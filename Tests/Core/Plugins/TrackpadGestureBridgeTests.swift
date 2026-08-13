@@ -38,6 +38,37 @@ final class TrackpadGestureBridgeTests: XCTestCase {
         XCTAssertEqual(provider.externalClaims, [])
         XCTAssertEqual(claimChanges, 1)
     }
+
+    func testBridgeDoesNotRetainProviderAndConsumerThroughCallbacks() {
+        weak var weakProvider: ProviderSpy?
+        weak var weakConsumer: ConsumerSpy?
+
+        do {
+            let bridge = TrackpadGestureBridge()
+            let provider = ProviderSpy()
+            let consumer = ConsumerSpy(claims: [.threeFingerTap])
+            weakProvider = provider
+            weakConsumer = consumer
+            bridge.connect(providers: [provider], consumers: [consumer], onClaimsChanged: {})
+        }
+
+        XCTAssertNil(weakProvider)
+        XCTAssertNil(weakConsumer)
+    }
+
+    func testBridgeDisconnectsParticipantsRemovedByAPluginReload() {
+        let bridge = TrackpadGestureBridge()
+        let provider = ProviderSpy()
+        let consumer = ConsumerSpy(claims: [.threeFingerTap])
+        bridge.connect(providers: [provider], consumers: [consumer], onClaimsChanged: {})
+
+        bridge.connect(providers: [], consumers: [], onClaimsChanged: {})
+
+        XCTAssertNil(provider.requestTrackpadGestureOwnership)
+        XCTAssertEqual(provider.externalClaims, [])
+        XCTAssertNil(consumer.onTrackpadGestureClaimsChange)
+        XCTAssertNil(consumer.requestTrackpadGestureOwnership)
+    }
 }
 
 @MainActor

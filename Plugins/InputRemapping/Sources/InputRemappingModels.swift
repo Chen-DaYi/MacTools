@@ -11,10 +11,14 @@ enum InputRemappingRulePolicy {
     static let eligibleButtonNumbers = minimumButtonNumber...maximumButtonNumber
     static let longPressDuration: TimeInterval = 0.45
     static let doubleClickInterval: TimeInterval = 0.35
+    private static let timingTolerance: TimeInterval = 0.000_001
 
     static func isEligible(buttonNumber: Int64) -> Bool { eligibleButtonNumbers.contains(buttonNumber) }
     static func normalized(buttonNumber: Int64) -> Int64 {
         min(maximumButtonNumber, max(minimumButtonNumber, buttonNumber))
+    }
+    static func reachesLongPressDuration(_ duration: TimeInterval) -> Bool {
+        duration >= longPressDuration - timingTolerance
     }
 }
 
@@ -101,7 +105,8 @@ enum InputRemappingCapturedInput: Equatable, Sendable {
 struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, isEnabled, trigger, buttonNumber, modifiers, action
-        case isInputConfigured, isOutputConfigured, outputConfigurationState, isUnmodifiedKeyboardConfirmed
+        case isInputConfigured, isOutputConfigured, outputConfigurationState
+        case isUnsafeTriggerConfirmed, isUnmodifiedKeyboardConfirmed
     }
 
     enum Action: Codable, Equatable, Hashable, Sendable, CaseIterable {
@@ -177,15 +182,32 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
     var action: Action
     var isInputConfigured: Bool
     var outputConfigurationState: InputRemappingOutputConfigurationState
-    var isUnmodifiedKeyboardConfirmed: Bool
+    var isUnsafeTriggerConfirmed: Bool
 
     var isOutputConfigured: Bool {
         get { outputConfigurationState == .configured }
         set { outputConfigurationState = newValue ? .configured : .needsSelection }
     }
 
+    /// The sole gate for an event to be intercepted or a trackpad claim to be active.
+    var isRunnable: Bool {
+        isEnabled
+            && isInputConfigured
+            && isOutputConfigured
+            && (!Self.requiresExplicitConfirmation(for: trigger) || isUnsafeTriggerConfirmed)
+    }
+
+    var requiresEventTap: Bool {
+        switch trigger {
+        case .keyboard, .mouseButton, .scroll:
+            true
+        case .trackpadGesture:
+            false
+        }
+    }
+
     var claimedTrackpadGesture: TrackpadGesture? {
-        guard isEnabled, isInputConfigured, isOutputConfigured,
+        guard isRunnable,
               case let .trackpadGesture(gesture) = trigger
         else { return nil }
         return gesture
@@ -219,15 +241,18 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
         action: Action = .mouseBack,
         isInputConfigured: Bool = true,
         outputConfigurationState: InputRemappingOutputConfigurationState = .configured,
-        isUnmodifiedKeyboardConfirmed: Bool = false
+        isUnsafeTriggerConfirmed: Bool = false
     ) {
         self.id = id
         self.trigger = trigger.normalized()
-        self.isUnmodifiedKeyboardConfirmed = isUnmodifiedKeyboardConfirmed
-        self.isEnabled = isEnabled && (!Self.requiresExplicitConfirmation(for: self.trigger) || isUnmodifiedKeyboardConfirmed)
+        self.isUnsafeTriggerConfirmed = isUnsafeTriggerConfirmed
         self.action = action
         self.isInputConfigured = isInputConfigured
         self.outputConfigurationState = outputConfigurationState
+        self.isEnabled = isEnabled
+            && isInputConfigured
+            && outputConfigurationState == .configured
+            && (!Self.requiresExplicitConfirmation(for: self.trigger) || isUnsafeTriggerConfirmed)
     }
 
     init(id: UUID = UUID(), isEnabled: Bool = true, buttonNumber: Int64 = 3, modifiers: ShortcutModifiers = [], action: Action = .mouseBack) {
@@ -252,34 +277,44 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
         let isInputConfigured = try c.decodeIfPresent(Bool.self, forKey: .isInputConfigured) ?? true
         let outputConfigurationState = try c.decodeIfPresent(InputRemappingOutputConfigurationState.self, forKey: .outputConfigurationState)
             ?? ((try c.decodeIfPresent(Bool.self, forKey: .isOutputConfigured)) == false ? .needsSelection : .configured)
-        let isUnmodifiedKeyboardConfirmed = try c.decodeIfPresent(Bool.self, forKey: .isUnmodifiedKeyboardConfirmed) ?? false
+        let isUnsafeTriggerConfirmed = try c.decodeIfPresent(Bool.self, forKey: .isUnsafeTriggerConfirmed)
+            ?? c.decodeIfPresent(Bool.self, forKey: .isUnmodifiedKeyboardConfirmed)
+            ?? false
         if let trigger = try c.decodeIfPresent(InputRemappingTrigger.self, forKey: .trigger) {
-            self.init(id: id, isEnabled: enabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnmodifiedKeyboardConfirmed: isUnmodifiedKeyboardConfirmed)
+            self.init(id: id, isEnabled: enabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnsafeTriggerConfirmed: isUnsafeTriggerConfirmed)
         } else {
-            self.init(id: id, isEnabled: enabled, trigger: .mouseButton(number: try c.decode(Int64.self, forKey: .buttonNumber), modifiers: try c.decode(ShortcutModifiers.self, forKey: .modifiers), interaction: .click), action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnmodifiedKeyboardConfirmed: isUnmodifiedKeyboardConfirmed)
+            self.init(id: id, isEnabled: enabled, trigger: .mouseButton(number: try c.decode(Int64.self, forKey: .buttonNumber), modifiers: try c.decode(ShortcutModifiers.self, forKey: .modifiers), interaction: .click), action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnsafeTriggerConfirmed: isUnsafeTriggerConfirmed)
         }
     }
 
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id); try c.encode(isEnabled, forKey: .isEnabled); try c.encode(trigger.normalized(), forKey: .trigger); try c.encode(action, forKey: .action)
-        try c.encode(isInputConfigured, forKey: .isInputConfigured); try c.encode(outputConfigurationState, forKey: .outputConfigurationState); try c.encode(isUnmodifiedKeyboardConfirmed, forKey: .isUnmodifiedKeyboardConfirmed)
+        try c.encode(isInputConfigured, forKey: .isInputConfigured); try c.encode(outputConfigurationState, forKey: .outputConfigurationState); try c.encode(isUnsafeTriggerConfirmed, forKey: .isUnsafeTriggerConfirmed)
     }
     func normalized() -> InputRemappingRule {
-        InputRemappingRule(id: id, isEnabled: isEnabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnmodifiedKeyboardConfirmed: isUnmodifiedKeyboardConfirmed)
+        InputRemappingRule(id: id, isEnabled: isEnabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnsafeTriggerConfirmed: isUnsafeTriggerConfirmed)
     }
 
     mutating func replaceTrigger(_ newTrigger: InputRemappingTrigger) {
         trigger = newTrigger.normalized()
-        isUnmodifiedKeyboardConfirmed = false
+        isUnsafeTriggerConfirmed = false
         if Self.requiresExplicitConfirmation(for: trigger) {
             isEnabled = false
         }
     }
 
     static func requiresExplicitConfirmation(for trigger: InputRemappingTrigger) -> Bool {
-        guard case let .keyboard(_, modifiers) = trigger else { return false }
-        return modifiers.isEmpty
+        switch trigger {
+        case let .keyboard(_, modifiers):
+            return modifiers.isEmpty
+        case let .mouseButton(number, modifiers, interaction):
+            return modifiers.isEmpty
+                && interaction == .click
+                && (number == 0 || number == 1)
+        case .scroll, .trackpadGesture:
+            return false
+        }
     }
     static func modifiers(from flags: CGEventFlags) -> ShortcutModifiers {
         var result: ShortcutModifiers = []
@@ -291,15 +326,15 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
 enum InputRemappingRuleMatcher {
     static func rule(for buttonNumber: Int64, flags: CGEventFlags, in rules: [InputRemappingRule], interaction: InputRemappingMouseInteraction = .click) -> InputRemappingRule? {
         rules.first { rule in
-            guard rule.isEnabled, case let .mouseButton(number, modifiers, expectedInteraction) = rule.trigger else { return false }
+            guard rule.isRunnable, case let .mouseButton(number, modifiers, expectedInteraction) = rule.trigger else { return false }
             return number == buttonNumber && modifiers == InputRemappingRule.modifiers(from: flags) && expectedInteraction == interaction
         }
     }
     static func keyboardRule(for keyCode: UInt16, flags: CGEventFlags, in rules: [InputRemappingRule]) -> InputRemappingRule? {
-        rules.first { rule in if case let .keyboard(expected, modifiers) = rule.trigger { return rule.isEnabled && expected == keyCode && modifiers == InputRemappingRule.modifiers(from: flags) }; return false }
+        rules.first { rule in if case let .keyboard(expected, modifiers) = rule.trigger { return rule.isRunnable && expected == keyCode && modifiers == InputRemappingRule.modifiers(from: flags) }; return false }
     }
     static func scrollRule(for direction: InputRemappingScrollDirection, flags: CGEventFlags, in rules: [InputRemappingRule]) -> InputRemappingRule? {
-        rules.first { rule in if case let .scroll(expected, modifiers) = rule.trigger { return rule.isEnabled && expected == direction && modifiers == InputRemappingRule.modifiers(from: flags) }; return false }
+        rules.first { rule in if case let .scroll(expected, modifiers) = rule.trigger { return rule.isRunnable && expected == direction && modifiers == InputRemappingRule.modifiers(from: flags) }; return false }
     }
 }
 
@@ -312,6 +347,7 @@ struct InputRemappingEventProcessor {
     }
 
     private var buttonsAwaitingConsumedUp: Set<Int64> = []
+    private var pendingDoubleClickActions: [Int64: InputRemappingRule.Action] = [:]
     private var keysAwaitingConsumedUp: Set<UInt16> = []
     private var lastClickState: [Int64: MouseSequenceState] = [:]
     private var mouseDownState: [Int64: MouseSequenceState] = [:]
@@ -327,17 +363,26 @@ struct InputRemappingEventProcessor {
                let previous = lastClickState[buttonNumber],
                previous.modifiers == modifiers,
                timestamp - previous.timestamp <= InputRemappingRulePolicy.doubleClickInterval {
-                _ = execute(rule.action)
                 lastClickState[buttonNumber] = nil
+                pendingDoubleClickActions[buttonNumber] = rule.action
                 return false
             }
-            lastClickState[buttonNumber] = MouseSequenceState(timestamp: timestamp, modifiers: modifiers)
             return false
         case .up:
             if buttonsAwaitingConsumedUp.remove(buttonNumber) != nil { return true }
-            guard let started = mouseDownState.removeValue(forKey: buttonNumber),
-                  started.modifiers == modifiers,
-                  timestamp - started.timestamp >= InputRemappingRulePolicy.longPressDuration,
+            if let action = pendingDoubleClickActions.removeValue(forKey: buttonNumber) {
+                guard let started = mouseDownState.removeValue(forKey: buttonNumber),
+                      started.modifiers == modifiers
+                else { return false }
+                _ = execute(action)
+                return false
+            }
+            guard let started = mouseDownState.removeValue(forKey: buttonNumber), started.modifiers == modifiers else {
+                lastClickState[buttonNumber] = nil
+                return false
+            }
+            lastClickState[buttonNumber] = started
+            guard InputRemappingRulePolicy.reachesLongPressDuration(timestamp - started.timestamp),
                   let rule = InputRemappingRuleMatcher.rule(for: buttonNumber, flags: flags, in: rules, interaction: .longPress)
             else { return false }
             // Long presses intentionally pass through. Consuming them would require buffering/replaying the original click.
@@ -369,6 +414,7 @@ struct InputRemappingEventProcessor {
 
     mutating func reset() {
         buttonsAwaitingConsumedUp.removeAll()
+        pendingDoubleClickActions.removeAll()
         keysAwaitingConsumedUp.removeAll()
         lastClickState.removeAll()
         mouseDownState.removeAll()
@@ -393,6 +439,17 @@ final class InputRemappingStore: ObservableObject {
         let remainingRules = rules.filter { $0.claimedTrackpadGesture != gesture }
         guard remainingRules.count != rules.count else { return }
         update(remainingRules)
+    }
+    func disableUnsafeTriggers() {
+        let updatedRules = rules.map { rule in
+            guard InputRemappingRule.requiresExplicitConfirmation(for: rule.trigger) else { return rule }
+            var disabledRule = rule
+            disabledRule.isEnabled = false
+            disabledRule.isUnsafeTriggerConfirmed = false
+            return disabledRule
+        }
+        guard updatedRules != rules else { return }
+        update(updatedRules)
     }
     func replace(_ rule: InputRemappingRule) { update(rules.map { $0.id == rule.id ? rule : $0 }) }
     private func update(_ rules: [InputRemappingRule]) { let normalizedRules = rules.map { $0.normalized() }; do { storage.set(try JSONEncoder().encode(normalizedRules), forKey: Self.storageKey); self.rules = normalizedRules; onRulesChange?() } catch { logger.error("Failed to encode input remapping rules: \(String(describing: error), privacy: .public)") } }

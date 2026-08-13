@@ -156,6 +156,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         context: PluginRuntimeContext,
         localization: PluginLocalization? = nil,
         tap: (any InputRemappingEventTapping)? = nil,
+        buttonCapture: InputRemappingButtonCaptureCoordinator? = nil,
         accessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
         requestAccessibilityTrust: @escaping @MainActor (Bool) -> Bool = { prompt in
             let options = ["AXTrustedCheckOptionPrompt": prompt] as CFDictionary
@@ -178,7 +179,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         self.localization = resolvedLocalization
         self.store = InputRemappingStore(storage: context.storage)
         self.tap = tap ?? InputRemappingEventTap()
-        self.buttonCapture = InputRemappingButtonCaptureCoordinator(tap: self.tap)
+        self.buttonCapture = buttonCapture ?? InputRemappingButtonCaptureCoordinator(tap: self.tap)
         self.accessibilityTrusted = accessibilityTrusted
         self.requestAccessibilityTrust = requestAccessibilityTrust
         self.inputMonitoringStatus = inputMonitoringStatus
@@ -199,6 +200,11 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         store.onRulesChange = { [weak self] in
             self?.applyConfiguration()
             self?.onTrackpadGestureClaimsChange?()
+        }
+        self.tap.emergencyStopHandler = { [weak self] in
+            Task { @MainActor in
+                self?.store.disableUnsafeTriggers()
+            }
         }
     }
 
@@ -261,7 +267,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     }
 
     var primaryPanelState: PluginPanelState {
-        let enabledRuleCount = store.rules.filter(\.isEnabled).count
+        let enabledRuleCount = store.rules.filter(\.isRunnable).count
         let subtitle = enabledRuleCount == 0
             ? localization.string("panel.subtitle.noRules", defaultValue: "无规则")
             : localization.format(
@@ -322,6 +328,10 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     requestTrackpadGestureOwnership: self.requestTrackpadGestureOwnership
                 )
             }
+        }
+        .onVisibilityChange { [weak self] visible in
+            guard !visible else { return }
+            self?.buttonCapture.cancel()
         }
     }
 
@@ -386,8 +396,11 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     private func applyConfiguration() {
         tap.update(rules: store.rules)
 
-        guard store.rules.contains(where: \.isEnabled) else {
-            tap.stop()
+        let runnableRules = store.rules.filter(\.isRunnable)
+        guard !runnableRules.isEmpty else {
+            if !tap.isCaptureSequenceActive {
+                tap.stop()
+            }
             errorMessage = nil
             onStateChange?()
             return
@@ -399,6 +412,15 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
                 "error.accessibilityRequired",
                 defaultValue: "请先授予辅助功能权限以启用规则。"
             )
+            onStateChange?()
+            return
+        }
+
+        guard runnableRules.contains(where: \.requiresEventTap) else {
+            if !tap.isCaptureSequenceActive {
+                tap.stop()
+            }
+            errorMessage = nil
             onStateChange?()
             return
         }
@@ -536,7 +558,7 @@ private struct InputRemappingRuleEditor: View {
     let requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
 
     @State private var draft: InputRemappingRule
-    @State private var requiresKeyboardConfirmation = false
+    @State private var requiresSafetyConfirmation = false
 
     init(
         rule: InputRemappingRule,
@@ -569,16 +591,13 @@ private struct InputRemappingRuleEditor: View {
                 Spacer()
                 Text(localization.string("settings.enabled", defaultValue: "Enabled"))
                     .foregroundStyle(.secondary)
-                Toggle("", isOn: enabledBinding)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                Button(role: .destructive) { store.delete(rule) } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .accessibilityLabel(localization.string("settings.deleteMapping", defaultValue: "Delete mapping"))
-                .help(localization.string("settings.deleteMapping", defaultValue: "Delete mapping"))
+                DualClickToggle(isOn: enabledBinding)
+                    .accessibilityLabel(localization.string("settings.enabled", defaultValue: "Enabled"))
+                DualClickIconButton(
+                    systemImage: "trash",
+                    accessibilityLabel: localization.string("settings.deleteMapping", defaultValue: "Delete mapping"),
+                    action: { store.delete(rule) }
+                )
             }
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
@@ -586,17 +605,17 @@ private struct InputRemappingRuleEditor: View {
         .pluginSettingsCardBackground(.standard)
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
         .alert(
-            localization.string("settings.keyboard.confirmation.title", defaultValue: "Enable unmodified key?"),
-            isPresented: $requiresKeyboardConfirmation
+            localization.string("settings.keyboard.confirmation.title", defaultValue: "Enable this trigger?"),
+            isPresented: $requiresSafetyConfirmation
         ) {
             Button(localization.string("settings.keyboard.confirmation.enable", defaultValue: "Enable")) {
-                draft.isUnmodifiedKeyboardConfirmed = true
+                draft.isUnsafeTriggerConfirmed = true
                 draft.isEnabled = true
                 save()
             }
             Button(localization.string("settings.cancel", defaultValue: "Cancel"), role: .cancel) {}
         } message: {
-            Text(localization.string("settings.keyboard.confirmation.message", defaultValue: "This rule captures normal typing system-wide. You can disable it at any time."))
+            Text(localization.string("settings.keyboard.confirmation.message", defaultValue: "This rule intercepts input system-wide. Press ⌃⌥⌘Esc at any time to disable unsafe shortcuts."))
         }
     }
 
@@ -853,12 +872,12 @@ private struct InputRemappingRuleEditor: View {
             get: { draft.isEnabled },
             set: { enabled in
                 guard !enabled || (draft.isInputConfigured && draft.isOutputConfigured) else { return }
-                guard enabled, case let .keyboard(_, modifiers) = draft.trigger, modifiers.isEmpty else {
+                guard enabled, InputRemappingRule.requiresExplicitConfirmation(for: draft.trigger) else {
                     draft.isEnabled = enabled
                     save()
                     return
                 }
-                requiresKeyboardConfirmation = true
+                requiresSafetyConfirmation = true
             }
         )
     }
@@ -925,7 +944,10 @@ private struct InputRemappingRuleEditor: View {
     }
 
     private func enableIfComplete() {
-        guard draft.isInputConfigured, draft.isOutputConfigured else { return }
+        guard draft.isInputConfigured, draft.isOutputConfigured else {
+            draft.isEnabled = false
+            return
+        }
         draft.isEnabled = !InputRemappingRule.requiresExplicitConfirmation(for: draft.trigger)
     }
 
@@ -1088,5 +1110,92 @@ private struct InputRemappingRuleEditor: View {
             requestTrackpadGestureOwnership?(gesture)
         }
         store.replace(draft)
+    }
+}
+
+private struct DualClickToggle: NSViewRepresentable {
+    @Binding var isOn: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isOn: $isOn)
+    }
+
+    func makeNSView(context: Context) -> DualClickSwitch {
+        let control = DualClickSwitch()
+        control.controlSize = .small
+        control.target = context.coordinator
+        control.action = #selector(Coordinator.didToggle(_:))
+        return control
+    }
+
+    func updateNSView(_ control: DualClickSwitch, context: Context) {
+        control.state = isOn ? .on : .off
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        private var isOn: Binding<Bool>
+
+        init(isOn: Binding<Bool>) {
+            self.isOn = isOn
+        }
+
+        @objc func didToggle(_ sender: NSSwitch) {
+            isOn.wrappedValue = sender.state == .on
+        }
+    }
+}
+
+private final class DualClickSwitch: NSSwitch {
+    override func rightMouseDown(with event: NSEvent) {
+        state = state == .on ? .off : .on
+        sendAction(action, to: target)
+    }
+}
+
+private struct DualClickIconButton: NSViewRepresentable {
+    let systemImage: String
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
+    }
+
+    func makeNSView(context: Context) -> DualClickButton {
+        let button = DualClickButton()
+        button.isBordered = false
+        button.controlSize = .small
+        button.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: accessibilityLabel)
+        button.toolTip = accessibilityLabel
+        button.setAccessibilityLabel(accessibilityLabel)
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.didPress(_:))
+        return button
+    }
+
+    func updateNSView(_ button: DualClickButton, context: Context) {
+        button.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: accessibilityLabel)
+        button.toolTip = accessibilityLabel
+        button.setAccessibilityLabel(accessibilityLabel)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        private let action: () -> Void
+
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc func didPress(_ sender: NSButton) {
+            action()
+        }
+    }
+}
+
+private final class DualClickButton: NSButton {
+    override func rightMouseDown(with event: NSEvent) {
+        sendAction(action, to: target)
     }
 }

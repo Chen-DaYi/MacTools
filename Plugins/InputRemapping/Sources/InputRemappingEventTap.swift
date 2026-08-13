@@ -8,6 +8,8 @@ import MacToolsPluginKit
 import OSLog
 
 protocol InputRemappingEventTapping: AnyObject {
+    var isCaptureSequenceActive: Bool { get }
+    var emergencyStopHandler: (@Sendable () -> Void)? { get set }
     func update(rules: [InputRemappingRule])
     func start() -> Bool
     func stop()
@@ -27,8 +29,11 @@ enum InputRemappingSystemDefinedEvent {
     }
 }
 
-final class InputRemappingEventTap: InputRemappingEventTapping {
+final class InputRemappingEventTap: InputRemappingEventTapping, @unchecked Sendable {
     static let syntheticMarker: Int64 = 0x4D_54_49_52
+    private static let scrollCaptureQuiescence: TimeInterval = 0.25
+    private static let emergencyStopKeyCode = UInt16(kVK_Escape)
+    private static let emergencyStopModifiers: ShortcutModifiers = [.control, .option, .command]
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -41,9 +46,29 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
     private var shortcutCaptureHandler: (@Sendable (ShortcutBinding) -> Void)?
     private var capturedKeyAwaitingUp: UInt16?
     private var capturedMouseButtonAwaitingUp: Int64?
+    private var capturedScrollUntil: TimeInterval?
+    private var emergencyStopKeyAwaitingUp = false
+    private var scrollCaptureGeneration = 0
     private var eventProcessor = InputRemappingEventProcessor()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
+    private let captureStartResult: Bool?
+    var emergencyStopHandler: (@Sendable () -> Void)?
+
+    init(captureStartResult: Bool? = nil) {
+        self.captureStartResult = captureStartResult
+    }
+
+    var isCaptureSequenceActive: Bool {
+        rulesLock.lock()
+        defer { rulesLock.unlock() }
+        return inputCaptureHandler != nil
+            || shortcutCaptureHandler != nil
+            || capturedKeyAwaitingUp != nil
+            || capturedMouseButtonAwaitingUp != nil
+            || capturedScrollUntil != nil
+            || emergencyStopKeyAwaitingUp
+    }
 
     func update(rules: [InputRemappingRule]) {
         rulesLock.lock()
@@ -52,6 +77,9 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
     }
 
     func start() -> Bool {
+        if let captureStartResult {
+            return captureStartResult
+        }
         guard tap == nil else { return true }
 
         let mask = (CGEventMask(1) << CGEventType.leftMouseDown.rawValue)
@@ -84,7 +112,7 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
 
     func stop() {
         eventProcessor.reset()
-        cancelButtonCapture()
+        clearCaptureState()
         guard let tap else { return }
 
         CGEvent.tapEnable(tap: tap, enable: false)
@@ -120,11 +148,19 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
     }
 
     func cancelButtonCapture() {
+        clearCaptureState()
+        scheduleStopIfNoMonitoringNeeded()
+    }
+
+    private func clearCaptureState() {
         rulesLock.lock()
         inputCaptureHandler = nil
         shortcutCaptureHandler = nil
         capturedKeyAwaitingUp = nil
         capturedMouseButtonAwaitingUp = nil
+        capturedScrollUntil = nil
+        emergencyStopKeyAwaitingUp = false
+        scrollCaptureGeneration += 1
         rulesLock.unlock()
     }
 
@@ -136,7 +172,7 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
             .handle(type: type, event: event)
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap {
                 CGEvent.tapEnable(tap: tap, enable: true)
@@ -146,6 +182,25 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
 
         guard !Self.isMarkedSynthetic(event) else {
             return Unmanaged.passUnretained(event)
+        }
+
+        if type == .keyDown || type == .keyUp {
+            let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+            if consumeEmergencyStop(type: type, keyCode: keyCode, flags: event.flags) {
+                return nil
+            }
+        }
+
+        if type == .keyDown || type == .keyUp {
+            let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+            if consumeCapturedKeyEvent(type: type, keyCode: keyCode) {
+                return nil
+            }
+        }
+
+        if type == .scrollWheel,
+           consumeCapturedScroll(at: TimeInterval(event.timestamp) / 1_000_000_000) {
+            return nil
         }
 
         if type == .keyDown, let shortcut = shortcutCapture(from: event) {
@@ -171,11 +226,16 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
                 case let .mouseButton(number, _):
                     capturedMouseButtonAwaitingUp = number
                 case .scroll:
-                    break
+                    capturedScrollUntil = TimeInterval(event.timestamp) / 1_000_000_000
+                        + Self.scrollCaptureQuiescence
+                    scrollCaptureGeneration += 1
                 }
             }
             rulesLock.unlock()
             if let handler {
+                if case .scroll = capturedInput {
+                    scheduleScrollCaptureCompletion()
+                }
                 handler(capturedInput)
                 return nil
             }
@@ -183,9 +243,6 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
 
         if type == .keyDown || type == .keyUp {
             let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-            if type == .keyUp, consumeCapturedKeyUp(keyCode) {
-                return nil
-            }
             let rules = rulesSnapshot()
             let shouldConsume = eventProcessor.shouldConsumeKeyboard(
                 isKeyDown: type == .keyDown,
@@ -249,20 +306,110 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
         return currentRules
     }
 
-    private func consumeCapturedKeyUp(_ keyCode: UInt16) -> Bool {
+    private func consumeCapturedKeyEvent(type: CGEventType, keyCode: UInt16) -> Bool {
         rulesLock.lock()
-        defer { rulesLock.unlock() }
-        guard capturedKeyAwaitingUp == keyCode else { return false }
+        guard capturedKeyAwaitingUp == keyCode else {
+            rulesLock.unlock()
+            return false
+        }
+        if type == .keyUp {
+            capturedKeyAwaitingUp = nil
+        }
+        rulesLock.unlock()
+        if type == .keyUp {
+            scheduleStopIfNoMonitoringNeeded()
+        }
+        return true
+    }
+
+    private func consumeEmergencyStop(type: CGEventType, keyCode: UInt16, flags: CGEventFlags) -> Bool {
+        rulesLock.lock()
+        if type == .keyUp, keyCode == Self.emergencyStopKeyCode, emergencyStopKeyAwaitingUp {
+            emergencyStopKeyAwaitingUp = false
+            rulesLock.unlock()
+            scheduleStopIfNoMonitoringNeeded()
+            return true
+        }
+        guard type == .keyDown,
+              keyCode == Self.emergencyStopKeyCode,
+              InputRemappingRule.modifiers(from: flags) == Self.emergencyStopModifiers
+        else {
+            rulesLock.unlock()
+            return false
+        }
+        let shouldNotify = !emergencyStopKeyAwaitingUp
+        emergencyStopKeyAwaitingUp = true
+        inputCaptureHandler = nil
+        shortcutCaptureHandler = nil
         capturedKeyAwaitingUp = nil
+        capturedMouseButtonAwaitingUp = nil
+        capturedScrollUntil = nil
+        scrollCaptureGeneration += 1
+        let handler = emergencyStopHandler
+        rulesLock.unlock()
+        if shouldNotify {
+            handler?()
+        }
+        return true
+    }
+
+    private func consumeCapturedScroll(at timestamp: TimeInterval) -> Bool {
+        rulesLock.lock()
+        guard let capturedScrollUntil else {
+            rulesLock.unlock()
+            return false
+        }
+        guard timestamp <= capturedScrollUntil else {
+            self.capturedScrollUntil = nil
+            scrollCaptureGeneration += 1
+            rulesLock.unlock()
+            scheduleStopIfNoMonitoringNeeded()
+            return false
+        }
+        self.capturedScrollUntil = timestamp + Self.scrollCaptureQuiescence
+        scrollCaptureGeneration += 1
+        rulesLock.unlock()
+        scheduleScrollCaptureCompletion()
         return true
     }
 
     private func consumeCapturedMouseUp(_ buttonNumber: Int64) -> Bool {
         rulesLock.lock()
-        defer { rulesLock.unlock() }
-        guard capturedMouseButtonAwaitingUp == buttonNumber else { return false }
+        guard capturedMouseButtonAwaitingUp == buttonNumber else {
+            rulesLock.unlock()
+            return false
+        }
         capturedMouseButtonAwaitingUp = nil
+        rulesLock.unlock()
+        scheduleStopIfNoMonitoringNeeded()
         return true
+    }
+
+    private func scheduleScrollCaptureCompletion() {
+        rulesLock.lock()
+        let generation = scrollCaptureGeneration
+        rulesLock.unlock()
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.scrollCaptureQuiescence) { [weak self] in
+            guard let self else { return }
+            self.rulesLock.lock()
+            guard self.scrollCaptureGeneration == generation else {
+                self.rulesLock.unlock()
+                return
+            }
+            self.capturedScrollUntil = nil
+            self.rulesLock.unlock()
+            self.scheduleStopIfNoMonitoringNeeded()
+        }
+    }
+
+    private func scheduleStopIfNoMonitoringNeeded() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isCaptureSequenceActive else { return }
+            let needsMonitoring = self.rulesSnapshot().contains { $0.isRunnable && $0.requiresEventTap }
+            if !needsMonitoring {
+                self.stop()
+            }
+        }
     }
 
     private func capturedInput(from event: CGEvent, type: CGEventType) -> InputRemappingCapturedInput? {

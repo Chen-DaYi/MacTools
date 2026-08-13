@@ -15,3 +15,7 @@ Confirmed plain-key shortcuts stay enabled after restart.
 The most recently activated precise trackpad mapping takes ownership across both plugins, while disabled drafts never take ownership.
 
 Compound mouse gestures require unchanged modifier keys from start to finish.
+
+Recording now stops when leaving settings and ignores held-key repeats and scroll momentum; incomplete mappings never intercept input.
+
+Control-Option-Command-Escape cancels recording and disables unsafe plain-key or primary-button mappings when pointer recovery is unavailable.

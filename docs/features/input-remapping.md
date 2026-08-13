@@ -16,7 +16,7 @@ Source of truth: yes
 - User grants Accessibility and Input Monitoring.
 - User adds, enables, edits, or removes a persisted rule.
 - A new rule starts as a disabled draft with direct input recording and a neutral output selector. Selecting Shortcut reveals its recorder; each captured value is then shown in its normal editor.
-- To select a trigger, the user starts recording and presses a key, a mouse button, or scrolls; the recorded event and its matching key-up or mouse-up are consumed without executing a rule.
+- To select a trigger, the user starts recording and presses a key, a mouse button, or scrolls; the recorded sequence is consumed without executing a rule.
 - Recording first shows a brief preparation state so the click that opened the recorder cannot become the trigger; it then shows an explicit listening state.
 - A matching click, key, or scroll executes the action. Mouse double-click and long-press keep the original click available to avoid unsafe event replay.
 - When the action is a shortcut, the user can record the output combination directly; the recorded key-down and key-up are consumed.
@@ -31,14 +31,16 @@ Source of truth: yes
 | Capture accepts keyboard, mouse buttons, and scroll and consumes the recorded event | This document | `InputRemappingCapturedInput` | Settings editor, CGEvent tap |
 | Recording arms after its opening click and distinguishes preparation from active listening | This document | `InputRemappingButtonCaptureCoordinator` | Input and shortcut recorders |
 | Shortcut output can be recorded directly and consumes its key pair | This document | `InputRemappingButtonCaptureCoordinator` | Shortcut action editor, CGEvent tap |
-| Exact modifier set required | This document | `InputRemappingRule.matches` | Event processor |
+| Exact modifier set required across a full compound mouse gesture | This document | `InputRemappingEventProcessor` | Event processor |
 | A consumed down consumes its matching up | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | Events carrying the Input Remapping synthetic marker always pass through | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | Failed or inapplicable actions fail open | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
-| A keyboard trigger with no modifier is saved disabled and requires explicit confirmation before it can be enabled | This document | `InputRemappingRule` | Rule editor, event processor |
+| An unsafe trigger (a keyboard key without modifiers or primary mouse button) is saved disabled and requires explicit confirmation before it can be enabled | This document | `InputRemappingRule` | Rule editor, event processor |
+| Control-Option-Command-Escape always cancels recording and disables every unsafe trigger | This document | `InputRemappingEventTap`, `InputRemappingStore` | Global event tap, warning copy |
 | An enabled precise trackpad gesture belongs to the plugin where it was activated most recently, never both | This document | Shared trackpad gesture broker | Plugin host, both plugins |
 | Rule context is global only | This document | Rule editor layout | Context column |
 | New rules remain disabled until input and output are configured | This document | `InputRemappingRule` configuration state | Rule editor, matcher |
+| Recording is cancelled when the settings page is hidden | This document | `InputRemappingButtonCaptureCoordinator` | Settings page visibility handler |
 
 ## Decisions
 
@@ -51,6 +53,7 @@ Source of truth: yes
 | 2026-08-13 | Synthetic-event protection is limited to the private Input Remapping marker | Public CoreGraphics source fields describe state tables or process metadata, not a reliable physical-versus-generated category | Unmarked third-party generated events can match a rule |
 | 2026-08-13 | Modifier-free keyboard triggers are allowed after a warning | User requires full flexibility while being informed of global typing risk | Rule remains disabled until confirmation |
 | 2026-08-13 | Trackpad gesture ownership is exclusive | A single Multitouch listener must arbitrate gestures | Activating a claim removes the conflicting active mapping from the other plugin |
+| 2026-08-13 | Unsafe mappings have a keyboard emergency stop | Both primary mouse buttons can otherwise make pointer-based recovery impossible | Control-Option-Command-Escape disables unsafe mappings and cancels recording |
 
 ## Known limitation
 
@@ -106,6 +109,8 @@ Source of truth: yes
 - [x] Shortcut recording exposes preparation and active-listening states.
 - [x] Each mapping card exposes its trigger, action, and global context in the requested flow layout.
 - [x] A new mapping presents direct input recording and a neutral Run selector; Shortcut reveals its recorder and each completed value persists in its editor.
+- [x] Incomplete, hidden, and unsafe mappings fail open and cannot leave input interception armed.
+- [x] Control-Option-Command-Escape remains available during recording and disables every unsafe mapping.
 
 ## Implementation journal
 
@@ -118,6 +123,8 @@ Source of truth: yes
 - 2026-08-13 — Checks passed: Swift parse for plugin sources and tests, string catalog JSON parse, and scoped `git diff --check`. Targeted XCTest could not run because the generated local Xcode project does not yet contain the `InputRemappingPlugin` scheme; generating project files is outside this agent's assigned files.
 - 2026-08-13 — Review 2 fixed: auxiliary event data encodes down/up state once; persisted and copied button values normalize to 0...32; matching uses typed `CGEventFlags`; application activation revalidates both permissions with observer cleanup on deactivation; the Add action moved to the host section header and editor rows use edge-to-edge list chrome.
 - 2026-08-13 — Synthetic-event contract narrowed to Input Remapping-marked events after checking the public CoreGraphics event-source APIs; unmarked third-party generated events remain a documented risk.
+- 2026-08-13 — Review follow-up: incomplete rules are never runnable; recording consumes key repeats and scroll momentum until quiescence; hidden settings cancel capture; unsafe primary-button triggers require confirmation; and Trackpad bridge callbacks retain plugins weakly.
+- 2026-08-13 — Review follow-up checks passed: plugin build, source/test parse, string-catalog JSON parse, and `git diff --check`. Targeted XCTest is blocked locally because the generated MacTools project references two App Instance Recovery files from an unapplied branch.
 - 2026-08-13 — Review 2 checks passed: Swift parse, source module emission, test typecheck, both JSON parses, tracked `git diff --check`, and whitespace checks for untracked feature files. No project lint command or user pre-commit hook is configured. Targeted XCTest remains unavailable because the generated local Xcode project has no `InputRemappingPlugin` scheme.
 - 2026-08-13 — UX refined: each rule now records the physical extra mouse button directly. The recorder has an explicit cancel action and lets the captured click pass through, avoiding accidental remapping during selection.
 - 2026-08-13 — Verification: generated the project, built `InputRemappingPlugin`, and passed `MacToolsTests/InputRemappingModelsTests`. Existing DiskClean Swift-concurrency warnings remain outside this feature.
@@ -154,6 +161,8 @@ Source of truth: yes
 - 2026-08-13 — Review 3 fixed: confirmed modifier-free keyboard rules persist their acknowledgement; the Core trackpad bridge observes both plugins and removes conflicting local mappings in either editing order; its provider/consumer seam is covered by an adjacent integration test.
 - 2026-08-13 — Review 4 fixed: Trackpad Gestures mapping mutations notify the Core bridge, so adding or re-enabling a gesture already claimed by Custom Shortcuts removes the conflicting local mapping immediately.
 - 2026-08-13 — Review 5 fixed: ownership now follows the most recently activated mapping in either plugin; disabled or incomplete Custom Shortcuts drafts do not claim gestures; double-click and long-press require stable modifiers across their full sequence; the settings contract now records the approved workspace layout. No manifest, registry, or inventory update was required.
+- 2026-08-13 — Auto-grill hardening: unsafe confirmation is persisted under a domain-specific key with legacy migration; capture drains the complete keyboard, mouse, or scroll sequence before the tap can stop; native dual-click controls replace checkbox emulation; removed Trackpad bridge participants are explicitly disconnected; Control-Option-Command-Escape cancels capture and disables every unsafe mapping.
+- 2026-08-13 — Verification after auto-grill: targeted `InputRemappingModelsTests` and `TrackpadGestureBridgeTests` pass; the Input Remapping plugin scheme builds; source parsing, localization JSON parsing, and whitespace validation pass. Existing Disk Clean Swift-concurrency warnings remain outside this feature.
 
 ## Files
 

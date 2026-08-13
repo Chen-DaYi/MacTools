@@ -3226,67 +3226,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enable unmodified key?"
+            "value": "Enable this trigger?"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "启用无修饰键？"
+            "value": "启用此触发器？"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "هل تريد تمكين المفتاح غير المعدل؟"
+            "value": "هل تريد تمكين هذا المُشغِّل؟"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unveränderten Schlüssel aktivieren?"
+            "value": "Diesen Auslöser aktivieren?"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "¿Habilitar clave no modificada?"
+            "value": "¿Activar este activador?"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activer la clé non modifiée ?"
+            "value": "Activer ce déclencheur ?"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "未変更のキーを有効にしますか?"
+            "value": "このトリガーを有効にしますか？"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "수정되지 않은 키를 사용하시겠습니까?"
+            "value": "이 트리거를 활성화할까요?"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ativar chave não modificada?"
+            "value": "Ativar este acionador?"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Включить немодифицированный ключ?"
+            "value": "Включить этот триггер?"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "啟用未修改的金鑰？"
+            "value": "啟用此觸發條件？"
           }
         }
       }
@@ -3296,67 +3296,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This rule captures normal typing system-wide. You can disable it at any time."
+            "value": "This rule intercepts input system-wide. Press ⌃⌥⌘Esc at any time to disable unsafe shortcuts."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "此规则会在全系统范围内捕获正常输入。你可以随时停用它。"
+            "value": "此规则会在全系统范围内拦截输入。随时按下 ⌃⌥⌘Esc 即可停用不安全的快捷键。"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "تلتقط هذه القاعدة الكتابة العادية على مستوى النظام. ويمكنك تعطيله في أي وقت."
+            "value": "تعترض هذه القاعدة الإدخال على مستوى النظام. اضغط ⌃⌥⌘Esc في أي وقت لتعطيل الاختصارات غير الآمنة."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Diese Regel erfasst systemweit die normale Eingabe. Sie können es jederzeit deaktivieren."
+            "value": "Diese Regel fängt Eingaben systemweit ab. Drücken Sie jederzeit ⌃⌥⌘Esc, um unsichere Kurzbefehle zu deaktivieren."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Esta regla captura la escritura normal en todo el sistema. Puedes desactivarlo en cualquier momento."
+            "value": "Esta regla intercepta entradas en todo el sistema. Pulsa ⌃⌥⌘Esc en cualquier momento para desactivar los atajos no seguros."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cette règle capture la saisie normale à l’échelle du système. Vous pouvez le désactiver à tout moment."
+            "value": "Cette règle intercepte les entrées à l’échelle du système. Appuyez à tout moment sur ⌃⌥⌘Échap pour désactiver les raccourcis à risque."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このルールは、システム全体で通常の入力をキャプチャします。いつでも無効にすることができます。"
+            "value": "このルールはシステム全体の入力をインターセプトします。⌃⌥⌘Esc を押すと、危険なショートカットをいつでも無効にできます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이 규칙은 시스템 전체의 일반적인 입력을 캡처합니다. 언제든지 비활성화할 수 있습니다."
+            "value": "이 규칙은 시스템 전체의 입력을 가로챕니다. 언제든지 ⌃⌥⌘Esc를 눌러 안전하지 않은 단축키를 비활성화할 수 있습니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Esta regra captura a digitação normal em todo o sistema. Você pode desativá-lo a qualquer momento."
+            "value": "Esta regra intercepta entradas em todo o sistema. Pressione ⌃⌥⌘Esc a qualquer momento para desativar atalhos não seguros."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Это правило распространяется на обычную типизацию в масштабах всей системы. Вы можете отключить его в любое время."
+            "value": "Это правило перехватывает ввод во всей системе. Нажмите ⌃⌥⌘Esc в любое время, чтобы отключить небезопасные сочетания клавиш."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "此規則捕獲系統範圍內的正常鍵入。您可以隨時停用它。"
+            "value": "此規則會攔截系統範圍內的輸入。隨時按下 ⌃⌥⌘Esc 即可停用不安全的快速鍵。"
           }
         }
       }
