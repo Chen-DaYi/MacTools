@@ -30,6 +30,12 @@ enum InputRemappingScrollDirection: String, Codable, CaseIterable, Equatable, Ha
     case right
 }
 
+enum InputRemappingOutputConfigurationState: String, Codable, Equatable, Sendable {
+    case needsSelection
+    case recordingShortcut
+    case configured
+}
+
 enum InputRemappingTrigger: Codable, Equatable, Hashable, Sendable {
     case keyboard(keyCode: UInt16, modifiers: ShortcutModifiers)
     case mouseButton(number: Int64, modifiers: ShortcutModifiers, interaction: InputRemappingMouseInteraction)
@@ -92,7 +98,10 @@ enum InputRemappingCapturedInput: Equatable, Sendable {
 }
 
 struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
-    private enum CodingKeys: String, CodingKey { case id, isEnabled, trigger, buttonNumber, modifiers, action }
+    private enum CodingKeys: String, CodingKey {
+        case id, isEnabled, trigger, buttonNumber, modifiers, action
+        case isInputConfigured, isOutputConfigured, outputConfigurationState
+    }
 
     enum Action: Codable, Equatable, Hashable, Sendable, CaseIterable {
         case shortcut(ShortcutBinding), mouseBack, mouseForward, mouseMiddle, missionControl, spaceLeft, spaceRight, mediaPlayPause, volumeDown, volumeUp
@@ -165,6 +174,13 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
     var isEnabled: Bool
     var trigger: InputRemappingTrigger
     var action: Action
+    var isInputConfigured: Bool
+    var outputConfigurationState: InputRemappingOutputConfigurationState
+
+    var isOutputConfigured: Bool {
+        get { outputConfigurationState == .configured }
+        set { outputConfigurationState = newValue ? .configured : .needsSelection }
+    }
 
     // Compatibility conveniences for rules saved before universal input support.
     var buttonNumber: Int64 {
@@ -187,15 +203,34 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
         set { if case let .mouseButton(number, modifiers, _) = trigger { replaceTrigger(.mouseButton(number: number, modifiers: modifiers, interaction: newValue)) } }
     }
 
-    init(id: UUID = UUID(), isEnabled: Bool = true, trigger: InputRemappingTrigger = .mouseButton(number: 3, modifiers: [], interaction: .click), action: Action = .mouseBack) {
+    init(
+        id: UUID = UUID(),
+        isEnabled: Bool = true,
+        trigger: InputRemappingTrigger = .mouseButton(number: 3, modifiers: [], interaction: .click),
+        action: Action = .mouseBack,
+        isInputConfigured: Bool = true,
+        outputConfigurationState: InputRemappingOutputConfigurationState = .configured
+    ) {
         self.id = id
         self.trigger = trigger.normalized()
         self.isEnabled = isEnabled && !Self.requiresExplicitConfirmation(for: self.trigger)
         self.action = action
+        self.isInputConfigured = isInputConfigured
+        self.outputConfigurationState = outputConfigurationState
     }
 
     init(id: UUID = UUID(), isEnabled: Bool = true, buttonNumber: Int64 = 3, modifiers: ShortcutModifiers = [], action: Action = .mouseBack) {
         self.init(id: id, isEnabled: isEnabled, trigger: .mouseButton(number: buttonNumber, modifiers: modifiers, interaction: .click), action: action)
+    }
+
+    static func newDraft() -> InputRemappingRule {
+        InputRemappingRule(
+            isEnabled: false,
+            trigger: .mouseButton(number: InputRemappingRulePolicy.minimumButtonNumber, modifiers: [], interaction: .click),
+            action: .shortcut(ShortcutBinding(keyCode: 0, modifiers: [.command])),
+            isInputConfigured: false,
+            outputConfigurationState: .needsSelection
+        )
     }
 
     init(from decoder: any Decoder) throws {
@@ -203,19 +238,23 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
         let id = try c.decode(UUID.self, forKey: .id)
         let enabled = try c.decode(Bool.self, forKey: .isEnabled)
         let action = try c.decode(Action.self, forKey: .action)
+        let isInputConfigured = try c.decodeIfPresent(Bool.self, forKey: .isInputConfigured) ?? true
+        let outputConfigurationState = try c.decodeIfPresent(InputRemappingOutputConfigurationState.self, forKey: .outputConfigurationState)
+            ?? ((try c.decodeIfPresent(Bool.self, forKey: .isOutputConfigured)) == false ? .needsSelection : .configured)
         if let trigger = try c.decodeIfPresent(InputRemappingTrigger.self, forKey: .trigger) {
-            self.init(id: id, isEnabled: enabled, trigger: trigger, action: action)
+            self.init(id: id, isEnabled: enabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState)
         } else {
-            self.init(id: id, isEnabled: enabled, buttonNumber: try c.decode(Int64.self, forKey: .buttonNumber), modifiers: try c.decode(ShortcutModifiers.self, forKey: .modifiers), action: action)
+            self.init(id: id, isEnabled: enabled, trigger: .mouseButton(number: try c.decode(Int64.self, forKey: .buttonNumber), modifiers: try c.decode(ShortcutModifiers.self, forKey: .modifiers), interaction: .click), action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState)
         }
     }
 
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id); try c.encode(isEnabled, forKey: .isEnabled); try c.encode(trigger.normalized(), forKey: .trigger); try c.encode(action, forKey: .action)
+        try c.encode(isInputConfigured, forKey: .isInputConfigured); try c.encode(outputConfigurationState, forKey: .outputConfigurationState)
     }
     func normalized() -> InputRemappingRule {
-        InputRemappingRule(id: id, isEnabled: isEnabled, trigger: trigger, action: action)
+        InputRemappingRule(id: id, isEnabled: isEnabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState)
     }
 
     mutating func replaceTrigger(_ newTrigger: InputRemappingTrigger) {
@@ -322,7 +361,7 @@ final class InputRemappingStore: ObservableObject {
         guard let data = storage.data(forKey: Self.storageKey) else { rules = []; return }
         do { rules = try JSONDecoder().decode([InputRemappingRule].self, from: data) } catch { logger.error("Failed to decode input remapping rules: \(String(describing: error), privacy: .public)"); rules = [] }
     }
-    func addRule() { update(rules + [InputRemappingRule()]) }
+    func addRule() { update(rules + [.newDraft()]) }
     func delete(_ rule: InputRemappingRule) { update(rules.filter { $0.id != rule.id }) }
     func replace(_ rule: InputRemappingRule) { update(rules.map { $0.id == rule.id ? rule : $0 }) }
     private func update(_ rules: [InputRemappingRule]) { let normalizedRules = rules.map { $0.normalized() }; do { storage.set(try JSONEncoder().encode(normalizedRules), forKey: Self.storageKey); self.rules = normalizedRules; onRulesChange?() } catch { logger.error("Failed to encode input remapping rules: \(String(describing: error), privacy: .public)") } }

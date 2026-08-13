@@ -15,6 +15,7 @@ Source of truth: yes
 
 - User grants Accessibility and Input Monitoring.
 - User adds, enables, edits, or removes a persisted rule.
+- A new rule starts as a disabled draft with direct input recording and a neutral output selector. Selecting Shortcut reveals its recorder; each captured value is then shown in its normal editor.
 - To select a trigger, the user starts recording and presses a key, a mouse button, or scrolls; the recorded event and its matching key-up or mouse-up are consumed without executing a rule.
 - Recording first shows a brief preparation state so the click that opened the recorder cannot become the trigger; it then shows an explicit listening state.
 - A matching click, key, or scroll executes the action. Mouse double-click and long-press keep the original click available to avoid unsafe event replay.
@@ -37,6 +38,7 @@ Source of truth: yes
 | A keyboard trigger with no modifier is saved disabled and requires explicit confirmation before it can be enabled | This document | `InputRemappingRule` | Rule editor, event processor |
 | A precise trackpad gesture belongs to either Trackpad Gestures or Input Remapping, never both | This document | Shared trackpad gesture broker | Plugin host, both plugins |
 | Rule context is global only | This document | Rule editor layout | Context column |
+| New rules remain disabled until input and output are configured | This document | `InputRemappingRule` configuration state | Rule editor, matcher |
 
 ## Decisions
 
@@ -73,6 +75,11 @@ Source of truth: yes
 - [x] P013 — Keep the mapping workspace within the host's standard readable-width guide.
 - [x] P014 — Offer mapping deletion only once, in the card footer.
 - [x] P015 — Keep the trigger controls in a mapping column visually aligned.
+- [x] P016 — Keep card management controls together in the footer.
+- [x] P017 — Center mapping-column labels over their respective control areas.
+- [x] P018 — Start new mappings with direct input recording and output selection.
+- [x] P019 — Keep recorded shortcut labels compact in the Run selector.
+- [x] P020 — Guide users from the empty state to the Add Mapping control.
 
 ## Acceptance / DoD
 
@@ -97,6 +104,7 @@ Source of truth: yes
 - [x] Mouse double-click actions preserve the native click pair.
 - [x] Shortcut recording exposes preparation and active-listening states.
 - [x] Each mapping card exposes its trigger, action, and global context in the requested flow layout.
+- [x] A new mapping presents direct input recording and a neutral Run selector; Shortcut reveals its recorder and each completed value persists in its editor.
 
 ## Implementation journal
 
@@ -125,7 +133,12 @@ Source of truth: yes
 - 2026-08-13 — Checks passed: generated project, `InputRemappingPlugin`, `TrackpadGesturesPlugin`, and `MacTools` Debug builds; targeted Input Remapping XCTest passed through the MacTools scheme; localization JSON parse and `git diff --check` passed. The plugin scheme has no test action.
 - 2026-08-13 — Kept the mapping workspace within the host's readable-width guide; responsive column minimums preserve all three controls in a narrow detail pane without overflowing the sidebar.
 - 2026-08-13 — Removed the redundant header overflow menu; the card footer is now the single deletion control.
-- 2026-08-13 — Set a shared width for trigger and interaction controls in the When I press column.
+- 2026-08-13 — Set the same fixed label width inside the native trigger and interaction menu buttons so their visible control bounds align.
+- 2026-08-13 — Removed the redundant trigger heading and grouped enablement with deletion in the card footer.
+- 2026-08-13 — Centered the When I press, Run, and Where labels across their mapping columns.
+- 2026-08-13 — New mappings persist as disabled drafts. Input recording is direct; Run first asks the user to choose an action, and Shortcut then reveals its recorder. Legacy rules decode as fully configured.
+- 2026-08-13 — Removed the redundant command icon before a recorded shortcut in the Run selector; system-action icons remain visible.
+- 2026-08-13 — Replaced the empty-state sentence with a centered first-mapping prompt that explicitly directs users to Add Mapping.
 - 2026-08-13 — Reworked the mappings list into individual cards matching the approved When I press → Run → Where flow. The page subtitle is “Create shortcuts from keyboard/trackpad/mouse”; enablement and destructive actions moved to the card header/footer.
 - 2026-08-13 — Removed the enclosing Form section card. The settings page now uses its task-oriented workspace shell, leaving only the individual mapping cards visible.
 - 2026-08-13 — Aligned mapping cards with the approved reference: bordered control fields, one shortcut value field rather than duplicated output controls, and the exact conditional Run presentation for shortcuts versus predefined actions.

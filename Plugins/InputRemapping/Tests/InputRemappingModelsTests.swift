@@ -114,6 +114,27 @@ final class InputRemappingModelsTests: XCTestCase {
         )
     }
 
+    func testNewDraftRequiresRecordedInputAndOutput() {
+        let draft = InputRemappingRule.newDraft()
+
+        XCTAssertFalse(draft.isEnabled)
+        XCTAssertFalse(draft.isInputConfigured)
+        XCTAssertFalse(draft.isOutputConfigured)
+        XCTAssertEqual(draft.outputConfigurationState, .needsSelection)
+    }
+
+    func testLegacyRuleDecodingTreatsBothSidesAsConfigured() throws {
+        let rule = InputRemappingRule(buttonNumber: 4, action: .mouseBack)
+        var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(rule)) as? [String: Any])
+        payload.removeValue(forKey: "isInputConfigured")
+        payload.removeValue(forKey: "outputConfigurationState")
+
+        let decoded = try JSONDecoder().decode(InputRemappingRule.self, from: JSONSerialization.data(withJSONObject: payload))
+
+        XCTAssertTrue(decoded.isInputConfigured)
+        XCTAssertTrue(decoded.isOutputConfigured)
+    }
+
     func testSuccessfulDownConsumesMatchingUpWithoutExecutingTwice() {
         let rule = InputRemappingRule(buttonNumber: 4, action: .mouseBack)
         var processor = InputRemappingEventProcessor()
@@ -219,6 +240,9 @@ final class InputRemappingModelsTests: XCTestCase {
         var rule = try XCTUnwrap(plugin.store.rules.first)
         rule.replaceTrigger(.trackpadGesture(.threeFingerTap))
         rule.action = .mouseBack
+        rule.isInputConfigured = true
+        rule.isOutputConfigured = true
+        rule.isEnabled = true
         plugin.store.replace(rule)
 
         XCTAssertEqual(plugin.claimedTrackpadGestures, [.threeFingerTap])
@@ -361,10 +385,15 @@ final class InputRemappingModelsTests: XCTestCase {
     }
 
     @MainActor
-    func testRulesStartOnlyWithBothPermissionsAndEveryDeactivationStopsTap() {
+    func testRulesStartOnlyWithBothPermissionsAndEveryDeactivationStopsTap() throws {
         let storage = InputRemappingMemoryStorage()
         let store = InputRemappingStore(storage: storage)
         store.addRule()
+        var rule = try XCTUnwrap(store.rules.first)
+        rule.isInputConfigured = true
+        rule.isOutputConfigured = true
+        rule.isEnabled = true
+        store.replace(rule)
         let tap = InputRemappingTapSpy()
         let permissionState = InputRemappingPermissionState()
         let plugin = InputRemappingPlugin(
@@ -387,9 +416,15 @@ final class InputRemappingModelsTests: XCTestCase {
     }
 
     @MainActor
-    func testAppReactivationResamplesPermissionsAndDeactivationRemovesObserver() async {
+    func testAppReactivationResamplesPermissionsAndDeactivationRemovesObserver() async throws {
         let storage = InputRemappingMemoryStorage()
-        InputRemappingStore(storage: storage).addRule()
+        let store = InputRemappingStore(storage: storage)
+        store.addRule()
+        var rule = try XCTUnwrap(store.rules.first)
+        rule.isInputConfigured = true
+        rule.isOutputConfigured = true
+        rule.isEnabled = true
+        store.replace(rule)
         let tap = InputRemappingTapSpy()
         let notificationCenter = NotificationCenter()
         let permissionState = InputRemappingPermissionState()

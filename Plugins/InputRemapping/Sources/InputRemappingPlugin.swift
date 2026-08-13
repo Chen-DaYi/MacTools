@@ -459,19 +459,26 @@ private struct InputRemappingSettingsView: View {
             }
 
             if store.rules.isEmpty {
-                HStack {
-                    Spacer()
+                VStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    Image(systemName: "arrow.up.right.circle")
+                        .font(.system(size: 34))
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                    Text(localization.string("settings.empty.title", defaultValue: "Create your first mapping"))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     Text(
                         localization.string(
                             "settings.empty",
-                            defaultValue: "Record a keyboard key, mouse button, or scroll direction to add a rule."
+                            defaultValue: "Click Add Mapping above, then record an input and choose what it runs."
                         )
                     )
-                    .font(PluginSettingsTheme.Typography.pageDescription)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
-                    .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
-                    Spacer()
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
                 }
+                .frame(maxWidth: .infinity, minHeight: 260)
+                .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             } else {
                 ForEach(store.rules) { rule in
                     InputRemappingRuleEditor(
@@ -537,8 +544,6 @@ private struct InputRemappingRuleEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            mappingHeader
-
             HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 inputColumn
                 flowArrow
@@ -551,6 +556,11 @@ private struct InputRemappingRuleEditor: View {
 
             HStack {
                 Spacer()
+                Text(localization.string("settings.enabled", defaultValue: "Enabled"))
+                    .foregroundStyle(.secondary)
+                Toggle("", isOn: enabledBinding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
                 Button(role: .destructive) { store.delete(rule) } label: {
                     Image(systemName: "trash")
                 }
@@ -582,34 +592,46 @@ private struct InputRemappingRuleEditor: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Text(localization.string("settings.mapping.when", defaultValue: "When I press"))
                 .foregroundStyle(.secondary)
-
-            inputKindMenu
+                .frame(maxWidth: .infinity, alignment: .center)
 
             if buttonCapture.preparingRuleID == rule.id || buttonCapture.recordingRuleID == rule.id {
                 inputCaptureControl
+            } else if !draft.isInputConfigured {
+                Button(localization.string("settings.input.record", defaultValue: "Record input")) {
+                    startInputCapture()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            } else {
+                inputKindMenu
             }
 
-            if inputKind == .trackpad {
-                Picker(localization.string("settings.trackpadGesture", defaultValue: "Trackpad gesture"), selection: trackpadGestureBinding) {
-                    ForEach(TrackpadGesture.configurableCases) { gesture in
-                        Text(trackpadGestureTitle(gesture)).tag(Optional(gesture))
+            if draft.isInputConfigured {
+                if inputKind == .trackpad {
+                    Picker(localization.string("settings.trackpadGesture", defaultValue: "Trackpad gesture"), selection: trackpadGestureBinding) {
+                        ForEach(TrackpadGesture.configurableCases) { gesture in
+                            Text(trackpadGestureTitle(gesture)).tag(Optional(gesture))
+                        }
                     }
+                    .labelsHidden()
                 }
-                .labelsHidden()
-            }
 
-            if case .mouseButton = draft.trigger {
-                Menu {
-                    ForEach(InputRemappingMouseInteraction.allCases, id: \.self) { interaction in
-                        Button(mouseInteractionTitle(interaction)) { mouseInteractionBinding.wrappedValue = interaction }
+                if case .mouseButton = draft.trigger {
+                    Menu {
+                        ForEach(InputRemappingMouseInteraction.allCases, id: \.self) { interaction in
+                            Button(mouseInteractionTitle(interaction)) { mouseInteractionBinding.wrappedValue = interaction }
+                        }
+                    } label: {
+                        mappingMenuLabel(
+                            mouseInteractionTitle(draft.mouseInteraction),
+                            systemImage: "cursorarrow",
+                            width: InputRemappingEditorLayout.inputControlWidth
+                        )
                     }
-                } label: {
-                    mappingMenuLabel(mouseInteractionTitle(draft.mouseInteraction), systemImage: "cursorarrow")
+                    .menuStyle(.button)
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
-                .menuStyle(.button)
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .frame(width: InputRemappingEditorLayout.inputControlWidth)
             }
         }
         .frame(minWidth: 170, maxWidth: .infinity, alignment: .leading)
@@ -619,36 +641,12 @@ private struct InputRemappingRuleEditor: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Text(localization.string("settings.mapping.run", defaultValue: "Run"))
                 .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
             actionMenu
 
-            if case .shortcut = draft.action {
-                if buttonCapture.preparingShortcutRuleID == rule.id {
-                    Label(localization.string("settings.shortcut.preparing", defaultValue: "Preparing shortcut recording…"), systemImage: "hourglass")
-                        .foregroundStyle(.tint)
-                    Text(localization.string("settings.shortcut.preparing.detail", defaultValue: "Release the Record Shortcut button; listening starts next."))
-                        .foregroundStyle(.secondary)
-                    Button(localization.string("settings.cancel", defaultValue: "Cancel")) { buttonCapture.cancel() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                } else if buttonCapture.recordingShortcutRuleID == rule.id {
-                    Label(localization.string("settings.shortcut.recording", defaultValue: "Press the shortcut"), systemImage: "record.circle")
-                        .foregroundStyle(.tint)
-                    Button(localization.string("settings.cancel", defaultValue: "Cancel")) { buttonCapture.cancel() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                } else {
-                    Button {
-                        _ = buttonCapture.startShortcut(ruleID: rule.id) { binding in
-                            draft.action = .shortcut(binding)
-                            save()
-                        }
-                    } label: {
-                        Text(localization.string("settings.shortcut.record", defaultValue: "Record shortcut"))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
+            if draft.outputConfigurationState == .recordingShortcut ||
+                (draft.isOutputConfigured && draft.action.kind == .shortcut) {
+                shortcutRecordingControl
             }
         }
         .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
@@ -658,6 +656,7 @@ private struct InputRemappingRuleEditor: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Text(localization.string("settings.mapping.where", defaultValue: "Where"))
                 .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
             Menu {
                 Button(localization.string("settings.context.global", defaultValue: "Everywhere")) {}
                     .disabled(true)
@@ -682,22 +681,6 @@ private struct InputRemappingRuleEditor: View {
         .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
     }
 
-    private var mappingHeader: some View {
-        HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
-            Text(triggerTitle)
-                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-            Spacer()
-            Text(localization.string("settings.enabled", defaultValue: "Enabled"))
-                .foregroundStyle(.secondary)
-            Toggle("", isOn: enabledBinding)
-                .labelsHidden()
-                .toggleStyle(.switch)
-        }
-    }
-
     private var flowArrow: some View {
         Image(systemName: "arrow.right")
             .font(.title3)
@@ -719,12 +702,15 @@ private struct InputRemappingRuleEditor: View {
                 Button(inputKindTitle(kind)) { inputKindBinding.wrappedValue = kind }
             }
         } label: {
-            mappingMenuLabel(triggerTitle, systemImage: inputKind.symbolName)
+            mappingMenuLabel(
+                triggerTitle,
+                systemImage: inputKind.symbolName,
+                width: InputRemappingEditorLayout.inputControlWidth
+            )
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.large)
-        .frame(width: InputRemappingEditorLayout.inputControlWidth)
     }
 
     private var actionMenu: some View {
@@ -735,7 +721,10 @@ private struct InputRemappingRuleEditor: View {
                 }
             }
         } label: {
-            mappingMenuLabel(actionTitle, systemImage: actionSymbolName)
+            mappingMenuLabel(
+                actionTitle,
+                systemImage: draft.outputConfigurationState == .needsSelection || draft.action.kind == .shortcut ? nil : actionSymbolName
+            )
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
@@ -743,20 +732,30 @@ private struct InputRemappingRuleEditor: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func mappingMenuLabel(_ title: String, systemImage: String) -> some View {
+    private func mappingMenuLabel(
+        _ title: String,
+        systemImage: String?,
+        width: CGFloat? = nil
+    ) -> some View {
         HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-            Image(systemName: systemImage)
-                .foregroundStyle(.secondary)
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.secondary)
+            }
             Text(title)
                 .font(PluginSettingsTheme.Typography.rowTitle)
                 .lineLimit(1)
             Spacer(minLength: 8)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: width, alignment: .leading)
+        .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
     }
 
     private var actionTitle: String {
-        switch draft.action {
+        guard draft.outputConfigurationState != .needsSelection else {
+            return localization.string("settings.action.choose", defaultValue: "Choose something to run")
+        }
+        return switch draft.action {
         case let .shortcut(shortcut): shortcutTitle(shortcut)
         default: draft.action.title(localization: localization)
         }
@@ -791,6 +790,8 @@ private struct InputRemappingRuleEditor: View {
             get: { draft.action.kind },
             set: { kind in
                 draft.action = draft.action.replacingKind(kind)
+                draft.outputConfigurationState = kind == .shortcut ? .recordingShortcut : .configured
+                enableIfComplete()
                 save()
             }
         )
@@ -821,6 +822,7 @@ private struct InputRemappingRuleEditor: View {
                 case .scroll:
                     draft.replaceTrigger(.scroll(direction: .up, modifiers: []))
                 }
+                draft.isInputConfigured = true
                 save()
             }
         )
@@ -839,6 +841,7 @@ private struct InputRemappingRuleEditor: View {
         Binding(
             get: { draft.isEnabled },
             set: { enabled in
+                guard !enabled || (draft.isInputConfigured && draft.isOutputConfigured) else { return }
                 guard enabled, case let .keyboard(_, modifiers) = draft.trigger, modifiers.isEmpty else {
                     draft.isEnabled = enabled
                     save()
@@ -871,8 +874,48 @@ private struct InputRemappingRuleEditor: View {
     private func startInputCapture() {
         _ = buttonCapture.start(ruleID: rule.id) { input in
             draft.replaceTrigger(input.trigger(interaction: draft.mouseInteraction))
+            draft.isInputConfigured = true
+            enableIfComplete()
             save()
         }
+    }
+
+    @ViewBuilder
+    private var shortcutRecordingControl: some View {
+        if buttonCapture.preparingShortcutRuleID == rule.id {
+            Label(localization.string("settings.shortcut.preparing", defaultValue: "Preparing shortcut recording…"), systemImage: "hourglass")
+                .foregroundStyle(.tint)
+            Text(localization.string("settings.shortcut.preparing.detail", defaultValue: "Release the Record Shortcut button; listening starts next."))
+                .foregroundStyle(.secondary)
+            Button(localization.string("settings.cancel", defaultValue: "Cancel")) { buttonCapture.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        } else if buttonCapture.recordingShortcutRuleID == rule.id {
+            Label(localization.string("settings.shortcut.recording", defaultValue: "Press the shortcut"), systemImage: "record.circle")
+                .foregroundStyle(.tint)
+            Button(localization.string("settings.cancel", defaultValue: "Cancel")) { buttonCapture.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        } else {
+            Button {
+                _ = buttonCapture.startShortcut(ruleID: rule.id) { binding in
+                    draft.action = .shortcut(binding)
+                    draft.outputConfigurationState = .configured
+                    enableIfComplete()
+                    save()
+                }
+            } label: {
+                Text(localization.string("settings.shortcut.record", defaultValue: "Record shortcut"))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+    }
+
+    private func enableIfComplete() {
+        guard draft.isInputConfigured, draft.isOutputConfigured else { return }
+        draft.isEnabled = !InputRemappingRule.requiresExplicitConfirmation(for: draft.trigger)
     }
 
     private func captureStatus(title: String, detail: String, isPreparing: Bool) -> some View {
