@@ -80,6 +80,13 @@ private final class InputRemappingPermissionState {
 }
 
 final class InputRemappingModelsTests: XCTestCase {
+
+    func testShortcutActionKindStaysSelectedAfterRecording() {
+        let recorded = InputRemappingRule.Action.shortcut(ShortcutBinding(keyCode: 21, modifiers: [.command, .shift]))
+
+        XCTAssertEqual(recorded.kind, .shortcut)
+        XCTAssertEqual(recorded.replacingKind(.shortcut), recorded)
+    }
     func testMatcherRequiresEligibleButtonAndExactModifiers() {
         let rule = InputRemappingRule(
             buttonNumber: 4,

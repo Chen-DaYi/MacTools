@@ -68,6 +68,7 @@ Source of truth: yes
 - [x] P008 — Generalize triggers to keyboard, mouse click/double-click/long-press, scroll, and precise trackpad gestures.
 - [x] P009 — Add shared trackpad gesture arbitration and migration from Trackpad Gestures.
 - [x] P010 — Redesign the rule editor around Input, Output, and Context columns.
+- [x] P011 — Present each mapping as a card following When I press → Run → Where.
 
 ## Acceptance / DoD
 
@@ -91,6 +92,7 @@ Source of truth: yes
 - [x] Unmodified keyboard triggers persist disabled until their explicit confirmation.
 - [x] Mouse double-click actions preserve the native click pair.
 - [x] Shortcut recording exposes preparation and active-listening states.
+- [x] Each mapping card exposes its trigger, action, and global context in the requested flow layout.
 
 ## Implementation journal
 
@@ -117,6 +119,7 @@ Source of truth: yes
 - 2026-08-13 — Reverted the master-detail workspace at user request. Rules again render directly in the settings list; the three-column Input, Output, and Context editor remains for each rule.
 - 2026-08-13 — Review fixes: unmodified keyboard triggers now centrally persist disabled until confirmation; double-click actions preserve their native click pair; shortcut recording renders preparation and listening states; universal matcher, interaction, and trackpad-claim paths have targeted coverage; universal copy and human-readable localized trackpad gesture titles replace stale button-only and raw identifiers.
 - 2026-08-13 — Checks passed: generated project, `InputRemappingPlugin`, `TrackpadGesturesPlugin`, and `MacTools` Debug builds; targeted Input Remapping XCTest passed through the MacTools scheme; localization JSON parse and `git diff --check` passed. The plugin scheme has no test action.
+- 2026-08-13 — Reworked the mappings list into individual cards matching the approved When I press → Run → Where flow. The page subtitle is “Create shortcuts from keyboard/trackpad/mouse”; enablement and destructive actions moved to the card header/footer.
 
 ## Files
 

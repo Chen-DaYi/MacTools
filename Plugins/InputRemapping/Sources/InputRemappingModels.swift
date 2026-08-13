@@ -97,6 +97,54 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
     enum Action: Codable, Equatable, Hashable, Sendable, CaseIterable {
         case shortcut(ShortcutBinding), mouseBack, mouseForward, mouseMiddle, missionControl, spaceLeft, spaceRight, mediaPlayPause, volumeDown, volumeUp
         static var allCases: [Action] { [.shortcut(ShortcutBinding(keyCode: 0, modifiers: [.command])), .mouseBack, .mouseForward, .mouseMiddle, .missionControl, .spaceLeft, .spaceRight, .mediaPlayPause, .volumeDown, .volumeUp] }
+
+        enum Kind: CaseIterable, Hashable {
+            case shortcut, mouseBack, mouseForward, mouseMiddle, missionControl, spaceLeft, spaceRight, mediaPlayPause, volumeDown, volumeUp
+        }
+
+        var kind: Kind {
+            switch self {
+            case .shortcut: .shortcut
+            case .mouseBack: Kind.mouseBack
+            case .mouseForward: Kind.mouseForward
+            case .mouseMiddle: Kind.mouseMiddle
+            case .missionControl: Kind.missionControl
+            case .spaceLeft: Kind.spaceLeft
+            case .spaceRight: Kind.spaceRight
+            case .mediaPlayPause: Kind.mediaPlayPause
+            case .volumeDown: Kind.volumeDown
+            case .volumeUp: Kind.volumeUp
+            }
+        }
+
+        func replacingKind(_ kind: Kind) -> Action {
+            switch kind {
+            case .shortcut:
+                if case .shortcut = self { return self }
+                return .shortcut(ShortcutBinding(keyCode: 0, modifiers: [.command]))
+            case .mouseBack: return .mouseBack
+            case .mouseForward: return .mouseForward
+            case .mouseMiddle: return .mouseMiddle
+            case .missionControl: return .missionControl
+            case .spaceLeft: return .spaceLeft
+            case .spaceRight: return .spaceRight
+            case .mediaPlayPause: return .mediaPlayPause
+            case .volumeDown: return .volumeDown
+            case .volumeUp: return .volumeUp
+            }
+        }
+
+        func kindTitle(localization: PluginLocalization) -> String {
+            switch self {
+            case .shortcut: localization.string("action.shortcut", defaultValue: "Shortcut")
+            default: title(localization: localization)
+            }
+        }
+
+        static func action(for kind: Kind) -> Action {
+            Action.shortcut(ShortcutBinding(keyCode: 0, modifiers: [.command])).replacingKind(kind)
+        }
+
         func title(localization: PluginLocalization) -> String {
             switch self {
             case let .shortcut(binding): localization.format("action.shortcut.format", defaultValue: "快捷键 %@%d", binding.modifiers.symbolString, binding.keyCode)
