@@ -1056,67 +1056,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Input Remapping"
+            "value": "Custom Shortcuts"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "输入重映射"
+            "value": "自定义快捷操作"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "إعادة تعيين المدخلات"
+            "value": "اختصارات مخصصة"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eingabe-Neuzuordnung"
+            "value": "Eigene Kurzbefehle"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reasignación de entrada"
+            "value": "Atajos personalizados"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remappage des entrées"
+            "value": "Raccourcis personnalisés"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "入力の再マッピング"
+            "value": "カスタムショートカット"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "입력 재매핑"
+            "value": "사용자화 단축키"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remapeamento de entrada"
+            "value": "Atalhos personalizados"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Переназначение ввода"
+            "value": "Пользовательские сочетания"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "輸入重新映射"
+            "value": "自訂快速操作"
           }
         }
       }
@@ -1826,67 +1826,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add Mapping"
+            "value": "Add Shortcut"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "添加映射"
+            "value": "添加快捷操作"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "إضافة رسم الخرائط"
+            "value": "إضافة اختصار"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zuordnung hinzufügen"
+            "value": "Kurzbefehl hinzufügen"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agregar mapeo"
+            "value": "Añadir atajo"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajouter un mappage"
+            "value": "Ajouter un raccourci"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "マッピングの追加"
+            "value": "ショートカットを追加"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "매핑 추가"
+            "value": "단축키 추가"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Adicionar mapeamento"
+            "value": "Adicionar atalho"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Добавить сопоставление"
+            "value": "Добавить сочетание"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "新增映射"
+            "value": "加入快速操作"
           }
         }
       }
@@ -2316,67 +2316,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delete mapping"
+            "value": "Delete shortcut"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "删除映射"
+            "value": "删除快捷操作"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "حذف التعيين"
+            "value": "حذف الاختصار"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zuordnung löschen"
+            "value": "Kurzbefehl löschen"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eliminar mapeo"
+            "value": "Eliminar atajo"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supprimer le mappage"
+            "value": "Supprimer le raccourci"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "マッピングの削除"
+            "value": "ショートカットを削除"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "매핑 삭제"
+            "value": "단축키 삭제"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Excluir mapeamento"
+            "value": "Excluir atalho"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Удалить сопоставление"
+            "value": "Удалить сочетание"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "刪除映射"
+            "value": "刪除快速操作"
           }
         }
       }
@@ -2386,67 +2386,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Click Add Mapping above, then record an input and choose what it runs."
+            "value": "Click Add Shortcut above, then record an input and choose its action."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "点击上方的添加映射，然后录制输入并选择要运行的操作。"
+            "value": "点击上方的“添加快捷操作”，然后录制输入并选择要执行的操作。"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "انقر فوق \"إضافة تعيين\" أعلاه، ثم سجل إدخالاً واختر ما سيتم تشغيله."
+            "value": "انقر على «إضافة اختصار» أعلاه، ثم سجّل إدخالاً واختر الإجراء المطلوب."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Klicken Sie oben auf „Zuordnung hinzufügen“, zeichnen Sie dann eine Eingabe auf und wählen Sie aus, was ausgeführt werden soll."
+            "value": "Klicken Sie oben auf „Kurzbefehl hinzufügen“, zeichnen Sie eine Eingabe auf und wählen Sie die Aktion."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Haga clic en Agregar asignación arriba, luego registre una entrada y elija lo que ejecuta."
+            "value": "Haz clic arriba en Añadir atajo, registra una entrada y elige la acción."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cliquez sur Ajouter un mappage ci-dessus, puis enregistrez une entrée et choisissez ce qu'elle exécute."
+            "value": "Cliquez sur Ajouter un raccourci ci-dessus, enregistrez une entrée, puis choisissez son action."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "上の [マッピングの追加] をクリックして、入力を記録し、実行する内容を選択します。"
+            "value": "上の「ショートカットを追加」をクリックして、入力を記録し、実行するアクションを選択します。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "위의 매핑 추가를 클릭한 다음 입력을 기록하고 실행 항목을 선택하세요."
+            "value": "위의 단축키 추가를 클릭한 다음 입력을 기록하고 실행할 동작을 선택하세요."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clique em Adicionar mapeamento acima, registre uma entrada e escolha o que ela executa."
+            "value": "Clique em Adicionar atalho acima, registre uma entrada e escolha a ação."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Нажмите «Добавить сопоставление» выше, затем запишите входные данные и выберите, что они будут запускать."
+            "value": "Нажмите «Добавить сочетание» выше, запишите ввод и выберите действие."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "點擊上面的“新增映射”，然後記錄輸入並選擇其運行的內容。"
+            "value": "點擊上方的「加入快速操作」，然後記錄輸入並選擇要執行的動作。"
           }
         }
       }
@@ -2456,67 +2456,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Create your first mapping"
+            "value": "Create your first shortcut"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "创建第一个映射"
+            "value": "创建第一个快捷操作"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "أنشئ خرائطك الأولى"
+            "value": "أنشئ اختصارك الأول"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Erstellen Sie Ihr erstes Mapping"
+            "value": "Erstellen Sie Ihren ersten Kurzbefehl"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crea tu primer mapeo"
+            "value": "Crea tu primer atajo"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Créez votre première cartographie"
+            "value": "Créez votre premier raccourci"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最初のマッピングを作成する"
+            "value": "最初のショートカットを作成"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "첫 번째 매핑 만들기"
+            "value": "첫 번째 단축키 만들기"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crie seu primeiro mapeamento"
+            "value": "Crie seu primeiro atalho"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Создайте свою первую карту"
+            "value": "Создайте первое сочетание"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "建立您的第一個映射"
+            "value": "建立第一個快速操作"
           }
         }
       }
@@ -2596,67 +2596,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Input Mappings"
+            "value": "Custom Shortcuts"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "输入映射"
+            "value": "自定义快捷操作"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "تعيينات الإدخال"
+            "value": "اختصارات مخصصة"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eingabezuordnungen"
+            "value": "Eigene Kurzbefehle"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Asignaciones de entrada"
+            "value": "Atajos personalizados"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mappages d'entrée"
+            "value": "Raccourcis personnalisés"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "入力マッピング"
+            "value": "カスタムショートカット"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "입력 매핑"
+            "value": "사용자화 단축키"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mapeamentos de entrada"
+            "value": "Atalhos personalizados"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Входные сопоставления"
+            "value": "Пользовательские сочетания"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "輸入映射"
+            "value": "自訂快速操作"
           }
         }
       }
@@ -3576,67 +3576,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose something to run"
+            "value": "Choose an action"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选择要运行的项目"
+            "value": "选择操作"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "اختر شيئا لتشغيله"
+            "value": "اختر إجراءً"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wählen Sie etwas zum Ausführen aus"
+            "value": "Aktion auswählen"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Elige algo para ejecutar"
+            "value": "Elige una acción"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choisissez quelque chose à exécuter"
+            "value": "Choisissez une action"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "実行するものを選択してください"
+            "value": "アクションを選択"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "실행할 항목 선택"
+            "value": "동작 선택"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escolha algo para executar"
+            "value": "Escolha uma ação"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Выберите что-нибудь для запуска"
+            "value": "Выберите действие"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "選擇要運行的東西"
+            "value": "選擇操作"
           }
         }
       }
