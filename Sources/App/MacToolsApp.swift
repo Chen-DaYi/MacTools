@@ -28,6 +28,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private var launchDisposition: AppInstanceLaunchDisposition?
     private var didFinishLaunching = false
     private var runtime: MacToolsAppRuntime?
+    private var instanceCoordinationTask: Task<Void, Never>?
     #if DEBUG
     private var showSettingsForTesting: (() -> Void)?
     #endif
@@ -43,20 +44,17 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             return
         }
 
-        instanceCoordinator.setCommandHandler { [weak self] in
-            self?.requestSettingsRecovery() ?? .notReady
-        }
-
-        if instanceCoordinator.claimPrimaryPortIfPossible() {
-            launchDisposition = .primary(recoveryRequested: false)
-            return
-        }
-
         launchDisposition = .secondary(.timedOut)
-        Task { [weak self, instanceCoordinator] in
-            let disposition = await Task.detached {
-                instanceCoordinator.resolveSecondaryLaunch()
-            }.value
+        let recoveryHandler = settingsRecoveryHandler()
+        instanceCoordinationTask = Task { [weak self, instanceCoordinator, recoveryHandler] in
+            await instanceCoordinator.setCommandHandler(recoveryHandler)
+            let disposition: AppInstanceLaunchDisposition
+            if await instanceCoordinator.claimPrimaryPortIfPossible() {
+                disposition = .primary(recoveryRequested: false)
+            } else {
+                disposition = await instanceCoordinator.resolveSecondaryLaunch()
+            }
+            guard !Task.isCancelled else { return }
             self?.completeSecondaryLaunch(disposition)
         }
     }
@@ -103,8 +101,12 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        instanceCoordinationTask?.cancel()
+        instanceCoordinationTask = nil
         runtime?.terminate()
-        instanceCoordinator.invalidate()
+        Task { [instanceCoordinator] in
+            await instanceCoordinator.invalidate()
+        }
     }
 
     nonisolated func userNotificationCenter(
@@ -126,6 +128,14 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         return runtime?.showSettings() == true ? .accepted : .notReady
     }
 
+    private func settingsRecoveryHandler() -> @Sendable () -> AppInstanceResponse {
+        { [weak self] in
+            MainActor.assumeIsolated {
+                self?.requestSettingsRecovery() ?? .notReady
+            }
+        }
+    }
+
     private var isRunningTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
@@ -133,6 +143,10 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     #if DEBUG
     func setShowSettingsForRecoveryForTesting(_ action: @escaping () -> Void) {
         showSettingsForTesting = action
+    }
+
+    func handleInstanceRecoveryCommandForTesting() -> AppInstanceResponse {
+        settingsRecoveryHandler()()
     }
     #endif
 }

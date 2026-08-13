@@ -365,7 +365,10 @@ targets["MacToolsTests"] = {
   "platform" => "macOS",
   "deploymentTarget" => "14.0",
   "sources" => [
-    { "path" => relative_to_output_dir(File.join(repo_root, "Tests"), output_dir) },
+    {
+      "path" => relative_to_output_dir(File.join(repo_root, "Tests"), output_dir),
+      "excludes" => ["Support/**"]
+    },
     {
       "path" => relative_to_output_dir(File.join(repo_root, "Plugins"), output_dir),
       "includes" => ["*/Tests/**"]
@@ -373,7 +376,8 @@ targets["MacToolsTests"] = {
   ],
   "dependencies" => [
     { "target" => "MacTools" },
-    { "target" => "MacToolsPluginKit" }
+    { "target" => "MacToolsPluginKit" },
+    { "target" => "AppInstanceProbe" }
   ] + plugin_core_targets.map { |target| { "target" => target } },
   "settings" => test_settings
 }
@@ -382,7 +386,8 @@ schemes = {
   "MacTools" => {
     "build" => {
       "targets" => {
-        "MacToolsPluginKit" => "all"
+        "MacToolsPluginKit" => "all",
+        "AppInstanceProbe" => ["test"]
       }.merge(plugin_bundle_targets.to_h { |target| [target, "all"] })
         .merge(
           "MacTools" => "all",

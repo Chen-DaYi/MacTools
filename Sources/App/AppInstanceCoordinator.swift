@@ -41,28 +41,28 @@ struct AppInstanceCommand: Codable, Equatable {
     }
 }
 
-final class AppInstanceCoordinator: @unchecked Sendable {
-    private static let messageID: Int32 = 1
+actor AppInstanceCoordinator {
+    fileprivate static let messageID: Int32 = 1
     private static let sendTimeout: CFTimeInterval = 0.5
     private static let receiveTimeout: CFTimeInterval = 0.5
-    private static let forwardingTimeout: TimeInterval = 2
+    private static let forwardingTimeout: TimeInterval = 1.5
     private static let retryDelay: TimeInterval = 0.1
 
     private let portName: String
     private let callbackBox: CallbackBox
-    private var localPort: CFMessagePort?
+    private let transport: any AppInstanceTransport
 
-    init(bundleIdentifier: String? = Bundle.main.bundleIdentifier) {
+    init(
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+        transport: any AppInstanceTransport = CFMessagePortInstanceTransport()
+    ) {
         let identifier = bundleIdentifier ?? "com.example.mactools"
         portName = "\(identifier).instance-coordination.v1"
         callbackBox = CallbackBox()
+        self.transport = transport
     }
 
-    deinit {
-        invalidate()
-    }
-
-    func setCommandHandler(_ handler: @escaping () -> AppInstanceResponse) {
+    func setCommandHandler(_ handler: @escaping @Sendable () -> AppInstanceResponse) {
         callbackBox.setHandler(handler)
     }
 
@@ -75,12 +75,17 @@ final class AppInstanceCoordinator: @unchecked Sendable {
         return false
     }
 
-    func resolveSecondaryLaunch() -> AppInstanceLaunchDisposition {
+    func resolveSecondaryLaunch() async -> AppInstanceLaunchDisposition {
         let deadline = Date().addingTimeInterval(Self.forwardingTimeout)
         let command = AppInstanceCommand.showSettingsRequest()
         var lastResult: AppInstanceForwardingResult = .timedOut
 
         while Date() < deadline {
+            guard !Task.isCancelled else {
+                AppLog.instanceCoordination.debug("Cancelled settings recovery forwarding")
+                return .secondary(.timedOut)
+            }
+
             switch forwardSettingsRequest(command, deadline: deadline) {
             case .accepted:
                 AppLog.instanceCoordination.debug("Forwarded settings recovery request")
@@ -98,7 +103,12 @@ final class AppInstanceCoordinator: @unchecked Sendable {
                 return .secondary(.rejected)
             }
 
-            RunLoop.current.run(until: min(Date().addingTimeInterval(Self.retryDelay), deadline))
+            guard !Task.isCancelled else {
+                AppLog.instanceCoordination.debug("Cancelled settings recovery forwarding")
+                return .secondary(.timedOut)
+            }
+            let retryDelay = min(Self.retryDelay, max(0, deadline.timeIntervalSinceNow))
+            try? await Task.sleep(for: .seconds(retryDelay))
         }
 
         AppLog.instanceCoordination.error("Timed out forwarding settings recovery request")
@@ -106,15 +116,80 @@ final class AppInstanceCoordinator: @unchecked Sendable {
     }
 
     func invalidate() {
-        guard let localPort else { return }
-        CFMessagePortInvalidate(localPort)
-        self.localPort = nil
+        transport.invalidate()
         AppLog.instanceCoordination.debug("Invalidated primary instance port")
     }
 
     private func registerLocalPortIfPossible() -> Bool {
-        guard localPort == nil else { return true }
+        transport.registerLocalPort(name: portName, callbackBox: callbackBox)
+    }
 
+    private func forwardSettingsRequest(
+        _ command: AppInstanceCommand,
+        deadline: Date
+    ) -> ForwardingAttempt {
+        guard let data = try? JSONEncoder().encode(command) else {
+            return .rejected
+        }
+
+        let remainingTime = deadline.timeIntervalSinceNow
+        guard remainingTime > 0 else { return .timedOut }
+        let sendTimeout = min(Self.sendTimeout, remainingTime / 2)
+        let receiveTimeout = min(Self.receiveTimeout, remainingTime - sendTimeout)
+
+        let responseData: Data
+        switch transport.send(
+            name: portName,
+            messageID: Self.messageID,
+            data: data,
+            sendTimeout: sendTimeout,
+            receiveTimeout: receiveTimeout
+        ) {
+        case let .response(data): responseData = data
+        case .timedOut: return .timedOut
+        case .invalidPort: return .invalidPort
+        case .rejected: return .rejected
+        }
+        guard let response = try? JSONDecoder().decode(AppInstanceResponse.self, from: responseData) else {
+            return .rejected
+        }
+
+        switch response {
+        case .accepted:
+            return .accepted
+        case .notReady:
+            return .notReady
+        case .unsupported, .invalid:
+            return .rejected
+        }
+    }
+
+}
+
+protocol AppInstanceTransport: AnyObject {
+    func registerLocalPort(name: String, callbackBox: CallbackBox) -> Bool
+    func send(
+        name: String,
+        messageID: Int32,
+        data: Data,
+        sendTimeout: CFTimeInterval,
+        receiveTimeout: CFTimeInterval
+    ) -> AppInstanceTransportResult
+    func invalidate()
+}
+
+enum AppInstanceTransportResult {
+    case response(Data)
+    case timedOut
+    case invalidPort
+    case rejected
+}
+
+final class CFMessagePortInstanceTransport: AppInstanceTransport {
+    private var localPort: CFMessagePort?
+
+    func registerLocalPort(name: String, callbackBox: CallbackBox) -> Bool {
+        guard localPort == nil else { return true }
         var shouldFreeInfo = DarwinBoolean(false)
         var context = CFMessagePortContext(
             version: 0,
@@ -130,87 +205,51 @@ final class AppInstanceCoordinator: @unchecked Sendable {
             },
             copyDescription: nil
         )
-
         guard let port = CFMessagePortCreateLocal(
-            kCFAllocatorDefault,
-            portName as CFString,
-            Self.receiveMessage,
-            &context,
-            &shouldFreeInfo
-        ) else {
-            AppLog.instanceCoordination.error("Unable to create instance coordination port")
-            return false
-        }
-
-        guard !shouldFreeInfo.boolValue else {
-            return false
-        }
-
+            kCFAllocatorDefault, name as CFString, Self.receiveMessage,
+            &context, &shouldFreeInfo
+        ) else { return false }
+        guard !shouldFreeInfo.boolValue else { return false }
         CFMessagePortSetDispatchQueue(port, DispatchQueue.main)
         localPort = port
         return true
     }
 
-    private func forwardSettingsRequest(
-        _ command: AppInstanceCommand,
-        deadline: Date
-    ) -> ForwardingAttempt {
-        guard let remotePort = CFMessagePortCreateRemote(kCFAllocatorDefault, portName as CFString) else {
+    func send(
+        name: String,
+        messageID: Int32,
+        data: Data,
+        sendTimeout: CFTimeInterval,
+        receiveTimeout: CFTimeInterval
+    ) -> AppInstanceTransportResult {
+        guard let remotePort = CFMessagePortCreateRemote(kCFAllocatorDefault, name as CFString) else {
             return .invalidPort
         }
-
-        guard let data = try? JSONEncoder().encode(command) else {
-            return .rejected
-        }
-
-        let remainingTime = deadline.timeIntervalSinceNow
-        guard remainingTime > 0 else { return .timedOut }
-        let sendTimeout = min(Self.sendTimeout, remainingTime / 2)
-        let receiveTimeout = min(Self.receiveTimeout, remainingTime - sendTimeout)
-
         var returnedData: Unmanaged<CFData>?
         let result = CFMessagePortSendRequest(
-            remotePort,
-            Self.messageID,
-            data as CFData,
-            sendTimeout,
-            receiveTimeout,
-            CFRunLoopMode.defaultMode.rawValue,
-            &returnedData
+            remotePort, messageID, data as CFData, sendTimeout, receiveTimeout,
+            CFRunLoopMode.defaultMode.rawValue, &returnedData
         )
-
-        guard result != kCFMessagePortReceiveTimeout, result != kCFMessagePortSendTimeout else {
+        if result == kCFMessagePortReceiveTimeout || result == kCFMessagePortSendTimeout {
             return .timedOut
         }
-        guard result == kCFMessagePortSuccess else {
-            return .invalidPort
-        }
-        guard let returnedData else {
-            return .rejected
-        }
+        guard result == kCFMessagePortSuccess else { return .invalidPort }
+        guard let returnedData else { return .rejected }
+        return .response(returnedData.takeRetainedValue() as Data)
+    }
 
-        let responseData = returnedData.takeRetainedValue() as Data
-        guard let response = try? JSONDecoder().decode(AppInstanceResponse.self, from: responseData) else {
-            return .rejected
-        }
-
-        switch response {
-        case .accepted:
-            return .accepted
-        case .notReady:
-            return .notReady
-        case .unsupported, .invalid:
-            return .rejected
-        }
+    func invalidate() {
+        guard let localPort else { return }
+        CFMessagePortInvalidate(localPort)
+        self.localPort = nil
     }
 
     private static let receiveMessage: CFMessagePortCallBack = { _, messageID, data, info in
         guard messageID == AppInstanceCoordinator.messageID, let data, let info else {
-            return AppInstanceCoordinator.encodedResponse(.invalid)
+            return encodedResponse(.invalid)
         }
-
         let callbackBox = Unmanaged<CallbackBox>.fromOpaque(info).takeUnretainedValue()
-        return AppInstanceCoordinator.encodedResponse(callbackBox.response(for: data as Data))
+        return encodedResponse(callbackBox.response(for: data as Data))
     }
 
     private static func encodedResponse(_ response: AppInstanceResponse) -> Unmanaged<CFData>? {
@@ -227,30 +266,31 @@ private enum ForwardingAttempt {
     case timedOut
 }
 
-private final class CallbackBox {
+final class CallbackBox {
     private static let acceptedRequestLifetime: TimeInterval = 30
 
     private let lock = NSLock()
-    private var handler: (() -> AppInstanceResponse)?
+    private var handler: (@Sendable () -> AppInstanceResponse)?
     private var acceptedRequestDates = [UUID: Date]()
 
-    func setHandler(_ handler: @escaping () -> AppInstanceResponse) {
+    func setHandler(_ handler: @escaping @Sendable () -> AppInstanceResponse) {
         lock.lock()
         self.handler = handler
         lock.unlock()
     }
 
     func response(for data: Data) -> AppInstanceResponse {
-        guard
-            data.count <= AppInstanceCommand.maximumPayloadSize,
-            let command = try? JSONDecoder().decode(AppInstanceCommand.self, from: data)
-        else {
+        guard data.count <= AppInstanceCommand.maximumPayloadSize else {
+            AppLog.instanceCoordination.warning("Rejected oversized instance coordination message")
+            return .invalid
+        }
+        guard let command = try? JSONDecoder().decode(AppInstanceCommand.self, from: data) else {
+            AppLog.instanceCoordination.warning("Rejected malformed instance coordination message")
             return .invalid
         }
 
-        guard command.version == AppInstanceCommand.currentVersion,
-              command.command == AppInstanceCommand.showSettings
-        else {
+        guard command.isSupported else {
+            AppLog.instanceCoordination.warning("Rejected unsupported instance coordination command")
             return .unsupported
         }
 

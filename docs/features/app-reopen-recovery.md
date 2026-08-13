@@ -1,6 +1,6 @@
 # Feature — App Reopen Recovery
 
-Last verified: 2026-08-12
+Last verified: 2026-08-13
 
 Status: implemented — Draft/WIP, not mergeable
 Source of truth: yes
@@ -48,7 +48,7 @@ Source of truth: yes
 - [x] F002 — Show Settings on reopen — files: `Sources/App/MacToolsApp.swift` — status: done
 - [x] F003 — Cover the AppKit callback — files: `Tests/App/MacToolsAppDelegateTests.swift` — status: done
 - [x] F004 — Guarantee one runtime — files: `Sources/App/AppInstanceCoordinator.swift`, `Sources/App/MacToolsAppRuntime.swift` — status: done
-- [x] F005 — Cover protocol, ACK, and invalidation boundaries — files: `Tests/App/AppInstanceCoordinatorTests.swift` — status: done
+- [x] F005 — Cover protocol, ACK, invalidation, concurrency, crash, and timeout boundaries — files: `Tests/App/AppInstanceCoordinatorTests.swift`, `Tests/App/AppInstanceCoordinatorProcessTests.swift`, `Tests/Support/AppInstanceProbe/AppInstanceProbe.swift` — status: done
 
 ## Codex implementation journal
 
@@ -62,6 +62,8 @@ Source of truth: yes
 - 2026-08-12 — Full suite: the instance-coordination change no longer terminates parallel XCTest hosts. The suite still fails in three existing `DiskCleanPluginTests` cases (`testCleanActionTitleReportsSelectionAndRemovalMode`, `testConfirmingPhaseReplacesCleanActionWithConfirmAndCancel`, and `testTrashCompletionSubtitleDoesNotClaimSpaceWasReclaimed`); direct rerun confirms they are outside this change.
 - 2026-08-12 — Review fixes: retries now reuse one request ID, per-attempt IPC timeouts are capped by the global deadline, and a process promoted after an invalid owner port presents Settings after its runtime starts. Multi-process certification and non-blocking launch coordination remain open Draft gates.
 - 2026-08-12 — Review fixes: secondary IPC forwarding now runs off the MainActor; its send and reply budgets share the remaining global deadline. Idempotence records expire after 30 seconds, and the coordinator logs command receipt, response, duplicate acknowledgement, and secondary termination. Multi-process certification remains an open Draft gate.
+- 2026-08-13 — Final review fixes: the coordinator is actor-confined, its lifecycle task is owned and cancellation-aware, the CFMessagePort transport is injectable, and invalid protocol messages produce warnings. A dedicated probe validates ten concurrent processes with nine acknowledged commands, crash promotion, an unresponsive owner under two seconds, and independent namespaces. The 1.5-second IPC budget leaves process-launch and termination margin inside the 2-second user-visible target. AppKit reopen and IPC handler convergence is covered directly.
+- 2026-08-13 — Test integration: `project.yml` and the plugin project generator register the process probe as a test dependency without including probe sources in `MacToolsTests`.
 
 ## Current files
 
@@ -72,7 +74,9 @@ Source of truth: yes
 | Owner runtime | `Sources/App/MacToolsAppRuntime.swift` |
 | Architecture plan | `docs/superpowers/plans/2026-08-12-single-instance-reopen-recovery.md` |
 | Settings presentation | `Sources/App/AppWindowRouter.swift` |
-| Tests | `Tests/App/AppInstanceCoordinatorTests.swift`, `Tests/App/MacToolsAppDelegateTests.swift`, `Tests/App/AppWindowRouterTests.swift` |
+| Tests | `Tests/App/AppInstanceCoordinatorTests.swift`, `Tests/App/AppInstanceCoordinatorProcessTests.swift`, `Tests/App/MacToolsAppDelegateTests.swift`, `Tests/App/AppWindowRouterTests.swift` |
+| Process probe | `Tests/Support/AppInstanceProbe/AppInstanceProbe.swift` |
+| Test integration | `project.yml`, `scripts/plugins/generate-plugin-project-config.rb` |
 
 ## Tests / QA
 
@@ -80,7 +84,7 @@ Source of truth: yes
 - [x] Run `MacToolsAppDelegateTests` and `AppWindowRouterTests` after implementation.
 - [x] `open -n` on the Debug bundle leaves one PID and presents Settings in the primary instance.
 - [x] Unit coverage verifies ACK forwarding and primary-port invalidation/recovery.
-- [ ] Verify ten concurrent launches, primary crash as a separate process, and an unresponsive primary.
+- [x] Process coverage verifies ten concurrent launches, primary crash, an unresponsive primary, and independent namespaces.
 - [ ] Repeat Finder, Spotlight, Dock, and launcher QA with one final process.
 
 ## History

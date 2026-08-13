@@ -8,7 +8,7 @@ Baseline: `06ad3254a8a3b1dcf3bc8b2e4fb7bee01f6c014a`
 
 PR: [#273 — Draft](https://github.com/ggbond268/MacTools/pull/273)
 
-Architecture status: `ACTION_REQUIRED`
+Architecture status: `IMPLEMENTED_DRAFT`
 
 Independent architecture review: `runtime_attestation=gpt-5.6-sol/high`; `settled` packet
 
@@ -99,7 +99,7 @@ One versioned command: `show-settings`.
 - Closed responses: `accepted`, `not-ready`, `unsupported`, `invalid`.
 - Send timeout: at most 500 ms per attempt.
 - Receive timeout: at most 500 ms per attempt.
-- Global retry budget: 2 seconds.
+- Global retry budget: 1.5 seconds; reserves 0.5 seconds for process launch and orderly termination while keeping the user-visible recovery below 2 seconds.
 - No URL, path, preference, or arbitrary data.
 - A secondary copy cannot initialize the runtime, whatever the result.
 - `requestID` makes repeated commands idempotent.
