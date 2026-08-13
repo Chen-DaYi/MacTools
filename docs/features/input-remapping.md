@@ -71,6 +71,8 @@ Source of truth: yes
 - [x] P011 — Present each mapping as a card following When I press → Run → Where.
 - [x] P012 — Match the approved card positioning and native control hierarchy.
 - [x] P013 — Keep the mapping workspace within the host's standard readable-width guide.
+- [x] P014 — Offer mapping deletion only once, in the card footer.
+- [x] P015 — Keep the trigger controls in a mapping column visually aligned.
 
 ## Acceptance / DoD
 
@@ -122,6 +124,8 @@ Source of truth: yes
 - 2026-08-13 — Review fixes: unmodified keyboard triggers now centrally persist disabled until confirmation; double-click actions preserve their native click pair; shortcut recording renders preparation and listening states; universal matcher, interaction, and trackpad-claim paths have targeted coverage; universal copy and human-readable localized trackpad gesture titles replace stale button-only and raw identifiers.
 - 2026-08-13 — Checks passed: generated project, `InputRemappingPlugin`, `TrackpadGesturesPlugin`, and `MacTools` Debug builds; targeted Input Remapping XCTest passed through the MacTools scheme; localization JSON parse and `git diff --check` passed. The plugin scheme has no test action.
 - 2026-08-13 — Kept the mapping workspace within the host's readable-width guide; responsive column minimums preserve all three controls in a narrow detail pane without overflowing the sidebar.
+- 2026-08-13 — Removed the redundant header overflow menu; the card footer is now the single deletion control.
+- 2026-08-13 — Set a shared width for trigger and interaction controls in the When I press column.
 - 2026-08-13 — Reworked the mappings list into individual cards matching the approved When I press → Run → Where flow. The page subtitle is “Create shortcuts from keyboard/trackpad/mouse”; enablement and destructive actions moved to the card header/footer.
 - 2026-08-13 — Removed the enclosing Form section card. The settings page now uses its task-oriented workspace shell, leaving only the individual mapping cards visible.
 - 2026-08-13 — Aligned mapping cards with the approved reference: bordered control fields, one shortcut value field rather than duplicated output controls, and the exact conditional Run presentation for shortcuts versus predefined actions.

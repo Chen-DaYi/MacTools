@@ -506,6 +506,10 @@ private enum InputRemappingInputKind: String, CaseIterable, Identifiable {
     }
 }
 
+private enum InputRemappingEditorLayout {
+    static let inputControlWidth: CGFloat = 220
+}
+
 private struct InputRemappingRuleEditor: View {
     let rule: InputRemappingRule
     @ObservedObject var store: InputRemappingStore
@@ -548,10 +552,12 @@ private struct InputRemappingRuleEditor: View {
             HStack {
                 Spacer()
                 Button(role: .destructive) { store.delete(rule) } label: {
-                    Label(localization.string("settings.deleteMapping", defaultValue: "Delete mapping"), systemImage: "trash")
+                    Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
+                .accessibilityLabel(localization.string("settings.deleteMapping", defaultValue: "Delete mapping"))
+                .help(localization.string("settings.deleteMapping", defaultValue: "Delete mapping"))
             }
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
@@ -603,7 +609,7 @@ private struct InputRemappingRuleEditor: View {
                 .menuStyle(.button)
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                .frame(maxWidth: .infinity)
+                .frame(width: InputRemappingEditorLayout.inputControlWidth)
             }
         }
         .frame(minWidth: 170, maxWidth: .infinity, alignment: .leading)
@@ -689,18 +695,6 @@ private struct InputRemappingRuleEditor: View {
             Toggle("", isOn: enabledBinding)
                 .labelsHidden()
                 .toggleStyle(.switch)
-            Menu {
-                Button(role: .destructive) { store.delete(rule) } label: {
-                    Label(localization.string("settings.deleteMapping", defaultValue: "Delete mapping"), systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .frame(width: 28, height: 28)
-                    .background(.quaternary, in: Circle())
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .help(localization.string("settings.mapping.more", defaultValue: "More options"))
         }
     }
 
@@ -730,7 +724,7 @@ private struct InputRemappingRuleEditor: View {
         .menuStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.large)
-        .frame(maxWidth: .infinity)
+        .frame(width: InputRemappingEditorLayout.inputControlWidth)
     }
 
     private var actionMenu: some View {
