@@ -195,7 +195,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         self.metadata = PluginMetadata(
             id: "input-remapping",
             title: resolvedLocalization.string("metadata.title", defaultValue: "输入重映射"),
-            iconName: "computermouse",
+            iconName: "arrow.triangle.2.circlepath",
             iconTint: .purple,
             order: 57,
             defaultDescription: resolvedLocalization.string(
@@ -302,35 +302,16 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var settingsPage: PluginSettingsPage? {
-        .form(description: metadata.defaultDescription, sections: [
-            PluginSettingsSection(
-                id: SettingsID.rules,
-                title: localization.string("settings.rules.title", defaultValue: "Input Mappings"),
-                systemImage: "computermouse",
-                presentation: .edgeToEdge
-            ) { [weak self] _ in
-                if let self {
-                    InputRemappingSettingsView(
-                        store: self.store,
-                        localization: self.localization,
-                        buttonCapture: self.buttonCapture,
-                        requestTrackpadGestureOwnership: self.requestTrackpadGestureOwnership
-                    )
-                }
+        .workspace(description: metadata.defaultDescription, scrolling: .host) { [weak self] _ in
+            if let self {
+                InputRemappingSettingsView(
+                    store: self.store,
+                    localization: self.localization,
+                    buttonCapture: self.buttonCapture,
+                    requestTrackpadGestureOwnership: self.requestTrackpadGestureOwnership
+                )
             }
-            .headerAccessory { [store, localization] _ in
-                Button {
-                    store.addRule()
-                } label: {
-                    Label(
-                        localization.string("settings.addRule", defaultValue: "Add Mapping"),
-                        systemImage: "plus"
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
-        ])
+        }
     }
 
     func handleAction(_ action: PluginPanelAction) {
@@ -455,17 +436,27 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
 }
 
 private struct InputRemappingSettingsView: View {
+
     @ObservedObject var store: InputRemappingStore
     let localization: PluginLocalization
     @ObservedObject var buttonCapture: InputRemappingButtonCaptureCoordinator
     let requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Text(localization.string("settings.rules.subtitle", defaultValue: "Create shortcuts from keyboard/trackpad/mouse"))
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            HStack {
+                Spacer()
+                Button {
+                    store.addRule()
+                } label: {
+                    Label(
+                        localization.string("settings.addRule", defaultValue: "Add Mapping"),
+                        systemImage: "plus"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
 
             if store.rules.isEmpty {
                 HStack {
@@ -493,6 +484,7 @@ private struct InputRemappingSettingsView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
     }
 }
@@ -543,7 +535,7 @@ private struct InputRemappingRuleEditor: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             mappingHeader
 
-            HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.section) {
+            HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 inputColumn
                 flowArrow
                 outputColumn
@@ -587,7 +579,7 @@ private struct InputRemappingRuleEditor: View {
 
             inputKindMenu
 
-            if inputKind != .trackpad {
+            if buttonCapture.preparingRuleID == rule.id || buttonCapture.recordingRuleID == rule.id {
                 inputCaptureControl
             }
 
@@ -600,27 +592,21 @@ private struct InputRemappingRuleEditor: View {
                 .labelsHidden()
             }
 
-            if inputKind != .trackpad {
-                HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                    modifierToggle("⇧", .shift)
-                    modifierToggle("⌥", .option)
-                    modifierToggle("⌃", .control)
-                    modifierToggle("⌘", .command)
-                }
-            }
-
             if case .mouseButton = draft.trigger {
                 Menu {
                     ForEach(InputRemappingMouseInteraction.allCases, id: \.self) { interaction in
                         Button(mouseInteractionTitle(interaction)) { mouseInteractionBinding.wrappedValue = interaction }
                     }
                 } label: {
-                    mappingField(mouseInteractionTitle(draft.mouseInteraction), systemImage: "cursorarrow")
+                    mappingMenuLabel(mouseInteractionTitle(draft.mouseInteraction), systemImage: "cursorarrow")
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
             }
         }
-        .frame(minWidth: 250, maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 170, maxWidth: .infinity, alignment: .leading)
     }
 
     private var outputColumn: some View {
@@ -629,8 +615,7 @@ private struct InputRemappingRuleEditor: View {
                 .foregroundStyle(.secondary)
             actionMenu
 
-            if case let .shortcut(shortcut) = draft.action {
-                mappingField(shortcutTitle(shortcut), systemImage: "command")
+            if case .shortcut = draft.action {
                 if buttonCapture.preparingShortcutRuleID == rule.id {
                     Label(localization.string("settings.shortcut.preparing", defaultValue: "Preparing shortcut recording…"), systemImage: "hourglass")
                         .foregroundStyle(.tint)
@@ -646,25 +631,37 @@ private struct InputRemappingRuleEditor: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                 } else {
-                    Button(localization.string("settings.shortcut.record", defaultValue: "Record shortcut")) {
+                    Button {
                         _ = buttonCapture.startShortcut(ruleID: rule.id) { binding in
                             draft.action = .shortcut(binding)
                             save()
                         }
+                    } label: {
+                        Text(localization.string("settings.shortcut.record", defaultValue: "Record shortcut"))
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 }
             }
         }
-        .frame(minWidth: 250, maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
     }
 
     private var contextColumn: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Text(localization.string("settings.mapping.where", defaultValue: "Where"))
                 .foregroundStyle(.secondary)
-            mappingField(localization.string("settings.context.global", defaultValue: "Everywhere"), systemImage: "globe")
+            Menu {
+                Button(localization.string("settings.context.global", defaultValue: "Everywhere")) {}
+                    .disabled(true)
+            } label: {
+                mappingMenuLabel(localization.string("settings.context.global", defaultValue: "Everywhere"), systemImage: "globe")
+            }
+            .menuStyle(.button)
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
 
             if case let .keyboard(_, modifiers) = draft.trigger, modifiers.isEmpty {
                 Text(localization.string("settings.keyboard.warning", defaultValue: "A key without modifiers overrides normal typing while the rule is enabled."))
@@ -676,7 +673,7 @@ private struct InputRemappingRuleEditor: View {
             }
 
         }
-        .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
     }
 
     private var mappingHeader: some View {
@@ -699,8 +696,10 @@ private struct InputRemappingRuleEditor: View {
             } label: {
                 Image(systemName: "ellipsis")
                     .frame(width: 28, height: 28)
+                    .background(.quaternary, in: Circle())
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .help(localization.string("settings.mapping.more", defaultValue: "More options"))
         }
     }
@@ -709,20 +708,29 @@ private struct InputRemappingRuleEditor: View {
         Image(systemName: "arrow.right")
             .font(.title3)
             .foregroundStyle(.secondary)
-            .frame(width: 24)
+            .frame(width: 16)
             .padding(.top, 31)
             .accessibilityHidden(true)
     }
 
     private var inputKindMenu: some View {
         Menu {
+            Button {
+                startInputCapture()
+            } label: {
+                Label(localization.string("settings.input.record", defaultValue: "Record input"), systemImage: "record.circle")
+            }
+            Divider()
             ForEach(InputRemappingInputKind.allCases) { kind in
                 Button(inputKindTitle(kind)) { inputKindBinding.wrappedValue = kind }
             }
         } label: {
-            mappingField(triggerTitle, systemImage: inputKind.symbolName)
+            mappingMenuLabel(triggerTitle, systemImage: inputKind.symbolName)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
     }
 
     private var actionMenu: some View {
@@ -733,12 +741,15 @@ private struct InputRemappingRuleEditor: View {
                 }
             }
         } label: {
-            mappingField(actionTitle, systemImage: actionSymbolName)
+            mappingMenuLabel(actionTitle, systemImage: actionSymbolName)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
     }
 
-    private func mappingField(_ title: String, systemImage: String) -> some View {
+    private func mappingMenuLabel(_ title: String, systemImage: String) -> some View {
         HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
             Image(systemName: systemImage)
                 .foregroundStyle(.secondary)
@@ -746,14 +757,8 @@ private struct InputRemappingRuleEditor: View {
                 .font(PluginSettingsTheme.Typography.rowTitle)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            Image(systemName: "chevron.down")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .pluginSettingsCardBackground(.recessed)
     }
 
     private var actionTitle: String {
@@ -865,20 +870,14 @@ private struct InputRemappingRuleEditor: View {
                 isPreparing: false
             )
         } else {
-            Button(localization.string("settings.input.record", defaultValue: "Record input")) {
-                _ = buttonCapture.start(ruleID: rule.id) { input in
-                    draft.replaceTrigger(input.trigger(interaction: draft.mouseInteraction))
-                    save()
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help(
-                localization.string(
-                    "settings.input.record.help",
-                    defaultValue: "The next keyboard key, mouse button, or scroll direction becomes this trigger."
-                )
-            )
+            EmptyView()
+        }
+    }
+
+    private func startInputCapture() {
+        _ = buttonCapture.start(ruleID: rule.id) { input in
+            draft.replaceTrigger(input.trigger(interaction: draft.mouseInteraction))
+            save()
         }
     }
 

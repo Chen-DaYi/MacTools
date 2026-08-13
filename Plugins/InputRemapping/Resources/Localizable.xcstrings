@@ -51,7 +51,7 @@
     "settings.keyboard.confirmation.enable": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Enable" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用" } } } },
     "settings.shortcut.record": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Record shortcut" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "录制快捷键" } } } },
     "settings.shortcut.recording": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Press the shortcut" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "按下快捷键" } } } },
-    "settings.shortcut.current": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Current: %@%d" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前：%@%d" } } } },
+    "settings.shortcut.current": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@%d" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@%d" } } } },
     "settings.column.input": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Input" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "输入" } } } },
     "settings.column.output": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Output" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "输出" } } } },
     "settings.column.context": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Context" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "上下文" } } } },

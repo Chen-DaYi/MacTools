@@ -424,7 +424,7 @@ final class InputRemappingModelsTests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsPageUsesValidFormContract() throws {
+    func testSettingsPageUsesValidWorkspaceContract() throws {
         let plugin = InputRemappingPlugin(
             context: PluginRuntimeContext(
                 pluginID: "input-remapping",
@@ -436,11 +436,11 @@ final class InputRemappingModelsTests: XCTestCase {
         )
         let page = try XCTUnwrap(plugin.settingsPage)
 
-        XCTAssertEqual(page.body.layout, .form)
-        guard case let .form(sections) = page.body else {
-            return XCTFail("Expected form settings")
+        XCTAssertEqual(page.body.layout, .workspace)
+        guard case let .workspace(workspace) = page.body else {
+            return XCTFail("Expected workspace settings")
         }
-        XCTAssertNotNil(sections.first?.headerAccessory)
+        XCTAssertEqual(workspace.scrolling, .host)
         XCTAssertNoThrow(try PluginSettingsValidator.validate(page))
     }
 

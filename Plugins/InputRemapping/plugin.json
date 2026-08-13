@@ -1,11 +1,11 @@
 {
   "id": "input-remapping",
   "displayName": "输入重映射",
-  "summary": "为额外鼠标按键分配快捷操作",
+  "summary": "从键盘、触控板和鼠标创建快捷操作",
   "localizedMetadata": {
-    "en": { "displayName": "Input Remapping", "summary": "Assign actions to extra mouse buttons." },
-    "fr": { "displayName": "Remappage des entrées", "summary": "Assignez des actions aux boutons supplémentaires de la souris." },
-    "zh-Hans": { "displayName": "输入重映射", "summary": "为额外鼠标按键分配快捷操作" }
+    "en": { "displayName": "Input Remapping", "summary": "Create shortcuts from keyboard, trackpad, and mouse." },
+    "fr": { "displayName": "Remappage des entrées", "summary": "Créez des raccourcis depuis le clavier, le trackpad et la souris." },
+    "zh-Hans": { "displayName": "输入重映射", "summary": "从键盘、触控板和鼠标创建快捷操作" }
   },
   "version": "1.0.0",
   "minHostVersion": "1.1.6",
@@ -13,7 +13,7 @@
   "bundleRelativePath": "InputRemapping.bundle",
   "factoryClass": "InputRemappingPlugin.InputRemappingPluginFactory",
   "build": { "project": "../../MacTools.xcodeproj", "scheme": "InputRemappingPlugin" },
-  "capabilities": { "primaryPanel": true, "componentPanel": false, "settings": "form" },
+  "capabilities": { "primaryPanel": true, "componentPanel": false, "settings": "workspace" },
   "permissions": ["accessibility", "inputMonitoring"],
   "category": "productivity"
 }
