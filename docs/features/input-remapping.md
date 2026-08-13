@@ -1,6 +1,6 @@
 # Feature — Input Remapping
 
-Last verified: 2026-08-13
+Last verified: 2026-08-14
 
 Status: in-progress
 Source of truth: yes
@@ -111,6 +111,7 @@ Source of truth: yes
 - [x] A new mapping presents direct input recording and a neutral Run selector; Shortcut reveals its recorder and each completed value persists in its editor.
 - [x] Incomplete, hidden, and unsafe mappings fail open and cannot leave input interception armed.
 - [x] Control-Option-Command-Escape remains available during recording and disables every unsafe mapping.
+- [x] An external TipTap claim consumes its corresponding native click before dispatching its action.
 
 ## Implementation journal
 
@@ -163,6 +164,7 @@ Source of truth: yes
 - 2026-08-13 — Review 5 fixed: ownership now follows the most recently activated mapping in either plugin; disabled or incomplete Custom Shortcuts drafts do not claim gestures; double-click and long-press require stable modifiers across their full sequence; the settings contract now records the approved workspace layout. No manifest, registry, or inventory update was required.
 - 2026-08-13 — Auto-grill hardening: unsafe confirmation is persisted under a domain-specific key with legacy migration; capture drains the complete keyboard, mouse, or scroll sequence before the tap can stop; native dual-click controls replace checkbox emulation; removed Trackpad bridge participants are explicitly disconnected; Control-Option-Command-Escape cancels capture and disables every unsafe mapping.
 - 2026-08-13 — Verification after auto-grill: targeted `InputRemappingModelsTests` and `TrackpadGestureBridgeTests` pass; the Input Remapping plugin scheme builds; source parsing, localization JSON parsing, and whitespace validation pass. Existing Disk Clean Swift-concurrency warnings remain outside this feature.
+- 2026-08-14 — Review fixes: external TipTap claims consume the native click; the emergency stop resets recorder UI even while arming; recorder startup activates the emergency tap before the preparation delay. Plugin manifests are patch-bumped and the plugin package workflow is documented after the shared PluginKit API change.
 
 ## Files
 

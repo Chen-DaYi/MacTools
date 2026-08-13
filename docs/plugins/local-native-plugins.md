@@ -121,6 +121,8 @@ make run
 
 To update an existing plugin, change its code/resources/tests beside the plugin. If the update should be released through the plugin catalog, bump only that plugin's `plugin.json.version`, then run the focused build or tests before opening a PR.
 
+When a change touches `Sources/MacToolsPluginKit/`, it is package-relevant for every plugin. Increase every plugin manifest version and run the all-plugin package build before release; the catalog workflow rejects a mixed set of packages linked against different PluginKit builds.
+
 ## Settings UI
 
 Plugin settings are hosted by MacTools. PluginKit 4 exposes one `settingsPage` entry point with two explicit layouts:

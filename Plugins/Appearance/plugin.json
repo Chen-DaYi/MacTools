@@ -48,7 +48,7 @@
       "summary": "切換系統亮色與深色外觀"
     }
   },
-  "version": "1.0.10",
+  "version": "1.0.11",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "Appearance.bundle",

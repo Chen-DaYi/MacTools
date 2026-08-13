@@ -837,6 +837,7 @@ final class InputRemappingModelsTests: XCTestCase {
 
         XCTAssertTrue(coordinator.start(ruleID: UUID()) { captured = $0 })
         XCTAssertNotNil(coordinator.preparingRuleID)
+        XCTAssertEqual(tap.startCallCount, 1)
         tap.capture(.mouseButton(number: 0, modifiers: []))
         await Task.yield()
         XCTAssertNil(captured)
@@ -846,5 +847,53 @@ final class InputRemappingModelsTests: XCTestCase {
         tap.capture(.mouseButton(number: 4, modifiers: []))
         await Task.yield()
         XCTAssertEqual(captured, .mouseButton(number: 4, modifiers: []))
+    }
+
+    @MainActor
+    func testEmergencyStopCancelsAPreparingRecorder() {
+        let tap = InputRemappingTapSpy()
+        var pendingArming: (@MainActor () -> Void)?
+        let coordinator = InputRemappingButtonCaptureCoordinator(
+            tap: tap,
+            scheduleArming: { pendingArming = $0 }
+        )
+
+        XCTAssertTrue(coordinator.start(ruleID: UUID()) { _ in })
+        XCTAssertNotNil(coordinator.preparingRuleID)
+
+        coordinator.cancelFromEmergencyStop()
+        XCTAssertNil(coordinator.preparingRuleID)
+
+        pendingArming?()
+        XCTAssertNil(coordinator.recordingRuleID)
+    }
+
+    @MainActor
+    func testEmergencyStopHandlerResetsThePluginRecorderState() async {
+        let tap = InputRemappingTapSpy()
+        var pendingArming: (@MainActor () -> Void)?
+        let coordinator = InputRemappingButtonCaptureCoordinator(
+            tap: tap,
+            scheduleArming: { pendingArming = $0 }
+        )
+        let plugin = InputRemappingPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "input-remapping",
+                storage: InputRemappingMemoryStorage()
+            ),
+            tap: tap,
+            buttonCapture: coordinator
+        )
+
+        XCTAssertTrue(coordinator.start(ruleID: UUID()) { _ in })
+        XCTAssertNotNil(coordinator.preparingRuleID)
+
+        tap.emergencyStopHandler?()
+        await Task.yield()
+
+        XCTAssertNil(coordinator.preparingRuleID)
+        pendingArming?()
+        XCTAssertNil(coordinator.recordingRuleID)
+        plugin.deactivate(reason: .disabled)
     }
 }

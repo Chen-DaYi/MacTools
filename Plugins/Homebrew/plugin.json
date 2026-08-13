@@ -48,7 +48,7 @@
       "summary": "管理 Homebrew 包、軟體倉庫並執行系統診斷"
     }
   },
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "Homebrew.bundle",

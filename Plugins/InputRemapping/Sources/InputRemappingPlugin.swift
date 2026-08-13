@@ -58,6 +58,9 @@ final class InputRemappingButtonCaptureCoordinator: ObservableObject {
         onCapture: @escaping @MainActor (InputRemappingCapturedInput) -> Void
     ) -> Bool {
         cancel()
+        guard tap.start() else {
+            return false
+        }
         preparingRuleID = ruleID
         scheduleArming { [weak self] in
             guard let self, self.preparingRuleID == ruleID else { return }
@@ -88,11 +91,21 @@ final class InputRemappingButtonCaptureCoordinator: ObservableObject {
         tap.cancelButtonCapture()
     }
 
+    func cancelFromEmergencyStop() {
+        recordingRuleID = nil
+        recordingShortcutRuleID = nil
+        preparingRuleID = nil
+        preparingShortcutRuleID = nil
+    }
+
     func startShortcut(
         ruleID: UUID,
         onCapture: @escaping @MainActor (ShortcutBinding) -> Void
     ) -> Bool {
         cancel()
+        guard tap.start() else {
+            return false
+        }
         preparingShortcutRuleID = ruleID
         scheduleArming { [weak self] in
             guard let self, self.preparingShortcutRuleID == ruleID else { return }
@@ -203,6 +216,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         }
         self.tap.emergencyStopHandler = { [weak self] in
             Task { @MainActor in
+                self?.buttonCapture.cancelFromEmergencyStop()
                 self?.store.disableUnsafeTriggers()
             }
         }
@@ -587,18 +601,12 @@ private struct InputRemappingRuleEditor: View {
 
             Divider()
 
-            HStack {
-                Spacer()
-                Text(localization.string("settings.enabled", defaultValue: "Enabled"))
-                    .foregroundStyle(.secondary)
-                DualClickToggle(isOn: enabledBinding)
-                    .accessibilityLabel(localization.string("settings.enabled", defaultValue: "Enabled"))
-                DualClickIconButton(
-                    systemImage: "trash",
-                    accessibilityLabel: localization.string("settings.deleteMapping", defaultValue: "Delete mapping"),
-                    action: { store.delete(rule) }
-                )
-            }
+            InputRemappingRuleFooter(
+                isEnabled: enabledBinding,
+                enabledTitle: localization.string("settings.enabled", defaultValue: "Enabled"),
+                deleteTitle: localization.string("settings.deleteMapping", defaultValue: "Delete mapping"),
+                onDelete: { store.delete(rule) }
+            )
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
         .padding(PluginSettingsTheme.Spacing.cardContent)
@@ -952,15 +960,13 @@ private struct InputRemappingRuleEditor: View {
     }
 
     private func captureStatus(title: String, detail: String, isPreparing: Bool) -> some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-            Label(title, systemImage: isPreparing ? "hourglass" : "record.circle")
-                .font(PluginSettingsTheme.Typography.rowTitle)
-                .foregroundStyle(.tint)
-            Text(detail).foregroundStyle(.secondary)
-            Button(localization.string("settings.cancel", defaultValue: "Cancel")) { buttonCapture.cancel() }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-        }
+        InputRemappingCaptureStatus(
+            title: title,
+            detail: detail,
+            isPreparing: isPreparing,
+            cancelTitle: localization.string("settings.cancel", defaultValue: "Cancel"),
+            onCancel: { buttonCapture.cancel() }
+        )
     }
 
     private var mouseInteractionBinding: Binding<InputRemappingMouseInteraction> {
@@ -1021,95 +1027,54 @@ private struct InputRemappingRuleEditor: View {
         }
     }
 
-    private var shortcutKeyCodeBinding: Binding<UInt16> {
-        Binding(
-            get: {
-                if case let .shortcut(binding) = draft.action {
-                    return binding.keyCode
-                }
-                return 0
-            },
-            set: { setShortcut(keyCode: $0, modifiers: shortcutModifiers) }
-        )
-    }
-
-    private var shortcutModifiers: ShortcutModifiers {
-        if case let .shortcut(binding) = draft.action {
-            return binding.modifiers
-        }
-        return []
-    }
-
-    private func binding<T>(_ keyPath: WritableKeyPath<InputRemappingRule, T>) -> Binding<T> {
-        Binding(
-            get: { draft[keyPath: keyPath] },
-            set: {
-                draft[keyPath: keyPath] = $0
-                save()
-            }
-        )
-    }
-
-    private func modifierToggle(
-        _ title: String,
-        _ modifier: ShortcutModifiers
-    ) -> some View {
-        Toggle(
-            title,
-            isOn: Binding(
-                get: { draft.modifiers.contains(modifier) },
-                set: { enabled in
-                    if enabled {
-                        draft.modifiers.insert(modifier)
-                    } else {
-                        draft.modifiers.remove(modifier)
-                    }
-                    save()
-                }
-            )
-        )
-        .toggleStyle(.button)
-        .controlSize(.small)
-    }
-
-    private func shortcutModifierToggle(
-        _ title: String,
-        _ modifier: ShortcutModifiers
-    ) -> some View {
-        Toggle(
-            title,
-            isOn: Binding(
-                get: { shortcutModifiers.contains(modifier) },
-                set: { enabled in
-                    var modifiers = shortcutModifiers
-                    if enabled {
-                        modifiers.insert(modifier)
-                    } else {
-                        modifiers.remove(modifier)
-                    }
-                    setShortcut(
-                        keyCode: shortcutKeyCodeBinding.wrappedValue,
-                        modifiers: modifiers
-                    )
-                }
-            )
-        )
-        .toggleStyle(.button)
-        .controlSize(.small)
-    }
-
-    private func setShortcut(keyCode: UInt16, modifiers: ShortcutModifiers) {
-        draft.action = .shortcut(
-            ShortcutBinding(keyCode: keyCode, modifiers: modifiers)
-        )
-        save()
-    }
-
     private func save() {
         if let gesture = draft.claimedTrackpadGesture {
             requestTrackpadGestureOwnership?(gesture)
         }
         store.replace(draft)
+    }
+}
+
+private struct InputRemappingRuleFooter: View {
+    @Binding var isEnabled: Bool
+    let enabledTitle: String
+    let deleteTitle: String
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer()
+            Text(enabledTitle)
+                .foregroundStyle(.secondary)
+            DualClickToggle(isOn: $isEnabled)
+                .accessibilityLabel(enabledTitle)
+            DualClickIconButton(
+                systemImage: "trash",
+                accessibilityLabel: deleteTitle,
+                action: onDelete
+            )
+        }
+    }
+}
+
+private struct InputRemappingCaptureStatus: View {
+    let title: String
+    let detail: String
+    let isPreparing: Bool
+    let cancelTitle: String
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            Label(title, systemImage: isPreparing ? "hourglass" : "record.circle")
+                .font(PluginSettingsTheme.Typography.rowTitle)
+                .foregroundStyle(.tint)
+            Text(detail)
+                .foregroundStyle(.secondary)
+            Button(cancelTitle, action: onCancel)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
     }
 }
 

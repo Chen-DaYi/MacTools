@@ -48,7 +48,7 @@
       "summary": "自動調節顯示器顏色以適應環境光"
     }
   },
-  "version": "1.0.10",
+  "version": "1.0.11",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "DisplayTrueColor.bundle",

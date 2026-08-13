@@ -15,7 +15,7 @@
     "zh-Hans": { "displayName": "自定义快捷操作", "summary": "从键盘、触控板和鼠标创建快捷操作" },
     "zh-Hant": { "displayName": "自訂快速操作", "summary": "從鍵盤、觸控板和滑鼠建立快速鍵操作。" }
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "InputRemapping.bundle",

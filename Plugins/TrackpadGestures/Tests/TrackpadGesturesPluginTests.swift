@@ -902,6 +902,16 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(ownershipRequests, [.threeFingerTap])
     }
 
+    func testExternalTipTapClaimConsumesTheNativeClick() {
+        let (plugin, session, _) = makePlugin()
+        let gesture = TrackpadGesture.tipTapLeftOneFixed
+
+        plugin.setExternalGestureClaims([gesture]) { _, _ in }
+        plugin.activate(context: PluginRuntimeContext(pluginID: "trackpad-gestures"))
+
+        XCTAssertEqual(session.nativeClickResolutionUpdates.last?[gesture], .consume)
+    }
+
     func testSessionRestartsDriverWhenDeviceRemovalNotificationArrives() async throws {
         let driver = MockMultitouchFrameListener()
         let session = MultitouchDeviceSession(

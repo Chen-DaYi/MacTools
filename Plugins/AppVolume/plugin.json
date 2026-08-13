@@ -48,7 +48,7 @@
       "summary": "分別調整正在播放音訊的應用程式音量"
     }
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "AppVolume.bundle",

@@ -456,7 +456,8 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         if store.isTesting {
             clickResolutions = [:]
         } else {
-            clickResolutions = Dictionary(uniqueKeysWithValues: store.mappings.compactMap { mapping in
+            let localResolutions: [TrackpadGesture: TrackpadNativeClickResolution] = Dictionary(
+                uniqueKeysWithValues: store.mappings.compactMap { mapping -> (TrackpadGesture, TrackpadNativeClickResolution)? in
                 guard mapping.isEnabled else { return nil }
                 switch mapping.action {
                 case .middleClick:
@@ -466,7 +467,17 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                 case .keyboardShortcut:
                     return nil
                 }
-            })
+                }
+            )
+            let externalResolutions: [TrackpadGesture: TrackpadNativeClickResolution] = Dictionary(
+                uniqueKeysWithValues: externalGestureClaims.compactMap { gesture -> (TrackpadGesture, TrackpadNativeClickResolution)? in
+                    guard gesture.tipTapConfiguration != nil else {
+                        return nil
+                    }
+                    return (gesture, .consume)
+                }
+            )
+            clickResolutions = localResolutions.merging(externalResolutions) { local, _ in local }
         }
         session.updateNativeClickResolutions(clickResolutions)
         session.updateTypingProtection(
