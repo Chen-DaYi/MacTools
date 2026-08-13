@@ -1,4 +1,5 @@
 import CryptoKit
+import CoreFoundation
 import Foundation
 
 enum MenuBarPanelThemeAppearance: String, Codable, CaseIterable, Sendable {
@@ -171,28 +172,6 @@ enum MenuBarPanelBuiltInThemes {
             ]
         ),
         make(
-            id: "tokyo-day",
-            name: "Tokyo Day",
-            author: "enkia",
-            colors: [
-                "E1E2E7", "D5D6DB", "C4C8DA", "9699A3",
-                "4C505E", "343B58", "20242D", "1A1B26",
-                "8C4351", "965027", "8F5E15", "485E30",
-                "166775", "34548A", "5A4A78", "7A3E9D"
-            ]
-        ),
-        make(
-            id: "rose-pine-dawn",
-            name: "Rosé Pine Dawn",
-            author: "Rosé Pine",
-            colors: [
-                "FAF4ED", "FFF8F1", "F2E9E1", "9893A5",
-                "797593", "575279", "403D52", "282535",
-                "B4637A", "EA9D34", "D7827E", "56949F",
-                "3E8FB0", "286983", "907AA9", "C26D85"
-            ]
-        ),
-        make(
             id: "solarized-light",
             name: "Solarized Light",
             author: "Ethan Schoonover",
@@ -245,28 +224,6 @@ enum MenuBarPanelBuiltInThemes {
                 "8B949E", "C9D1D9", "F0F6FC", "FFFFFF",
                 "FF7B72", "D29922", "E3B341", "3FB950",
                 "39C5CF", "58A6FF", "BC8CFF", "DB6D28"
-            ]
-        ),
-        make(
-            id: "tokyo-night",
-            name: "Tokyo Night",
-            author: "enkia",
-            colors: [
-                "1A1B26", "24283B", "2F3549", "444B6A",
-                "787C99", "A9B1D6", "CBCCD1", "D5D6DB",
-                "F7768E", "FF9E64", "E0AF68", "9ECE6A",
-                "7DCFFF", "7AA2F7", "BB9AF7", "9D7CD8"
-            ]
-        ),
-        make(
-            id: "rose-pine-moon",
-            name: "Rosé Pine Moon",
-            author: "Rosé Pine",
-            colors: [
-                "232136", "2A273F", "393552", "6E6A86",
-                "908CAA", "E0DEF4", "EAE7FA", "F4F0FF",
-                "EB6F92", "F6C177", "EA9A97", "3E8FB0",
-                "9CCFD8", "C4A7E7", "F6C177", "56526E"
             ]
         ),
         make(
@@ -338,7 +295,7 @@ enum MenuBarPanelThemeImportError: LocalizedError, Equatable {
         case .unsupportedDocument:
             return AppL10n.settings(
                 "panelTheme.error.unsupportedDocument",
-                defaultValue: "主题文件不是受支持的 Base16/Base24 YAML 或 JSON。"
+                defaultValue: "不支持此主题格式。请选择 .itermcolors、Base16/Base24 YAML 或 JSON 文件。"
             )
         case .missingName:
             return AppL10n.settings(
@@ -376,27 +333,66 @@ enum MenuBarPanelThemeImporter {
             throw MenuBarPanelThemeImportError.fileTooLarge
         }
 
-        guard let data = try? Data(contentsOf: url), data.count <= maximumFileSize else {
+        guard let fileHandle = try? FileHandle(forReadingFrom: url) else {
             throw MenuBarPanelThemeImportError.unreadableFile
         }
-        return try decode(data: data)
-    }
+        defer { try? fileHandle.close() }
 
-    static func decode(data: Data) throws -> MenuBarPanelThemeDefinition {
+        let data: Data
+        do {
+            data = try fileHandle.read(upToCount: maximumFileSize + 1) ?? Data()
+        } catch {
+            throw MenuBarPanelThemeImportError.unreadableFile
+        }
         guard data.count <= maximumFileSize else {
             throw MenuBarPanelThemeImportError.fileTooLarge
         }
 
-        let fields: [String: String]
-        if let object = try? JSONSerialization.jsonObject(with: data),
-           let dictionary = object as? [String: Any] {
-            fields = flattenedJSONFields(dictionary)
-        } else if let source = String(data: data, encoding: .utf8) {
-            fields = parseYAMLFields(source)
-        } else {
-            throw MenuBarPanelThemeImportError.unsupportedDocument
+        return try decode(data: data, suggestedName: suggestedThemeName(for: url))
+    }
+
+    static func decode(
+        data: Data,
+        suggestedName: String? = nil
+    ) throws -> MenuBarPanelThemeDefinition {
+        guard data.count <= maximumFileSize else {
+            throw MenuBarPanelThemeImportError.fileTooLarge
         }
 
+        let prefix = String(decoding: data.prefix(256), as: UTF8.self)
+            .trimmingCharacters(in: documentLeadingCharacters)
+        if data.starts(with: Data("bplist".utf8))
+            || prefix.hasPrefix("<?xml")
+            || prefix.hasPrefix("<!DOCTYPE")
+            || prefix.hasPrefix("<plist") {
+            return try decodeITermColors(data: data, suggestedName: suggestedName)
+        }
+
+        if prefix.hasPrefix("{") || prefix.hasPrefix("[") {
+            guard let object = try? JSONSerialization.jsonObject(with: data),
+                  let dictionary = object as? [String: Any] else {
+                throw MenuBarPanelThemeImportError.unsupportedDocument
+            }
+            let fields = flattenedJSONFields(dictionary)
+            guard containsBasePalette(fields) else {
+                throw MenuBarPanelThemeImportError.unsupportedDocument
+            }
+            return try decodeBaseTheme(fields: fields)
+        }
+
+        guard let source = String(data: data, encoding: .utf8) else {
+            throw MenuBarPanelThemeImportError.unsupportedDocument
+        }
+        let fields = parseYAMLFields(source)
+        guard containsBasePalette(fields) else {
+            throw MenuBarPanelThemeImportError.unsupportedDocument
+        }
+        return try decodeBaseTheme(fields: fields)
+    }
+
+    private static func decodeBaseTheme(
+        fields: [String: String]
+    ) throws -> MenuBarPanelThemeDefinition {
         let name = fields["name"] ?? fields["scheme"]
         guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
             throw MenuBarPanelThemeImportError.missingName
@@ -414,6 +410,94 @@ enum MenuBarPanelThemeImporter {
             palette[key] = try MenuBarPanelThemeColor(hex: value)
         }
 
+        return try importedTheme(
+            name: name,
+            author: fields["author"],
+            palette: palette
+        )
+    }
+
+    private static func decodeITermColors(
+        data: Data,
+        suggestedName: String?
+    ) throws -> MenuBarPanelThemeDefinition {
+        var format = PropertyListSerialization.PropertyListFormat.xml
+        guard let object = try? PropertyListSerialization.propertyList(
+            from: data,
+            options: [],
+            format: &format
+        ), let dictionary = object as? [String: Any] else {
+            throw MenuBarPanelThemeImportError.unsupportedDocument
+        }
+
+        let hasITermColorKeys = dictionary["Background Color"] != nil
+            || dictionary.keys.contains { $0.hasPrefix("Ansi ") && $0.hasSuffix(" Color") }
+        guard hasITermColorKeys else {
+            throw MenuBarPanelThemeImportError.unsupportedDocument
+        }
+
+        let background = try itermColor(named: "Background Color", in: dictionary)
+        let foreground = try itermColor(named: "Foreground Color", in: dictionary)
+        let ansi = try (0..<16).map { index in
+            try itermColor(named: "Ansi \(index) Color", in: dictionary)
+        }
+        let selection = try optionalITermColor(named: "Selection Color", in: dictionary)
+        let bold = try optionalITermColor(named: "Bold Color", in: dictionary)
+
+        let endpointCandidates = [foreground, bold, ansi[0], ansi[7], ansi[8], ansi[15]]
+            .compactMap { $0 }
+        let contrastEndpoint = endpointCandidates.max { lhs, rhs in
+            lhs.contrastRatio(with: background) < rhs.contrastRatio(with: background)
+        } ?? foreground
+        let selectedSurface = constrainedSurface(
+            selection ?? background.mixed(with: foreground, amount: 0.14),
+            background: background,
+            foreground: foreground
+        )
+
+        // iTerm palettes define terminal roles rather than Base16 UI surfaces.
+        // Derive a restrained neutral ramp from the configured background and
+        // foreground, then preserve the ANSI hues for semantic status colors.
+        var palette: [String: MenuBarPanelThemeColor] = [
+            "base00": background,
+            "base01": background.mixed(with: foreground, amount: 0.07),
+            "base02": selectedSurface,
+            "base03": background.mixed(with: foreground, amount: 0.46),
+            "base04": background.mixed(with: foreground, amount: 0.72),
+            "base05": foreground,
+            "base06": bold ?? foreground.mixed(with: contrastEndpoint, amount: 0.35),
+            "base07": contrastEndpoint,
+            "base08": ansi[1],
+            "base09": ansi[9],
+            "base0A": ansi[3],
+            "base0B": ansi[2],
+            "base0C": ansi[6],
+            "base0D": ansi[4],
+            "base0E": ansi[5],
+            "base0F": ansi[14]
+        ]
+        for index in 8..<16 {
+            palette[String(format: "base%02X", 0x10 + index - 8)] = ansi[index]
+        }
+
+        let name = normalizedNonemptyString(dictionary["Name"] as? String)
+            ?? normalizedNonemptyString(suggestedName)
+        guard let name else {
+            throw MenuBarPanelThemeImportError.missingName
+        }
+
+        return try importedTheme(
+            name: name,
+            author: normalizedNonemptyString(dictionary["Author"] as? String),
+            palette: palette
+        )
+    }
+
+    private static func importedTheme(
+        name: String,
+        author: String?,
+        palette: [String: MenuBarPanelThemeColor]
+    ) throws -> MenuBarPanelThemeDefinition {
         guard let background = palette["base00"], let foreground = palette["base05"] else {
             throw MenuBarPanelThemeImportError.unsupportedDocument
         }
@@ -432,11 +516,101 @@ enum MenuBarPanelThemeImporter {
         return MenuBarPanelThemeDefinition(
             id: "imported.\(digestPrefix)",
             name: name,
-            author: fields["author"],
+            author: author,
             origin: .imported,
             palette: palette
         )
     }
+
+    private static func itermColor(
+        named name: String,
+        in dictionary: [String: Any]
+    ) throws -> MenuBarPanelThemeColor {
+        guard let value = dictionary[name] else {
+            throw MenuBarPanelThemeImportError.missingColor(name)
+        }
+        guard let components = value as? [String: Any] else {
+            throw MenuBarPanelThemeImportError.invalidColor(name)
+        }
+
+        func component(_ key: String) throws -> UInt8 {
+            guard let number = components[key] as? NSNumber,
+                  CFGetTypeID(number) != CFBooleanGetTypeID() else {
+                throw MenuBarPanelThemeImportError.invalidColor(name)
+            }
+            let value = number.doubleValue
+            guard value.isFinite, (0...1).contains(value) else {
+                throw MenuBarPanelThemeImportError.invalidColor(name)
+            }
+            return UInt8((value * 255).rounded())
+        }
+
+        return try MenuBarPanelThemeColor(
+            red: component("Red Component"),
+            green: component("Green Component"),
+            blue: component("Blue Component")
+        )
+    }
+
+    private static func optionalITermColor(
+        named name: String,
+        in dictionary: [String: Any]
+    ) throws -> MenuBarPanelThemeColor? {
+        guard dictionary[name] != nil else {
+            return nil
+        }
+        return try itermColor(named: name, in: dictionary)
+    }
+
+    private static func constrainedSurface(
+        _ target: MenuBarPanelThemeColor,
+        background: MenuBarPanelThemeColor,
+        foreground: MenuBarPanelThemeColor
+    ) -> MenuBarPanelThemeColor {
+        guard foreground.contrastRatio(with: target) < 4.5 else {
+            return target
+        }
+
+        var lowerBound = 0.0
+        var upperBound = 1.0
+        for _ in 0..<12 {
+            let amount = (lowerBound + upperBound) / 2
+            let candidate = background.mixed(with: target, amount: amount)
+            if foreground.contrastRatio(with: candidate) >= 4.5 {
+                lowerBound = amount
+            } else {
+                upperBound = amount
+            }
+        }
+        return background.mixed(with: target, amount: lowerBound)
+    }
+
+    private static func containsBasePalette(_ fields: [String: String]) -> Bool {
+        fields.keys.contains { key in
+            guard key.hasPrefix("base"), key.count == 6 else {
+                return false
+            }
+            return Int(key.dropFirst(4), radix: 16) != nil
+        }
+    }
+
+    private static func suggestedThemeName(for url: URL) -> String? {
+        var nameURL = url.deletingPathExtension()
+        if nameURL.pathExtension.lowercased() == "itermcolors" {
+            nameURL.deletePathExtension()
+        }
+        return normalizedNonemptyString(nameURL.lastPathComponent)
+    }
+
+    private static func normalizedNonemptyString(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    private static let documentLeadingCharacters = CharacterSet.whitespacesAndNewlines
+        .union(CharacterSet(charactersIn: "\u{FEFF}"))
 
     private static func flattenedJSONFields(_ dictionary: [String: Any]) -> [String: String] {
         var fields: [String: String] = [:]
