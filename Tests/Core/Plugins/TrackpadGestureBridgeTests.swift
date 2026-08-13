@@ -24,8 +24,12 @@ final class TrackpadGestureBridgeTests: XCTestCase {
         consumer.requestTrackpadGestureOwnership?(.fourFingerTap)
         XCTAssertEqual(provider.removedLocalMappings, [.fourFingerTap])
 
+        provider.addLocalMapping(.threeFingerTap)
+        XCTAssertEqual(provider.localMappings, [])
+        XCTAssertEqual(provider.removedLocalMappings, [.fourFingerTap, .threeFingerTap])
+
         consumer.onTrackpadGestureClaimsChange?()
-        XCTAssertEqual(claimChanges, 1)
+        XCTAssertEqual(claimChanges, 2)
     }
 }
 
@@ -33,6 +37,8 @@ final class TrackpadGestureBridgeTests: XCTestCase {
 private final class ProviderSpy: TrackpadGestureEventProviding {
     private(set) var externalClaims: Set<TrackpadGesture> = []
     private(set) var removedLocalMappings: [TrackpadGesture] = []
+    private(set) var localMappings: Set<TrackpadGesture> = []
+    var onTrackpadGestureMappingsChange: (() -> Void)?
     private var handler: ((TrackpadGesture, UInt64) -> Void)?
 
     func setExternalGestureClaims(
@@ -40,15 +46,23 @@ private final class ProviderSpy: TrackpadGestureEventProviding {
         handler: @escaping (TrackpadGesture, UInt64) -> Void
     ) {
         externalClaims = gestures
+        let conflicts = localMappings.intersection(gestures)
+        conflicts.forEach { removeLocalMapping(for: $0) }
         self.handler = handler
     }
 
     func removeLocalMapping(for gesture: TrackpadGesture) {
         removedLocalMappings.append(gesture)
+        localMappings.remove(gesture)
     }
 
     func deliver(_ gesture: TrackpadGesture, deviceID: UInt64) {
         handler?(gesture, deviceID)
+    }
+
+    func addLocalMapping(_ gesture: TrackpadGesture) {
+        localMappings.insert(gesture)
+        onTrackpadGestureMappingsChange?()
     }
 }
 

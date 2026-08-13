@@ -102,6 +102,7 @@ final class TrackpadGestureStore: ObservableObject {
 
     private let storage: any PluginStorage
     private let encoder = JSONEncoder()
+    var onMappingsChange: (() -> Void)?
 
     init(
         storage: any PluginStorage,
@@ -289,6 +290,7 @@ final class TrackpadGestureStore: ObservableObject {
             return
         }
         storage.set(data, forKey: Key.mappings)
+        onMappingsChange?()
     }
 
     private static func normalized(_ candidates: [TrackpadGestureMapping]) -> [TrackpadGestureMapping] {

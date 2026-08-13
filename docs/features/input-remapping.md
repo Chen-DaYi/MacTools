@@ -151,7 +151,8 @@ Source of truth: yes
 - 2026-08-13 — Aligned mapping cards with the approved reference: bordered control fields, one shortcut value field rather than duplicated output controls, and the exact conditional Run presentation for shortcuts versus predefined actions.
 - 2026-08-13 — Fixed the empty settings page: the dynamic-plugin manifest now declares the workspace layout used at runtime; its localized marketplace summary now matches the multi-device mapping scope.
 - 2026-08-13 — Refined the approved card layout: full-width native menu buttons for Input, interaction, Run, and Where; recording moved into the Input menu; shortcut output uses one selectable value field plus a full-width recording action; secondary modifier controls are hidden from the primary scan path.
-- 2026-08-13 — Review 3 fixed: confirmed modifier-free keyboard rules persist their acknowledgement; the Core trackpad bridge owns routing and removes conflicting local mappings in either editing order; its provider/consumer seam is covered by an adjacent integration test.
+- 2026-08-13 — Review 3 fixed: confirmed modifier-free keyboard rules persist their acknowledgement; the Core trackpad bridge observes both plugins and removes conflicting local mappings in either editing order; its provider/consumer seam is covered by an adjacent integration test.
+- 2026-08-13 — Review 4 fixed: Trackpad Gestures mapping mutations notify the Core bridge, so adding or re-enabling a gesture already claimed by Custom Shortcuts removes the conflicting local mapping immediately.
 
 ## Files
 

@@ -51,6 +51,10 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
+    var onTrackpadGestureMappingsChange: (() -> Void)? {
+        get { store.onMappingsChange }
+        set { store.onMappingsChange = newValue }
+    }
 
     let store: TrackpadGestureStore
 
