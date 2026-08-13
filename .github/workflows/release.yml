@@ -77,6 +77,11 @@ jobs:
             echo "SHA256_PATH=${ARTIFACT_DIR}/${TAG}/${PROJECT_NAME}.sha256"
           } >> "$GITHUB_ENV"
 
+      - name: Verify production plugin catalog
+        run: |
+          scripts/plugins/preflight-app-plugin-catalog.swift \
+            --app-version "$VERSION"
+
       - name: Validate required secrets
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}

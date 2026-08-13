@@ -22,6 +22,9 @@ PLUGIN_SOURCE_DIR = ROOT_DIR / "Plugins"
 PLUGIN_SHARED_PATHS = [ROOT_DIR / "Sources/MacToolsPluginKit"]
 LEGACY_PLUGIN_CATALOG = ROOT_DIR / "docs/plugins/catalog.json"
 PLUGIN_PLAN_PATH = ROOT_DIR / "build/release/plugin-plan.json"
+APP_PLUGIN_CATALOG_PREFLIGHT = (
+    ROOT_DIR / "scripts/plugins/preflight-app-plugin-catalog.swift"
+)
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 APP_TAG_RE = re.compile(r"^v(\d+\.\d+\.\d+)$")
 PLUGIN_TAG_RE = re.compile(r"^plugins-(\d+\.\d+\.\d+)$")
@@ -1033,6 +1036,19 @@ def resolve_app_release_target(
     return next_version, level, uses_declared_version
 
 
+def preflight_app_plugin_catalog(app_version: str) -> None:
+    info("验证目标版本所需的生产插件列表。")
+    run(
+        [
+            "xcrun",
+            "swift",
+            str(APP_PLUGIN_CATALOG_PREFLIGHT.relative_to(ROOT_DIR)),
+            "--app-version",
+            app_version,
+        ]
+    )
+
+
 def release_app(args: argparse.Namespace) -> None:
     validate_changelog("app", require_pending=True)
     current_version, current_build = read_app_versions()
@@ -1072,6 +1088,7 @@ def release_app(args: argparse.Namespace) -> None:
     )
     next_build = current_build_after_sync + 1
     check_tag_available(tag, args.remote)
+    preflight_app_plugin_catalog(next_version)
     run_app_check(args.skip_check, args.dry_run)
     write_app_versions(next_version, next_build, args.dry_run)
     changelog_paths = prepare_changelog("app", tag, args.dry_run)

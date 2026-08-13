@@ -152,6 +152,20 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
 
         self.assertEqual(changes, ["Sources/MacToolsPluginKit/PluginModels.swift"])
 
+    def test_app_release_preflight_invokes_catalog_verifier_for_target_version(self) -> None:
+        with mock.patch.object(release, "run") as run:
+            release.preflight_app_plugin_catalog("1.2.0")
+
+        run.assert_called_once_with(
+            [
+                "xcrun",
+                "swift",
+                "scripts/plugins/preflight-app-plugin-catalog.swift",
+                "--app-version",
+                "1.2.0",
+            ]
+        )
+
 
 class WorkflowReleasePlanningTests(unittest.TestCase):
     def test_default_plan_rejects_unbumped_plugin_after_plugin_kit_change(self) -> None:
