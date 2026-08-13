@@ -98,6 +98,29 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
         XCTAssertEqual(setup.feedback.values[1].title, "Run Link Unavailable")
     }
 
+    func testDeferredRoutingRejectionsUseSanitizedNonmodalFeedback() throws {
+        let setup = try makeSetup()
+
+        setup.coordinator.presentRoutingRejection(.actionAlreadyRunning)
+        setup.coordinator.presentRoutingRejection(.recursiveActionInvocation)
+
+        XCTAssertEqual(
+            setup.feedback.values,
+            [
+                RunLinkExecutionFeedback(
+                    tone: .failure,
+                    title: "Run Link Unavailable",
+                    message: "This action is already queued or running."
+                ),
+                RunLinkExecutionFeedback(
+                    tone: .failure,
+                    title: "Run Link Unavailable",
+                    message: "A recursive Run Link was blocked."
+                ),
+            ]
+        )
+    }
+
     func testClipboardUsesIsolatedPasteboard() {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
         pasteboard.declareTypes([.string], owner: nil)

@@ -39,19 +39,24 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private let appearanceUserDefaults = UserDefaults.standard
     private let menuBarPanelThemeStore = MenuBarPanelThemeStore()
     private let pluginAutomaticUpdateVersionStore = PluginAutomaticUpdateVersionStore()
-    private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
     private var actionGridOverlayController: ActionGridOverlayController?
     private lazy var automationStartupCoordinator = AutomationStartupCoordinator { [weak self] in
         self?.pluginHost.automationController.startAutomaticRules()
     }
+    private lazy var runLinkFeedbackPresenter = SystemRunLinkFeedbackPresenter()
     private lazy var runLinkExecutionCoordinator = RunLinkExecutionCoordinator(
         registry: pluginHost.actionRegistry,
         executor: pluginHost.actionExecutor,
         runLinkService: pluginHost.actionRunLinkService,
         confirmationService: pluginHost.actionConfirmationService,
-        feedbackPresenter: SystemRunLinkFeedbackPresenter()
+        feedbackPresenter: runLinkFeedbackPresenter
+    )
+    private lazy var appURLRouter = AppURLRouter(
+        deferredActionRejectionHandler: { [weak self] _, error in
+            self?.runLinkExecutionCoordinator.presentRoutingRejection(error)
+        }
     )
 
     func applicationWillFinishLaunching(_ notification: Notification) {

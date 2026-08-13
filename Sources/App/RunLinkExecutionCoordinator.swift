@@ -260,6 +260,25 @@ final class RunLinkExecutionCoordinator {
         await execute(runLinkService.resolve(request))
     }
 
+    func presentRoutingRejection(_ error: AppURLRoutingError) {
+        let message: String
+        switch error {
+        case .actionAlreadyRunning:
+            message = FeatureL10n.string("此操作已在等待或运行。")
+        case .recursiveActionInvocation:
+            message = FeatureL10n.string("已阻止递归运行链接。")
+        default:
+            message = FeatureL10n.string("操作未能开始。")
+        }
+        feedbackPresenter.present(
+            RunLinkExecutionFeedback(
+                tone: .failure,
+                title: FeatureL10n.string("运行链接不可用"),
+                message: message
+            )
+        )
+    }
+
     @discardableResult
     func execute(
         _ resolution: Result<ActionReference, ActionRunLinkResolutionError>
