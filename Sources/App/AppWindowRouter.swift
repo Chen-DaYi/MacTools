@@ -141,6 +141,14 @@ enum AppWindowPresentation {
     }
 }
 
+enum AppDockVisibilityPolicy {
+    static func activationPolicy(
+        hasVisibleSettingsWindow: Bool
+    ) -> NSApplication.ActivationPolicy {
+        hasVisibleSettingsWindow ? .regular : .accessory
+    }
+}
+
 @MainActor
 final class StandaloneCommandPaletteState: ObservableObject {
     @Published private(set) var presentationOrigin: UnifiedSearchPresentationOrigin?
@@ -591,6 +599,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
         let contentSize = window.contentView?.bounds.size ?? SettingsWindowLayout.defaultContentSize
         settingsWindow = window
+        NSApplication.shared.setActivationPolicy(
+            AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: true)
+        )
         show(window)
         // SwiftUI installs its toolbar when the window becomes visible. Finish that
         // layout before restoring the content size.
@@ -687,5 +698,8 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         window.contentView = nil
         settingsWindow = nil
         settingsNavigationCoordinator = nil
+        NSApplication.shared.setActivationPolicy(
+            AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: false)
+        )
     }
 }
