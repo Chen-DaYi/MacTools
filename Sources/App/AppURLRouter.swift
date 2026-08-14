@@ -358,6 +358,26 @@ final class AppURLRouter {
     private var drainTask: Task<Void, Never>?
     private var isDraining = false
 
+    nonisolated static func acceptsDeferredInput(
+        _ url: URL,
+        acceptedSchemes: Set<String>
+    ) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(),
+              acceptedSchemes.contains(scheme) else {
+            return false
+        }
+
+        if components.host?.lowercased() == "right-click" {
+            return true
+        }
+
+        if case .success = AppDeepLinkParser.parse(url, acceptedSchemes: acceptedSchemes) {
+            return true
+        }
+        return false
+    }
+
     init(
         acceptedURLSchemes: Set<String> = RightClickURLRouter.bundleURLSchemes(),
         maximumPendingDeepLinks: Int = 32,

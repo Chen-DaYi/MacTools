@@ -24,105 +24,132 @@ struct MacToolsApp: App {
 
 @MainActor
 final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    private static let maximumPendingURLCount = 32
+
+    private let instanceCoordinator: AppInstanceCoordinator
+    private let acceptedURLSchemes: Set<String>
+    private var launchDisposition: AppInstanceLaunchDisposition?
+    private var didFinishLaunching = false
+    private var runtime: MacToolsAppRuntime?
+    private var instanceCoordinationTask: Task<Void, Never>?
+    private var pendingURLs = [URL]()
     #if DEBUG
-    private let developmentInstanceGuard = DevelopmentInstanceGuard()
-    private var shouldCompleteLaunch = true
+    private var showSettingsForTesting: (() -> Void)?
     #endif
-    private let pluginHost = PluginHost(
-        loadDynamicPluginsOnInit: false,
-        preferencesBackupStore: PreferencesBackupStore()
-    )
-    private let appUpdater = AppUpdater()
-    private let menuBarIconSettings = MenuBarIconSettings()
-    private let menuBarIconGallery = MenuBarIconGalleryLibrary()
-    private let launchAtLoginController = LaunchAtLoginController()
-    private let appearanceUserDefaults = UserDefaults.standard
-    private let menuBarPanelThemeStore = MenuBarPanelThemeStore()
-    private let pluginAutomaticUpdateVersionStore = PluginAutomaticUpdateVersionStore()
-    private var windowRouter: AppWindowRouter?
-    private var statusItemController: MenuBarStatusItemController?
-    private var actionGridOverlayController: ActionGridOverlayController?
-    private lazy var automationStartupCoordinator = AutomationStartupCoordinator { [weak self] in
-        self?.pluginHost.automationController.startAutomaticRules()
+
+    override convenience init() {
+        self.init(acceptedURLSchemes: RightClickURLRouter.bundleURLSchemes())
     }
-    private lazy var runLinkFeedbackPresenter = SystemRunLinkFeedbackPresenter()
-    private lazy var runLinkExecutionCoordinator = RunLinkExecutionCoordinator(
-        registry: pluginHost.actionRegistry,
-        executor: pluginHost.actionExecutor,
-        runLinkService: pluginHost.actionRunLinkService,
-        confirmationService: pluginHost.actionConfirmationService,
-        feedbackPresenter: runLinkFeedbackPresenter
-    )
-    private lazy var appURLRouter = AppURLRouter(
-        actionRejectionHandler: { [weak self] _, error in
-            self?.runLinkExecutionCoordinator.presentRoutingRejection(error)
-        }
-    )
+
+    init(acceptedURLSchemes: Set<String>) {
+        instanceCoordinator = AppInstanceCoordinator()
+        self.acceptedURLSchemes = Set(acceptedURLSchemes.map { $0.lowercased() })
+        super.init()
+    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        #if DEBUG
-        guard developmentInstanceGuard.claim(bundleIdentifier: Bundle.main.bundleIdentifier) else {
-            shouldCompleteLaunch = false
-            DispatchQueue.main.async {
-                NSApp.terminate(nil)
-            }
+        guard !isRunningTests else {
+            launchDisposition = .primary(recoveryRequested: false)
             return
         }
-        #endif
+
+        launchDisposition = .secondary(.timedOut)
+        let commandHandler = instanceCommandHandler()
+        instanceCoordinationTask = Task { [weak self, instanceCoordinator, commandHandler] in
+            let forwardingDeadline = AppInstanceCoordinator.makeForwardingDeadline()
+            let settingsRecoveryDeadline = AppInstanceCoordinator.makeSettingsRecoveryDeadline(
+                forwardingDeadline: forwardingDeadline
+            )
+            await instanceCoordinator.setCommandHandler(commandHandler)
+            let disposition: AppInstanceLaunchDisposition
+            if await instanceCoordinator.claimPrimaryPortIfPossible() {
+                disposition = .primary(recoveryRequested: false)
+            } else {
+                disposition = await instanceCoordinator.resolveSecondaryLaunch(
+                    deadline: settingsRecoveryDeadline
+                )
+            }
+            guard !Task.isCancelled else { return }
+            await self?.completeLaunch(disposition, forwardingDeadline: forwardingDeadline)
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        #if DEBUG
-        guard shouldCompleteLaunch else { return }
-        #endif
-        AppAppearancePreference.applyStoredPreference(userDefaults: appearanceUserDefaults)
-        launchAtLoginController.refreshStatus()
-        UNUserNotificationCenter.current().delegate = self
+        didFinishLaunching = true
+        guard case let .primary(recoveryRequested) = launchDisposition else { return }
+        startRuntime(recoveryRequested: recoveryRequested)
+    }
 
-        let windowRouter = AppWindowRouter(
-            pluginHost: pluginHost,
-            appUpdater: appUpdater,
-            menuBarIconSettings: menuBarIconSettings,
-            menuBarIconGallery: menuBarIconGallery,
-            launchAtLoginController: launchAtLoginController,
-            menuBarPanelThemeStore: menuBarPanelThemeStore,
-            appearanceUserDefaults: appearanceUserDefaults
-        )
-        self.windowRouter = windowRouter
-        let actionConfirmationService = AppActionConfirmationService { [weak self] in
-            self?.windowRouter?.windowForActionConfirmation()
+    private func startRuntime(recoveryRequested: Bool) {
+        guard runtime == nil else { return }
+        let runtime = MacToolsAppRuntime()
+        self.runtime = runtime
+        runtime.start(notificationDelegate: self)
+        let urls = pendingURLs
+        pendingURLs.removeAll()
+        runtime.handle(urls: urls)
+        if recoveryRequested {
+            _ = requestSettingsRecovery()
         }
-        pluginHost.actionConfirmationService.setHandler { request in
-            await actionConfirmationService.confirm(request)
-        }
-        let actionGridOverlayController = ActionGridOverlayController(pluginHost: pluginHost)
-        self.actionGridOverlayController = actionGridOverlayController
-        pluginHost.installActionGridPresenter { [weak actionGridOverlayController] entries, source in
-            actionGridOverlayController?.present(entries: entries, source: source) ?? false
-        }
-        statusItemController = MenuBarStatusItemController(
-            pluginHost: pluginHost,
-            windowRouter: windowRouter,
-            appUpdater: appUpdater,
-            iconSettings: menuBarIconSettings,
-            menuBarPanelThemeStore: menuBarPanelThemeStore
-        )
+    }
 
-        bootstrapDynamicPlugins()
+    private func completeLaunch(
+        _ disposition: AppInstanceLaunchDisposition,
+        forwardingDeadline: Date
+    ) async {
+        switch disposition {
+        case let .primary(recoveryRequested):
+            launchDisposition = disposition
+            if didFinishLaunching {
+                startRuntime(recoveryRequested: recoveryRequested)
+            }
+        case let .secondary(result):
+            var urlForwardingResult = AppInstanceForwardingOutcome.acknowledged
+            while !pendingURLs.isEmpty && urlForwardingResult == .acknowledged {
+                let urls = pendingURLs
+                pendingURLs.removeAll()
+                urlForwardingResult = await instanceCoordinator.forwardURLs(
+                    urls,
+                    deadline: forwardingDeadline
+                )
+                if urlForwardingResult == .becamePrimary {
+                    pendingURLs.insert(contentsOf: urls, at: 0)
+                    launchDisposition = .primary(recoveryRequested: false)
+                    startRuntime(recoveryRequested: false)
+                    return
+                }
+            }
+
+            AppLog.instanceCoordination.notice(
+                "Secondary instance terminating: \(String(describing: result), privacy: .public), deep links: \(String(describing: urlForwardingResult), privacy: .public)"
+            )
+            NSApp.terminate(nil)
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        appURLRouter.handle(urls)
+        guard let runtime else {
+            _ = enqueuePendingURLs(urls)
+            return
+        }
+        runtime.handle(urls: urls)
+    }
+
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows _: Bool
+    ) -> Bool {
+        _ = requestSettingsRecovery()
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        pluginHost.automationController.stopAutomaticRules()
-        actionGridOverlayController?.close(restoringFocus: false)
-        statusItemController?.dismissPanels()
-        pluginHost.deactivateAllPlugins()
-        #if DEBUG
-        developmentInstanceGuard.release()
-        #endif
+        instanceCoordinationTask?.cancel()
+        instanceCoordinationTask = nil
+        runtime?.terminate()
+        Task { [instanceCoordinator] in
+            await instanceCoordinator.invalidate()
+        }
     }
 
     nonisolated func userNotificationCenter(
@@ -133,68 +160,82 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         completionHandler([.banner, .list, .sound])
     }
 
-    private func bootstrapDynamicPlugins() {
-        let currentAppVersion = AppMetadata.versionDescription
-
-        guard pluginHost.hasInstalledDynamicPlugins else {
-            pluginHost.loadDynamicPluginsIfNeeded()
-            pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
-                currentAppVersion: currentAppVersion
-            )
-            completeBootstrap()
-            return
+    private func requestSettingsRecovery() -> AppInstanceResponse {
+        #if DEBUG
+        if let showSettingsForTesting {
+            showSettingsForTesting()
+            return .accepted
         }
+        #endif
 
-        let needsAutomaticUpdateCheck = pluginAutomaticUpdateVersionStore.needsAutomaticUpdateCheck(
-            currentAppVersion: currentAppVersion
-        )
-        guard needsAutomaticUpdateCheck
-            || pluginHost.hasPendingDynamicPluginExtractionMigration
-        else {
-            pluginHost.loadDynamicPluginsIfNeeded()
-            completeBootstrap()
-            return
-        }
+        return runtime?.showSettings() == true ? .accepted : .notReady
+    }
 
-        Task { @MainActor in
-            await automationStartupCoordinator.startAfterActionRegistryPreparation {
-                let updateSucceeded = await pluginHost
-                    .automaticUpdateInstalledPluginsBeforeLoading()
-                if updateSucceeded {
-                    pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
-                        currentAppVersion: currentAppVersion
-                    )
-                }
+    private func instanceCommandHandler() -> @Sendable (AppInstanceCommand) -> AppInstanceResponse {
+        { [weak self] command in
+            MainActor.assumeIsolated {
+                self?.handleInstanceCommand(command) ?? .notReady
             }
-            activateAppURLRouter()
         }
     }
 
-    private func completeBootstrap() {
-        automationStartupCoordinator.actionRegistryDidBecomeReady()
-        activateAppURLRouter()
+    private func handleInstanceCommand(_ command: AppInstanceCommand) -> AppInstanceResponse {
+        switch command.command {
+        case AppInstanceCommand.showSettings:
+            return requestSettingsRecovery()
+        case AppInstanceCommand.openURLs:
+            let urls = command.urlStrings.compactMap(URL.init(string:))
+            guard urls.count == command.urlStrings.count else { return .invalid }
+            if let runtime {
+                runtime.handle(urls: urls)
+                return .accepted
+            }
+            return enqueuePendingURLs(urls) ? .accepted : .invalid
+        default:
+            return .unsupported
+        }
     }
 
-    private func activateAppURLRouter() {
-        appURLRouter.activate(
-            presentationHandler: { [weak self] request in
-                self?.pluginHost.appPresentationHandler?(request)
-            },
-            isPluginConfigurationAvailable: { [weak self] pluginID in
-                self?.pluginHost.hasPluginSettings(pluginID: pluginID) == true
-            },
-            actionIdentityResolver: { [weak self] request in
-                self?.pluginHost.actionRunLinkService.resolve(request)
-            },
-            actionHandler: { [weak self] request, resolution in
-                guard let self else { return .completed }
-                if let resolution {
-                    return await self.runLinkExecutionCoordinator.execute(resolution)
-                }
-                return await self.runLinkExecutionCoordinator.execute(request)
-            }
-        )
+    private func enqueuePendingURLs(_ urls: [URL]) -> Bool {
+        guard pendingURLs.count + urls.count <= Self.maximumPendingURLCount else {
+            AppLog.instanceCoordination.warning("Rejected deep links because the launch queue is full")
+            return false
+        }
+        guard urls.allSatisfy({
+            AppURLRouter.acceptsDeferredInput($0, acceptedSchemes: acceptedURLSchemes)
+        }) else {
+            AppLog.instanceCoordination.warning("Rejected invalid deep link during launch")
+            return false
+        }
+        guard AppInstanceCommand.openURLsRequest(pendingURLs + urls).fitsPayloadSizeLimit else {
+            AppLog.instanceCoordination.warning("Rejected deep links above the launch payload limit")
+            return false
+        }
+        pendingURLs.append(contentsOf: urls)
+        return true
     }
+
+    private var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    #if DEBUG
+    func setShowSettingsForRecoveryForTesting(_ action: @escaping () -> Void) {
+        showSettingsForTesting = action
+    }
+
+    func handleInstanceRecoveryCommandForTesting() -> AppInstanceResponse {
+        instanceCommandHandler()(AppInstanceCommand.showSettingsRequest())
+    }
+
+    func handleInstanceURLsCommandForTesting(_ urls: [URL]) -> AppInstanceResponse {
+        instanceCommandHandler()(AppInstanceCommand.openURLsRequest(urls))
+    }
+
+    func pendingURLsForTesting() -> [URL] {
+        pendingURLs
+    }
+    #endif
 }
 
 /// Keeps one-shot automation events from observing an incomplete action registry
