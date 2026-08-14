@@ -256,7 +256,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     TrackpadGesturesSettingsView(
                         store: self.store,
                         localization: self.localization,
-                        isGestureOwned: { self.ownedLocalGestures.contains($0) },
+                        isGestureOwned: { self.isGestureOwned($0) },
                         onChange: { [weak self] in self?.configurationDidChange() },
                         onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
                         section: .testing
