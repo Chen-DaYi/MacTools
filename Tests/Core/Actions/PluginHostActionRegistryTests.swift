@@ -511,7 +511,7 @@ final class PluginHostActionRegistryTests: XCTestCase {
         )
     }
 
-    func testActionBackedPluginShortcutEditorsShareOneAssignmentAndRegistration() throws {
+    func testActionBackedPluginShortcutMigratesIntoCentralEditorOnly() throws {
         let registrar = FakeCarbonHotKeyRegistrar()
         let shortcutManager = GlobalShortcutManager(registrar: registrar)
         let plugin = ActionBackedShortcutTestPlugin()
@@ -553,8 +553,11 @@ final class PluginHostActionRegistryTests: XCTestCase {
             }.count,
             1
         )
+        XCTAssertFalse(host.shortcutItems.contains {
+            $0.id == ActionBackedShortcutTestPlugin.shortcutItemID
+        })
         XCTAssertEqual(
-            try shortcutItem(in: host).bindingText,
+            host.actionShortcutSettingsItem(for: reference)?.bindingText,
             ShortcutFormatter.displayString(for: legacyBinding)
         )
         let initialRegistrations = registrations(
@@ -565,61 +568,53 @@ final class PluginHostActionRegistryTests: XCTestCase {
         XCTAssertEqual(initialRegistrations.count, 1)
         XCTAssertTrue(initialRegistrations.first?.shortcutID.hasPrefix("action-shortcut.") ?? false)
 
-        let pluginEditorBinding = ShortcutBinding(
+        let centralEditorBinding = ShortcutBinding(
             keyCode: UInt16(kVK_ANSI_B),
             modifiers: [.command, .option]
-        )
-        XCTAssertNil(
-            host.setShortcutBindingAndReturnError(
-                pluginEditorBinding,
-                for: ActionBackedShortcutTestPlugin.shortcutItemID
-            )
-        )
-        XCTAssertEqual(
-            host.shortcutAssignmentService.assignment(for: reference)?.binding,
-            pluginEditorBinding
-        )
-        XCTAssertEqual(
-            try shortcutItem(in: host).bindingText,
-            ShortcutFormatter.displayString(for: pluginEditorBinding)
-        )
-        XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
-
-        let centralEditorBinding = ShortcutBinding(
-            keyCode: UInt16(kVK_ANSI_N),
-            modifiers: [.command, .shift]
         )
         XCTAssertEqual(
             host.setActionShortcutBinding(centralEditorBinding, to: reference),
             .success
         )
         XCTAssertEqual(
-            try shortcutItem(in: host).bindingText,
+            host.shortcutAssignmentService.assignment(for: reference)?.binding,
+            centralEditorBinding
+        )
+        XCTAssertEqual(
+            host.actionShortcutSettingsItem(for: reference)?.bindingText,
             ShortcutFormatter.displayString(for: centralEditorBinding)
+        )
+        XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
+
+        let replacementBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_N),
+            modifiers: [.command, .shift]
+        )
+        XCTAssertEqual(
+            host.setActionShortcutBinding(replacementBinding, to: reference),
+            .success
         )
         XCTAssertEqual(
             host.actionShortcutSettingsItem(for: reference)?.assignment.binding,
-            centralEditorBinding
+            replacementBinding
         )
         XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
 
         host.clearActionShortcut(for: reference)
-        XCTAssertEqual(
-            try shortcutItem(in: host).bindingText,
-            ShortcutFormatter.displayString(for: nil)
-        )
-        XCTAssertFalse(try shortcutItem(in: host).usesDefaultValue)
+        XCTAssertNil(host.actionShortcutSettingsItem(for: reference))
 
-        host.resetShortcut(for: ActionBackedShortcutTestPlugin.shortcutItemID)
+        XCTAssertEqual(
+            host.setActionShortcutBinding(plugin.defaultBinding, to: reference),
+            .success
+        )
         XCTAssertEqual(
             host.shortcutAssignmentService.assignment(for: reference)?.binding,
             plugin.defaultBinding
         )
-        XCTAssertTrue(try shortcutItem(in: host).usesDefaultValue)
         XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
     }
 
-    func testPluginShortcutEditorKeepsConvergedAssignmentsIndividuallyEditable() throws {
+    func testCentralActionShortcutEditorKeepsConvergedAssignmentsIndividuallyEditable() throws {
         let plugin = ActionBackedShortcutTestPlugin()
         let suiteName = "PluginHostActionRegistryTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -644,23 +639,45 @@ final class PluginHostActionRegistryTests: XCTestCase {
             shortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
         )
 
-        let rowPrefix = ActionBackedShortcutTestPlugin.shortcutItemID
-        let rows = host.shortcutItems.filter {
-            $0.id == rowPrefix || $0.id.hasPrefix("\(rowPrefix).assignment.")
+        XCTAssertFalse(host.shortcutItems.contains {
+            $0.id == ActionBackedShortcutTestPlugin.shortcutItemID
+        })
+        let rows = host.actionShortcutCatalogItems.filter {
+            $0.reference == reference
         }
         XCTAssertEqual(Set(rows.map(\.id)).count, 2)
 
         let secondRow = try XCTUnwrap(rows.first(where: {
-            $0.id.hasSuffix(second.id.uuidString.lowercased())
+            $0.assignmentID == second.id
         }))
-        host.clearShortcut(for: secondRow.id)
+        host.clearActionShortcut(for: reference, assignmentID: secondRow.assignmentID)
 
         XCTAssertEqual(host.shortcutAssignmentService.assignments, [first])
         XCTAssertEqual(
-            host.shortcutItems.filter {
-                $0.id == rowPrefix || $0.id.hasPrefix("\(rowPrefix).assignment.")
-            }.map(\.id),
-            [rowPrefix]
+            host.actionShortcutCatalogItems.filter { $0.reference == reference }.map(\.assignmentID),
+            [first.id]
+        )
+    }
+
+    func testKeyPhaseActionShortcutRemainsInPluginSettings() throws {
+        let plugin = EventHandlingActionBackedShortcutTestPlugin()
+        let suiteName = "PluginHostActionRegistryTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let host = makeIsolatedHost(
+            plugin: plugin,
+            defaults: defaults,
+            shortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        )
+
+        XCTAssertTrue(host.shortcutItems.contains {
+            $0.id == ActionBackedShortcutTestPlugin.shortcutItemID
+        })
+        XCTAssertNil(
+            host.shortcutAssignmentService.assignment(
+                for: ActionReference(key: plugin.definition.key)
+            )
         )
     }
 
@@ -823,12 +840,6 @@ final class PluginHostActionRegistryTests: XCTestCase {
             loadDynamicPluginsOnInit: false,
             actionURLScheme: "mactools-tests"
         )
-    }
-
-    private func shortcutItem(in host: PluginHost) throws -> ShortcutSettingsItem {
-        try XCTUnwrap(host.shortcutItems.first(where: {
-            $0.id == ActionBackedShortcutTestPlugin.shortcutItemID
-        }))
     }
 
     private func registrations(
@@ -1112,7 +1123,7 @@ private final class ParameterizedActionTestPlugin: MacToolsPlugin, PluginActionP
 }
 
 @MainActor
-private final class ActionBackedShortcutTestPlugin:
+private class ActionBackedShortcutTestPlugin:
     MacToolsPlugin,
     PluginActionProviding,
     PluginLegacyActionShortcutProviding
@@ -1175,4 +1186,14 @@ private final class ActionBackedShortcutTestPlugin:
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         ActionExecutionHandle { .succeeded() }
     }
+}
+
+@MainActor
+private final class EventHandlingActionBackedShortcutTestPlugin:
+    ActionBackedShortcutTestPlugin,
+    PluginShortcutEventHandling
+{
+    override var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] { [] }
+
+    func handleShortcutEvent(id: String, phase: PluginShortcutEventPhase) {}
 }

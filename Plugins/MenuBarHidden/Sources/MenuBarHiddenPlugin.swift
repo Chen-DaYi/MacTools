@@ -274,7 +274,7 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
                     ActionParameterDefinition(id: "enabled", title: metadata.title, kind: .boolean),
                 ],
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

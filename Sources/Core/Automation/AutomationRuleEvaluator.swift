@@ -15,11 +15,13 @@ enum AutomationRunSkipReason: String, Codable, Equatable, Sendable {
     case workflowDoesNotExist = "工作流不存在。"
     case workflowDisabled = "工作流已停用。"
     case previousRunActive = "该规则的上一次运行尚未结束。"
+    case automaticConcurrencyLimitReached = "自动运行数量已达上限。"
     case workflowNotFound = "找不到工作流。"
     case emptyWorkflow = "工作流尚未添加步骤。"
     case recursiveInvocation = "检测到递归工作流调用。"
     case maximumDepthExceeded = "工作流嵌套层级已达上限。"
     case backgroundExecutionUnsupported = "工作流包含只能交互运行的操作。"
+    case automaticExecutionUnsupported = "工作流包含未获准自动运行的操作。"
     case confirmationRequiredForAutomaticExecution = "工作流包含需要确认的操作，无法自动运行。"
 
     var localizedText: String {
@@ -52,6 +54,8 @@ enum AutomationRunSkipReason: String, Codable, Equatable, Sendable {
             FeatureL10n.string("工作流已停用。")
         case .previousRunActive:
             FeatureL10n.string("该规则的上一次运行尚未结束。")
+        case .automaticConcurrencyLimitReached:
+            FeatureL10n.string("自动运行数量已达上限。")
         case .workflowNotFound:
             FeatureL10n.string("找不到工作流。")
         case .emptyWorkflow:
@@ -62,6 +66,8 @@ enum AutomationRunSkipReason: String, Codable, Equatable, Sendable {
             FeatureL10n.string("工作流嵌套层级已达上限。")
         case .backgroundExecutionUnsupported:
             FeatureL10n.string("工作流包含只能交互运行的操作。")
+        case .automaticExecutionUnsupported:
+            FeatureL10n.string("工作流包含未获准自动运行的操作。")
         case .confirmationRequiredForAutomaticExecution:
             FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
         }

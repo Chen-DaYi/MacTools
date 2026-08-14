@@ -59,6 +59,9 @@ final class WorkflowRunner {
         guard !workflow.steps.isEmpty else {
             return .failure(.emptyWorkflow)
         }
+        guard !workflowIDsByRunID.values.contains(workflowID) else {
+            return .failure(.alreadyRunning)
+        }
         if let error = WorkflowExecutionAnalysis.structuralStartError(
             workflowID: workflowID,
             store: store
@@ -76,7 +79,11 @@ final class WorkflowRunner {
             }
             if source.requiresUnattendedExecution,
                !analysis.supportsUnattendedExecution {
-                return .failure(.confirmationRequiredForAutomaticExecution)
+                return .failure(
+                    analysis.requiresConfirmation
+                        ? .confirmationRequiredForAutomaticExecution
+                        : .automaticExecutionUnsupported
+                )
             }
         }
 
@@ -391,8 +398,10 @@ final class WorkflowRunner {
         case .rejected(.unknownAction), .rejected(.unavailable),
              .rejected(.backgroundExecutionUnsupported),
              .rejected(.foregroundExecutionUnsupported),
+             .rejected(.automaticExecutionUnsupported),
              .rejected(.confirmationRequiredForAutomaticExecution),
              .rejected(.externalInvocationUnavailable),
+             .rejected(.actionAlreadyRunning),
              .rejected(.providerChanged):
             return stepResult(
                 for: step,

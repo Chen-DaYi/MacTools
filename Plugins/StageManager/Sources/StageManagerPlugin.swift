@@ -134,7 +134,7 @@ final class StageManagerPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAction
                 keywords: [metadata.title, metadata.defaultDescription, "Stage Manager"],
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
@@ -146,7 +146,7 @@ final class StageManagerPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAction
                     ActionParameterDefinition(id: "enabled", title: metadata.title, kind: .boolean),
                 ],
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

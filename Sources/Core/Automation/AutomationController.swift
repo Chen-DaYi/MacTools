@@ -243,7 +243,7 @@ final class AutomationController: ObservableObject {
         delaySeconds: Double,
         errorPolicy: WorkflowStepErrorPolicy
     ) {
-        mutateStep(workflowID: workflowID, stepID: stepID) { step in
+        mutateStep(workflowID: workflowID, stepID: stepID, rebuildCatalog: false) { step in
             let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
             step.label = trimmed?.isEmpty == false ? trimmed : nil
             step.delaySeconds = min(
@@ -375,6 +375,9 @@ final class AutomationController: ObservableObject {
             if analysis.supportsBackground {
                 capabilities.insert(.background)
             }
+            if analysis.supportsUnattendedExecution {
+                capabilities.insert(.automatic)
+            }
             return ActionDefinition(
                 key: workflow.actionKey,
                 title: FeatureL10n.format("运行“%@”", workflow.name),
@@ -388,7 +391,7 @@ final class AutomationController: ObservableObject {
                     ? .allowed
                     : .unavailable,
                 capabilities: capabilities,
-                executionTimeoutSeconds: nil
+                executionTimeoutSeconds: 86_400
             )
         }
         let catalogEntries = enabled.map { workflow in
@@ -462,6 +465,7 @@ final class AutomationController: ObservableObject {
 
     private func mutateWorkflow(
         id: UUID,
+        rebuildCatalog: Bool = true,
         mutation: (inout WorkflowDefinition) -> Void
     ) {
         guard var workflow = store.workflow(id: id) else {
@@ -471,7 +475,7 @@ final class AutomationController: ObservableObject {
         mutation(&workflow)
         switch store.upsert(workflow) {
         case .success:
-            finishDefinitionMutation()
+            finishDefinitionMutation(rebuildCatalog: rebuildCatalog)
         case let .failure(error):
             record(error)
         }
@@ -480,9 +484,10 @@ final class AutomationController: ObservableObject {
     private func mutateStep(
         workflowID: UUID,
         stepID: UUID,
+        rebuildCatalog: Bool = true,
         mutation: (inout WorkflowStep) -> Void
     ) {
-        mutateWorkflow(id: workflowID) { workflow in
+        mutateWorkflow(id: workflowID, rebuildCatalog: rebuildCatalog) { workflow in
             guard let index = workflow.steps.firstIndex(where: { $0.id == stepID }) else {
                 return
             }
@@ -490,10 +495,12 @@ final class AutomationController: ObservableObject {
         }
     }
 
-    private func finishDefinitionMutation() {
+    private func finishDefinitionMutation(rebuildCatalog: Bool = true) {
         lastError = nil
         reloadAll()
-        onCatalogChange?()
+        if rebuildCatalog {
+            onCatalogChange?()
+        }
     }
 
     private func finishRuleMutation() {
@@ -543,9 +550,11 @@ final class AutomationController: ObservableObject {
             ))
         }
         guard analysis.supportsUnattendedExecution else {
-            return .unavailable(FeatureL10n.string(
-                "工作流包含需要确认的操作，无法自动运行。"
-            ))
+            return .unavailable(
+                analysis.requiresConfirmation
+                    ? FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
+                    : FeatureL10n.string("工作流包含未获准自动运行的操作。")
+            )
         }
         return .available
     }
@@ -608,8 +617,12 @@ final class AutomationController: ObservableObject {
         case .maximumDepthExceeded: FeatureL10n.string("工作流嵌套层级已达上限。")
         case .backgroundExecutionUnsupported:
             FeatureL10n.string("工作流包含只能交互运行的操作。")
+        case .automaticExecutionUnsupported:
+            FeatureL10n.string("工作流包含未获准自动运行的操作。")
         case .confirmationRequiredForAutomaticExecution:
             FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
+        case .alreadyRunning:
+            FeatureL10n.string("此工作流正在运行。")
         }
     }
 }

@@ -210,6 +210,152 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(provider.beginCount, 0)
     }
 
+    func testAutomaticRuleRequiresExplicitProviderOptIn() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            capabilities: [.background, .foregroundInteractive]
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+
+        let outcome = await ActionExecutor(registry: registry).execute(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .automaticRule,
+                mode: .background
+            )
+        )
+
+        XCTAssertEqual(outcome, .rejected(.automaticExecutionUnsupported))
+        XCTAssertEqual(provider.beginCount, 0)
+    }
+
+    func testDefaultConcurrencyPolicyRejectsOverlappingInvocation() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(timeout: 86_400)
+        var continuation: CheckedContinuation<ActionExecutionResult, Never>?
+        provider.operation = {
+            await withCheckedContinuation { continuation = $0 }
+        }
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(registry: registry)
+        let invocation = ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .workflow,
+            mode: .background
+        )
+        let first = Task { @MainActor in await executor.execute(invocation) }
+        while continuation == nil { await Task.yield() }
+
+        let overlapping = await executor.execute(invocation)
+
+        XCTAssertEqual(overlapping, .rejected(.actionAlreadyRunning))
+        XCTAssertEqual(provider.beginCount, 1)
+        continuation?.resume(returning: .succeeded())
+        let firstOutcome = await first.value
+        XCTAssertEqual(firstOutcome, .completed(.succeeded()))
+    }
+
+    func testSerializedConcurrencyWaitsForPriorInvocation() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            concurrencyPolicy: .serialize,
+            timeout: 86_400
+        )
+        var continuations: [CheckedContinuation<ActionExecutionResult, Never>] = []
+        provider.operation = {
+            await withCheckedContinuation { continuations.append($0) }
+        }
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(registry: registry)
+        let invocation = ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .workflow,
+            mode: .background
+        )
+        let first = Task { @MainActor in await executor.execute(invocation) }
+        while continuations.isEmpty { await Task.yield() }
+        let second = Task { @MainActor in await executor.execute(invocation) }
+        for _ in 0 ..< 10 { await Task.yield() }
+        XCTAssertEqual(provider.beginCount, 1)
+
+        continuations.removeFirst().resume(returning: .succeeded(message: "first"))
+        while continuations.isEmpty { await Task.yield() }
+        continuations.removeFirst().resume(returning: .succeeded(message: "second"))
+
+        let firstOutcome = await first.value
+        let secondOutcome = await second.value
+        XCTAssertEqual(firstOutcome, .completed(.succeeded(message: "first")))
+        XCTAssertEqual(secondOutcome, .completed(.succeeded(message: "second")))
+    }
+
+    func testSerializedAppIntentRechecksExposureAfterWaiting() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            concurrencyPolicy: .serialize,
+            timeout: 86_400
+        )
+        var continuation: CheckedContinuation<ActionExecutionResult, Never>?
+        provider.operation = {
+            await withCheckedContinuation { continuation = $0 }
+        }
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(registry: registry)
+        let invocation = ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .appIntent,
+            mode: .foreground
+        )
+        let first = Task { @MainActor in await executor.execute(invocation) }
+        while continuation == nil { await Task.yield() }
+        let second = Task { @MainActor in await executor.execute(invocation) }
+        for _ in 0 ..< 10 { await Task.yield() }
+        XCTAssertEqual(provider.beginCount, 1)
+
+        provider.exposurePolicy = .excluded
+        continuation?.resume(returning: .succeeded())
+
+        let firstOutcome = await first.value
+        let secondOutcome = await second.value
+        XCTAssertEqual(firstOutcome, .completed(.succeeded()))
+        XCTAssertEqual(secondOutcome, .rejected(.systemExposureUnavailable))
+        XCTAssertEqual(provider.beginCount, 1)
+    }
+
+    func testAllowConcurrentPolicyStartsOverlappingInvocations() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            concurrencyPolicy: .allowConcurrent,
+            timeout: 86_400
+        )
+        var continuations: [CheckedContinuation<ActionExecutionResult, Never>] = []
+        provider.operation = {
+            await withCheckedContinuation { continuations.append($0) }
+        }
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(registry: registry)
+        let invocation = ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .workflow,
+            mode: .background
+        )
+        let first = Task { @MainActor in await executor.execute(invocation) }
+        let second = Task { @MainActor in await executor.execute(invocation) }
+        while continuations.count < 2 { await Task.yield() }
+
+        XCTAssertEqual(provider.beginCount, 2)
+        continuations.removeFirst().resume(returning: .succeeded())
+        continuations.removeFirst().resume(returning: .succeeded())
+        let firstOutcome = await first.value
+        let secondOutcome = await second.value
+        XCTAssertEqual(firstOutcome, .completed(.succeeded()))
+        XCTAssertEqual(secondOutcome, .completed(.succeeded()))
+    }
+
     func testConfirmationAndExecutionUseIndependentTimeouts() async {
         let registry = ActionRegistry()
         let provider = ActionExecutorTestProvider()
@@ -405,7 +551,7 @@ final class ActionExecutorTests: XCTestCase {
         let provider = ActionExecutorTestProvider()
         let definition = makeActionDefinition(
             capabilities: [.background, .foregroundInteractive, .cancellable],
-            timeout: nil
+            timeout: 86_400
         )
         provider.operation = {
             await withCheckedContinuation { continuation in
@@ -435,7 +581,7 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertTrue(provider.didCancel)
     }
 
-    func testNonCancellableActionFinishesBeforeCancellationIsReported() async {
+    func testNonCancellableActionTimesOutWithoutInvokingProviderCancellation() async {
         let registry = ActionRegistry()
         let provider = ActionExecutorTestProvider()
         let definition = makeActionDefinition(
@@ -447,21 +593,15 @@ final class ActionExecutorTests: XCTestCase {
             return .succeeded(message: "finished")
         }
         registry.synchronize([provider.registration(definition: definition)])
-        let task = Task { @MainActor in
-            await ActionExecutor(registry: registry).execute(
-                ActionInvocation(
-                    reference: ActionReference(key: definition.key),
-                    source: .workflow,
-                    mode: .background
-                )
+        let outcome = await ActionExecutor(registry: registry).execute(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .workflow,
+                mode: .background
             )
-        }
-        await Task.yield()
+        )
 
-        task.cancel()
-        let outcome = await task.value
-
-        XCTAssertEqual(outcome, .completed(.succeeded(message: "finished")))
+        XCTAssertEqual(outcome, .rejected(.executionTimedOut))
         XCTAssertFalse(provider.didCancel)
     }
 
@@ -475,7 +615,7 @@ final class ActionExecutorTests: XCTestCase {
                 .cancellable,
                 .reportsProgress,
             ],
-            timeout: nil
+            timeout: 86_400
         )
         var continuation: CheckedContinuation<ActionExecutionResult, Never>?
         provider.operation = {
@@ -519,7 +659,7 @@ final class ActionExecutorTests: XCTestCase {
         let provider = ActionExecutorTestProvider()
         let definition = makeActionDefinition(
             capabilities: [.background, .foregroundInteractive, .cancellable],
-            timeout: nil
+            timeout: 86_400
         )
         var continuation: CheckedContinuation<ActionExecutionResult, Never>?
         provider.operation = {

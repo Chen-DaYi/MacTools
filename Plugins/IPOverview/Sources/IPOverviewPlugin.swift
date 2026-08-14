@@ -287,7 +287,7 @@ final class IPOverviewPlugin:
             keywords: [metadata.title, title, "IP", "copy"],
             systemImage: "doc.on.doc",
             externalInvocationPolicy: .allowed,
-            capabilities: [.background, .foregroundInteractive],
+            capabilities: [.automatic, .background, .foregroundInteractive],
             executionTimeoutSeconds: 30
         )
     }

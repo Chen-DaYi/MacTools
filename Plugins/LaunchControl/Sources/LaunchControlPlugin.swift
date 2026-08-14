@@ -292,7 +292,7 @@ final class LaunchControlPlugin:
                 )
                 : nil,
             externalInvocationPolicy: .unavailable,
-            capabilities: [.background, .foregroundInteractive],
+            capabilities: [.automatic, .background, .foregroundInteractive],
             executionTimeoutSeconds: 15
         )
     }

@@ -144,7 +144,7 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
                 keywords: [metadata.title, metadata.defaultDescription],
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .unavailable,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

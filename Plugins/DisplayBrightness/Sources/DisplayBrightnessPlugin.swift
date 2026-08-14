@@ -290,7 +290,7 @@ final class DisplayBrightnessPlugin:
                 ],
                 systemImage: direction.systemImage,
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive, .cancellable]
+                capabilities: [.automatic, .background, .foregroundInteractive, .cancellable]
             )
         }
         return brightnessActions + [
@@ -325,7 +325,7 @@ final class DisplayBrightnessPlugin:
                     )
                 ),
                 externalInvocationPolicy: .unavailable,
-                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration]
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration]
             ),
             ActionDefinition(
                 key: ActionKey(
@@ -340,7 +340,7 @@ final class DisplayBrightnessPlugin:
                 keywords: [metadata.title, "display", "restore"],
                 systemImage: "display",
                 externalInvocationPolicy: .unavailable,
-                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration]
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration]
             ),
         ]
     }

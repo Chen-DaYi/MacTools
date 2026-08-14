@@ -411,6 +411,8 @@ final class RunLinkExecutionCoordinator {
             reason ?? FeatureL10n.string("操作当前不可用。")
         case .backgroundExecutionUnsupported, .foregroundExecutionUnsupported:
             FeatureL10n.string("操作不支持当前执行方式。")
+        case .automaticExecutionUnsupported:
+            FeatureL10n.string("此操作未获准自动运行。")
         case .confirmationRequiredForAutomaticExecution:
             FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
         case .externalInvocationUnavailable:
@@ -423,6 +425,8 @@ final class RunLinkExecutionCoordinator {
             FeatureL10n.string("操作已取消。")
         case .confirmationTimedOut:
             FeatureL10n.string("确认已超时。")
+        case .actionAlreadyRunning:
+            FeatureL10n.string("此操作正在运行。")
         case .executionTimedOut:
             FeatureL10n.string("操作超时。")
         }

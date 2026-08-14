@@ -7,6 +7,9 @@ struct AutomationSettingsView: View {
     @ObservedObject private var automation: AutomationController
     @ObservedObject private var navigationCoordinator: SettingsNavigationCoordinator
     @State private var selectedWorkflowID: UUID?
+    @State private var previewRequest: WorkflowPreviewRequest?
+    @State private var pendingDeleteWorkflow: WorkflowDefinition?
+    @AppStorage("automation.previewBeforeRunning") private var previewBeforeRunning = true
 
     init(
         pluginHost: PluginHost,
@@ -27,7 +30,8 @@ struct AutomationSettingsView: View {
                     pluginHost: pluginHost,
                     automation: automation,
                     workflow: workflow,
-                    onDeleted: { selectedWorkflowID = automation.workflows.first?.id }
+                    previewBeforeRunning: $previewBeforeRunning,
+                    onRun: { requestRun($0) }
                 )
                 .id(workflow.id)
             } else {
@@ -50,6 +54,27 @@ struct AutomationSettingsView: View {
             }
         }
         .background(SettingsStyle.contentBackground)
+        .sheet(item: $previewRequest) { request in
+            if let workflow = automation.workflows.first(where: { $0.id == request.workflowID }) {
+                WorkflowRunPreviewSheet(
+                    automation: automation,
+                    workflow: workflow,
+                    onRun: { _ = automation.startWorkflow(id: workflow.id) }
+                )
+            }
+        }
+        .alert(item: $pendingDeleteWorkflow) { workflow in
+            Alert(
+                title: Text(FeatureL10n.string("删除工作流？")),
+                message: Text(FeatureL10n.string("运行中的任务会先停止，相关自动规则会一并删除。保存的快捷键、运行链接和网格条目会保留，并显示为不可用。")),
+                primaryButton: .destructive(Text(FeatureL10n.string("删除"))) {
+                    if automation.deleteWorkflow(id: workflow.id) {
+                        selectedWorkflowID = automation.workflows.first?.id
+                    }
+                },
+                secondaryButton: .cancel()
+            )
+        }
         .onAppear {
             selectInitialWorkflowIfNeeded()
             handleNavigationRevealRequest(navigationCoordinator.searchRevealRequest)
@@ -98,7 +123,9 @@ struct AutomationSettingsView: View {
                             ruleCount: automation.rules(workflowID: workflow.id).count,
                             lastRun: automation.recentRuns(workflowID: workflow.id, limit: 1).first,
                             canMoveUp: index > 0,
-                            canMoveDown: index + 1 < automation.workflows.count
+                            canMoveDown: index + 1 < automation.workflows.count,
+                            onRun: { requestRun(workflow) },
+                            onDelete: { pendingDeleteWorkflow = workflow }
                         )
                         .tag(workflow.id)
                     }
@@ -135,6 +162,19 @@ struct AutomationSettingsView: View {
         selectedWorkflowID = target.workflowID
         navigationCoordinator.clearSearchRevealRequest(request)
     }
+
+    private func requestRun(_ workflow: WorkflowDefinition) {
+        if previewBeforeRunning {
+            previewRequest = WorkflowPreviewRequest(workflowID: workflow.id)
+        } else {
+            _ = automation.startWorkflow(id: workflow.id)
+        }
+    }
+}
+
+private struct WorkflowPreviewRequest: Identifiable {
+    let workflowID: UUID
+    var id: UUID { workflowID }
 }
 
 private struct WorkflowCollectionRow: View {
@@ -144,6 +184,8 @@ private struct WorkflowCollectionRow: View {
     let lastRun: WorkflowRun?
     let canMoveUp: Bool
     let canMoveDown: Bool
+    let onRun: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -176,7 +218,7 @@ private struct WorkflowCollectionRow: View {
                 if isRunning {
                     automation.activeRunIDs(for: workflow.id).forEach(automation.cancel(runID:))
                 } else {
-                    _ = automation.startWorkflow(id: workflow.id)
+                    onRun()
                 }
             } label: {
                 Image(systemName: isRunning ? "stop.fill" : "play.fill")
@@ -195,6 +237,9 @@ private struct WorkflowCollectionRow: View {
                     .disabled(!canMoveUp)
                 Button(FeatureL10n.string("下移")) { automation.moveWorkflow(id: workflow.id, offset: 1) }
                     .disabled(!canMoveDown)
+                Divider()
+                Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateWorkflow(id: workflow.id) }
+                Button(FeatureL10n.string("删除"), role: .destructive, action: onDelete)
             } label: {
                 Image(systemName: "arrow.up.arrow.down")
             }
@@ -204,6 +249,10 @@ private struct WorkflowCollectionRow: View {
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .contain)
+        .contextMenu {
+            Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateWorkflow(id: workflow.id) }
+            Button(FeatureL10n.string("删除"), role: .destructive, action: onDelete)
+        }
     }
 
     private var summary: String {
@@ -237,9 +286,8 @@ private struct WorkflowDetailView: View {
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var automation: AutomationController
     let workflow: WorkflowDefinition
-    let onDeleted: () -> Void
-
-    @State private var pendingDelete = false
+    @Binding var previewBeforeRunning: Bool
+    let onRun: (WorkflowDefinition) -> Void
 
     var body: some View {
         ScrollView {
@@ -259,16 +307,6 @@ private struct WorkflowDetailView: View {
             .padding(PluginSettingsTheme.Spacing.pagePadding)
         }
         .disabled(!automation.canEditDefinitions)
-        .alert(FeatureL10n.string("删除工作流？"), isPresented: $pendingDelete) {
-            Button(FeatureL10n.string("删除"), role: .destructive) {
-                if automation.deleteWorkflow(id: workflow.id) {
-                    onDeleted()
-                }
-            }
-            Button(FeatureL10n.string("取消"), role: .cancel) {}
-        } message: {
-            Text(FeatureL10n.string("运行中的任务会先停止，相关自动规则会一并删除。保存的快捷键、运行链接和网格条目会保留，并显示为不可用。"))
-        }
     }
 
     private var header: some View {
@@ -305,12 +343,10 @@ private struct WorkflowDetailView: View {
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 34)
 
-            TextField(
+            DebouncedAutomationTextField(
                 FeatureL10n.string("工作流名称"),
-                text: Binding(
-                    get: { workflow.name },
-                    set: { automation.renameWorkflow(id: workflow.id, name: $0) }
-                )
+                value: workflow.name,
+                onCommit: { automation.renameWorkflow(id: workflow.id, name: $0) }
             )
             .font(PluginSettingsTheme.Typography.pageTitle)
             .textFieldStyle(.plain)
@@ -333,16 +369,8 @@ private struct WorkflowDetailView: View {
             .fixedSize()
 
             if activeWorkflowRunIDs.isEmpty {
-                Button(FeatureL10n.string("测试")) {
-                    _ = automation.startWorkflow(id: workflow.id, test: true)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(workflow.steps.isEmpty)
-                .fixedSize()
-
                 Button(FeatureL10n.string("运行")) {
-                    _ = automation.startWorkflow(id: workflow.id)
+                    onRun(workflow)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -359,15 +387,6 @@ private struct WorkflowDetailView: View {
                 .accessibilityIdentifier("mactools.automation.stop")
             }
 
-            Menu {
-                Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateWorkflow(id: workflow.id) }
-                Divider()
-                Button(FeatureL10n.string("删除"), role: .destructive) { pendingDelete = true }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
         }
         .fixedSize(horizontal: true, vertical: false)
     }
@@ -402,6 +421,7 @@ private struct WorkflowDetailView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(workflow.steps.enumerated()), id: \.element.id) { index, step in
                         WorkflowStepEditor(
+                            pluginHost: pluginHost,
                             automation: automation,
                             workflow: workflow,
                             step: step,
@@ -453,6 +473,9 @@ private struct WorkflowDetailView: View {
                     pluginHost: pluginHost,
                     reference: workflow.actionReference
                 )
+                Toggle(FeatureL10n.string("运行前预览"), isOn: $previewBeforeRunning)
+                    .toggleStyle(.switch)
+                    .help(FeatureL10n.string("运行前检查步骤、可用性和确认要求。"))
                 ForEach(
                     pluginHost.actionSurfaceAssignmentSummaries(
                         for: workflow.actionReference
@@ -621,6 +644,8 @@ private struct WorkflowActionPicker: View {
     @ObservedObject var pluginHost: PluginHost
     let excluding: ActionKey
     let select: (ActionReference) -> Void
+    var buttonTitle = FeatureL10n.string("添加操作")
+    var buttonSystemImage = "plus"
 
     @State private var isPresented = false
     @State private var query = ""
@@ -630,7 +655,7 @@ private struct WorkflowActionPicker: View {
         Button {
             isPresented.toggle()
         } label: {
-            Label(FeatureL10n.string("添加操作"), systemImage: "plus")
+            Label(buttonTitle, systemImage: buttonSystemImage)
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
@@ -804,7 +829,15 @@ private struct AutomationRuleEditor: View {
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                TextField(FeatureL10n.string("规则名称"), text: binding(\.name))
+                DebouncedAutomationTextField(
+                    FeatureL10n.string("规则名称"),
+                    value: rule.name,
+                    onCommit: { value in
+                        var updated = rule
+                        updated.name = value
+                        automation.saveRule(updated)
+                    }
+                )
                     .textFieldStyle(.roundedBorder)
                     .frame(minWidth: 180, idealWidth: 240, maxWidth: 320)
 
@@ -944,7 +977,11 @@ private struct AutomationRuleEditor: View {
                 .frame(maxWidth: 150)
                 Stepper(FeatureL10n.format("偏移 %d 分钟", value.offsetMinutes), value: triggerIntBinding(value.offsetMinutes, range: -1_440 ... 1_440) { .calendar(replacing(value, offsetMinutes: $0)) }, in: -1_440 ... 1_440)
             }
-            TextField(FeatureL10n.string("标题包含（可选）"), text: optionalTriggerStringBinding(value.titleContains) { .calendar(replacing(value, titleContains: $0)) })
+            DebouncedAutomationTextField(
+                FeatureL10n.string("标题包含（可选）"),
+                value: value.titleContains ?? "",
+                onCommit: { saveTrigger(.calendar(replacing(value, titleContains: $0.isEmpty ? nil : $0))) }
+            )
                 .textFieldStyle(.roundedBorder)
             if !automation.triggerAvailability(for: .calendar).isAvailable {
                 Button(FeatureL10n.string("允许访问日历")) {
@@ -960,7 +997,11 @@ private struct AutomationRuleEditor: View {
                     Text(FeatureL10n.string("激活")).tag(ApplicationAutomationEvent.activates)
                 }
                 .frame(maxWidth: 150)
-                TextField(FeatureL10n.string("应用 Bundle ID"), text: triggerStringBinding(value.bundleIdentifier) { .application(replacing(value, bundleIdentifier: $0)) })
+                DebouncedAutomationTextField(
+                    FeatureL10n.string("应用 Bundle ID"),
+                    value: value.bundleIdentifier,
+                    onCommit: { saveTrigger(.application(replacing(value, bundleIdentifier: $0))) }
+                )
                     .textFieldStyle(.roundedBorder)
             }
         case let .power(value):
@@ -982,7 +1023,11 @@ private struct AutomationRuleEditor: View {
                     Text(FeatureL10n.string("断开")).tag(DisplayAutomationEvent.disconnected)
                 }
                 .frame(maxWidth: 150)
-                TextField(FeatureL10n.string("显示器名称包含（可选）"), text: optionalTriggerStringBinding(value.displayNameContains) { .display(replacing(value, displayNameContains: $0)) })
+                DebouncedAutomationTextField(
+                    FeatureL10n.string("显示器名称包含（可选）"),
+                    value: value.displayNameContains ?? "",
+                    onCommit: { saveTrigger(.display(replacing(value, displayNameContains: $0.isEmpty ? nil : $0))) }
+                )
                     .textFieldStyle(.roundedBorder)
             }
         case let .network(value):
@@ -1329,13 +1374,102 @@ private func powerEventTitle(_ value: PowerAutomationEvent) -> String {
     }
 }
 
+private struct DebouncedAutomationTextField: View {
+    let title: String
+    let value: String
+    let onCommit: (String) -> Void
+    @State private var draft: String
+
+    init(
+        _ title: String,
+        value: String,
+        onCommit: @escaping (String) -> Void
+    ) {
+        self.title = title
+        self.value = value
+        self.onCommit = onCommit
+        _draft = State(initialValue: value)
+    }
+
+    var body: some View {
+        TextField(title, text: $draft)
+            .task(id: draft) {
+                do {
+                    try await Task.sleep(for: .milliseconds(350))
+                } catch {
+                    return
+                }
+                commit()
+            }
+            .onChange(of: value) { _, newValue in
+                if draft != newValue {
+                    draft = newValue
+                }
+            }
+            .onDisappear(perform: commit)
+    }
+
+    private func commit() {
+        guard draft != value else { return }
+        onCommit(draft)
+    }
+}
+
+private struct DebouncedAutomationDoubleField: View {
+    let title: String
+    let value: Double
+    let onCommit: (Double) -> Void
+    @State private var draft: Double
+
+    init(
+        _ title: String,
+        value: Double,
+        onCommit: @escaping (Double) -> Void
+    ) {
+        self.title = title
+        self.value = value
+        self.onCommit = onCommit
+        _draft = State(initialValue: value)
+    }
+
+    var body: some View {
+        TextField(
+            title,
+            value: $draft,
+            format: .number.precision(.fractionLength(0 ... 1))
+        )
+        .task(id: draft) {
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+            } catch {
+                return
+            }
+            commit()
+        }
+        .onChange(of: value) { _, newValue in
+            if draft != newValue {
+                draft = newValue
+            }
+        }
+        .onDisappear(perform: commit)
+    }
+
+    private func commit() {
+        let clamped = min(max(0, draft), WorkflowStep.maximumDelaySeconds)
+        guard clamped != value else { return }
+        onCommit(clamped)
+    }
+}
+
 private struct WorkflowStepEditor: View {
+    @ObservedObject var pluginHost: PluginHost
     @ObservedObject var automation: AutomationController
     let workflow: WorkflowDefinition
     let step: WorkflowStep
     let index: Int
     let canMoveUp: Bool
     let canMoveDown: Bool
+    @State private var isAdvancedExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
@@ -1348,10 +1482,10 @@ private struct WorkflowStepEditor: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(actionTitle)
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text(step.reference.key.id)
-                        .font(PluginSettingsTheme.Typography.monospacedValue)
+                    Text(actionDescription)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                        .lineLimit(2)
                     if !availability.isAvailable {
                         Text(availability.reason ?? FeatureL10n.string("操作不可用。"))
                             .font(PluginSettingsTheme.Typography.rowDescription)
@@ -1361,6 +1495,19 @@ private struct WorkflowStepEditor: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 ControlGroup {
+                    WorkflowActionPicker(
+                        pluginHost: pluginHost,
+                        excluding: workflow.actionKey,
+                        select: {
+                            automation.replaceStepReference(
+                                workflowID: workflow.id,
+                                stepID: step.id,
+                                reference: $0
+                            )
+                        },
+                        buttonTitle: FeatureL10n.string("替换操作"),
+                        buttonSystemImage: "arrow.triangle.2.circlepath"
+                    )
                     Button { automation.moveStep(workflowID: workflow.id, stepID: step.id, offset: -1) } label: {
                         Image(systemName: "chevron.up")
                     }
@@ -1384,22 +1531,17 @@ private struct WorkflowStepEditor: View {
                 .controlSize(.small)
             }
 
-            if let definition = automation.definition(for: step.reference),
-               !definition.parameters.isEmpty {
-                WorkflowParameterEditor(
-                    automation: automation,
-                    workflowID: workflow.id,
-                    step: step,
-                    definitions: definition.parameters
-                )
-                .padding(.leading, 30)
-            }
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    stepOptions
+            DisclosureGroup(
+                FeatureL10n.string("高级选项"),
+                isExpanded: $isAdvancedExpanded
+            ) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                        stepOptions
+                    }
+                    VStack(alignment: .leading, spacing: 8) { stepOptions }
                 }
-                VStack(alignment: .leading, spacing: 8) { stepOptions }
+                .padding(.top, 8)
             }
             .padding(.leading, 30)
         }
@@ -1409,25 +1551,20 @@ private struct WorkflowStepEditor: View {
 
     @ViewBuilder
     private var stepOptions: some View {
-        TextField(
+        DebouncedAutomationTextField(
             FeatureL10n.string("步骤名称（可选）"),
-            text: Binding(
-                get: { step.label ?? "" },
-                set: { update(label: $0) }
-            )
+            value: step.label ?? "",
+            onCommit: { update(label: $0) }
         )
         .textFieldStyle(.roundedBorder)
         .frame(minWidth: 150, idealWidth: 190, maxWidth: 240)
 
         HStack(spacing: 6) {
             Text(FeatureL10n.string("步骤前等待"))
-            TextField(
+            DebouncedAutomationDoubleField(
                 FeatureL10n.string("秒"),
-                value: Binding(
-                    get: { step.delaySeconds },
-                    set: { update(delay: $0) }
-                ),
-                format: .number.precision(.fractionLength(0 ... 1))
+                value: step.delaySeconds,
+                onCommit: { update(delay: $0) }
             )
             .textFieldStyle(.roundedBorder)
             .frame(width: 64)
@@ -1455,6 +1592,11 @@ private struct WorkflowStepEditor: View {
             ?? step.reference.key.id
     }
 
+    private var actionDescription: String {
+        automation.definition(for: step.reference)?.description
+            ?? FeatureL10n.string("操作说明不可用。")
+    }
+
     private var availability: ActionAvailability {
         automation.availability(for: step.reference)
     }
@@ -1474,110 +1616,104 @@ private struct WorkflowStepEditor: View {
     }
 }
 
-private struct WorkflowParameterEditor: View {
+private struct WorkflowRunPreviewSheet: View {
     @ObservedObject var automation: AutomationController
-    let workflowID: UUID
-    let step: WorkflowStep
-    let definitions: [ActionParameterDefinition]
+    let workflow: WorkflowDefinition
+    let onRun: () -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(definitions) { definition in
-                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    Text(definition.title)
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(FeatureL10n.string("运行前预览"), systemImage: "checklist")
+                    .font(PluginSettingsTheme.Typography.pageTitle)
+                Text(FeatureL10n.string("工作流会按顺序更改系统状态；已完成的步骤无法自动撤销。"))
+                    .font(PluginSettingsTheme.Typography.pageDescription)
+                    .foregroundStyle(.secondary)
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(workflow.steps.enumerated()), id: \.element.id) { index, step in
+                        previewRow(index: index, step: step)
+                        if index + 1 < workflow.steps.count {
+                            PluginSettingsListDivider()
+                        }
+                    }
+                }
+                .pluginSettingsCardBackground(.standard)
+            }
+
+            HStack {
+                if !canRun {
+                    Label(
+                        FeatureL10n.string("请先修复不可用的步骤。"),
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.orange)
+                }
+                Spacer()
+                Button(FeatureL10n.string("取消"), role: .cancel) { dismiss() }
+                Button(FeatureL10n.string("运行")) {
+                    dismiss()
+                    onRun()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canRun)
+            }
+        }
+        .padding(PluginSettingsTheme.Spacing.pagePadding)
+        .frame(minWidth: 560, minHeight: 420)
+    }
+
+    private var canRun: Bool {
+        workflow.isEnabled
+            && !workflow.steps.isEmpty
+            && workflow.steps.allSatisfy { automation.availability(for: $0.reference).isAvailable }
+    }
+
+    private func previewRow(index: Int, step: WorkflowStep) -> some View {
+        let definition = automation.definition(for: step.reference)
+        let availability = automation.availability(for: step.reference)
+        return HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Text("\(index + 1)")
+                .font(PluginSettingsTheme.Typography.statusBadge)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.accentColor.opacity(0.14)))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(step.label ?? definition?.title ?? step.reference.key.id)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                if let description = definition?.description {
+                    Text(description)
                         .font(PluginSettingsTheme.Typography.rowDescription)
-                        .frame(width: 90, alignment: .trailing)
-                    editor(for: definition)
+                        .foregroundStyle(.secondary)
+                }
+                if step.delaySeconds > 0 {
+                    Label(
+                        FeatureL10n.format("运行前等待 %@ 秒", step.delaySeconds.formatted()),
+                        systemImage: "clock"
+                    )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                }
+                if definition?.risk == .confirmationRequired {
+                    Label(FeatureL10n.string("此步骤会在执行前要求确认。"), systemImage: "exclamationmark.shield")
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.orange)
+                }
+                if !availability.isAvailable {
+                    Label(
+                        availability.reason ?? FeatureL10n.string("操作不可用。"),
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.red)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-
-    @ViewBuilder
-    private func editor(for definition: ActionParameterDefinition) -> some View {
-        switch definition.kind {
-        case .boolean:
-            Toggle(
-                "",
-                isOn: Binding(
-                    get: {
-                        guard case let .boolean(value)? = step.reference.parameters[definition.id]
-                        else { return false }
-                        return value
-                    },
-                    set: { update(definition.id, value: .boolean($0)) }
-                )
-            )
-            .labelsHidden()
-            .toggleStyle(.switch)
-        case .string:
-            let binding = Binding(
-                get: {
-                    guard case let .string(value)? = step.reference.parameters[definition.id]
-                    else { return "" }
-                    return value
-                },
-                set: { update(definition.id, value: .string($0)) }
-            )
-            if definition.privacy == .sensitive {
-                SecureField(definition.title, text: binding)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 160, maxWidth: 280)
-            } else {
-                TextField(definition.title, text: binding)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 160, maxWidth: 280)
-            }
-        case .integer:
-            TextField(
-                definition.title,
-                value: Binding(
-                    get: {
-                        guard case let .integer(value)? = step.reference.parameters[definition.id]
-                        else { return Int64(0) }
-                        return value
-                    },
-                    set: { update(definition.id, value: .integer($0)) }
-                ),
-                format: .number
-            )
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 120)
-        case .double:
-            TextField(
-                definition.title,
-                value: Binding(
-                    get: {
-                        guard case let .double(value)? = step.reference.parameters[definition.id]
-                        else { return 0 }
-                        return value
-                    },
-                    set: { update(definition.id, value: .double($0)) }
-                ),
-                format: .number
-            )
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 120)
-        }
-    }
-
-    private func update(_ name: String, value: ActionParameterValue) {
-        var values = Dictionary(
-            uniqueKeysWithValues: step.reference.parameters.entries.map { ($0.name, $0.value) }
-        )
-        values[name] = value
-        guard let parameters = try? ActionParameterSet(values) else {
-            return
-        }
-        automation.replaceStepReference(
-            workflowID: workflowID,
-            stepID: step.id,
-            reference: ActionReference(
-                key: step.reference.key,
-                schemaVersion: step.reference.schemaVersion,
-                parameters: parameters
-            )
-        )
+        .pluginSettingsListRowPadding(interactive: false)
     }
 }
 

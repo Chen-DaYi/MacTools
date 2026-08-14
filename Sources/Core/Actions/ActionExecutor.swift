@@ -1,5 +1,6 @@
 import Foundation
 import MacToolsPluginKit
+import OSLog
 
 protocol ActionConfirmationRequesting: AnyObject, Sendable {
     @MainActor
@@ -63,12 +64,14 @@ enum ActionExecutionRejection: Error, Equatable, Sendable {
     case unavailable(String?)
     case backgroundExecutionUnsupported
     case foregroundExecutionUnsupported
+    case automaticExecutionUnsupported
     case confirmationRequiredForAutomaticExecution
     case externalInvocationUnavailable
     case systemExposureUnavailable
     case confirmationUnavailable
     case confirmationDenied
     case confirmationTimedOut
+    case actionAlreadyRunning
     case providerChanged
     case providerFailure(String)
     case executionTimedOut
@@ -97,6 +100,93 @@ struct SurfaceIndependentActionStartResult {
 
 @MainActor
 final class ActionExecutor {
+    @MainActor
+    private final class ConcurrencyCoordinator {
+        private struct Waiter {
+            let id: UUID
+            let continuation: CheckedContinuation<Bool, Never>
+        }
+
+        private var activeReferences: Set<ActionReference> = []
+        private var waiters: [ActionReference: [Waiter]] = [:]
+
+        func acquire(
+            _ reference: ActionReference,
+            policy: ActionConcurrencyPolicy
+        ) async -> Bool {
+            switch policy {
+            case .allowConcurrent:
+                return true
+            case .rejectWhileRunning:
+                guard activeReferences.insert(reference).inserted else { return false }
+                return true
+            case .serialize:
+                guard !activeReferences.contains(reference) else {
+                    let waiterID = UUID()
+                    return await withTaskCancellationHandler {
+                        await withCheckedContinuation { continuation in
+                            if Task.isCancelled {
+                                continuation.resume(returning: false)
+                            } else {
+                                waiters[reference, default: []].append(
+                                    Waiter(id: waiterID, continuation: continuation)
+                                )
+                            }
+                        }
+                    } onCancel: {
+                        Task { @MainActor [weak self] in
+                            self?.cancelWaiter(id: waiterID, reference: reference)
+                        }
+                    }
+                }
+                activeReferences.insert(reference)
+                return true
+            }
+        }
+
+        func release(_ reference: ActionReference, policy: ActionConcurrencyPolicy) {
+            guard policy != .allowConcurrent else { return }
+            if policy == .serialize, var queued = waiters[reference], !queued.isEmpty {
+                let next = queued.removeFirst()
+                waiters[reference] = queued.isEmpty ? nil : queued
+                next.continuation.resume(returning: true)
+                return
+            }
+            activeReferences.remove(reference)
+        }
+
+        private func cancelWaiter(id: UUID, reference: ActionReference) {
+            guard var queued = waiters[reference],
+                  let index = queued.firstIndex(where: { $0.id == id }) else { return }
+            let waiter = queued.remove(at: index)
+            waiters[reference] = queued.isEmpty ? nil : queued
+            waiter.continuation.resume(returning: false)
+        }
+    }
+
+    @MainActor
+    private final class ConcurrencyLease {
+        private weak var coordinator: ConcurrencyCoordinator?
+        private let reference: ActionReference
+        private let policy: ActionConcurrencyPolicy
+        private var isReleased = false
+
+        init(
+            coordinator: ConcurrencyCoordinator,
+            reference: ActionReference,
+            policy: ActionConcurrencyPolicy
+        ) {
+            self.coordinator = coordinator
+            self.reference = reference
+            self.policy = policy
+        }
+
+        func release() {
+            guard !isReleased else { return }
+            isReleased = true
+            coordinator?.release(reference, policy: policy)
+        }
+    }
     @MainActor
     private final class Race<Value: Sendable> {
         private var resolution: Value?
@@ -151,6 +241,7 @@ final class ActionExecutor {
     private struct PreparedExecution {
         let definition: ActionDefinition
         let handle: ActionExecutionHandle
+        let concurrencyLease: ConcurrencyLease
     }
 
     private enum PreparationOutcome {
@@ -163,6 +254,7 @@ final class ActionExecutor {
     private let confirmationService: any ActionConfirmationRequesting
     private let confirmationTimeout: Duration
     private let presentationPreparation: @MainActor @Sendable () -> Void
+    private let concurrencyCoordinator = ConcurrencyCoordinator()
     private var continuingExecutionTasks: [UUID: Task<Void, Never>] = [:]
     private var surfaceIndependentExecutionTasks: [UUID: Task<Void, Never>] = [:]
 
@@ -234,6 +326,7 @@ final class ActionExecutor {
         case let .prepared(execution):
             guard execution.definition.capabilities.contains(.reportsProgress) else {
                 execution.handle.cancel()
+                execution.concurrencyLease.release()
                 return ContinuingActionStartResult(
                     outcome: .rejected(.providerChanged),
                     completion: nil
@@ -243,6 +336,7 @@ final class ActionExecutor {
             let task = Task { @MainActor [weak self] in
                 guard let self else {
                     execution.handle.cancel()
+                    execution.concurrencyLease.release()
                     return
                 }
                 _ = await executionOutcome(for: execution)
@@ -288,6 +382,7 @@ final class ActionExecutor {
             let task = Task { @MainActor [weak self] in
                 guard let self else {
                     execution.handle.cancel()
+                    execution.concurrencyLease.release()
                     continuation.yield(.completed(.cancelled))
                     continuation.finish()
                     return
@@ -398,11 +493,55 @@ final class ActionExecutor {
             return .rejected(rejection)
         }
 
-        if revalidated.definition.capabilities.contains(.changesDisplayConfiguration) {
+        guard await concurrencyCoordinator.acquire(
+            invocation.reference,
+            policy: revalidated.definition.concurrencyPolicy
+        ) else {
+            return Task.isCancelled
+                ? .completed(.cancelled)
+                : .rejected(.actionAlreadyRunning)
+        }
+        let concurrencyLease = ConcurrencyLease(
+            coordinator: concurrencyCoordinator,
+            reference: invocation.reference,
+            policy: revalidated.definition.concurrencyPolicy
+        )
+
+        guard !Task.isCancelled else {
+            concurrencyLease.release()
+            return .completed(.cancelled)
+        }
+
+        let admitted: RegisteredAction
+        switch registry.registeredAction(for: invocation.reference) {
+        case let .success(action):
+            admitted = action
+        case let .failure(error):
+            concurrencyLease.release()
+            return .rejected(Self.rejection(for: error))
+        }
+        guard admitted.providerGeneration == revalidated.providerGeneration,
+              admitted.providerExecutionRevision == revalidated.providerExecutionRevision,
+              admitted.definition == revalidated.definition else {
+            concurrencyLease.release()
+            return .rejected(.providerChanged)
+        }
+        let admittedAvailability = registry.availability(for: invocation.reference)
+        guard admittedAvailability.isAvailable else {
+            concurrencyLease.release()
+            return .rejected(.unavailable(admittedAvailability.reason))
+        }
+        if let rejection = exposureRejection(for: invocation) {
+            concurrencyLease.release()
+            return .rejected(rejection)
+        }
+
+        if admitted.definition.capabilities.contains(.changesDisplayConfiguration) {
             presentationPreparation()
         }
 
         let handle: ActionExecutionHandle
+        let beginStartedAt = ContinuousClock.now
         switch registry.begin(
             invocation,
             expectedProviderGeneration: revalidated.providerGeneration,
@@ -411,19 +550,29 @@ final class ActionExecutor {
         case let .success(value):
             handle = value
         case let .failure(error):
+            concurrencyLease.release()
             return .rejected(Self.rejection(for: error))
         }
+        let beginDuration = beginStartedAt.duration(to: .now)
+        if beginDuration > .milliseconds(100) {
+            AppLog.actionExecution.warning(
+                "Action provider begin was slow for \(invocation.reference.key.id, privacy: .public)"
+            )
+        }
 
-        return .prepared(PreparedExecution(definition: revalidated.definition, handle: handle))
+        return .prepared(PreparedExecution(
+            definition: admitted.definition,
+            handle: handle,
+            concurrencyLease: concurrencyLease
+        ))
     }
 
     private func executionOutcome(
         for execution: PreparedExecution
     ) async -> ActionExecutionOutcome {
+        defer { execution.concurrencyLease.release() }
         let isCancellable = execution.definition.capabilities.contains(.cancellable)
-        let timeout = isCancellable
-            ? execution.definition.executionTimeoutSeconds.map(Duration.seconds)
-            : nil
+        let timeout = Duration.seconds(execution.definition.executionTimeoutSeconds)
         switch await executionResult(
             handle: execution.handle,
             timeout: timeout,
@@ -432,7 +581,9 @@ final class ActionExecutor {
         case let .result(result):
             return .completed(result)
         case .timedOut:
-            execution.handle.cancel()
+            if isCancellable {
+                execution.handle.cancel()
+            }
             return .rejected(.executionTimedOut)
         case .cancelled:
             execution.handle.cancel()
@@ -453,9 +604,13 @@ final class ActionExecutor {
             break
         }
 
-        if invocation.source == .automaticRule,
-           definition.risk == .confirmationRequired {
-            return .confirmationRequiredForAutomaticExecution
+        if invocation.source == .automaticRule {
+            guard definition.risk != .confirmationRequired else {
+                return .confirmationRequiredForAutomaticExecution
+            }
+            guard definition.capabilities.contains(.automatic) else {
+                return .automaticExecutionUnsupported
+            }
         }
 
         if invocation.source == .runLink {

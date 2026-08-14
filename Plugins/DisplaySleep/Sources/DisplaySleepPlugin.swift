@@ -126,7 +126,7 @@ final class DisplaySleepPlugin:
                     )
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration]
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration]
             ),
         ]
     }

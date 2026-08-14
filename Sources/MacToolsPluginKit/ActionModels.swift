@@ -245,6 +245,14 @@ public enum ActionExternalInvocationPolicy: String, Hashable, Codable, Sendable 
     case confirmAlways
 }
 
+/// Controls how the host admits overlapping invocations of the same action reference.
+/// Providers should choose `.allowConcurrent` only when overlapping work is known to be safe.
+public enum ActionConcurrencyPolicy: String, Hashable, Codable, Sendable {
+    case serialize
+    case rejectWhileRunning
+    case allowConcurrent
+}
+
 public struct ActionExecutionCapabilities: OptionSet, Hashable, Codable, Sendable {
     public let rawValue: UInt8
 
@@ -258,6 +266,9 @@ public struct ActionExecutionCapabilities: OptionSet, Hashable, Codable, Sendabl
     /// The host uses this to detach AppKit's remote text-completion UI before the
     /// display server wakes or reorders status-item windows.
     public static let changesDisplayConfiguration = ActionExecutionCapabilities(rawValue: 1 << 4)
+    /// The provider explicitly permits this action to run from unattended automatic rules.
+    /// Background support alone does not imply that the action is safe to automate.
+    public static let automatic = ActionExecutionCapabilities(rawValue: 1 << 5)
 
     public init(rawValue: UInt8) {
         self.rawValue = rawValue
@@ -288,7 +299,8 @@ public struct ActionDefinition: Hashable, Codable, Sendable, Identifiable {
     public let confirmation: ActionConfirmation?
     public let externalInvocationPolicy: ActionExternalInvocationPolicy
     public let capabilities: ActionExecutionCapabilities
-    public let executionTimeoutSeconds: Double?
+    public let concurrencyPolicy: ActionConcurrencyPolicy
+    public let executionTimeoutSeconds: Double
 
     public init(
         key: ActionKey,
@@ -302,7 +314,8 @@ public struct ActionDefinition: Hashable, Codable, Sendable, Identifiable {
         confirmation: ActionConfirmation? = nil,
         externalInvocationPolicy: ActionExternalInvocationPolicy = .unavailable,
         capabilities: ActionExecutionCapabilities = [.foregroundInteractive],
-        executionTimeoutSeconds: Double? = 30
+        concurrencyPolicy: ActionConcurrencyPolicy = .rejectWhileRunning,
+        executionTimeoutSeconds: Double = 30
     ) {
         self.key = key
         self.parameterSchemaVersion = parameterSchemaVersion
@@ -315,6 +328,7 @@ public struct ActionDefinition: Hashable, Codable, Sendable, Identifiable {
         self.confirmation = confirmation
         self.externalInvocationPolicy = externalInvocationPolicy
         self.capabilities = capabilities
+        self.concurrencyPolicy = concurrencyPolicy
         self.executionTimeoutSeconds = executionTimeoutSeconds
     }
 
@@ -520,6 +534,8 @@ public protocol PluginActionProviding: AnyObject {
         _ reference: ActionReference,
         toSchemaVersion schemaVersion: Int
     ) -> ActionReference?
+    /// Accepts an already validated invocation and returns promptly with an execution handle.
+    /// Expensive work belongs in the handle's asynchronous operation, not in this method.
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle
 }
 

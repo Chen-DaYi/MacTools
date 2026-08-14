@@ -168,6 +168,15 @@ final class SavedScriptsPlugin:
         store.scripts.map { script in
             let needsConfirmationCopy = script.confirmOutsideManager
                 || script.allowExternalInvocation
+            var capabilities: ActionExecutionCapabilities = [
+                .background,
+                .foregroundInteractive,
+                .cancellable,
+                .reportsProgress,
+            ]
+            if !script.confirmOutsideManager {
+                capabilities.insert(.automatic)
+            }
             return ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: script.actionID),
                 title: script.name,
@@ -207,12 +216,7 @@ final class SavedScriptsPlugin:
                     )
                     : nil,
                 externalInvocationPolicy: script.allowExternalInvocation ? .confirmAlways : .unavailable,
-                capabilities: [
-                    .background,
-                    .foregroundInteractive,
-                    .cancellable,
-                    .reportsProgress,
-                ],
+                capabilities: capabilities,
                 executionTimeoutSeconds: Double(script.timeoutSeconds)
                     + ProcessSavedScriptRunner.actionExecutionTimeoutGraceSeconds
             )

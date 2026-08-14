@@ -232,7 +232,7 @@ final class AppHotkeyPlugin:
                 ),
             ],
             externalInvocationPolicy: .allowed,
-            capabilities: [.background, .foregroundInteractive]
+            capabilities: [.automatic, .background, .foregroundInteractive]
         )
     }
 

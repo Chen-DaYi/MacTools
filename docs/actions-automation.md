@@ -5,8 +5,8 @@ MacTools exposes one host-owned action platform to every invocation surface. Plu
 ## Ownership
 
 - `ActionRegistry` owns revisioned in-memory definition/catalog indexes and live availability invalidation.
-- `ActionExecutor` is the only execution gate. It validates parameters and execution mode, applies confirmation policy, revalidates the exact approved request, provider, and availability, and enforces cancellation and timeouts only when the provider advertises cancellable execution. Non-cancellable destructive work is allowed to finish so MacTools never reports a cancellation while the operation is still running.
-- `ShortcutAssignmentService` owns ordinary global-action bindings, conflicts, migration, persistence, and Carbon registration state. Plugin-specific and central editors are projections of the same records.
+- `ActionExecutor` is the only execution gate. It validates parameters and execution mode, applies confirmation policy, revalidates the exact approved request, provider, and availability, enforces a deadline for every action, and calls provider cancellation when supported. Definitions also declare how overlapping invocations behave: reject by default, serialize, or allow concurrent execution.
+- `ShortcutAssignmentService` owns ordinary global-action bindings, conflicts, migration, persistence, and Carbon registration state. Actions & Shortcuts is the canonical editor for these bindings; plugin settings retain only specialized plugin shortcuts that are not ordinary action assignments.
 - Automation owns workflow definitions, rules, conditions, and bounded privacy-conscious history. Steps store versioned `ActionReference` values and execute serially through `ActionExecutor`.
 - `AppURLRouter` owns one strict, ordered, bounded route queue. Run Links resolve to `ActionReference` values before execution.
 - Action Grid owns only its versioned tree of folders, each containing up to nine positioned references. Catalog discovery, owner navigation, migration, availability, execution, shortcut assignment, and Run Link generation remain host-owned.
@@ -17,7 +17,9 @@ Portable imports distinguish unavailable providers from configuration-defined ac
 
 ## Automation boundaries
 
-Workflows can be created, renamed, duplicated, enabled or disabled, reordered, run, tested, stopped, and deleted. Automatic rules are managed separately; deleting a workflow first cancels its active runs and explicitly removes its attached rules so neither an unreachable run nor enabled orphan trigger remains hidden. Manual Run and Test ignore rule-specific conditions. Enabled workflows publish stable `automation/workflow.<uuid>` actions, so Unified Search, global shortcuts, Run Links, and Action Grid need no workflow-specific dispatch path.
+Workflows can be created, renamed, duplicated, enabled or disabled, reordered, previewed, run, stopped, and deleted. Preview Before Running is enabled by default and shows the ordered steps, current availability, waits, confirmation requirements, and the lack of automatic rollback before a manual run starts. Automatic rules are managed separately; deleting a workflow first cancels its active runs and explicitly removes its attached rules so neither an unreachable run nor enabled orphan trigger remains hidden. Manual runs ignore rule-specific conditions. Enabled workflows publish stable `automation/workflow.<uuid>` actions, so Unified Search, global shortcuts, Run Links, and Action Grid need no workflow-specific dispatch path.
+
+The workflow editor keeps action identity and parameters together: changing an action uses the shared action picker and replaces its parameters with a valid reference. Step names, waits, and failure policy live under Advanced Options. Text and numeric drafts are debounced before persistence, while structural changes such as adding, replacing, moving, or deleting steps are saved immediately and rebuild the published catalog only when action identity changes.
 
 Workflow actions publish durable progress through Automation. Action Grid and Unified Search complete validation, availability checks, provider-generation revalidation, and any confirmation before handing the run to Automation and closing; the menu-bar running indicator, Automation run history, and Stop control then own its lifecycle. Ordinary actions still keep the invoking surface open until they return a terminal result, and nested workflow steps always await their child action so ordering, failure policy, recursion limits, and cancellation remain deterministic.
 
@@ -29,7 +31,9 @@ If:   frontmost app, power/battery, connected display, time range, or network st
 Run:  reusable workflow
 ```
 
-Trigger delivery is debounced, serialized per rule, and bounded. Calendar offsets, crossed battery thresholds, and network-interface transitions are carried as exact event identities so adjacent rules cannot cross-fire; positive calendar offsets retain ended events across provider refreshes. Skipped rules record a concise reason. Workflow recursion and execution depth are bounded; history recovers unfinished runs as interrupted after a restart. Advanced branches, loops, variables, folders, and application-specific Action Grid profiles are intentionally outside this release.
+Trigger delivery is debounced, serialized per rule, and bounded. MacTools starts a trigger provider only while at least one enabled rule uses that trigger family, limits automatic runs globally, and never overlaps a second run of the same workflow. Providers must explicitly opt an action into unattended execution with the `.automatic` capability; background support alone is not sufficient. Calendar offsets, crossed battery thresholds, and network-interface transitions are carried as exact event identities so adjacent rules cannot cross-fire; positive calendar offsets retain ended events across provider refreshes. Skipped rules record a concise reason. Workflow recursion and execution depth are bounded; history recovers unfinished runs as interrupted after a restart. Advanced branches, loops, variables, folders, and application-specific Action Grid profiles are intentionally outside this release.
+
+Run Link controls copy the canonical direct URL when an action is externally invocable. If a parameterized action needs a durable preset, preset creation remains an internal compatibility mechanism instead of a second user-facing link type.
 
 ## Automated verification
 

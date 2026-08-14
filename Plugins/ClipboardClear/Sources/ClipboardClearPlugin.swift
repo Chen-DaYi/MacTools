@@ -82,7 +82,7 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
                     confirmButtonTitle: localization.string("panel.button.clear", defaultValue: "清空")
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

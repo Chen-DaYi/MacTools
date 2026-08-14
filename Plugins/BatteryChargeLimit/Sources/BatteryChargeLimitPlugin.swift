@@ -156,7 +156,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
     var actionDefinitions: [ActionDefinition] {
         let executionCapabilities: ActionExecutionCapabilities =
             writer.isInstalledHelperAvailable
-                ? [.background, .foregroundInteractive]
+                ? [.automatic, .background, .foregroundInteractive]
                 : [.foregroundInteractive]
         return [
             ActionDefinition(

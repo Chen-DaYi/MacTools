@@ -125,8 +125,8 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
                     confirmButtonTitle: localization.string("panel.button.empty", defaultValue: "清空")
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive],
-                executionTimeoutSeconds: nil
+                capabilities: [.automatic, .background, .foregroundInteractive],
+                executionTimeoutSeconds: 600
             ),
         ]
     }

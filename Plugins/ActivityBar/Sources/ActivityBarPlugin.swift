@@ -179,7 +179,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
                     ),
                 ],
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.resetToday),
@@ -194,7 +194,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
                     confirmButtonTitle: localization.string("panel.action.resetToday", defaultValue: "清空今日统计")
                 ),
                 externalInvocationPolicy: .unavailable,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

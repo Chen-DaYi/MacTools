@@ -109,6 +109,33 @@ final class WorkflowRunnerTests: XCTestCase {
         XCTAssertEqual(harness.provider.invocations.map(\.source), [.automaticRule])
     }
 
+    func testSameWorkflowCannotStartTwiceUntilTrackedRunFinishes() async throws {
+        let harness = try makeHarness(actionIDs: ["slow"])
+        harness.provider.nonCooperativeActionIDs.insert("slow")
+        let workflow = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: harness.reference("slow"))]
+        )
+        let first = try harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .manual,
+            mode: .foreground
+        ).get()
+
+        guard case let .failure(error) = harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .manual,
+            mode: .foreground
+        ) else {
+            return XCTFail("Expected duplicate workflow run to be rejected")
+        }
+        XCTAssertEqual(error, .alreadyRunning)
+
+        first.actionHandle.cancel()
+        let result = await first.actionHandle.result()
+        XCTAssertEqual(result, .cancelled)
+    }
+
     func testAutomaticRunPreservesUnattendedSourceThroughNestedWorkflows() async throws {
         let harness = try makeHarness(actionIDs: ["first"])
         let child = try saveWorkflow(
@@ -640,7 +667,7 @@ final class WorkflowRunnerTests: XCTestCase {
                             confirmButtonTitle: "Run"
                         )
                         : nil,
-                    capabilities: [.background]
+                    capabilities: [.automatic, .background]
                 )],
                 catalogEntries: [],
                 availability: { _ in .available },
@@ -952,7 +979,7 @@ final class WorkflowRunnerTests: XCTestCase {
 
     private func makeHarness(
         actionIDs: [String],
-        timeout: Double? = 30,
+        timeout: Double = 30,
         nonCancellableActionIDs: Set<String> = [],
         terminalCheckpoint: WorkflowRunnerTerminalCheckpoint? = nil
     ) throws -> Harness {
@@ -1081,7 +1108,7 @@ private final class WorkflowRunnerTestProvider {
 
     init(
         actionIDs: [String],
-        timeout: Double?,
+        timeout: Double,
         nonCancellableActionIDs: Set<String> = []
     ) {
         definitions = actionIDs.map { actionID in
@@ -1092,8 +1119,8 @@ private final class WorkflowRunnerTestProvider {
                 systemImage: "bolt",
                 externalInvocationPolicy: .allowed,
                 capabilities: nonCancellableActionIDs.contains(actionID)
-                    ? [.background, .foregroundInteractive]
-                    : [.background, .foregroundInteractive, .cancellable],
+                    ? [.automatic, .background, .foregroundInteractive]
+                    : [.automatic, .background, .foregroundInteractive, .cancellable],
                 executionTimeoutSeconds: timeout
             )
         }

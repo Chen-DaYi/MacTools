@@ -134,7 +134,7 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAction
                 keywords: [localization.string("metadata.title", defaultValue: "自动隐藏程序坞"), "Dock"],
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
@@ -156,7 +156,7 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAction
                     ),
                 ],
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

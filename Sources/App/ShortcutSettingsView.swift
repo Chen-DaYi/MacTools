@@ -121,11 +121,12 @@ struct ActionShortcutSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
     @State private var query = ""
     @State private var filter: ActionShortcutFilter = .all
+    @State private var groups: [ActionShortcutGroup] = []
     @State private var pendingReplacement: PendingActionShortcutReplacement?
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            LazyVStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
                 header
                 controls
 
@@ -138,7 +139,7 @@ struct ActionShortcutSettingsView: View {
                         .pluginSettingsCardBackground(.standard)
                 }
 
-                if groupedItems.isEmpty {
+                if groups.isEmpty {
                     ContentUnavailableView(
                         FeatureL10n.string("没有匹配的操作"),
                         systemImage: "command",
@@ -146,7 +147,7 @@ struct ActionShortcutSettingsView: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
-                    ForEach(groupedItems, id: \.providerID) { group in
+                    ForEach(groups, id: \.providerID) { group in
                         actionGroup(group)
                     }
                 }
@@ -154,6 +155,10 @@ struct ActionShortcutSettingsView: View {
             .padding(PluginSettingsTheme.Spacing.pagePadding)
         }
         .background(SettingsStyle.contentBackground)
+        .onAppear(perform: refreshGroups)
+        .onChange(of: pluginHost.actionShortcutCatalogItems) { _, _ in refreshGroups() }
+        .onChange(of: query) { _, _ in refreshGroups() }
+        .onChange(of: filter) { _, _ in refreshGroups() }
         .alert(item: $pendingReplacement) { replacement in
             Alert(
                 title: Text(FeatureL10n.string("替换快捷键？")),
@@ -221,7 +226,7 @@ struct ActionShortcutSettingsView: View {
         .frame(minWidth: 320, idealWidth: 380, maxWidth: 420)
     }
 
-    private var groupedItems: [ActionShortcutGroup] {
+    private func refreshGroups() {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let matching = pluginHost.actionShortcutCatalogItems.filter { item in
             guard filter.includes(item.status) else {
@@ -235,16 +240,16 @@ struct ActionShortcutSettingsView: View {
         }
 
         var order: [String] = []
-        var groups: [String: [ActionShortcutCatalogItem]] = [:]
+        var groupedItems: [String: [ActionShortcutCatalogItem]] = [:]
         for item in matching {
             let providerID = item.reference.key.providerID
-            if groups[providerID] == nil {
+            if groupedItems[providerID] == nil {
                 order.append(providerID)
             }
-            groups[providerID, default: []].append(item)
+            groupedItems[providerID, default: []].append(item)
         }
-        return order.compactMap { providerID in
-            guard let items = groups[providerID], let first = items.first else {
+        groups = order.compactMap { providerID in
+            guard let items = groupedItems[providerID], let first = items.first else {
                 return nil
             }
             return ActionShortcutGroup(
@@ -277,7 +282,7 @@ struct ActionShortcutSettingsView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
                     ActionShortcutCatalogRow(
                         pluginHost: pluginHost,

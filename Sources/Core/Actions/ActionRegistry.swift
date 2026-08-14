@@ -380,8 +380,8 @@ final class ActionRegistry: ObservableObject {
             || definition.capabilities.contains(.foregroundInteractive) else {
             return "missing-execution-mode"
         }
-        if let timeout = definition.executionTimeoutSeconds,
-           (!timeout.isFinite || timeout <= 0 || timeout > 86_400) {
+        let timeout = definition.executionTimeoutSeconds
+        if !timeout.isFinite || timeout <= 0 || timeout > 86_400 {
             return "invalid-timeout"
         }
         return nil

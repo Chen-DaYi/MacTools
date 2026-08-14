@@ -21,25 +21,21 @@ struct ActionRunLinkControl: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
             switch pluginHost.actionRunLinkPresentation(for: reference) {
-            case let .available(representation, presetID):
-                availableContent(representation, presetID: presetID)
+            case let .available(representation, _):
+                availableContent(representation)
             case .needsPreset:
-                VStack(alignment: .leading, spacing: 4) {
-                    Button(FeatureL10n.string("创建并复制运行链接")) {
-                        switch pluginHost.createActionRunLink(for: reference) {
-                        case let .success(representation):
-                            copy(representation.url)
-                        case let .failure(error):
-                            errorMessage = message(for: error)
-                        }
+                Button {
+                    switch pluginHost.createActionRunLink(for: reference) {
+                    case let .success(representation):
+                        copy(representation.url)
+                    case let .failure(error):
+                        errorMessage = message(for: error)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                    Text(FeatureL10n.string("此操作需要使用已保存的运行链接预设。"))
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
+                } label: {
+                    Label(FeatureL10n.string("复制运行链接"), systemImage: "doc.on.doc")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             case let .unavailable(reason):
                 if displaysUnavailableReason {
                     Label(reason, systemImage: "link.badge.plus")
@@ -57,10 +53,7 @@ struct ActionRunLinkControl: View {
         .accessibilityIdentifier("mactools.run-link.\(reference.key.id)")
     }
 
-    private func availableContent(
-        _ representation: ActionRunLinkRepresentation,
-        presetID: UUID?
-    ) -> some View {
+    private func availableContent(_ representation: ActionRunLinkRepresentation) -> some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
             HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
                 Button {
@@ -95,15 +88,6 @@ struct ActionRunLinkControl: View {
                     title: FeatureL10n.string("终端命令"),
                     value: representation.terminalCommand
                 )
-
-                if presetID != nil {
-                    Button(FeatureL10n.string("删除预设")) {
-                        pluginHost.deleteActionRunLinkPreset(for: reference)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .foregroundStyle(.red)
-                }
             }
         }
     }
@@ -197,11 +181,11 @@ struct ActionRunLinkCopyButton: View {
                     copy(representation.url)
                 }
             } label: {
-                Image(systemName: "link.badge.plus")
+                Image(systemName: didCopy ? "checkmark" : "link")
             }
             .buttonStyle(.plain)
-            .help(FeatureL10n.string("创建并复制运行链接"))
-            .accessibilityLabel(FeatureL10n.string("创建并复制运行链接"))
+            .help(FeatureL10n.string("复制运行链接"))
+            .accessibilityLabel(FeatureL10n.string("复制运行链接"))
         case let .unavailable(reason):
             Image(systemName: "link.badge.plus")
                 .foregroundStyle(.tertiary)

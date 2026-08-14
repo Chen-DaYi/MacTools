@@ -204,7 +204,7 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
                     confirmButtonTitle: metadata.title
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration]
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration]
             ),
         ]
     }

@@ -96,7 +96,7 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
                 ],
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
@@ -118,7 +118,7 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
                     ),
                 ],
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

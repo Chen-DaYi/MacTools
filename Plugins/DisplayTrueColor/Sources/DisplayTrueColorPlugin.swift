@@ -89,7 +89,7 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
                 keywords: [metadata.title, metadata.defaultDescription, "True Tone"],
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
@@ -101,7 +101,7 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
                     ActionParameterDefinition(id: "enabled", title: metadata.title, kind: .boolean),
                 ],
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

@@ -110,7 +110,7 @@ final class ActionGridPlugin:
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .allowed,
                 capabilities: [.foregroundInteractive],
-                executionTimeoutSeconds: nil
+                executionTimeoutSeconds: 30
             ),
         ]
     }

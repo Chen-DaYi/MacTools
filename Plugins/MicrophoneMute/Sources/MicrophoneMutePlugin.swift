@@ -176,7 +176,7 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
                 systemImage: metadata.iconName,
                 confirmation: toggleConfirmation,
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
@@ -205,7 +205,7 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
                 ],
                 confirmation: toggleConfirmation,
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }

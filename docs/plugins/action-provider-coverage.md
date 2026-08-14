@@ -21,6 +21,8 @@ Parameterized actions publish concrete catalog entries rather than asking each a
 
 Operations that eject storage, empty Trash, clear the clipboard, change hardware management, or enter a physical clean session preserve confirmation or foreground-only requirements. Machine-local parameters are marked local-only, and actions that require an interactive chooser or key lifecycle do not expose Run Links.
 
+Unattended automation is also an explicit provider decision. An action must publish both `.background` and `.automatic` before an automatic rule may run it; confirmation-required actions remain interactive even if they otherwise support background execution. Providers should keep the default overlap policy unless concurrent execution is known to be safe, return an execution handle promptly from `beginAction`, and perform expensive work asynchronously behind that handle.
+
 The maintenance providers use deliberately narrow contracts:
 
 - Disk Clean and Xcode Clean expose only a foreground **scan and review** action. It opens the owning settings page and starts a scan; deletion still requires the plugin's existing selection, safety validation, and confirmation flow.

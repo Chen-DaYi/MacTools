@@ -5,6 +5,7 @@ struct WorkflowExecutionAnalysisResult: Equatable {
     let availability: ActionAvailability
     let supportsBackground: Bool
     let supportsUnattendedExecution: Bool
+    let requiresConfirmation: Bool
     let allowsExternalInvocation: Bool
 }
 
@@ -78,6 +79,7 @@ enum WorkflowExecutionAnalysis {
         nextVisiting.insert(workflowID)
         var supportsBackground = true
         var supportsUnattendedExecution = true
+        var requiresConfirmation = false
         var allowsExternalInvocation = true
 
         for step in workflow.steps {
@@ -94,6 +96,7 @@ enum WorkflowExecutionAnalysis {
                 supportsBackground = supportsBackground && nested.supportsBackground
                 supportsUnattendedExecution = supportsUnattendedExecution
                     && nested.supportsUnattendedExecution
+                requiresConfirmation = requiresConfirmation || nested.requiresConfirmation
                 allowsExternalInvocation = allowsExternalInvocation
                     && nested.allowsExternalInvocation
                 continue
@@ -114,6 +117,9 @@ enum WorkflowExecutionAnalysis {
                 && actionDefinition.capabilities.contains(.background)
             supportsUnattendedExecution = supportsUnattendedExecution
                 && actionDefinition.risk != .confirmationRequired
+                && actionDefinition.capabilities.contains(.automatic)
+            requiresConfirmation = requiresConfirmation
+                || actionDefinition.risk == .confirmationRequired
             allowsExternalInvocation = allowsExternalInvocation
                 && actionDefinition.externalInvocationPolicy != .unavailable
                 && !ActionRegistry.containsSensitiveParameters(
@@ -126,6 +132,7 @@ enum WorkflowExecutionAnalysis {
             availability: .available,
             supportsBackground: supportsBackground,
             supportsUnattendedExecution: supportsUnattendedExecution,
+            requiresConfirmation: requiresConfirmation,
             allowsExternalInvocation: allowsExternalInvocation
         )
     }
@@ -169,6 +176,7 @@ enum WorkflowExecutionAnalysis {
             availability: .unavailable(reason),
             supportsBackground: false,
             supportsUnattendedExecution: false,
+            requiresConfirmation: false,
             allowsExternalInvocation: false
         )
     }

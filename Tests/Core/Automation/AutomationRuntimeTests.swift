@@ -66,7 +66,7 @@ final class AutomationRuntimeTests: XCTestCase {
     }
 
     func testEachTriggerProviderStartsSameWorkflowThroughGenericRuntime() throws {
-        let fixture = try makeFixture()
+        let fixture = try makeFixture(maximumConcurrentRuns: 6)
         let date = fixture.date
         let display = AutomationDisplaySnapshot(identifier: "42", name: "Studio Display")
         let triggersAndEvents: [(AutomationTrigger, AutomationTriggerEvent)] = [
@@ -267,6 +267,80 @@ final class AutomationRuntimeTests: XCTestCase {
         XCTAssertEqual(fixture.runtime.availability(for: .calendar), .available)
     }
 
+    func testTriggerProviderRunsOnlyWhileItHasEnabledRules() throws {
+        let fixture = try makeFixture()
+        let network = try XCTUnwrap(fixture.providers[.network])
+
+        fixture.runtime.start()
+        XCTAssertEqual(network.startCount, 0)
+        XCTAssertEqual(network.stopCount, 0)
+
+        let rule = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available))
+            )
+        ).get()
+        fixture.runtime.refreshProviders()
+        XCTAssertEqual(network.startCount, 1)
+        XCTAssertEqual(network.refreshedRules.map(\.id), [rule.id])
+
+        var disabled = rule
+        disabled.isEnabled = false
+        _ = try fixture.ruleStore.upsert(disabled).get()
+        fixture.runtime.refreshProviders()
+        XCTAssertEqual(network.stopCount, 1)
+
+        network.emit(.network(status: .available, interface: .any, date: fixture.date))
+        XCTAssertTrue(fixture.starter.starts.isEmpty)
+    }
+
+    func testRefreshBeforeStartDoesNotActivateTriggerProviders() throws {
+        let fixture = try makeFixture()
+        let network = try XCTUnwrap(fixture.providers[.network])
+        _ = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available))
+            )
+        ).get()
+
+        fixture.runtime.refreshProviders()
+
+        XCTAssertEqual(network.startCount, 0)
+        XCTAssertTrue(network.refreshedRules.isEmpty)
+        fixture.runtime.start()
+        XCTAssertEqual(network.startCount, 1)
+        XCTAssertEqual(network.refreshedRules.count, 1)
+    }
+
+    func testAutomaticRunsRespectGlobalConcurrencyLimit() throws {
+        let fixture = try makeFixture(
+            completesImmediately: false,
+            maximumConcurrentRuns: 4
+        )
+        for index in 0 ..< 5 {
+            _ = try fixture.ruleStore.upsert(
+                AutomationRule(
+                    name: "Rule \(index)",
+                    workflowID: fixture.workflow.id,
+                    trigger: .network(NetworkAutomationTrigger(status: .available))
+                )
+            ).get()
+        }
+        fixture.runtime.start()
+
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: fixture.date)
+        )
+
+        XCTAssertEqual(fixture.starter.starts.count, 4)
+        XCTAssertEqual(
+            fixture.workflowStore.history().first?.automationSkippedSummary?.reason,
+            .automaticConcurrencyLimitReached
+        )
+    }
+
     func testBackgroundUnsupportedWorkflowRecordsSpecificSkipReason() throws {
         let fixture = try makeFixture(startError: .backgroundExecutionUnsupported)
         let rule = try fixture.ruleStore.upsert(AutomationRule(
@@ -309,7 +383,8 @@ final class AutomationRuntimeTests: XCTestCase {
 
     private func makeFixture(
         completesImmediately: Bool = true,
-        startError: WorkflowStartError? = nil
+        startError: WorkflowStartError? = nil,
+        maximumConcurrentRuns: Int = 4
     ) throws -> RuntimeFixture {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
@@ -349,7 +424,8 @@ final class AutomationRuntimeTests: XCTestCase {
             snapshotProvider: snapshot,
             providers: Array(providers.values),
             evaluator: AutomationRuleEvaluator(calendar: calendar),
-            now: { matchingDate }
+            now: { matchingDate },
+            maximumConcurrentRuns: maximumConcurrentRuns
         )
         return RuntimeFixture(
             workflowStore: workflowStore,
@@ -381,6 +457,8 @@ private final class FakeAutomationTriggerProvider: AutomationTriggerProviding {
     let kind: AutomationTriggerKind
     var availability: AutomationTriggerAvailability = .available
     var refreshedRules: [AutomationRule] = []
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
     private var handler: (@MainActor (AutomationTriggerEvent) -> Void)?
 
     init(kind: AutomationTriggerKind) {
@@ -388,10 +466,12 @@ private final class FakeAutomationTriggerProvider: AutomationTriggerProviding {
     }
 
     func start(handler: @escaping @MainActor (AutomationTriggerEvent) -> Void) {
+        startCount += 1
         self.handler = handler
     }
 
     func stop() {
+        stopCount += 1
         handler = nil
     }
 

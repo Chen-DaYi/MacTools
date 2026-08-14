@@ -264,7 +264,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginSet
             risk: risk,
             confirmation: confirmation,
             externalInvocationPolicy: .unavailable,
-            capabilities: [.background, .foregroundInteractive, .cancellable, .reportsProgress],
+            capabilities: [.automatic, .background, .foregroundInteractive, .cancellable, .reportsProgress],
             executionTimeoutSeconds: 7_200
         )
     }

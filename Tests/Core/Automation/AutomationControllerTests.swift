@@ -680,7 +680,11 @@ private final class AutomationControllerTestProvider {
     init(
         providerID: String = "automation-controller-tests",
         actionID: String = "run",
-        capabilities: ActionExecutionCapabilities = [.background, .foregroundInteractive],
+        capabilities: ActionExecutionCapabilities = [
+            .automatic,
+            .background,
+            .foregroundInteractive,
+        ],
         externalInvocationPolicy: ActionExternalInvocationPolicy = .allowed,
         risk: ActionRisk = .safe
     ) {

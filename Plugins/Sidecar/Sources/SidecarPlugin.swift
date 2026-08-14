@@ -279,7 +279,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                     )
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             ),
             ActionDefinition(
@@ -301,7 +301,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                     )
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             ),
         ]
@@ -321,7 +321,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 systemImage: deviceActionIcon(for: preference.shortcutAction),
                 confirmation: externalConfirmation(title: deviceActionTitle(for: preference)),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             )
         }

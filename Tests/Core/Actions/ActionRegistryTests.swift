@@ -379,7 +379,8 @@ func makeActionDefinition(
     confirmation: ActionConfirmation? = nil,
     externalPolicy: ActionExternalInvocationPolicy = .allowed,
     capabilities: ActionExecutionCapabilities = [.background, .foregroundInteractive],
-    timeout: Double? = 30
+    concurrencyPolicy: ActionConcurrencyPolicy = .rejectWhileRunning,
+    timeout: Double = 30
 ) -> ActionDefinition {
     ActionDefinition(
         key: ActionKey(providerID: "test-provider", actionID: "toggle"),
@@ -392,6 +393,7 @@ func makeActionDefinition(
         confirmation: confirmation,
         externalInvocationPolicy: externalPolicy,
         capabilities: capabilities,
+        concurrencyPolicy: concurrencyPolicy,
         executionTimeoutSeconds: timeout
     )
 }

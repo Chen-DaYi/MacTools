@@ -33,6 +33,7 @@ extension WorkflowRunner: WorkflowStarting {}
 @MainActor
 final class AutomationRuntime {
     static let defaultDeduplicationInterval: TimeInterval = 2
+    static let defaultMaximumConcurrentRuns = 4
 
     private let ruleStore: AutomationRuleStore
     private let workflowStore: WorkflowStore
@@ -42,10 +43,12 @@ final class AutomationRuntime {
     private let evaluator: AutomationRuleEvaluator
     private let now: () -> Date
     private let deduplicationInterval: TimeInterval
+    private let maximumConcurrentRuns: Int
 
     private var lastDelivery: [String: Date] = [:]
     private var activeRuleIDs: Set<UUID> = []
     private var activeHandles: [UUID: ActionExecutionHandle] = [:]
+    private var activeProviderKinds: Set<AutomationTriggerKind> = []
     private(set) var isStarted = false
 
     var onChange: (() -> Void)?
@@ -58,7 +61,8 @@ final class AutomationRuntime {
         providers: [any AutomationTriggerProviding],
         evaluator: AutomationRuleEvaluator = AutomationRuleEvaluator(),
         now: @escaping () -> Date = Date.init,
-        deduplicationInterval: TimeInterval = defaultDeduplicationInterval
+        deduplicationInterval: TimeInterval = defaultDeduplicationInterval,
+        maximumConcurrentRuns: Int = defaultMaximumConcurrentRuns
     ) {
         self.ruleStore = ruleStore
         self.workflowStore = workflowStore
@@ -68,32 +72,42 @@ final class AutomationRuntime {
         self.evaluator = evaluator
         self.now = now
         self.deduplicationInterval = deduplicationInterval
+        self.maximumConcurrentRuns = max(1, maximumConcurrentRuns)
     }
 
     func start() {
         guard !isStarted else { return }
         isStarted = true
-        for provider in providers {
-            provider.start { [weak self] event in
-                self?.receive(event)
-            }
-        }
         refreshProviders()
     }
 
     func stop() {
         guard isStarted else { return }
         isStarted = false
-        providers.forEach { $0.stop() }
+        providers.filter { activeProviderKinds.contains($0.kind) }.forEach { $0.stop() }
+        activeProviderKinds.removeAll()
         activeHandles.values.forEach { $0.cancel() }
         activeHandles.removeAll()
         activeRuleIDs.removeAll()
     }
 
     func refreshProviders() {
+        guard isStarted else { return }
         let rules = ruleStore.rules().filter(\.isEnabled)
         providers.forEach { provider in
-            provider.refresh(rules: rules.filter { $0.trigger.kind == provider.kind })
+            let matchingRules = rules.filter { $0.trigger.kind == provider.kind }
+            if matchingRules.isEmpty {
+                if activeProviderKinds.remove(provider.kind) != nil {
+                    provider.stop()
+                }
+                return
+            }
+            if activeProviderKinds.insert(provider.kind).inserted {
+                provider.start { [weak self] event in
+                    self?.receive(event)
+                }
+            }
+            provider.refresh(rules: matchingRules)
         }
     }
 
@@ -153,6 +167,15 @@ final class AutomationRuntime {
                 event: event,
                 workflowName: workflow.name,
                 reason: .previousRunActive
+            )
+            return
+        }
+        guard activeHandles.count < maximumConcurrentRuns else {
+            recordSkipped(
+                rule: rule,
+                event: event,
+                workflowName: workflow.name,
+                reason: .automaticConcurrencyLimitReached
             )
             return
         }
@@ -241,8 +264,11 @@ final class AutomationRuntime {
         case .recursiveInvocation: .recursiveInvocation
         case .maximumDepthExceeded: .maximumDepthExceeded
         case .backgroundExecutionUnsupported: .backgroundExecutionUnsupported
+        case .automaticExecutionUnsupported: .automaticExecutionUnsupported
         case .confirmationRequiredForAutomaticExecution:
             .confirmationRequiredForAutomaticExecution
+        case .alreadyRunning:
+            .previousRunActive
         }
     }
 }

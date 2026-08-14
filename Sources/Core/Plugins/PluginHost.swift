@@ -2993,34 +2993,22 @@ final class PluginHost: ObservableObject {
         let shortcutDescriptors = shortcutDescriptors()
         var shortcutMutationMetadataByRowID: [String: ShortcutMutationMetadata] = [:]
         shortcutItems = shortcutDescriptors.flatMap { descriptor -> [ShortcutSettingsItem] in
-            let customization = shortcutStore.customization(for: descriptor.itemID)
-            let reference = actionReference(for: descriptor)
-            let assignments: [ActionShortcutAssignmentRecord?]
-            if let reference {
-                let records = shortcutAssignmentService.assignments.filter {
-                    $0.reference == reference
-                }
-                assignments = records.isEmpty ? [nil] : records.map(Optional.some)
-            } else {
-                assignments = [nil]
+            // Ordinary global shortcuts backed by canonical Actions are managed only in
+            // Actions & Shortcuts. Active-only, required, and key-phase shortcuts remain
+            // plugin-specific settings because their behavior cannot be represented by a
+            // one-shot Action invocation.
+            if actionReference(for: descriptor) != nil {
+                return []
             }
-
-            return assignments.enumerated().map { index, assignment in
-                let binding = reference == nil
-                    ? legacyResolvedBinding(for: descriptor)
-                    : assignment?.binding
-                let usesDefaultValue = reference == nil
-                    ? customization == .inheritDefault
-                    : binding == descriptor.definition.defaultBinding
-                let rowID = index == 0
-                    ? descriptor.itemID
-                    : "\(descriptor.itemID).assignment.\(assignment?.id.uuidString.lowercased() ?? String(index))"
-                shortcutMutationMetadataByRowID[rowID] = ShortcutMutationMetadata(
-                    shortcutID: descriptor.itemID,
-                    assignmentID: assignment?.id
-                )
-                return ShortcutSettingsItem(
-                    id: rowID,
+            let customization = shortcutStore.customization(for: descriptor.itemID)
+            let binding = legacyResolvedBinding(for: descriptor)
+            shortcutMutationMetadataByRowID[descriptor.itemID] = ShortcutMutationMetadata(
+                shortcutID: descriptor.itemID,
+                assignmentID: nil
+            )
+            return [
+                ShortcutSettingsItem(
+                    id: descriptor.itemID,
                     pluginID: descriptor.pluginID,
                     pluginTitle: descriptor.pluginTitle,
                     title: descriptor.definition.title,
@@ -3028,7 +3016,7 @@ final class PluginHost: ObservableObject {
                     bindingText: ShortcutFormatter.displayString(for: binding),
                     isRequired: descriptor.definition.isRequired,
                     canClear: !descriptor.definition.isRequired && binding != nil,
-                    usesDefaultValue: usesDefaultValue,
+                    usesDefaultValue: customization == .inheritDefault,
                     errorMessage: shortcutErrors[descriptor.itemID]
                         ?? binding.flatMap {
                             MacToolsReservedShortcutBindings.validationError(for: $0)?
@@ -3040,7 +3028,7 @@ final class PluginHost: ObservableObject {
                     settingsControlTitle: descriptor.definition.settingsControlTitle,
                     settingsControlSystemImage: descriptor.definition.settingsControlSystemImage
                 )
-            }
+            ]
         }
         self.shortcutMutationMetadataByRowID = shortcutMutationMetadataByRowID
 
@@ -4417,7 +4405,8 @@ final class PluginHost: ObservableObject {
     /// one-shot migration; all subsequent edits and registrations use the action store.
     private func actionReference(for descriptor: ShortcutDescriptor) -> ActionReference? {
         guard descriptor.definition.scope == .global,
-              !descriptor.definition.isRequired else {
+              !descriptor.definition.isRequired,
+              !(descriptor.plugin is any PluginShortcutEventHandling) else {
             return nil
         }
         let key = ActionKey(

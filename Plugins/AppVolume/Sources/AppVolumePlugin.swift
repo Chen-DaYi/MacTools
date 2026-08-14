@@ -175,7 +175,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
                     ),
                 ],
                 externalInvocationPolicy: .unavailable,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.automatic, .background, .foregroundInteractive]
             ),
         ]
     }
