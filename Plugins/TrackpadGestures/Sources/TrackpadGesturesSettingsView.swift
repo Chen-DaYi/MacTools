@@ -11,6 +11,7 @@ struct TrackpadGesturesSettingsView: View {
 
     @ObservedObject var store: TrackpadGestureStore
     let localization: PluginLocalization
+    let isGestureOwned: (TrackpadGesture) -> Bool
     let onChange: () -> Void
     let onSetTesting: (Bool) -> Void
     let section: SectionKind
@@ -352,6 +353,14 @@ struct TrackpadGesturesSettingsView: View {
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                        if mapping.isEnabled && !isGestureOwned(mapping.gesture) {
+                            Text(localization.string(
+                                "settings.mapping.usedByAnotherPlugin",
+                                defaultValue: "此手势已被另一个插件使用。"
+                            ))
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 

@@ -341,7 +341,8 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     store: self.store,
                     localization: self.localization,
                     buttonCapture: self.buttonCapture,
-                    requestTrackpadGestureOwnership: self.requestTrackpadGestureOwnership
+                    requestTrackpadGestureOwnership: self.requestTrackpadGestureOwnership,
+                    isTrackpadGestureOwned: { self.ownedTrackpadGestures.contains($0) }
                 )
             }
         }
@@ -490,6 +491,7 @@ private struct InputRemappingSettingsView: View {
     let localization: PluginLocalization
     @ObservedObject var buttonCapture: InputRemappingButtonCaptureCoordinator
     let requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
+    let isTrackpadGestureOwned: (TrackpadGesture) -> Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
@@ -535,7 +537,8 @@ private struct InputRemappingSettingsView: View {
                         store: store,
                         localization: localization,
                         buttonCapture: buttonCapture,
-                        requestTrackpadGestureOwnership: requestTrackpadGestureOwnership
+                        requestTrackpadGestureOwnership: requestTrackpadGestureOwnership,
+                        isTrackpadGestureOwned: isTrackpadGestureOwned
                     )
                 }
             }
@@ -572,6 +575,7 @@ private struct InputRemappingRuleEditor: View {
     let localization: PluginLocalization
     @ObservedObject var buttonCapture: InputRemappingButtonCaptureCoordinator
     let requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
+    let isTrackpadGestureOwned: (TrackpadGesture) -> Bool
 
     @State private var draft: InputRemappingRule
     @State private var requiresSafetyConfirmation = false
@@ -581,13 +585,15 @@ private struct InputRemappingRuleEditor: View {
         store: InputRemappingStore,
         localization: PluginLocalization,
         buttonCapture: InputRemappingButtonCaptureCoordinator,
-        requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)? = nil
+        requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)? = nil,
+        isTrackpadGestureOwned: @escaping (TrackpadGesture) -> Bool = { _ in true }
     ) {
         self.rule = rule
         self.store = store
         self.localization = localization
         self.buttonCapture = buttonCapture
         self.requestTrackpadGestureOwnership = requestTrackpadGestureOwnership
+        self.isTrackpadGestureOwned = isTrackpadGestureOwned
         _draft = State(initialValue: rule)
     }
 
@@ -673,6 +679,15 @@ private struct InputRemappingRuleEditor: View {
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                 }
+            }
+
+            if let gesture = rule.claimedTrackpadGesture, !isTrackpadGestureOwned(gesture) {
+                Text(localization.string(
+                    "settings.mapping.usedByAnotherPlugin",
+                    defaultValue: "This gesture is already used by another plugin."
+                ))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(minWidth: 170, maxWidth: .infinity, alignment: .leading)
