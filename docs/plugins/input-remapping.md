@@ -17,7 +17,7 @@
 
 - Trackpad Gestures owns the private multitouch listener.
 - Input Remapping consumes the shared `TrackpadGestureEventConsuming` bridge.
-- The last enabled mapping owns a gesture; the other plugin removes its conflicting mapping.
+- The last enabled mapping owns a gesture at runtime; conflicting mappings remain saved, inactive, and marked as already used by another plugin.
 - External TipTap claims resolve their native click as consumed before dispatching the shortcut action.
 
 ## Validation
