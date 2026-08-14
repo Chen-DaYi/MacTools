@@ -48,7 +48,7 @@
       "summary": "移除隔離屬性，解決「已損壞」或「不受信任」提示"
     }
   },
-  "version": "1.0.11",
+  "version": "1.0.12",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "FixDamagedApp.bundle",

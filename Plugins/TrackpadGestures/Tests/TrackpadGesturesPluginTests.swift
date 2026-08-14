@@ -882,6 +882,36 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         plugin.deactivate(reason: .disabled)
     }
 
+    func testEnablingLocalGestureRequestsOwnershipForTrackpadGestures() {
+        let (plugin, _, _) = makePlugin()
+        let mapping = TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick,
+            isEnabled: false
+        )
+        var ownershipRequests: [TrackpadGesture] = []
+        plugin.requestTrackpadGestureOwnership = { ownershipRequests.append($0) }
+        XCTAssertTrue(plugin.store.save(mapping))
+
+        plugin.configurationDidChange()
+        XCTAssertEqual(ownershipRequests, [])
+
+        plugin.store.setEnabled(true, id: mapping.id)
+        plugin.configurationDidChange()
+
+        XCTAssertEqual(ownershipRequests, [.threeFingerTap])
+    }
+
+    func testExternalTipTapClaimConsumesTheNativeClick() {
+        let (plugin, session, _) = makePlugin()
+        let gesture = TrackpadGesture.tipTapLeftOneFixed
+
+        plugin.setTrackpadGestureOwnership(localGestures: [], externalGestures: [gesture]) { _, _ in }
+        plugin.activate(context: PluginRuntimeContext(pluginID: "trackpad-gestures"))
+
+        XCTAssertEqual(session.nativeClickResolutionUpdates.last?[gesture], .consume)
+    }
+
     func testSessionRestartsDriverWhenDeviceRemovalNotificationArrives() async throws {
         let driver = MockMultitouchFrameListener()
         let session = MultitouchDeviceSession(

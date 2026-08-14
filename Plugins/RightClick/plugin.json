@@ -48,7 +48,7 @@
       "summary": "為 Finder 右鍵菜單添加新建資料夾和路徑複製"
     }
   },
-  "version": "1.0.8",
+  "version": "1.0.9",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "RightClick.bundle",

@@ -4,6 +4,7 @@ import CoreGraphics
 import Darwin
 import Foundation
 import IOKit
+import MacToolsPluginKit
 import MultitouchSupport
 import OSLog
 

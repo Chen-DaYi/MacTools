@@ -1628,6 +1628,15 @@ final class PluginHost: ObservableObject {
             }
             configureHostStatusItemCallbacks(for: [plugin])
         }
+        configureTrackpadGestureBridge()
+    }
+
+    private let trackpadGestureBridge = TrackpadGestureBridge()
+
+    private func configureTrackpadGestureBridge() {
+        trackpadGestureBridge.connect(plugins: activePlugins) { [weak self] in
+            self?.configureTrackpadGestureBridge()
+        }
     }
 
     private func handleApplicationActivityStateChange(
