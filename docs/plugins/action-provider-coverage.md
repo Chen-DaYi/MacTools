@@ -36,6 +36,7 @@ These plugins should not publish a canonical action merely to appear in action p
 
 - `Calendar`, `DeviceBattery`, and `SystemStatus` primarily present information without a stable repeatable mutation. Calendar's selected-date context belongs in its view, while app launching is already covered by App Hotkeys.
 - `MouseEnhancer` and `ZshConfig` are configuration editors; runnable shell tasks belong in Saved Scripts.
+- `InputRemapping` is an input-lifecycle and configuration surface rather than one stable repeatable operation. If it adopts canonical MacTools actions as mapping outputs, it remains an action consumer rather than publishing a parallel provider surface.
 - `RightClick` extends Finder context menus rather than representing one repeatable operation.
 - `TrackpadGestures` is an input surface that consumes canonical actions; it is not itself an action provider.
 
