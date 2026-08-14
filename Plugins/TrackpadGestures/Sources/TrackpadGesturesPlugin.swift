@@ -70,6 +70,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     private var applicationActivationObserver: NSObjectProtocol?
     private var externalGestureClaims: Set<TrackpadGesture> = []
     private var ownedLocalGestures: Set<TrackpadGesture> = []
+    private var isTrackpadGestureOwnershipManaged = false
     private var externalGestureHandler: ((TrackpadGesture, UInt64) -> Void)?
     private var lastKnownEnabledLocalGestures: Set<TrackpadGesture>
 
