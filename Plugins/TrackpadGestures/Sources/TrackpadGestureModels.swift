@@ -1,105 +1,9 @@
 import Foundation
 import MacToolsPluginKit
 
-enum TipTapRegion: String, Codable, CaseIterable, Sendable {
-    case left
-    case middle
-    case right
-}
-
-enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Sendable {
-    case tipTapLeftOneFixed
-    case tipTapRightOneFixed
-    case tipTapLeftTwoFixed
-    case tipTapMiddleTwoFixed
-    case tipTapRightTwoFixed
-    case threeFingerTap
-    case fourFingerTap
-    case fiveFingerTap
-    case threeFingerLongTouch
-    case fourFingerLongTouch
-    case fiveFingerLongTouch
-    case threeFingerDoubleTap
-    case fourFingerDoubleTap
-    case fiveFingerDoubleTap
-    case twoFingerClick
-    case threeFingerClick
-
-    var id: String { rawValue }
-
-    static let configurableCases: [TrackpadGesture] = [
-        .tipTapLeftOneFixed,
-        .tipTapRightOneFixed,
-        .tipTapLeftTwoFixed,
-        .tipTapMiddleTwoFixed,
-        .tipTapRightTwoFixed,
-        .threeFingerTap,
-        .fourFingerTap,
-        .fiveFingerTap,
-        .threeFingerDoubleTap,
-        .fourFingerDoubleTap,
-        .fiveFingerDoubleTap,
-        .twoFingerClick,
-        .threeFingerClick,
-        .threeFingerLongTouch,
-        .fourFingerLongTouch,
-        .fiveFingerLongTouch,
-    ]
-
+extension TrackpadGesture {
     var settingsOrder: Int {
         Self.configurableCases.firstIndex(of: self) ?? Self.configurableCases.count
-    }
-
-    var tipTapConfiguration: (fixedFingerCount: Int, region: TipTapRegion)? {
-        switch self {
-        case .tipTapLeftOneFixed:
-            (1, .left)
-        case .tipTapRightOneFixed:
-            (1, .right)
-        case .tipTapLeftTwoFixed:
-            (2, .left)
-        case .tipTapMiddleTwoFixed:
-            (2, .middle)
-        case .tipTapRightTwoFixed:
-            (2, .right)
-        default:
-            nil
-        }
-    }
-
-    var fingerTapCount: Int? {
-        switch self {
-        case .threeFingerTap: 3
-        case .fourFingerTap: 4
-        case .fiveFingerTap: 5
-        default: nil
-        }
-    }
-
-    var longTouchFingerCount: Int? {
-        switch self {
-        case .threeFingerLongTouch: 3
-        case .fourFingerLongTouch: 4
-        case .fiveFingerLongTouch: 5
-        default: nil
-        }
-    }
-
-    var doubleFingerTapCount: Int? {
-        switch self {
-        case .threeFingerDoubleTap: 3
-        case .fourFingerDoubleTap: 4
-        case .fiveFingerDoubleTap: 5
-        default: nil
-        }
-    }
-
-    var physicalClickFingerCount: Int? {
-        switch self {
-        case .twoFingerClick: 2
-        case .threeFingerClick: 3
-        default: nil
-        }
     }
 
     /// The contact count that can also satisfy the standalone Middle Click plugin's
@@ -114,13 +18,6 @@ enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Sendable {
         return count
     }
 
-    static func fingerTap(count: Int) -> TrackpadGesture {
-        switch count {
-        case 4: .fourFingerTap
-        case 5: .fiveFingerTap
-        default: .threeFingerTap
-        }
-    }
 }
 
 enum TrackpadGestureMappingSort: String, CaseIterable, Sendable {

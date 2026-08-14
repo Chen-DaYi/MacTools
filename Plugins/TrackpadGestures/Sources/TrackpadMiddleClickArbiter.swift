@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import MacToolsPluginKit
 
 enum TrackpadNativeClickResolution: Equatable, Sendable {
     case consume

@@ -47,9 +47,9 @@
       "zh-Hant": { "stringUnit": { "state": "translated", "value": "關閉" } }
     } },
     "panelTheme.import": { "extractionState": "manual", "localizations": {
-      "en": { "stringUnit": { "state": "translated", "value": "Import Base16/Base24…" } },
-      "zh-Hans": { "stringUnit": { "state": "translated", "value": "导入 Base16/Base24…" } },
-      "zh-Hant": { "stringUnit": { "state": "translated", "value": "匯入 Base16/Base24…" } }
+      "en": { "stringUnit": { "state": "translated", "value": "Import Theme…" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "导入主题…" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "匯入主題…" } }
     } },
     "panelTheme.findMore": { "extractionState": "manual", "localizations": {
       "en": { "stringUnit": { "state": "translated", "value": "Find More Themes" } },
@@ -57,9 +57,9 @@
       "zh-Hant": { "stringUnit": { "state": "translated", "value": "尋找更多主題" } }
     } },
     "panelTheme.findMore.description": { "extractionState": "manual", "localizations": {
-      "en": { "stringUnit": { "state": "translated", "value": "Download a Base16/Base24 YAML file from the official Tinted Theming schemes repository, then import it directly." } },
-      "zh-Hans": { "stringUnit": { "state": "translated", "value": "从 Tinted Theming 官方主题仓库下载 Base16/Base24 YAML 文件后，可直接导入。" } },
-      "zh-Hant": { "stringUnit": { "state": "translated", "value": "從 Tinted Theming 官方主題倉庫下載 Base16/Base24 YAML 檔案後，可直接匯入。" } }
+      "en": { "stringUnit": { "state": "translated", "value": "Preview and download themes from iTerm2 Color Schemes. Supports .itermcolors (including .txt) and Base16/Base24 YAML/JSON." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "可从 iTerm2 Color Schemes 预览并下载主题。支持 .itermcolors（含 .txt）和 Base16/Base24 YAML/JSON。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "可從 iTerm2 Color Schemes 預覽並下載主題。支援 .itermcolors（含 .txt）和 Base16/Base24 YAML/JSON。" } }
     } },
     "panelTheme.systemDefault": { "extractionState": "manual", "localizations": {
       "en": { "stringUnit": { "state": "translated", "value": "System Default" } },
@@ -77,9 +77,9 @@
       "zh-Hant": { "stringUnit": { "state": "translated", "value": "已匯入" } }
     } },
     "panelTheme.import.prompt": { "extractionState": "manual", "localizations": {
-      "en": { "stringUnit": { "state": "translated", "value": "Choose a Base16 or Base24 YAML/JSON theme file." } },
-      "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择 Base16 或 Base24 YAML/JSON 主题文件。" } },
-      "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇 Base16 或 Base24 YAML/JSON 主題檔案。" } }
+      "en": { "stringUnit": { "state": "translated", "value": "Choose an .itermcolors file (or .txt containing one), or a Base16/Base24 YAML/JSON theme." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择 .itermcolors（或包含该内容的 .txt）、Base16/Base24 YAML/JSON 主题文件。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇 .itermcolors（或包含該內容的 .txt）、Base16/Base24 YAML/JSON 主題檔案。" } }
     } },
     "panelTheme.import.darkMismatch": { "extractionState": "manual", "localizations": {
       "en": { "stringUnit": { "state": "translated", "value": "The theme was imported, but it is a dark theme. Switch the app appearance to select it." } },
@@ -102,9 +102,9 @@
       "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法讀取主題檔案。" } }
     } },
     "panelTheme.error.unsupportedDocument": { "extractionState": "manual", "localizations": {
-      "en": { "stringUnit": { "state": "translated", "value": "This is not a supported Base16/Base24 YAML or JSON theme." } },
-      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题文件不是受支持的 Base16/Base24 YAML 或 JSON。" } },
-      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題檔案不是支援的 Base16/Base24 YAML 或 JSON。" } }
+      "en": { "stringUnit": { "state": "translated", "value": "This theme format is not supported. Choose an .itermcolors, Base16/Base24 YAML, or JSON file." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "不支持此主题格式。请选择 .itermcolors、Base16/Base24 YAML 或 JSON 文件。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "不支援此主題格式。請選擇 .itermcolors、Base16/Base24 YAML 或 JSON 檔案。" } }
     } },
     "panelTheme.error.missingName": { "extractionState": "manual", "localizations": {
       "en": { "stringUnit": { "state": "translated", "value": "The theme file is missing a name or scheme." } },
@@ -2308,7 +2308,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lumière"
+            "value": "Claire"
           }
         },
         "ja": {

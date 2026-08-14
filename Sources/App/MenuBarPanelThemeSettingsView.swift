@@ -316,7 +316,7 @@ private struct MenuBarPanelThemePickerSheet: View {
                     importTheme()
                 } label: {
                     Label(
-                        AppL10n.settings("panelTheme.import", defaultValue: "导入 Base16/Base24…"),
+                        AppL10n.settings("panelTheme.import", defaultValue: "导入主题…"),
                         systemImage: "square.and.arrow.down"
                     )
                 }
@@ -335,7 +335,7 @@ private struct MenuBarPanelThemePickerSheet: View {
 
             Text(AppL10n.settings(
                 "panelTheme.findMore.description",
-                defaultValue: "从 Tinted Theming 官方主题仓库下载 Base16/Base24 YAML 文件后，可直接导入。"
+                defaultValue: "可从 iTerm2 Color Schemes 预览并下载主题。支持 .itermcolors（含 .txt）和 Base16/Base24 YAML/JSON。"
             ))
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -345,7 +345,7 @@ private struct MenuBarPanelThemePickerSheet: View {
     }
 
     private static let moreThemesURL = URL(
-        string: "https://github.com/tinted-theming/schemes"
+        string: "https://iterm2colorschemes.com/"
     )!
 
     private var builtInThemes: [MenuBarPanelThemeDefinition] {
@@ -452,14 +452,19 @@ private struct MenuBarPanelThemePickerSheet: View {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [
+        var allowedContentTypes: [UTType] = [
             .json,
+            .plainText,
             UTType(filenameExtension: "yaml") ?? .plainText,
             UTType(filenameExtension: "yml") ?? .plainText
         ]
+        if let itermColorsType = UTType(filenameExtension: "itermcolors") {
+            allowedContentTypes.append(itermColorsType)
+        }
+        panel.allowedContentTypes = allowedContentTypes
         panel.message = AppL10n.settings(
             "panelTheme.import.prompt",
-            defaultValue: "选择 Base16 或 Base24 YAML/JSON 主题文件。"
+            defaultValue: "选择 .itermcolors（或包含该内容的 .txt）、Base16/Base24 YAML/JSON 主题文件。"
         )
 
         PluginPresentationSafety.prepareForWindowOrdering()

@@ -48,7 +48,7 @@
       "summary": "將自訂觸控板手勢對應為 MacTools 操作、快速鍵或中鍵點按"
     }
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 4,
   "bundleRelativePath": "TrackpadGestures.bundle",

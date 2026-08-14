@@ -6,8 +6,8 @@ import XCTest
 @MainActor
 final class MenuBarPanelThemeImporterTests: XCTestCase {
     func testBuiltInThemesHaveCompleteAccessiblePalettes() throws {
-        XCTAssertEqual(MenuBarPanelBuiltInThemes.all.count, 14)
-        XCTAssertEqual(Set(MenuBarPanelBuiltInThemes.all.map(\.id)).count, 14)
+        XCTAssertEqual(MenuBarPanelBuiltInThemes.all.count, 10)
+        XCTAssertEqual(Set(MenuBarPanelBuiltInThemes.all.map(\.id)).count, 10)
 
         for theme in MenuBarPanelBuiltInThemes.all {
             for index in 0...0x0F {
@@ -26,10 +26,10 @@ final class MenuBarPanelThemeImporterTests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(MenuBarPanelBuiltInThemes.all.filter { $0.appearance == .light }.count, 7)
-        XCTAssertEqual(MenuBarPanelBuiltInThemes.all.filter { $0.appearance == .dark }.count, 7)
-        XCTAssertTrue(MenuBarPanelBuiltInThemes.all.prefix(7).allSatisfy { $0.appearance == .light })
-        XCTAssertTrue(MenuBarPanelBuiltInThemes.all.suffix(7).allSatisfy { $0.appearance == .dark })
+        XCTAssertEqual(MenuBarPanelBuiltInThemes.all.filter { $0.appearance == .light }.count, 5)
+        XCTAssertEqual(MenuBarPanelBuiltInThemes.all.filter { $0.appearance == .dark }.count, 5)
+        XCTAssertTrue(MenuBarPanelBuiltInThemes.all.prefix(5).allSatisfy { $0.appearance == .light })
+        XCTAssertTrue(MenuBarPanelBuiltInThemes.all.suffix(5).allSatisfy { $0.appearance == .dark })
         XCTAssertTrue(MenuBarPanelBuiltInThemes.all.contains { $0.name == "VS Code Light Modern" })
         XCTAssertTrue(MenuBarPanelBuiltInThemes.all.contains { $0.name == "VS Code Dark Modern" })
     }
@@ -177,6 +177,75 @@ final class MenuBarPanelThemeImporterTests: XCTestCase {
         XCTAssertEqual(theme.appearance, .dark)
     }
 
+    func testDecodesITermColorsFromNativeAndTextExtensions() throws {
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: itermThemeDocument(),
+            format: .xml,
+            options: 0
+        )
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MenuBarPanelThemeImporterTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for fileExtension in ["itermcolors", "txt"] {
+            let url = directory.appendingPathComponent("Ocean Night.\(fileExtension)")
+            try data.write(to: url, options: .atomic)
+
+            let theme = try MenuBarPanelThemeImporter.decode(contentsOf: url)
+
+            XCTAssertEqual(theme.name, "Ocean Night")
+            XCTAssertEqual(theme.appearance, .dark)
+            XCTAssertEqual(theme.color("base00")?.hex, "#101820")
+            XCTAssertEqual(theme.color("base02")?.hex, "#27384A")
+            XCTAssertEqual(theme.color("base05")?.hex, "#E6EDF3")
+            XCTAssertEqual(theme.color("base08")?.hex, "#D65C5C")
+            XCTAssertEqual(theme.color("base09")?.hex, "#FF7A7A")
+            XCTAssertEqual(theme.color("base0D")?.hex, "#6FA8DC")
+            XCTAssertEqual(theme.color("base10")?.hex, "#52606D")
+            XCTAssertEqual(theme.color("base17")?.hex, "#FFFFFF")
+            XCTAssertTrue(theme.isBase24)
+        }
+    }
+
+    func testRejectsUnsupportedTextAndGenericPropertyList() throws {
+        let genericPropertyList = try PropertyListSerialization.data(
+            fromPropertyList: ["title": "Not a theme"],
+            format: .xml,
+            options: 0
+        )
+
+        for data in [Data("plain text".utf8), genericPropertyList] {
+            XCTAssertThrowsError(try MenuBarPanelThemeImporter.decode(data: data)) { error in
+                XCTAssertEqual(error as? MenuBarPanelThemeImportError, .unsupportedDocument)
+            }
+        }
+    }
+
+    func testReportsMissingITermColor() throws {
+        var document = try itermThemeDocument()
+        document.removeValue(forKey: "Ansi 15 Color")
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: document,
+            format: .xml,
+            options: 0
+        )
+
+        XCTAssertThrowsError(
+            try MenuBarPanelThemeImporter.decode(data: data, suggestedName: "Incomplete")
+        ) { error in
+            XCTAssertEqual(error as? MenuBarPanelThemeImportError, .missingColor("Ansi 15 Color"))
+        }
+    }
+
+    func testRejectsOversizedThemeBeforeParsing() {
+        let data = Data(repeating: 0x20, count: MenuBarPanelThemeImporter.maximumFileSize + 1)
+
+        XCTAssertThrowsError(try MenuBarPanelThemeImporter.decode(data: data)) { error in
+            XCTAssertEqual(error as? MenuBarPanelThemeImportError, .fileTooLarge)
+        }
+    }
+
     func testRejectsThemeWhoseBodyTextDoesNotMeetMinimumContrast() {
         let source = base16YAML.replacingOccurrences(of: "base05: \"ABB2BF\"", with: "base05: \"30343B\"")
 
@@ -209,6 +278,34 @@ final class MenuBarPanelThemeImporterTests: XCTestCase {
         base0E: "C678DD"
         base0F: "BE5046"
         """
+    }
+
+    private func itermThemeDocument() throws -> [String: Any] {
+        let ansi = [
+            "#121820", "#D65C5C", "#7DBA84", "#D8B26E",
+            "#6FA8DC", "#B48EDE", "#67C5C8", "#C7CED6",
+            "#52606D", "#FF7A7A", "#98D7A0", "#F0CB7C",
+            "#8FC8F0", "#D3A7F5", "#8DE1E4", "#FFFFFF"
+        ]
+        var document: [String: Any] = [
+            "Background Color": try itermColor("#101820"),
+            "Foreground Color": try itermColor("#E6EDF3"),
+            "Selection Color": try itermColor("#27384A"),
+            "Bold Color": try itermColor("#FFFFFF")
+        ]
+        for (index, hex) in ansi.enumerated() {
+            document["Ansi \(index) Color"] = try itermColor(hex)
+        }
+        return document
+    }
+
+    private func itermColor(_ hex: String) throws -> [String: Double] {
+        let color = try MenuBarPanelThemeColor(hex: hex)
+        return [
+            "Red Component": Double(color.red) / 255,
+            "Green Component": Double(color.green) / 255,
+            "Blue Component": Double(color.blue) / 255
+        ]
     }
 
     private func rgb(_ color: Color) throws -> MenuBarPanelThemeColor {

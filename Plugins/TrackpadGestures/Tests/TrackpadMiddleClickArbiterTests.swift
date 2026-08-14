@@ -1,4 +1,5 @@
 import CoreGraphics
+import MacToolsPluginKit
 import XCTest
 @testable import TrackpadGesturesPlugin
 
