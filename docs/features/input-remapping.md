@@ -84,6 +84,7 @@ Source of truth: yes
 - [x] P019 — Keep recorded shortcut labels compact in the Run selector.
 - [x] P020 — Guide users from the empty state to the Add Mapping control.
 - [x] P021 — Localize all Input Remapping copy in every MacTools-supported language.
+- [x] P022 — Name keyboard, mouse, and trackpad support in the primary-panel title.
 
 ## Acceptance / DoD
 
@@ -112,6 +113,7 @@ Source of truth: yes
 - [x] Incomplete, hidden, and unsafe mappings fail open and cannot leave input interception armed.
 - [x] Control-Option-Command-Escape remains available during recording and disables every unsafe mapping.
 - [x] An external TipTap claim consumes its corresponding native click before dispatching its action.
+- [x] The primary-panel title lists keyboard, trackpad, and mouse as supported input sources.
 
 ## Implementation journal
 
@@ -166,6 +168,12 @@ Source of truth: yes
 - 2026-08-13 — Auto-grill hardening: unsafe confirmation is persisted under a domain-specific key with legacy migration; capture drains the complete keyboard, mouse, or scroll sequence before the tap can stop; native dual-click controls replace checkbox emulation; removed Trackpad bridge participants are explicitly disconnected; Control-Option-Command-Escape cancels capture and disables every unsafe mapping.
 - 2026-08-13 — Verification after auto-grill: targeted `InputRemappingModelsTests` and `TrackpadGestureBridgeTests` pass; the Input Remapping plugin scheme builds; source parsing, localization JSON parsing, and whitespace validation pass. Existing Disk Clean Swift-concurrency warnings remain outside this feature.
 - 2026-08-14 — Review fixes: external TipTap claims consume the native click; the emergency stop resets recorder UI even while arming; recorder startup activates the emergency tap before the preparation delay. Plugin manifests are patch-bumped and the plugin package workflow is documented after the shared PluginKit API change.
+- 2026-08-14 — P022 complete: the primary-panel title now carries localized keyboard, mouse, and trackpad indicators using the existing compact-indicator contract. Code: `Plugins/InputRemapping/Sources/InputRemappingPlugin.swift`; tests: `Plugins/InputRemapping/Tests/InputRemappingModelsTests.swift`.
+- 2026-08-14 — Review follow-up: corrected the Portuguese Trackpad label and documented the title indicators in both README variants.
+- 2026-08-14 — User superseded the compact badges: the localized title itself now ends with `⌨️𝌕🖱️`; the compact-indicator implementation and its unrelated Portuguese-label correction were removed.
+- 2026-08-14 — User superseded the title symbols because they did not render. The localized title now names keyboard, trackpad, and mouse directly; the Portuguese Trackpad label was corrected for this visible title.
+- 2026-08-14 — Aligned the full localized title in runtime metadata, the string catalog, settings-title copy, and `plugin.json` marketplace metadata.
+- 2026-08-14 — Replaced the redundant source-list subtitle everywhere with localized “Map inputs to actions” copy.
 
 ## Files
 

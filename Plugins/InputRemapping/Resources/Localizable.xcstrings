@@ -986,67 +986,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Create shortcuts from keyboard/trackpad/mouse"
+            "value": "Map inputs to actions"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "从键盘、触控板和鼠标创建快捷操作"
+            "value": "将输入映射为操作"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "إنشاء اختصارات من لوحة المفاتيح/لوحة التتبع/الماوس"
+            "value": "اربط الإدخالات بالإجراءات"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Erstellen Sie Verknüpfungen über Tastatur/Trackpad/Maus"
+            "value": "Eingaben Aktionen zuordnen"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crea atajos desde el teclado/trackpad/mouse"
+            "value": "Asigna entradas a acciones"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Créer des raccourcis à partir du clavier/trackpad/souris"
+            "value": "Associer les entrées aux actions"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "キーボード/トラックパッド/マウスからショートカットを作成する"
+            "value": "入力をアクションに割り当てます"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "키보드/트랙패드/마우스에서 단축키 만들기"
+            "value": "입력을 동작에 연결합니다"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crie atalhos de teclado/trackpad/mouse"
+            "value": "Associe entradas a ações"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Создание ярлыков с клавиатуры/трекпада/мыши"
+            "value": "Сопоставляйте ввод с действиями"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "從鍵盤/觸控板/滑鼠建立快捷方式"
+            "value": "將輸入對應至操作"
           }
         }
       }
@@ -1056,67 +1056,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Custom Shortcuts"
+            "value": "Custom Shortcuts: Keyboard, Trackpad, Mouse"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "自定义快捷操作"
+            "value": "自定义快捷操作：键盘、触控板、鼠标"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "اختصارات مخصصة"
+            "value": "اختصارات مخصصة: لوحة المفاتيح، لوحة التتبع، الماوس"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eigene Kurzbefehle"
+            "value": "Eigene Kurzbefehle: Tastatur, Trackpad, Maus"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Atajos personalizados"
+            "value": "Atajos personalizados: Teclado, Panel táctil, Ratón"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Raccourcis personnalisés"
+            "value": "Raccourcis personnalisés : Clavier, Pavé tactile, Souris"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "カスタムショートカット"
+            "value": "カスタムショートカット：キーボード、トラックパッド、マウス"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용자화 단축키"
+            "value": "사용자화 단축키: 키보드, 트랙패드, 마우스"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Atalhos personalizados"
+            "value": "Atalhos personalizados: Teclado, Trackpad, Rato"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пользовательские сочетания"
+            "value": "Пользовательские сочетания: Клавиатура, Трекпад, Мышь"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "自訂快速操作"
+            "value": "自訂快速操作：鍵盤、觸控板、滑鼠"
           }
         }
       }
@@ -2596,67 +2596,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Custom Shortcuts"
+            "value": "Custom Shortcuts: Keyboard, Trackpad, Mouse"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "自定义快捷操作"
+            "value": "自定义快捷操作：键盘、触控板、鼠标"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "اختصارات مخصصة"
+            "value": "اختصارات مخصصة: لوحة المفاتيح، لوحة التتبع، الماوس"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eigene Kurzbefehle"
+            "value": "Eigene Kurzbefehle: Tastatur, Trackpad, Maus"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Atajos personalizados"
+            "value": "Atajos personalizados: Teclado, Panel táctil, Ratón"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Raccourcis personnalisés"
+            "value": "Raccourcis personnalisés : Clavier, Pavé tactile, Souris"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "カスタムショートカット"
+            "value": "カスタムショートカット：キーボード、トラックパッド、マウス"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용자화 단축키"
+            "value": "사용자화 단축키: 키보드, 트랙패드, 마우스"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Atalhos personalizados"
+            "value": "Atalhos personalizados: Teclado, Trackpad, Rato"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пользовательские сочетания"
+            "value": "Пользовательские сочетания: Клавиатура, Трекпад, Мышь"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "自訂快速操作"
+            "value": "自訂快速操作：鍵盤、觸控板、滑鼠"
           }
         }
       }
@@ -2666,67 +2666,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Create shortcuts from keyboard/trackpad/mouse"
+            "value": "Map inputs to actions"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "从键盘、触控板和鼠标创建快捷操作"
+            "value": "将输入映射为操作"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "إنشاء اختصارات من لوحة المفاتيح/لوحة التتبع/الماوس"
+            "value": "اربط الإدخالات بالإجراءات"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Erstellen Sie Verknüpfungen über Tastatur/Trackpad/Maus"
+            "value": "Eingaben Aktionen zuordnen"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crea atajos desde el teclado/trackpad/mouse"
+            "value": "Asigna entradas a acciones"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Créer des raccourcis à partir du clavier/trackpad/souris"
+            "value": "Associer les entrées aux actions"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "キーボード/トラックパッド/マウスからショートカットを作成する"
+            "value": "入力をアクションに割り当てます"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "키보드/트랙패드/마우스에서 단축키 만들기"
+            "value": "입력을 동작에 연결합니다"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crie atalhos de teclado/trackpad/mouse"
+            "value": "Associe entradas a ações"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Создание ярлыков с клавиатуры/трекпада/мыши"
+            "value": "Сопоставляйте ввод с действиями"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "從鍵盤/觸控板/滑鼠建立快捷方式"
+            "value": "將輸入對應至操作"
           }
         }
       }
@@ -4534,7 +4534,7 @@
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Painel de controle"
+            "value": "Trackpad"
           }
         },
         "ru": {

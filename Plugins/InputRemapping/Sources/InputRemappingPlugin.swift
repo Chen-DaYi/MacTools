@@ -242,15 +242,18 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     }
 
     private static func localizedMetadata(using localization: PluginLocalization) -> PluginMetadata {
-        PluginMetadata(
+        return PluginMetadata(
             id: "input-remapping",
-            title: localization.string("metadata.title", defaultValue: "Custom Shortcuts"),
+            title: localization.string(
+                "metadata.title",
+                defaultValue: "Custom Shortcuts: Keyboard, Trackpad, Mouse"
+            ),
             iconName: "arrow.triangle.2.circlepath",
             iconTint: .purple,
             order: 57,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "Create shortcuts from keyboard, trackpad, and mouse."
+                defaultValue: "Map inputs to actions"
             )
         )
     }

@@ -124,6 +124,21 @@ private final class InputRemappingLockedCounter: @unchecked Sendable {
 
 final class InputRemappingModelsTests: XCTestCase {
 
+    @MainActor
+    func testPrimaryPanelTitleNamesSupportedInputSources() {
+        let plugin = InputRemappingPlugin(
+            context: PluginRuntimeContext(pluginID: "input-remapping", storage: InputRemappingMemoryStorage()),
+            tap: InputRemappingTapSpy(),
+            accessibilityTrusted: { true },
+            inputMonitoringStatus: { .granted }
+        )
+
+        XCTAssertTrue(plugin.metadata.title.contains(":"))
+        XCTAssertEqual(plugin.metadata.title.filter { $0 == "," }.count, 2)
+        XCTAssertFalse(plugin.metadata.title.contains("⌨️"))
+        XCTAssertEqual(plugin.metadata.defaultDescription, "Map inputs to actions")
+    }
+
     func testShortcutActionKindStaysSelectedAfterRecording() {
         let recorded = InputRemappingRule.Action.shortcut(ShortcutBinding(keyCode: 21, modifiers: [.command, .shift]))
 
