@@ -48,7 +48,7 @@
       "summary": "查看並切換每個顯示器的分辨率"
     }
   },
-  "version": "1.0.11",
+  "version": "1.0.10",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "DisplayResolution.bundle",

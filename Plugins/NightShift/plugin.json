@@ -48,7 +48,7 @@
       "summary": "降低藍光，使螢幕顏色更暖"
     }
   },
-  "version": "1.0.11",
+  "version": "1.0.10",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "NightShift.bundle",

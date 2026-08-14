@@ -15,7 +15,7 @@
     "zh-Hans": { "displayName": "自动切换输入法", "summary": "按应用记住并自动切换输入法" },
     "zh-Hant": { "displayName": "自動切換輸入法", "summary": "按應用程式記住並自動切換輸入法" }
   },
-  "version": "1.0.2",
+  "version": "1.0.1",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "AutoInput.bundle",

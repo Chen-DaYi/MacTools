@@ -119,9 +119,9 @@ make build-plugin PLUGIN=<plugin directory or id>
 make run
 ```
 
-To update an existing plugin, change its code/resources/tests beside the plugin. If the update should be released through the plugin catalog, bump only that plugin's `plugin.json.version`, then run the focused build or tests before opening a PR.
+To update an existing plugin, change its code/resources/tests beside the plugin and run the focused build or tests before opening a PR. Do not bump `plugin.json.version` in a normal feature PR. The standard `make release` flow detects package-relevant changes, automatically bumps affected manifests, and records those updates in the plugin release commit.
 
-When a change touches `Sources/MacToolsPluginKit/`, it is package-relevant for every plugin. Increase every plugin manifest version and run the all-plugin package build before release; the catalog workflow rejects a mixed set of packages linked against different PluginKit builds.
+When a change touches `Sources/MacToolsPluginKit/`, it is package-relevant for every plugin. `make release` automatically selects and bumps every affected manifest so all plugin packages are rebuilt against the same PluginKit build. A manual version bump is needed only when bypassing `make release` and using the lower-level release workflow directly.
 
 ## Settings UI
 

@@ -48,7 +48,7 @@
       "summary": "觸控板輕點 → 模擬滑鼠中鍵"
     }
   },
-  "version": "1.0.16",
+  "version": "1.0.15",
   "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "MiddleClick.bundle",

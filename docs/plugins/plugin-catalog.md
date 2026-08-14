@@ -179,11 +179,11 @@ GitHub Release: plugins-1.0.1
 
 Unchanged plugin entries remain valid because the catalog preserves their previous URLs, checksums, and versions. They are not shown as updates in the app unless their catalog version is higher than the installed version.
 
-`pluginKitVersion` is the PluginKit ABI boundary. When it changes, every plugin package must be rebuilt and each plugin's manifest version must increase so installed users see an update. The new host reads the new catalog and updates all installed plugins before loading any dynamic bundle. The catalog merge step rejects mixed PluginKit versions.
+`pluginKitVersion` is the PluginKit ABI boundary. When it changes, every plugin package must be rebuilt and each plugin's manifest version must increase during release so installed users see an update. The standard `make release` flow handles these manifest bumps automatically. The new host reads the new catalog and updates all installed plugins before loading any dynamic bundle. The catalog merge step rejects mixed PluginKit versions.
 
 Within one PluginKit ABI line, a plugin that adopts a newly exported PluginKit type must set `minHostVersion` to the first MacTools app release that exports that symbol. This prevents an older host from accepting the manifest and then failing while loading the dynamic bundle.
 
-Any change under `Sources/MacToolsPluginKit/` is conservatively treated as package-relevant for every plugin. This forces each affected manifest version to increase and prevents an incremental catalog from retaining binaries built against an older copy of the shared framework.
+Any change under `Sources/MacToolsPluginKit/` is conservatively treated as package-relevant for every plugin. `make release` automatically bumps the affected manifests in the release commit; feature PRs should not pre-bump unrelated plugins. This prevents an incremental catalog from retaining binaries built against an older copy of the shared framework.
 
 When a full rebuild is needed, run the `Plugin Release` workflow manually with `mode=all`. To publish a controlled subset, use `mode=selected` and pass comma-separated plugin IDs or directory names in `plugins`.
 
