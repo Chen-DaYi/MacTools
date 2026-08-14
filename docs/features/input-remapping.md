@@ -37,7 +37,7 @@ Source of truth: yes
 | Failed or inapplicable actions fail open | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | An unsafe trigger (a keyboard key without modifiers or primary mouse button) is saved disabled and requires explicit confirmation before it can be enabled | This document | `InputRemappingRule` | Rule editor, event processor |
 | Control-Option-Command-Escape always cancels recording and disables every unsafe trigger | This document | `InputRemappingEventTap`, `InputRemappingStore` | Global event tap, warning copy |
-| An enabled precise trackpad gesture belongs to the plugin where it was activated most recently, never both; conflicting mappings remain saved but inactive | This document | Shared trackpad gesture broker | Plugin host, both plugins |
+| An enabled precise trackpad gesture belongs to the plugin where it was activated most recently, including after restart, never both; conflicting mappings remain saved but inactive | This document | `TrackpadGestureBridge`, `TrackpadGestureOwnershipStore` | Plugin host, both plugins |
 | Rule context is global only | This document | Rule editor layout | Context column |
 | New rules remain disabled until input and output are configured | This document | `InputRemappingRule` configuration state | Rule editor, matcher |
 | Recording is cancelled when the settings page is hidden | This document | `InputRemappingButtonCaptureCoordinator` | Settings page visibility handler |
@@ -52,7 +52,7 @@ Source of truth: yes
 | 2026-08-13 | Permission checks are injected behind plugin seams | Cards and activation use the same real OS state and remain testable | Accessibility and Input Monitoring |
 | 2026-08-13 | Synthetic-event protection is limited to the private Input Remapping marker | Public CoreGraphics source fields describe state tables or process metadata, not a reliable physical-versus-generated category | Unmarked third-party generated events can match a rule |
 | 2026-08-13 | Modifier-free keyboard triggers are allowed after a warning | User requires full flexibility while being informed of global typing risk | Rule remains disabled until confirmation |
-| 2026-08-14 | Trackpad gesture ownership is exclusive and non-destructive | A single Multitouch listener must arbitrate gestures without deleting user configuration | The host retains a stable runtime owner; conflicting mappings remain inactive |
+| 2026-08-14 | Trackpad gesture ownership is exclusive, persisted, and non-destructive | A single Multitouch listener must arbitrate gestures without deleting user configuration | The host restores the most recent owner; conflicting mappings remain inactive |
 | 2026-08-13 | Unsafe mappings have a keyboard emergency stop | Both primary mouse buttons can otherwise make pointer-based recovery impossible | Control-Option-Command-Escape disables unsafe mappings and cancels recording |
 
 ## Known limitation
@@ -104,6 +104,7 @@ Source of truth: yes
 - [x] Keyboard keys, mouse buttons, and scroll can be recorded as a trigger from the rule editor.
 - [x] Modifier-free keyboard triggers show a warning and require confirmation before activation.
 - [x] A trackpad gesture cannot remain active in both plugins; conflicts never delete mappings.
+- [x] The most recently activated trackpad owner is restored after an app restart.
 - [x] The rule editor separates Input, Output, and global Context into three columns.
 - [x] Unmodified keyboard triggers persist disabled until their explicit confirmation.
 - [x] Mouse double-click actions preserve the native click pair.
@@ -175,10 +176,13 @@ Source of truth: yes
 - 2026-08-14 — Aligned the full localized title in runtime metadata, the string catalog, settings-title copy, and `plugin.json` marketplace metadata.
 - 2026-08-14 — Replaced the redundant source-list subtitle everywhere with localized “Map inputs to actions” copy.
 - 2026-08-14 — Updated the Custom Shortcuts plugin icon to `arrow.left.arrow.right`.
+- 2026-08-14 — Review fix: persisted precise-trackpad ownership in Core and restore it after restart.
 
 ## Files
 
 - `Plugins/InputRemapping/`
+- `Sources/Core/Plugins/TrackpadGestureBridge.swift`
+- `Sources/Core/Plugins/TrackpadGestureOwnershipStore.swift`
 - `docs/features/input-remapping.md`
 - `docs/features/INDEX.md`
 - `changes/unreleased/input-remapping.md`

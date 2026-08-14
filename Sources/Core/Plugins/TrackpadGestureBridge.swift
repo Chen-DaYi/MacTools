@@ -29,6 +29,11 @@ final class TrackpadGestureBridge {
     private var providerReferences: [WeakTrackpadGestureProvider] = []
     private var consumerReferences: [WeakTrackpadGestureConsumer] = []
     private var owners: [TrackpadGesture: Owner] = [:]
+    private let ownershipStore: TrackpadGestureOwnershipStore
+
+    init(ownershipStore: TrackpadGestureOwnershipStore = TrackpadGestureOwnershipStore()) {
+        self.ownershipStore = ownershipStore
+    }
 
     func connect(
         plugins: [any MacToolsPlugin],
@@ -63,6 +68,7 @@ final class TrackpadGestureBridge {
                 let providers = self.providerReferences.compactMap(\.value)
                 let consumers = self.consumerReferences.compactMap(\.value)
                 self.owners[gesture] = .consumer(ObjectIdentifier(consumer))
+                self.ownershipStore.setOwner(.consumer, for: gesture)
                 self.applyOwnership(providers: providers, consumers: consumers)
             }
         }
@@ -73,6 +79,7 @@ final class TrackpadGestureBridge {
                 let providers = self.providerReferences.compactMap(\.value)
                 let consumers = self.consumerReferences.compactMap(\.value)
                 self.owners[gesture] = .provider(ObjectIdentifier(provider))
+                self.ownershipStore.setOwner(.provider, for: gesture)
                 self.applyOwnership(providers: providers, consumers: consumers)
             }
         }
@@ -91,7 +98,13 @@ final class TrackpadGestureBridge {
         }
 
         for gesture in requestedGestures where owners[gesture] == nil {
-            if let provider = providers.first(where: { $0.requestedTrackpadGestures.contains(gesture) }) {
+            if ownershipStore.owner(for: gesture) == .consumer,
+               let consumer = consumers.first(where: { $0.claimedTrackpadGestures.contains(gesture) }) {
+                owners[gesture] = .consumer(ObjectIdentifier(consumer))
+            } else if ownershipStore.owner(for: gesture) == .provider,
+                      let provider = providers.first(where: { $0.requestedTrackpadGestures.contains(gesture) }) {
+                owners[gesture] = .provider(ObjectIdentifier(provider))
+            } else if let provider = providers.first(where: { $0.requestedTrackpadGestures.contains(gesture) }) {
                 owners[gesture] = .provider(ObjectIdentifier(provider))
             } else if let consumer = consumers.first(where: { $0.claimedTrackpadGestures.contains(gesture) }) {
                 owners[gesture] = .consumer(ObjectIdentifier(consumer))

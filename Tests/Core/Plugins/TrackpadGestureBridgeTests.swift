@@ -5,7 +5,7 @@ import MacToolsPluginKit
 @MainActor
 final class TrackpadGestureBridgeTests: XCTestCase {
     func testBridgeRoutesClaimsAndLetsTheLastEditedPluginTakeOwnershipWithoutDeletingMappings() {
-        let bridge = TrackpadGestureBridge()
+        let bridge = TrackpadGestureBridge(ownershipStore: makeOwnershipStore())
         let provider = ProviderSpy()
         let consumer = ConsumerSpy(claims: [.threeFingerTap])
         var claimChanges = 0
@@ -41,7 +41,7 @@ final class TrackpadGestureBridgeTests: XCTestCase {
         weak var weakConsumer: ConsumerSpy?
 
         do {
-            let bridge = TrackpadGestureBridge()
+            let bridge = TrackpadGestureBridge(ownershipStore: makeOwnershipStore())
             let provider = ProviderSpy()
             let consumer = ConsumerSpy(claims: [.threeFingerTap])
             weakProvider = provider
@@ -53,8 +53,33 @@ final class TrackpadGestureBridgeTests: XCTestCase {
         XCTAssertNil(weakConsumer)
     }
 
+    func testBridgeRestoresTheMostRecentOwnerAfterRestart() {
+        let suiteName = "TrackpadGestureBridgeTests-\(UUID().uuidString)"
+        let userDefaults = UserDefaults(suiteName: suiteName)!
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+
+        let store = TrackpadGestureOwnershipStore(userDefaults: userDefaults)
+        let bridge = TrackpadGestureBridge(ownershipStore: store)
+        let provider = ProviderSpy()
+        let consumer = ConsumerSpy(claims: [.threeFingerTap])
+        bridge.connect(providers: [provider], consumers: [consumer], onClaimsChanged: {})
+        consumer.claim(.threeFingerTap)
+
+        let restoredBridge = TrackpadGestureBridge(ownershipStore: store)
+        let restoredProvider = ProviderSpy()
+        let restoredConsumer = ConsumerSpy(claims: [.threeFingerTap])
+        restoredBridge.connect(
+            providers: [restoredProvider],
+            consumers: [restoredConsumer],
+            onClaimsChanged: {}
+        )
+
+        XCTAssertEqual(restoredProvider.externalClaims, [.threeFingerTap])
+        XCTAssertEqual(restoredConsumer.ownedGestures, [.threeFingerTap])
+    }
+
     func testBridgeDisconnectsParticipantsRemovedByAPluginReload() {
-        let bridge = TrackpadGestureBridge()
+        let bridge = TrackpadGestureBridge(ownershipStore: makeOwnershipStore())
         let provider = ProviderSpy()
         let consumer = ConsumerSpy(claims: [.threeFingerTap])
         bridge.connect(providers: [provider], consumers: [consumer], onClaimsChanged: {})
@@ -66,6 +91,12 @@ final class TrackpadGestureBridgeTests: XCTestCase {
         XCTAssertEqual(provider.externalClaims, [])
         XCTAssertNil(consumer.onTrackpadGestureClaimsChange)
         XCTAssertNil(consumer.requestTrackpadGestureOwnership)
+    }
+
+    private func makeOwnershipStore() -> TrackpadGestureOwnershipStore {
+        TrackpadGestureOwnershipStore(
+            userDefaults: UserDefaults(suiteName: "TrackpadGestureBridgeTests-\(UUID().uuidString)")!
+        )
     }
 }
 
@@ -121,5 +152,9 @@ private final class ConsumerSpy: TrackpadGestureEventConsuming {
 
     func setOwnedTrackpadGestures(_ gestures: Set<TrackpadGesture>) {
         ownedGestures = gestures
+    }
+
+    func claim(_ gesture: TrackpadGesture) {
+        requestTrackpadGestureOwnership?(gesture)
     }
 }
