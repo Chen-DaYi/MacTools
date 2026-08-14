@@ -174,6 +174,7 @@ Source of truth: yes
 - 2026-08-14 — User superseded the title symbols because they did not render. The localized title now names keyboard, trackpad, and mouse directly; the Portuguese Trackpad label was corrected for this visible title.
 - 2026-08-14 — Aligned the full localized title in runtime metadata, the string catalog, settings-title copy, and `plugin.json` marketplace metadata.
 - 2026-08-14 — Replaced the redundant source-list subtitle everywhere with localized “Map inputs to actions” copy.
+- 2026-08-14 — Updated the Custom Shortcuts plugin icon to `arrow.left.arrow.right`.
 
 ## Files
 

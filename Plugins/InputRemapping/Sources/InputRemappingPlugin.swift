@@ -248,7 +248,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
                 "metadata.title",
                 defaultValue: "Custom Shortcuts: Keyboard, Trackpad, Mouse"
             ),
-            iconName: "arrow.triangle.2.circlepath",
+            iconName: "arrow.left.arrow.right",
             iconTint: .purple,
             order: 57,
             defaultDescription: localization.string(

@@ -137,6 +137,7 @@ final class InputRemappingModelsTests: XCTestCase {
         XCTAssertEqual(plugin.metadata.title.filter { $0 == "," }.count, 2)
         XCTAssertFalse(plugin.metadata.title.contains("⌨️"))
         XCTAssertEqual(plugin.metadata.defaultDescription, "Map inputs to actions")
+        XCTAssertEqual(plugin.metadata.iconName, "arrow.left.arrow.right")
     }
 
     func testShortcutActionKindStaysSelectedAfterRecording() {
