@@ -469,12 +469,14 @@ final class InputRemappingModelsTests: XCTestCase {
         plugin.store.replace(rule)
 
         XCTAssertEqual(plugin.claimedTrackpadGestures, [.threeFingerTap])
+        plugin.setOwnedTrackpadGestures([.threeFingerTap])
         plugin.receiveTrackpadGesture(.threeFingerTap, deviceID: 1)
         XCTAssertEqual(tap.executedActions, [.mouseBack])
 
-        plugin.removeTrackpadGestureClaim(for: .threeFingerTap)
-        XCTAssertEqual(plugin.claimedTrackpadGestures, [])
-        XCTAssertEqual(plugin.store.rules, [])
+        plugin.setOwnedTrackpadGestures([])
+        plugin.receiveTrackpadGesture(.threeFingerTap, deviceID: 1)
+        XCTAssertEqual(tap.executedActions, [.mouseBack])
+        XCTAssertEqual(plugin.store.rules.count, 1)
     }
 
     func testDisabledOrIncompleteTrackpadRuleDoesNotClaimOwnership() {

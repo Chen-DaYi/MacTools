@@ -37,7 +37,7 @@ Source of truth: yes
 | Failed or inapplicable actions fail open | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | An unsafe trigger (a keyboard key without modifiers or primary mouse button) is saved disabled and requires explicit confirmation before it can be enabled | This document | `InputRemappingRule` | Rule editor, event processor |
 | Control-Option-Command-Escape always cancels recording and disables every unsafe trigger | This document | `InputRemappingEventTap`, `InputRemappingStore` | Global event tap, warning copy |
-| An enabled precise trackpad gesture belongs to the plugin where it was activated most recently, never both | This document | Shared trackpad gesture broker | Plugin host, both plugins |
+| An enabled precise trackpad gesture belongs to the plugin where it was activated most recently, never both; conflicting mappings remain saved but inactive | This document | Shared trackpad gesture broker | Plugin host, both plugins |
 | Rule context is global only | This document | Rule editor layout | Context column |
 | New rules remain disabled until input and output are configured | This document | `InputRemappingRule` configuration state | Rule editor, matcher |
 | Recording is cancelled when the settings page is hidden | This document | `InputRemappingButtonCaptureCoordinator` | Settings page visibility handler |
@@ -52,7 +52,7 @@ Source of truth: yes
 | 2026-08-13 | Permission checks are injected behind plugin seams | Cards and activation use the same real OS state and remain testable | Accessibility and Input Monitoring |
 | 2026-08-13 | Synthetic-event protection is limited to the private Input Remapping marker | Public CoreGraphics source fields describe state tables or process metadata, not a reliable physical-versus-generated category | Unmarked third-party generated events can match a rule |
 | 2026-08-13 | Modifier-free keyboard triggers are allowed after a warning | User requires full flexibility while being informed of global typing risk | Rule remains disabled until confirmation |
-| 2026-08-13 | Trackpad gesture ownership is exclusive | A single Multitouch listener must arbitrate gestures | Activating a claim removes the conflicting active mapping from the other plugin |
+| 2026-08-14 | Trackpad gesture ownership is exclusive and non-destructive | A single Multitouch listener must arbitrate gestures without deleting user configuration | The host retains a stable runtime owner; conflicting mappings remain inactive |
 | 2026-08-13 | Unsafe mappings have a keyboard emergency stop | Both primary mouse buttons can otherwise make pointer-based recovery impossible | Control-Option-Command-Escape disables unsafe mappings and cancels recording |
 
 ## Known limitation
@@ -102,7 +102,7 @@ Source of truth: yes
 - [x] Adjacent targeted tests cover the behavioral seams.
 - [x] Keyboard keys, mouse buttons, and scroll can be recorded as a trigger from the rule editor.
 - [x] Modifier-free keyboard triggers show a warning and require confirmation before activation.
-- [x] A trackpad gesture cannot remain active in both plugins.
+- [x] A trackpad gesture cannot remain active in both plugins; conflicts never delete mappings.
 - [x] The rule editor separates Input, Output, and global Context into three columns.
 - [x] Unmodified keyboard triggers persist disabled until their explicit confirmation.
 - [x] Mouse double-click actions preserve the native click pair.
@@ -131,7 +131,7 @@ Source of truth: yes
 - 2026-08-13 — Verification: generated the project, built `InputRemappingPlugin`, and passed `MacToolsTests/InputRemappingModelsTests`. Existing DiskClean Swift-concurrency warnings remain outside this feature.
 - 2026-08-13 — User expanded the contract to keyboard, mouse click/double-click/long-press, scroll, and the precise Trackpad Gestures catalog. Modifier-free keys require confirmation; trackpad ownership is exclusive and must be brokered through the host.
 - 2026-08-13 — Implemented universal capture and persisted keyboard, mouse, scroll, and trackpad triggers. Double-click executes on the second down; long-press executes on release; both retain the source click to avoid buffering and replaying native input.
-- 2026-08-13 — Added a PluginKit trackpad gesture catalog and host broker. Trackpad Gestures remains the sole Multitouch listener; a new Input Remapping claim removes the conflicting local mapping and receives subsequent recognition.
+- 2026-08-14 — Review fix: the host now keeps stable non-destructive trackpad gesture ownership. Both plugins retain conflicting saved mappings, while only the current owner receives recognition.
 - 2026-08-13 — Recording now consumes the captured event and matching key-up or mouse-up; a successful keyboard remap also consumes both key-down and matching key-up. macOS no longer receives the source input after capture or remapping.
 - 2026-08-13 — Added a dedicated shortcut-output recorder. It captures the next keyboard combination and consumes its full key pair.
 - 2026-08-13 — Redesigned the rule editor into stable Input, Output, and Context columns. The input column reveals only source-specific controls; Output keeps action and shortcut recording together; Context contains scope, enablement, safety guidance, and deletion. Global scope is explicit while conditional contexts remain out of scope.

@@ -52,6 +52,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
     var requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
+    var onTrackpadGestureRequestsChange: (() -> Void)?
 
     let store: TrackpadGestureStore
 
@@ -68,6 +69,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     private var listenerActivationFailed = false
     private var applicationActivationObserver: NSObjectProtocol?
     private var externalGestureClaims: Set<TrackpadGesture> = []
+    private var ownedLocalGestures: Set<TrackpadGesture> = []
     private var externalGestureHandler: ((TrackpadGesture, UInt64) -> Void)?
     private var lastKnownEnabledLocalGestures: Set<TrackpadGesture>
 
@@ -331,6 +333,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         let newlyEnabledGestures = enabledLocalGestures.subtracting(lastKnownEnabledLocalGestures)
         lastKnownEnabledLocalGestures = enabledLocalGestures
         newlyEnabledGestures.forEach { requestTrackpadGestureOwnership?($0) }
+        onTrackpadGestureRequestsChange?()
 
         guard ensurePermissionsIfNeeded() else {
             session.deactivate()
@@ -451,14 +454,14 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         listenerActivationFailed = false
         let gestures = store.isTesting
             ? Set(TrackpadGesture.allCases)
-            : store.enabledGestures.union(externalGestureClaims)
+            : ownedLocalGestures.union(externalGestureClaims)
         let clickResolutions: [TrackpadGesture: TrackpadNativeClickResolution]
         if store.isTesting {
             clickResolutions = [:]
         } else {
             let localResolutions: [TrackpadGesture: TrackpadNativeClickResolution] = Dictionary(
                 uniqueKeysWithValues: store.mappings.compactMap { mapping -> (TrackpadGesture, TrackpadNativeClickResolution)? in
-                guard mapping.isEnabled else { return nil }
+                guard mapping.isEnabled, ownedLocalGestures.contains(mapping.gesture) else { return nil }
                 switch mapping.action {
                 case .middleClick:
                     return (mapping.gesture, .middleClick)
@@ -512,21 +515,19 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         store.isTesting || !store.enabledGestures.isEmpty || !externalGestureClaims.isEmpty
     }
 
-    func setExternalGestureClaims(
-        _ gestures: Set<TrackpadGesture>,
-        handler: @escaping (TrackpadGesture, UInt64) -> Void
-    ) {
-        let conflictingMappingIDs = gestures.compactMap { store.mapping(for: $0)?.id }
-        conflictingMappingIDs.forEach { store.delete(id: $0) }
-        externalGestureClaims = gestures
-        externalGestureHandler = handler
-        configurationDidChange()
+    var requestedTrackpadGestures: Set<TrackpadGesture> {
+        store.enabledGestures
     }
 
-    func removeLocalMapping(for gesture: TrackpadGesture) {
-        guard let mapping = store.mapping(for: gesture) else { return }
-        store.delete(id: mapping.id)
-        configurationDidChange()
+    func setTrackpadGestureOwnership(
+        localGestures: Set<TrackpadGesture>,
+        externalGestures: Set<TrackpadGesture>,
+        handler: @escaping (TrackpadGesture, UInt64) -> Void
+    ) {
+        ownedLocalGestures = localGestures
+        externalGestureClaims = externalGestures
+        externalGestureHandler = handler
+        applyConfiguration()
     }
 
     private var permissionErrorMessage: String {

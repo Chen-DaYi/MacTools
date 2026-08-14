@@ -906,7 +906,7 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         let (plugin, session, _) = makePlugin()
         let gesture = TrackpadGesture.tipTapLeftOneFixed
 
-        plugin.setExternalGestureClaims([gesture]) { _, _ in }
+        plugin.setTrackpadGestureOwnership(localGestures: [], externalGestures: [gesture]) { _, _ in }
         plugin.activate(context: PluginRuntimeContext(pluginID: "trackpad-gestures"))
 
         XCTAssertEqual(session.nativeClickResolutionUpdates.last?[gesture], .consume)

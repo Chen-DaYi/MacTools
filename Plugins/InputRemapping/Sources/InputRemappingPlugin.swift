@@ -164,6 +164,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     private var isInputMonitoringGranted: Bool
     private var errorMessage: String?
     private var applicationActivationObserver: NSObjectProtocol?
+    private var ownedTrackpadGestures: Set<TrackpadGesture> = []
 
     init(
         context: PluginRuntimeContext,
@@ -269,12 +270,13 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         Set(store.rules.compactMap(\.claimedTrackpadGesture))
     }
 
-    func removeTrackpadGestureClaim(for gesture: TrackpadGesture) {
-        store.removeTrackpadGestureClaim(for: gesture)
+    func setOwnedTrackpadGestures(_ gestures: Set<TrackpadGesture>) {
+        ownedTrackpadGestures = gestures
     }
 
     func receiveTrackpadGesture(_ gesture: TrackpadGesture, deviceID: UInt64) {
         guard isAccessibilityGranted,
+              ownedTrackpadGestures.contains(gesture),
               let rule = store.rules.first(where: { $0.claimedTrackpadGesture == gesture })
         else { return }
         _ = tap.execute(rule.action)
@@ -1028,10 +1030,10 @@ private struct InputRemappingRuleEditor: View {
     }
 
     private func save() {
+        store.replace(draft)
         if let gesture = draft.claimedTrackpadGesture {
             requestTrackpadGestureOwnership?(gesture)
         }
-        store.replace(draft)
     }
 }
 

@@ -590,11 +590,6 @@ final class InputRemappingStore: ObservableObject {
     func delete(_ rule: InputRemappingRule) {
         update(rules.filter { $0.id != rule.id })
     }
-    func removeTrackpadGestureClaim(for gesture: TrackpadGesture) {
-        let remainingRules = rules.filter { $0.claimedTrackpadGesture != gesture }
-        guard remainingRules.count != rules.count else { return }
-        update(remainingRules)
-    }
     func disableUnsafeTriggers() {
         let updatedRules = rules.map { rule in
             guard InputRemappingRule.requiresExplicitConfirmation(for: rule.trigger) else { return rule }

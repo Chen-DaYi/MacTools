@@ -203,12 +203,14 @@ public protocol PluginPortablePreferencesProviding: AnyObject {
 /// Optional bridge for the sole owner of the private multitouch listener.
 @MainActor
 public protocol TrackpadGestureEventProviding: AnyObject {
+    var requestedTrackpadGestures: Set<TrackpadGesture> { get }
+    var onTrackpadGestureRequestsChange: (() -> Void)? { get set }
     var requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)? { get set }
-    func setExternalGestureClaims(
-        _ gestures: Set<TrackpadGesture>,
+    func setTrackpadGestureOwnership(
+        localGestures: Set<TrackpadGesture>,
+        externalGestures: Set<TrackpadGesture>,
         handler: @escaping (TrackpadGesture, UInt64) -> Void
     )
-    func removeLocalMapping(for gesture: TrackpadGesture)
 }
 
 /// Optional bridge for a plugin that maps the shared precise trackpad gestures.
@@ -217,6 +219,6 @@ public protocol TrackpadGestureEventConsuming: AnyObject {
     var claimedTrackpadGestures: Set<TrackpadGesture> { get }
     var onTrackpadGestureClaimsChange: (() -> Void)? { get set }
     var requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)? { get set }
-    func removeTrackpadGestureClaim(for gesture: TrackpadGesture)
+    func setOwnedTrackpadGestures(_ gestures: Set<TrackpadGesture>)
     func receiveTrackpadGesture(_ gesture: TrackpadGesture, deviceID: UInt64)
 }
