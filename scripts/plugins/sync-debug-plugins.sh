@@ -90,17 +90,13 @@ if [[ -z "$SOURCE_DIR" || ! -d "$SOURCE_DIR" ]]; then
     exit 1
 fi
 
-PRODUCTS_DIR="$(cd "$PRODUCTS_DIR" 2>/dev/null && pwd || true)"
+PRODUCTS_DIR="$(cd "$PRODUCTS_DIR" 2>/dev/null && pwd -P || true)"
 if [[ -z "$PRODUCTS_DIR" || ! -d "$PRODUCTS_DIR" ]]; then
     echo "Debug build products directory not found. Run 'make build' first: $PRODUCTS_DIR" >&2
     exit 1
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
-PACKAGES_DIR="$OUTPUT_DIR/Packages"
-CATALOG_PATH="$OUTPUT_DIR/catalog.dev.json"
-STATE_DIR="$OUTPUT_DIR/.sync-state"
 MANIFEST_COPY_SCRIPT="$REPO_ROOT/scripts/plugins/copy-plugin-manifest.py"
 APP_VERSION_CONFIG="$REPO_ROOT/Configs/AppVersion.xcconfig"
 DEVELOPMENT_HOST_VERSION="$(
@@ -108,17 +104,65 @@ DEVELOPMENT_HOST_VERSION="$(
         --app-version-config "$APP_VERSION_CONFIG"
 )"
 
-mkdir -p "$PACKAGES_DIR"
-mkdir -p "$STATE_DIR"
-if [[ "$SKIP_INSTALL" != "1" ]]; then
-    mkdir -p "$INSTALL_DIR"
-fi
+# Resolve a path to its canonical form, following symlinks in every existing
+# component. The path may not exist yet: the deepest existing directory
+# ancestor is resolved and the remaining components are appended verbatim.
+# A symlink component (even a dangling one) stops the walk so it is resolved
+# or refused instead of being silently appended to a different location.
+resolve_path() {
+    local path="$1"
+    local current="$path"
+    local suffix=""
+    local parent=""
+    while [[ -n "$current" && "$current" != "/" && ! -d "$current" && ! -L "$current" ]]; do
+        suffix="/${current##*/}${suffix}"
+        parent="${current%/*}"
+        if [[ "$parent" == "$current" ]]; then
+            current="/"
+            break
+        fi
+        current="$parent"
+    done
+    if [[ -z "$current" ]]; then
+        current="/"
+    fi
+    local resolved
+    resolved="$(cd -P -- "$current" 2>/dev/null && pwd -P 2>/dev/null)" || true
+    if [[ -z "$resolved" ]]; then
+        printf '%s' ""
+        return 1
+    fi
+    printf '%s%s' "$resolved" "$suffix"
+}
+
+# Refuse operations on a destination that resolves outside its intended root,
+# including when an intermediate component (e.g. a pre-existing Packages
+# symlink) would redirect the real location elsewhere.
+assert_path_within_root() {
+    local path="$1"
+    local root="$2"
+    local resolved_root resolved_path
+    resolved_root="$(resolve_path "$root" 2>/dev/null)" || true
+    resolved_path="$(resolve_path "$path" 2>/dev/null)" || true
+    if [[ -z "$resolved_root" || -z "$resolved_path" ]]; then
+        echo "Refusing to operate on unresolvable path outside $root: $path" >&2
+        exit 1
+    fi
+    local root_with_slash="${resolved_root%/}/"
+    if [[ "$resolved_path" != "${resolved_root%/}" && "$resolved_path" != "$root_with_slash"* ]]; then
+        echo "Refusing to operate outside $resolved_root: $path (resolves to $resolved_path)" >&2
+        exit 1
+    fi
+}
 
 copy_package_to_installed_store() {
     local package_path="$1"
     local plugin_id="$2"
     local destination="$INSTALL_DIR/$plugin_id.mactoolsplugin"
     local staging="$INSTALL_DIR/.$plugin_id.syncing.$$.mactoolsplugin"
+
+    assert_path_within_root "$destination" "$INSTALL_DIR"
+    assert_path_within_root "$staging" "$INSTALL_DIR"
 
     rm -rf "$staging"
     ditto "$package_path" "$staging"
@@ -137,6 +181,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import sys
 
 source_dir = pathlib.Path(sys.argv[1])
@@ -153,6 +198,39 @@ def validate_field(value: str) -> str:
     if "\t" in value or "\n" in value:
         emit_error(f"Unsupported tab or newline in plugin sync field: {value!r}")
     return value
+
+PLUGIN_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{1,126}[A-Za-z0-9]\Z")
+RESERVED_PLUGIN_ID = "marketplace"
+INVALID_PATH_COMPONENTS = frozenset({"", ".", ".."})
+
+def validate_plugin_identity(
+    plugin_id: str,
+    bundle_relative_path: str,
+    manifest: pathlib.Path,
+) -> None:
+    if (
+        plugin_id == RESERVED_PLUGIN_ID
+        or PLUGIN_ID_PATTERN.fullmatch(plugin_id) is None
+    ):
+        emit_error(
+            f"Invalid plugin id {plugin_id!r} in {manifest}: must match the "
+            "PluginPackageManifestLoader grammar "
+            "([A-Za-z0-9][A-Za-z0-9._-]{1,126}[A-Za-z0-9], not 'marketplace')"
+        )
+
+    if (
+        not bundle_relative_path
+        or bundle_relative_path.startswith("/")
+        or any(
+            part in INVALID_PATH_COMPONENTS
+            for part in bundle_relative_path.split("/")
+        )
+    ):
+        emit_error(
+            f"Invalid bundleRelativePath {bundle_relative_path!r} in {manifest}: "
+            "must be a normalized relative path with no absolute, empty, '.', "
+            "or '..' components"
+        )
 
 def discover_candidates() -> list[pathlib.Path]:
     if (source_dir / "plugin.json").is_file():
@@ -227,6 +305,8 @@ for plugin_root in discover_candidates():
     if filters and plugin_root.name not in filters and plugin_id not in filters:
         continue
 
+    validate_plugin_identity(plugin_id, bundle_relative_path, manifest)
+
     bundle_name = pathlib.Path(bundle_relative_path).name
     bundle_path = products_dir / bundle_name
     if not bundle_path.is_dir():
@@ -281,12 +361,74 @@ else
     exit "$discovery_status"
 fi
 
+# Preflight: canonicalize the roots without creating anything, then validate
+# every destination the sync could touch for all records. Nothing on disk is
+# created or changed until every check passes, so a rejected destination (e.g.
+# a symlink redirecting Output/Packages or the install path outside its root)
+# aborts with a pristine filesystem: no output/state/install directories, no
+# rebuilt package, no fingerprint.
+if OUTPUT_DIR="$(resolve_path "$OUTPUT_DIR")"; then
+    :
+else
+    echo "Refusing to operate on unresolvable output directory: $OUTPUT_DIR" >&2
+    exit 1
+fi
+PACKAGES_DIR="$OUTPUT_DIR/Packages"
+CATALOG_PATH="$OUTPUT_DIR/catalog.dev.json"
+STATE_DIR="$OUTPUT_DIR/.sync-state"
+
+if [[ "$SKIP_INSTALL" != "1" ]]; then
+    if INSTALL_DIR="$(resolve_path "$INSTALL_DIR")"; then
+        :
+    else
+        echo "Refusing to operate on unresolvable install directory: $INSTALL_DIR" >&2
+        exit 1
+    fi
+fi
+
+while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bundle_path fingerprint; do
+    [[ -n "$plugin_root" ]] || continue
+
+    package_path="$PACKAGES_DIR/$plugin_id.mactoolsplugin"
+    # The package and state checks use OUTPUT_DIR as the root (not PACKAGES_DIR
+    # or STATE_DIR) so a pre-existing symlink at Output/Packages or
+    # Output/.sync-state cannot redirect writes outside the output root.
+    assert_path_within_root "$package_path" "$OUTPUT_DIR"
+    assert_path_within_root "$bundle_path" "$PRODUCTS_DIR"
+    bundle_destination="$package_path/$bundle_relative_path"
+    assert_path_within_root "$bundle_destination" "$OUTPUT_DIR"
+    state_path="$(state_file_for_plugin "$plugin_id")"
+    assert_path_within_root "$state_path" "$OUTPUT_DIR"
+    if [[ "$SKIP_INSTALL" != "1" ]]; then
+        install_path="$INSTALL_DIR/$plugin_id.mactoolsplugin"
+        assert_path_within_root "$install_path" "$INSTALL_DIR"
+        staging_path="$INSTALL_DIR/.$plugin_id.syncing.$$.mactoolsplugin"
+        assert_path_within_root "$staging_path" "$INSTALL_DIR"
+    fi
+done <<< "$plugin_records"
+assert_path_within_root "$CATALOG_PATH" "$OUTPUT_DIR"
+
+# Preflight passed: create the sync directories and run.
+mkdir -p "$OUTPUT_DIR" "$PACKAGES_DIR" "$STATE_DIR"
+if [[ "$SKIP_INSTALL" != "1" ]]; then
+    mkdir -p "$INSTALL_DIR"
+fi
+
 echo "Synchronizing Debug plugin packages..."
 while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bundle_path fingerprint; do
     [[ -n "$plugin_root" ]] || continue
 
     package_path="$PACKAGES_DIR/$plugin_id.mactoolsplugin"
+    # Validate every mutation destination before any rm/mkdir/ditto/mv. The
+    # package and state checks use OUTPUT_DIR as the root (not PACKAGES_DIR or
+    # STATE_DIR) so a pre-existing symlink at Output/Packages or
+    # Output/.sync-state cannot redirect writes outside the output root.
+    assert_path_within_root "$package_path" "$OUTPUT_DIR"
+    assert_path_within_root "$bundle_path" "$PRODUCTS_DIR"
+    bundle_destination="$package_path/$bundle_relative_path"
+    assert_path_within_root "$bundle_destination" "$OUTPUT_DIR"
     state_path="$(state_file_for_plugin "$plugin_id")"
+    assert_path_within_root "$state_path" "$OUTPUT_DIR"
     previous_fingerprint=""
     package_synced=0
     if [[ -f "$state_path" ]]; then
@@ -311,6 +453,7 @@ while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bund
 
     if [[ "$SKIP_INSTALL" != "1" ]]; then
         install_path="$INSTALL_DIR/$plugin_id.mactoolsplugin"
+        assert_path_within_root "$install_path" "$INSTALL_DIR"
         if [[ "$package_synced" == "1" || ! -d "$install_path" ]]; then
             copy_package_to_installed_store "$package_path" "$plugin_id"
             installed_count=$((installed_count + 1))
@@ -340,6 +483,7 @@ for package in "${packages[@]}"; do
 done
 
 if [[ "$synced_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
+    assert_path_within_root "$CATALOG_PATH" "$OUTPUT_DIR"
     echo "Generating local plugin catalog..."
     "$REPO_ROOT/scripts/plugins/generate-plugin-catalog.sh" \
         --mode debug \
