@@ -78,7 +78,7 @@ struct ShortcutSettingsView: View {
     }
 }
 
-private enum ActionShortcutFilter: String, CaseIterable, Identifiable {
+enum ActionShortcutFilter: String, CaseIterable, Identifiable {
     case all
     case assigned
     case unassigned
@@ -199,10 +199,7 @@ struct ActionShortcutSettingsView: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             searchField
 
-            HStack(spacing: 0) {
-                filterPicker
-                Spacer(minLength: 0)
-            }
+            ActionShortcutFilterControl(selection: $filter)
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
         .pluginSettingsCardBackground(.standard)
@@ -213,17 +210,6 @@ struct ActionShortcutSettingsView: View {
             .textFieldStyle(.roundedBorder)
             .frame(minWidth: 220, maxWidth: .infinity)
             .accessibilityIdentifier("mactools.actions.search")
-    }
-
-    private var filterPicker: some View {
-        Picker(FeatureL10n.string("筛选"), selection: $filter) {
-            ForEach(ActionShortcutFilter.allCases) { option in
-                Text(option.title).tag(option)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .frame(minWidth: 320, idealWidth: 380, maxWidth: 420)
     }
 
     private func refreshGroups() {
@@ -327,6 +313,61 @@ struct ActionShortcutSettingsView: View {
         case let .failure(error):
             return .rejected(error.localizedDescription)
         }
+    }
+}
+
+private struct ActionShortcutFilterControl: View {
+    @Binding var selection: ActionShortcutFilter
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            equalWidthTabs
+                .frame(width: 520)
+
+            Picker(FeatureL10n.string("筛选"), selection: $selection) {
+                ForEach(ActionShortcutFilter.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 220, alignment: .leading)
+        }
+    }
+
+    private var equalWidthTabs: some View {
+        HStack(spacing: 2) {
+            ForEach(ActionShortcutFilter.allCases) { option in
+                Button {
+                    selection = option
+                } label: {
+                    Text(option.title)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 5)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selection == option ? Color.white : Color.primary)
+                .background {
+                    RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field)
+                        .fill(selection == option ? Color.accentColor : Color.clear)
+                }
+                .accessibilityAddTraits(selection == option ? .isSelected : [])
+                .accessibilityIdentifier("mactools.actions.filter.\(option.rawValue)")
+            }
+        }
+        .padding(2)
+        .background {
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field + 2)
+                .fill(PluginSettingsTheme.Palette.fieldBackground)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field + 2)
+                .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(FeatureL10n.string("筛选"))
     }
 }
 

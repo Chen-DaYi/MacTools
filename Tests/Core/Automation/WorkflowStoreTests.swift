@@ -59,6 +59,60 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.workflows().map(\.id), [first.id, third.id, second.id])
     }
 
+    func testWorkflowOrderSupportsDragDropDistanceAndPersistsAcrossReload() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let first = try store.create(name: "第一").get()
+        let second = try store.create(name: "第二").get()
+        let third = try store.create(name: "第三").get()
+        let fourth = try store.create(name: "第四").get()
+
+        XCTAssertTrue(store.move(id: first.id, offset: 3))
+        XCTAssertEqual(store.workflows().map(\.id), [second.id, third.id, fourth.id, first.id])
+        XCTAssertTrue(store.move(id: first.id, offset: -2))
+        XCTAssertEqual(store.workflows().map(\.id), [second.id, first.id, third.id, fourth.id])
+
+        let reloaded = WorkflowStore(userDefaults: defaults)
+        XCTAssertEqual(reloaded.workflows().map(\.id), [second.id, first.id, third.id, fourth.id])
+    }
+
+    func testWorkflowListReorderConvertsNativeListDestinationsToStoreOffsets() {
+        XCTAssertEqual(
+            WorkflowListReorder.move(
+                sourceOffsets: IndexSet(integer: 0),
+                destinationOffset: 4,
+                itemCount: 4
+            )?.offset,
+            3
+        )
+        XCTAssertEqual(
+            WorkflowListReorder.move(
+                sourceOffsets: IndexSet(integer: 3),
+                destinationOffset: 0,
+                itemCount: 4
+            )?.offset,
+            -3
+        )
+        XCTAssertEqual(
+            WorkflowListReorder.move(
+                sourceOffsets: IndexSet(integer: 1),
+                destinationOffset: 3,
+                itemCount: 4
+            )?.offset,
+            1
+        )
+        XCTAssertNil(WorkflowListReorder.move(
+            sourceOffsets: IndexSet(integer: 1),
+            destinationOffset: 2,
+            itemCount: 4
+        ))
+        XCTAssertNil(WorkflowListReorder.move(
+            sourceOffsets: IndexSet([0, 1]),
+            destinationOffset: 3,
+            itemCount: 4
+        ))
+    }
+
     func testInvalidAndCorruptPayloadsFailClosedWithoutDeletingStoredBytes() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let key = "automation.workflows.v1"

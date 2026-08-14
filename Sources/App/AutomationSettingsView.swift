@@ -2,6 +2,65 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
+enum WorkflowListReorder {
+    static func move(
+        sourceOffsets: IndexSet,
+        destinationOffset: Int,
+        itemCount: Int
+    ) -> (sourceIndex: Int, offset: Int)? {
+        guard sourceOffsets.count == 1,
+              let sourceIndex = sourceOffsets.first,
+              (0..<itemCount).contains(sourceIndex),
+              (0...itemCount).contains(destinationOffset) else {
+            return nil
+        }
+
+        let destinationIndex = destinationOffset > sourceIndex
+            ? destinationOffset - 1
+            : destinationOffset
+        let offset = destinationIndex - sourceIndex
+        return offset == 0 ? nil : (sourceIndex, offset)
+    }
+}
+
+private struct WorkflowConditionalAccessibilityActionModifier: ViewModifier {
+    let isEnabled: Bool
+    let name: String
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.accessibilityAction(named: name, action)
+        } else {
+            content
+        }
+    }
+}
+
+private struct WorkflowKeyboardBoundaryMoveModifier: ViewModifier {
+    let canMoveToTop: Bool
+    let canMoveToBottom: Bool
+    let moveToTop: () -> Void
+    let moveToBottom: () -> Void
+
+    func body(content: Content) -> some View {
+        content.onKeyPress(phases: .down) { press in
+            guard press.modifiers == [.command, .option] else { return .ignored }
+            switch press.key {
+            case .upArrow where canMoveToTop:
+                moveToTop()
+                return .handled
+            case .downArrow where canMoveToBottom:
+                moveToBottom()
+                return .handled
+            default:
+                return .ignored
+            }
+        }
+    }
+}
+
 struct AutomationSettingsView: View {
     @ObservedObject private var pluginHost: PluginHost
     @ObservedObject private var automation: AutomationController
@@ -125,10 +184,16 @@ struct AutomationSettingsView: View {
                             canMoveUp: index > 0,
                             canMoveDown: index + 1 < automation.workflows.count,
                             onRun: { requestRun(workflow) },
-                            onDelete: { pendingDeleteWorkflow = workflow }
+                            onDelete: { pendingDeleteWorkflow = workflow },
+                            onMoveToTop: { moveWorkflow(workflow.id, to: 0) },
+                            onMoveToBottom: {
+                                moveWorkflow(workflow.id, to: automation.workflows.count - 1)
+                            }
                         )
+                        .moveDisabled(!automation.canEditDefinitions)
                         .tag(workflow.id)
                     }
+                    .onMove(perform: moveWorkflows)
                 }
                 .listStyle(.sidebar)
             }
@@ -170,6 +235,36 @@ struct AutomationSettingsView: View {
             _ = automation.startWorkflow(id: workflow.id)
         }
     }
+
+    private func moveWorkflows(fromOffsets sourceOffsets: IndexSet, toOffset destinationOffset: Int) {
+        guard automation.canEditDefinitions,
+              let move = WorkflowListReorder.move(
+                  sourceOffsets: sourceOffsets,
+                  destinationOffset: destinationOffset,
+                  itemCount: automation.workflows.count
+              ),
+              automation.workflows.indices.contains(move.sourceIndex) else {
+            return
+        }
+        let workflowID = automation.workflows[move.sourceIndex].id
+        withAnimation(.easeInOut(duration: 0.18)) {
+            automation.moveWorkflow(id: workflowID, offset: move.offset)
+        }
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
+
+    private func moveWorkflow(_ workflowID: UUID, to destinationIndex: Int) {
+        guard automation.canEditDefinitions,
+              let sourceIndex = automation.workflows.firstIndex(where: { $0.id == workflowID }),
+              automation.workflows.indices.contains(destinationIndex),
+              sourceIndex != destinationIndex else {
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            automation.moveWorkflow(id: workflowID, offset: destinationIndex - sourceIndex)
+        }
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
 }
 
 private struct WorkflowPreviewRequest: Identifiable {
@@ -186,6 +281,8 @@ private struct WorkflowCollectionRow: View {
     let canMoveDown: Bool
     let onRun: () -> Void
     let onDelete: () -> Void
+    let onMoveToTop: () -> Void
+    let onMoveToBottom: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -232,27 +329,42 @@ private struct WorkflowCollectionRow: View {
                     : FeatureL10n.format("运行“%@”", workflow.name)
             )
 
-            Menu {
-                Button(FeatureL10n.string("上移")) { automation.moveWorkflow(id: workflow.id, offset: -1) }
-                    .disabled(!canMoveUp)
-                Button(FeatureL10n.string("下移")) { automation.moveWorkflow(id: workflow.id, offset: 1) }
-                    .disabled(!canMoveDown)
-                Divider()
-                Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateWorkflow(id: workflow.id) }
-                Button(FeatureL10n.string("删除"), role: .destructive, action: onDelete)
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .accessibilityLabel(FeatureL10n.format("调整“%@”的顺序", workflow.name))
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(automation.canEditDefinitions ? .secondary : .tertiary)
+                .frame(width: 18, height: 24)
+                .contentShape(Rectangle())
+                .help(FeatureL10n.format("调整“%@”的顺序", workflow.name))
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .contain)
         .contextMenu {
+            Button(moveToTopTitle, action: onMoveToTop)
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .disabled(!canMoveUp)
+            Button(moveToBottomTitle, action: onMoveToBottom)
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(!canMoveDown)
+            Divider()
             Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateWorkflow(id: workflow.id) }
             Button(FeatureL10n.string("删除"), role: .destructive, action: onDelete)
         }
+        .modifier(WorkflowKeyboardBoundaryMoveModifier(
+            canMoveToTop: canMoveUp,
+            canMoveToBottom: canMoveDown,
+            moveToTop: onMoveToTop,
+            moveToBottom: onMoveToBottom
+        ))
+        .modifier(WorkflowConditionalAccessibilityActionModifier(
+            isEnabled: canMoveUp,
+            name: moveToTopTitle,
+            action: onMoveToTop
+        ))
+        .modifier(WorkflowConditionalAccessibilityActionModifier(
+            isEnabled: canMoveDown,
+            name: moveToBottomTitle,
+            action: onMoveToBottom
+        ))
     }
 
     private var summary: String {
@@ -279,6 +391,14 @@ private struct WorkflowCollectionRow: View {
 
     private var isRunning: Bool {
         !automation.activeRunIDs(for: workflow.id).isEmpty
+    }
+
+    private var moveToTopTitle: String {
+        AppL10n.plugins("plugin.management.moveToTop", defaultValue: "移到顶部")
+    }
+
+    private var moveToBottomTitle: String {
+        AppL10n.plugins("plugin.management.moveToBottom", defaultValue: "移到底部")
     }
 }
 

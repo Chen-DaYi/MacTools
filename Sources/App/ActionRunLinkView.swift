@@ -55,29 +55,13 @@ struct ActionRunLinkControl: View {
 
     private func availableContent(_ representation: ActionRunLinkRepresentation) -> some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
-                Button {
-                    isExpanded.toggle()
-                } label: {
-                    Label(FeatureL10n.string("运行链接"), systemImage: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Button {
-                    copy(representation.url)
-                } label: {
-                    Label(
-                        copiedValue == representation.url ? FeatureL10n.string("已复制") : FeatureL10n.string("复制"),
-                        systemImage: copiedValue == representation.url ? "checkmark" : "doc.on.doc"
-                    )
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help(representation.url)
+            Button {
+                isExpanded.toggle()
+            } label: {
+                Label(FeatureL10n.string("运行链接"), systemImage: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
             }
+            .buttonStyle(.plain)
 
             if isExpanded {
                 runLinkValueRow(

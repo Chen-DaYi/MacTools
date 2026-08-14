@@ -3,4 +3,4 @@ release: app
 type: fixed
 ---
 
-Kept Automation workflow titles readable in narrower settings windows and removed excess spacing around Actions & Shortcuts filters.
+Improved narrow Automation layouts, stabilized Actions & Shortcuts filters, moved Run Link copying into expanded details, and made workflow reordering reliable with native drag and compact context actions.
