@@ -3,6 +3,27 @@ import XCTest
 
 @MainActor
 final class AppURLRouterTests: XCTestCase {
+    func testDeferredInputValidationMatchesPublicAndRightClickRoutes() throws {
+        XCTAssertTrue(
+            AppURLRouter.acceptsDeferredInput(
+                try XCTUnwrap(URL(string: "mactools://app/search")),
+                acceptedSchemes: ["mactools"]
+            )
+        )
+        XCTAssertTrue(
+            AppURLRouter.acceptsDeferredInput(
+                try XCTUnwrap(URL(string: "mactools://right-click/open-terminal?directory=/tmp")),
+                acceptedSchemes: ["mactools"]
+            )
+        )
+        XCTAssertFalse(
+            AppURLRouter.acceptsDeferredInput(
+                try XCTUnwrap(URL(string: "https://example.com")),
+                acceptedSchemes: ["mactools"]
+            )
+        )
+    }
+
     func testParserAcceptsDocumentedReleaseAndDebugRoutes() throws {
         let routes: [(String, AppDeepLink)] = [
             ("settings", .settings(.root)),
