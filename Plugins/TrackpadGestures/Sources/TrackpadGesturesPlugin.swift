@@ -222,7 +222,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     TrackpadGesturesSettingsView(
                         store: self.store,
                         localization: self.localization,
-                        isGestureOwned: { self.ownedLocalGestures.contains($0) },
+                        isGestureOwned: { self.isGestureOwned($0) },
                         onChange: { [weak self] in self?.configurationDidChange() },
                         onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
                         section: .mappings
@@ -239,7 +239,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     TrackpadGesturesSettingsView(
                         store: self.store,
                         localization: self.localization,
-                        isGestureOwned: { self.ownedLocalGestures.contains($0) },
+                        isGestureOwned: { self.isGestureOwned($0) },
                         onChange: { [weak self] in self?.configurationDidChange() },
                         onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
                         section: .typingProtection
@@ -456,16 +456,17 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
 
     private func applyConfiguration() {
         listenerActivationFailed = false
+        let localGestures = managedLocalGestures
         let gestures = store.isTesting
             ? Set(TrackpadGesture.allCases)
-            : ownedLocalGestures.union(externalGestureClaims)
+            : localGestures.union(externalGestureClaims)
         let clickResolutions: [TrackpadGesture: TrackpadNativeClickResolution]
         if store.isTesting {
             clickResolutions = [:]
         } else {
             let localResolutions: [TrackpadGesture: TrackpadNativeClickResolution] = Dictionary(
                 uniqueKeysWithValues: store.mappings.compactMap { mapping -> (TrackpadGesture, TrackpadNativeClickResolution)? in
-                guard mapping.isEnabled, ownedLocalGestures.contains(mapping.gesture) else { return nil }
+                guard mapping.isEnabled, localGestures.contains(mapping.gesture) else { return nil }
                 switch mapping.action {
                 case .middleClick:
                     return (mapping.gesture, .middleClick)
@@ -528,10 +529,19 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         externalGestures: Set<TrackpadGesture>,
         handler: @escaping (TrackpadGesture, UInt64) -> Void
     ) {
+        isTrackpadGestureOwnershipManaged = true
         ownedLocalGestures = localGestures
         externalGestureClaims = externalGestures
         externalGestureHandler = handler
         applyConfiguration()
+    }
+
+    private var managedLocalGestures: Set<TrackpadGesture> {
+        isTrackpadGestureOwnershipManaged ? ownedLocalGestures : store.enabledGestures
+    }
+
+    private func isGestureOwned(_ gesture: TrackpadGesture) -> Bool {
+        !isTrackpadGestureOwnershipManaged || ownedLocalGestures.contains(gesture)
     }
 
     private var permissionErrorMessage: String {
