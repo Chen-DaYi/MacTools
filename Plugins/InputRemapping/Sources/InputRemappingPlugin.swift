@@ -680,7 +680,7 @@ private struct InputRemappingRuleEditor: View {
                     }
                     .menuStyle(.button)
                     .buttonStyle(.bordered)
-                    .controlSize(.large)
+                    .controlSize(.small)
                 }
             }
 
@@ -724,7 +724,7 @@ private struct InputRemappingRuleEditor: View {
             }
             .menuStyle(.button)
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(.small)
             .frame(maxWidth: .infinity)
 
             if case let .keyboard(_, modifiers) = draft.trigger, modifiers.isEmpty {
@@ -769,7 +769,7 @@ private struct InputRemappingRuleEditor: View {
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
-        .controlSize(.large)
+        .controlSize(.small)
     }
 
     private var actionMenu: some View {
@@ -787,7 +787,7 @@ private struct InputRemappingRuleEditor: View {
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
-        .controlSize(.large)
+        .controlSize(.small)
         .frame(maxWidth: .infinity)
     }
 
