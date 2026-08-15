@@ -1,5 +1,42 @@
+import AppKit
 import Foundation
 import OSLog
+
+struct AutoInputHUDTriggerPolicy {
+    private var applicationID: String?
+    private var sourceID: String?
+    private var hasPendingPresentation = false
+
+    init(currentSourceID: String?) {
+        sourceID = currentSourceID
+    }
+
+    mutating func applicationDidActivate(_ applicationID: String) -> Bool {
+        guard self.applicationID != applicationID else { return false }
+        self.applicationID = applicationID
+        hasPendingPresentation = true
+        return true
+    }
+
+    mutating func inputSourceDidChange(to sourceID: String?) -> Bool {
+        guard self.sourceID != sourceID else { return false }
+        self.sourceID = sourceID
+        hasPendingPresentation = true
+        return true
+    }
+
+    mutating func consumePresentation() -> Bool {
+        guard hasPendingPresentation else { return false }
+        hasPendingPresentation = false
+        return true
+    }
+
+    mutating func reset(currentSourceID: String?) {
+        applicationID = nil
+        sourceID = currentSourceID
+        hasPendingPresentation = false
+    }
+}
 
 @MainActor
 final class AutoInputController: ObservableObject {
@@ -14,7 +51,9 @@ final class AutoInputController: ObservableObject {
     private let applicationMonitor: AutoInputApplicationMonitoring
     private let focusObserver: AutoInputFocusObserving
     private let hudPresenter: InputSourceHUDPresenting
+    private let hudLabelResolver: InputSourceHUDLabelResolving
     private let accessibilityCheck: AutoInputAccessibilityChecking
+    private let applicationNotificationCenter: NotificationCenter
     private let switchErrorMessage: () -> String
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -28,7 +67,9 @@ final class AutoInputController: ObservableObject {
     private var isSourceMonitoringActive = false
     private var isApplicationMonitoringActive = false
     private var isFocusMonitoringActive = false
+    private var applicationActivationObserver: NSObjectProtocol?
     private var operationGeneration = 0
+    private var hudTriggerPolicy: AutoInputHUDTriggerPolicy
 
     var currentSourceID: String? {
         sourceController.currentSourceID
@@ -40,7 +81,9 @@ final class AutoInputController: ObservableObject {
         applicationMonitor: AutoInputApplicationMonitoring,
         focusObserver: AutoInputFocusObserving = AccessibilityAutoInputFocusObserver(),
         hudPresenter: InputSourceHUDPresenting = InputSourceHUDController(),
+        hudLabelResolver: InputSourceHUDLabelResolving = StandardInputSourceHUDLabelResolver(),
         accessibilityCheck: AutoInputAccessibilityChecking = SystemAutoInputAccessibilityCheck(),
+        applicationNotificationCenter: NotificationCenter = .default,
         switchErrorMessage: @escaping () -> String = { "无法切换输入法" }
     ) {
         self.store = store
@@ -48,10 +91,15 @@ final class AutoInputController: ObservableObject {
         self.applicationMonitor = applicationMonitor
         self.focusObserver = focusObserver
         self.hudPresenter = hudPresenter
+        self.hudLabelResolver = hudLabelResolver
         self.accessibilityCheck = accessibilityCheck
+        self.applicationNotificationCenter = applicationNotificationCenter
         self.switchErrorMessage = switchErrorMessage
         self.sources = sourceController.sources
         self.isAccessibilityGranted = accessibilityCheck.isTrusted
+        self.hudTriggerPolicy = AutoInputHUDTriggerPolicy(
+            currentSourceID: sourceController.currentSourceID
+        )
     }
 
     func start() {
@@ -70,6 +118,7 @@ final class AutoInputController: ObservableObject {
             self?.handleAccessibilityInvalidated()
         }
         refreshAccessibilityPermission(prompt: false)
+        reconcilePermissionObservation()
         reconcileActiveServices()
     }
 
@@ -80,10 +129,12 @@ final class AutoInputController: ObservableObject {
         stopApplicationMonitoring()
         stopSourceMonitoring()
         hudPresenter.dismiss()
+        hudTriggerPolicy.reset(currentSourceID: sourceController.currentSourceID)
         sourceController.onSourcesChanged = nil
         applicationMonitor.onApplicationActivated = nil
         focusObserver.onEditableFocusChanged = nil
         focusObserver.onAccessibilityInvalidated = nil
+        removeApplicationActivationObserver()
         isStarted = false
     }
 
@@ -105,6 +156,7 @@ final class AutoInputController: ObservableObject {
         }
 
         refreshAccessibilityPermission(prompt: promptForAccessibility && store.isInputHUDEnabled)
+        reconcilePermissionObservation()
         reconcileActiveServices()
 
         guard autoSwitchActive,
@@ -118,6 +170,7 @@ final class AutoInputController: ObservableObject {
 
     func refresh() {
         refreshAccessibilityPermission(prompt: false)
+        reconcilePermissionObservation()
         sourceController.refresh()
         sources = sourceController.sources
         reconcileActiveServices()
@@ -149,15 +202,27 @@ final class AutoInputController: ObservableObject {
     private func handleSourcesChanged() {
         sources = sourceController.sources
         rememberCurrentSourceIfNeeded()
+        let sourceChanged = hudTriggerPolicy.inputSourceDidChange(
+            to: sourceController.currentSourceID
+        )
         if store.isInputHUDEnabled && !accessibilityCheck.isTrusted {
             handleAccessibilityInvalidated()
             return
         }
-        showHUDForCurrentFocus()
+        if sourceChanged {
+            showPendingHUDForCurrentFocus()
+        }
         onStateChange?()
     }
 
     private func handleApplicationActivated(_ application: AutoInputApplication) {
+        let applicationChanged = hudTriggerPolicy.applicationDidActivate(
+            application.bundleIdentifier
+        )
+        if applicationChanged && hudActive {
+            focusedElement = nil
+            hudPresenter.dismiss()
+        }
         if let previousApplication = currentApplication,
            previousApplication.bundleIdentifier != application.bundleIdentifier {
             rememberCurrentSourceIfNeeded(for: previousApplication.bundleIdentifier)
@@ -236,17 +301,19 @@ final class AutoInputController: ObservableObject {
 
     private func reconcileActiveServices() {
         let shouldMonitorSources = autoSwitchActive || hudActive
+        let shouldMonitorApplications = autoSwitchActive || hudActive
         setSourceMonitoring(active: shouldMonitorSources)
-        setApplicationMonitoring(active: autoSwitchActive)
-        setFocusMonitoring(active: hudActive)
+        setApplicationMonitoring(active: shouldMonitorApplications)
 
-        if autoSwitchActive,
+        if shouldMonitorApplications,
            let application = applicationMonitor.frontmostApplication {
             handleApplicationActivated(application)
         }
+        setFocusMonitoring(active: hudActive)
         if !hudActive {
             focusedElement = nil
             hudPresenter.dismiss()
+            hudTriggerPolicy.reset(currentSourceID: sourceController.currentSourceID)
         }
     }
 
@@ -320,15 +387,24 @@ final class AutoInputController: ObservableObject {
             hudPresenter.dismiss()
             return
         }
-        showHUDForCurrentFocus()
+        showPendingHUDForCurrentFocus()
     }
 
-    private func showHUDForCurrentFocus() {
+    private func showPendingHUDForCurrentFocus() {
         guard hudActive,
               let focusedElement,
               let sourceID = sourceController.currentSourceID,
-              let source = sources.first(where: { $0.id == sourceID }) else { return }
-        hudPresenter.show(sourceName: source.name, near: focusedElement.frame)
+              let source = sources.first(where: { $0.id == sourceID }),
+              hudTriggerPolicy.consumePresentation()
+        else { return }
+        hudPresenter.show(
+            label: hudLabelResolver.displayLabel(for: source),
+            near: focusedElement.frame,
+            configuration: AutoInputHUDConfiguration(
+                size: store.inputHUDSize,
+                position: store.inputHUDPosition
+            )
+        )
     }
 
     private func refreshAccessibilityPermission(prompt: Bool) {
@@ -347,6 +423,36 @@ final class AutoInputController: ObservableObject {
             stopFocusMonitoring()
         }
         hudPresenter.dismiss()
+        hudTriggerPolicy.reset(currentSourceID: sourceController.currentSourceID)
         onStateChange?()
+    }
+
+    private func reconcilePermissionObservation() {
+        if isStarted && store.isInputHUDEnabled {
+            observeApplicationActivation()
+        } else {
+            removeApplicationActivationObserver()
+        }
+    }
+
+    private func observeApplicationActivation() {
+        guard applicationActivationObserver == nil else { return }
+        applicationActivationObserver = applicationNotificationCenter.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshAccessibilityPermission(prompt: false)
+                self.reconcileActiveServices()
+            }
+        }
+    }
+
+    private func removeApplicationActivationObserver() {
+        guard let applicationActivationObserver else { return }
+        applicationNotificationCenter.removeObserver(applicationActivationObserver)
+        self.applicationActivationObserver = nil
     }
 }

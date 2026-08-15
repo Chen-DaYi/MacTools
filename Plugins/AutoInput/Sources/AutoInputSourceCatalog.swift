@@ -86,7 +86,10 @@ final class CarbonAutoInputSourceCatalog: AutoInputSourceControlling {
 
             let name = stringProperty(source, key: kTISPropertyLocalizedName) ?? id
             nextReferences[id] = source
-            nextSources.append(AutoInputSource(id: id, name: name))
+            nextSources.append(AutoInputSource(
+                id: id,
+                name: name
+            ))
         }
 
         sourceReferences = nextReferences

@@ -51,6 +51,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         applicationMonitor: AutoInputApplicationMonitoring? = nil,
         focusObserver: AutoInputFocusObserving? = nil,
         hudPresenter: InputSourceHUDPresenting? = nil,
+        hudLabelResolver: InputSourceHUDLabelResolving? = nil,
         accessibilityCheck: AutoInputAccessibilityChecking? = nil
     ) {
         let localization = PluginLocalization(bundle: context.resourceBundle)
@@ -61,6 +62,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             applicationMonitor: applicationMonitor ?? WorkspaceAutoInputApplicationMonitor(),
             focusObserver: focusObserver ?? AccessibilityAutoInputFocusObserver(),
             hudPresenter: hudPresenter ?? InputSourceHUDController(),
+            hudLabelResolver: hudLabelResolver ?? StandardInputSourceHUDLabelResolver(),
             accessibilityCheck: accessibilityCheck ?? SystemAutoInputAccessibilityCheck(),
             switchErrorMessage: {
                 localization.string("error.switchFailed", defaultValue: "无法切换输入法")
@@ -109,7 +111,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                 ),
                 description: localization.string(
                     "permission.accessibility.description",
-                    defaultValue: "仅用于在可编辑文本框附近显示当前输入法。"
+                    defaultValue: "仅用于在文本输入区域和终端附近显示当前输入法。"
                 )
             ),
         ]

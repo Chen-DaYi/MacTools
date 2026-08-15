@@ -5,6 +5,27 @@ struct AutoInputSource: Identifiable, Equatable, Sendable {
     let name: String
 }
 
+enum AutoInputHUDSize: String, Codable, CaseIterable, Identifiable, Sendable {
+    case compact
+    case standard
+    case large
+
+    var id: String { rawValue }
+}
+
+enum AutoInputHUDPosition: String, Codable, CaseIterable, Identifiable, Sendable {
+    case automatic
+    case above
+    case below
+
+    var id: String { rawValue }
+}
+
+struct AutoInputHUDConfiguration: Equatable, Sendable {
+    let size: AutoInputHUDSize
+    let position: AutoInputHUDPosition
+}
+
 struct AutoInputApplication: Equatable, Sendable {
     let bundleIdentifier: String
     let displayName: String

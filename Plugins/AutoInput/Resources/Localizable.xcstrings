@@ -212,17 +212,177 @@
     "settings.hud.description" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اعرض مصدر الإدخال الحالي مؤقتًا قرب حقل النص النشط. يتطلب إذن تسهيلات الاستخدام." } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktuelle Eingabequelle kurz neben dem aktiven Textfeld anzeigen. Benötigt Bedienungshilfen." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Briefly show the current input source near the focused text field. Requires Accessibility." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Muestra brevemente la fuente de entrada actual junto al campo de texto activo. Requiere Accesibilidad." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Affiche brièvement la source de saisie près du champ de texte actif. Nécessite Accessibilité." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "フォーカス中のテキストフィールド付近に現在の入力ソースを一時表示します。アクセシビリティが必要です。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포커스된 텍스트 필드 근처에 현재 입력 소스를 잠시 표시합니다. 손쉬운 사용 권한이 필요합니다." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostre brevemente a fonte de entrada atual perto do campo de texto em foco. Requer Acessibilidade." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кратко показывать текущий источник ввода рядом с активным текстовым полем. Требуется Универсальный доступ." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "聚焦可编辑文本框时，在附近短暂显示当前输入法。需要辅助功能权限。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "聚焦可編輯文字欄位時，在附近短暫顯示目前輸入法。需要輔助使用權限。" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اعرض مصدر الإدخال الحالي مؤقتًا قرب منطقة إدخال النص أو الطرفية النشطة. يتطلب إذن تسهيلات الاستخدام." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktuelle Eingabequelle kurz neben dem aktiven Textbereich oder Terminal anzeigen. Benötigt Bedienungshilfen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Briefly show the current input source near the focused text area or terminal. Requires Accessibility." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Muestra brevemente la fuente de entrada actual junto al área de texto o terminal activo. Requiere Accesibilidad." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Affiche brièvement la source de saisie près de la zone de texte ou du terminal actif. Nécessite Accessibilité." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "フォーカス中のテキスト入力領域またはターミナル付近に現在の入力ソースを一時表示します。アクセシビリティが必要です。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포커스된 텍스트 입력 영역 또는 터미널 근처에 현재 입력 소스를 잠시 표시합니다. 손쉬운 사용 권한이 필요합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostre brevemente a fonte de entrada atual perto da área de texto ou terminal em foco. Requer Acessibilidade." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кратко показывать текущий источник ввода рядом с активной областью текста или терминалом. Требуется Универсальный доступ." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "聚焦文本输入区域或终端时，在附近短暂显示当前输入法。需要辅助功能权限。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "聚焦文字輸入區域或終端機時，在附近短暫顯示目前輸入法。需要輔助使用權限。" } }
+      }
+    },
+    "settings.hud.size.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "حجم المؤشر" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "HUD-Größe" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "HUD Size" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tamaño del indicador" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Taille de l’indicateur" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "表示サイズ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표시 크기" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Tamanho do indicador" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размер индикатора" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提示大小" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "提示大小" } }
+      }
+    },
+    "settings.hud.size.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اضبط حجم النص ولوحة المؤشر." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Text- und Panelgröße des HUD anpassen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Adjust the HUD’s text and panel size." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Ajusta el tamaño del texto y del panel." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajustez la taille du texte et du panneau." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "表示のテキストとパネルのサイズを調整します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표시의 텍스트와 패널 크기를 조절합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ajuste o tamanho do texto e do painel." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройте размер текста и панели." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "调整提示的文字和面板大小。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "調整提示的文字與面板大小。" } }
+      }
+    },
+    "settings.hud.size.compact" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مضغوط" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kompakt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Compact" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Compacto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Compact" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コンパクト" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "컴팩트" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Compacto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Компактный" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "紧凑" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "緊湊" } }
+      }
+    },
+    "settings.hud.size.standard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "قياسي" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Standard" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Standard" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Estándar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Standard" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "標準" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표준" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Padrão" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Стандартный" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标准" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "標準" } }
+      }
+    },
+    "settings.hud.size.large" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "كبير" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Groß" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Large" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Grande" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Grand" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "大" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "크게" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Grande" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Большой" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "大" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "大" } }
+      }
+    },
+    "settings.hud.position.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "موضع المؤشر" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "HUD-Position" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "HUD Position" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Posición del indicador" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Position de l’indicateur" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "表示位置" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "표시 위치" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Posição do indicador" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Положение индикатора" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提示位置" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "提示位置" } }
+      }
+    },
+    "settings.hud.position.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اختر ظهور المؤشر أعلى منطقة الإدخال الحالية أو أسفلها." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wählen, ob das HUD bevorzugt über oder unter dem Eingabebereich erscheint." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose whether the HUD prefers appearing above or below the current input area." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Elige si el indicador aparece preferentemente encima o debajo del área de entrada." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisissez si l’indicateur apparaît de préférence au-dessus ou au-dessous de la zone de saisie." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力領域の上または下のどちらに優先して表示するかを選択します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 영역 위 또는 아래 중 우선 표시할 위치를 선택합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Escolha se o indicador aparece preferencialmente acima ou abaixo da área de entrada." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите предпочтительное положение над или под областью ввода." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择提示优先显示在当前输入区域的上方或下方。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇提示優先顯示在目前輸入區域的上方或下方。" } }
+      }
+    },
+    "settings.hud.position.automatic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تلقائي" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Automatisch" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Automatic" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Automático" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Automatique" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "自動" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "자동" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Automático" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Автоматически" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動" } }
+      }
+    },
+    "settings.hud.position.above" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يفضّل الأعلى" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Oben bevorzugen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Prefer Above" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Preferir arriba" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Préférer au-dessus" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "上を優先" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "위쪽 우선" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Preferir acima" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предпочитать сверху" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "优先显示在上方" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "優先顯示在上方" } }
+      }
+    },
+    "settings.hud.position.below" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يفضّل الأسفل" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unten bevorzugen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Prefer Below" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Preferir abajo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Préférer au-dessous" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "下を優先" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "아래쪽 우선" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Preferir abaixo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предпочитать снизу" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "优先显示在下方" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "優先顯示在下方" } }
       }
     },
     "permission.accessibility.title" : {
@@ -244,17 +404,17 @@
     "permission.accessibility.description" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يُستخدم فقط لعرض مصدر الإدخال الحالي قرب حقول النص القابلة للتحرير." } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wird nur verwendet, um die aktuelle Eingabequelle neben bearbeitbaren Textfeldern anzuzeigen." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Used only to show the current input source near editable text fields." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solo se usa para mostrar la fuente de entrada actual junto a campos de texto editables." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Utilisé uniquement pour afficher la source de saisie actuelle près des champs de texte modifiables." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "編集可能なテキストフィールド付近に現在の入力ソースを表示するためにのみ使用します。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "편집 가능한 텍스트 필드 근처에 현재 입력 소스를 표시하는 데만 사용됩니다." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Usado apenas para mostrar a fonte de entrada atual perto de campos de texto editáveis." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Используется только для показа текущего источника ввода рядом с редактируемыми текстовыми полями." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅用于在可编辑文本框附近显示当前输入法。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅用於在可編輯文字欄位附近顯示目前輸入法。" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يُستخدم فقط لعرض مصدر الإدخال الحالي قرب مناطق إدخال النص والطرفيات النشطة." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wird nur verwendet, um die aktuelle Eingabequelle neben aktiven Texteingabebereichen und Terminals anzuzeigen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Used only to show the current input source near focused text input areas and terminals." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solo se usa para mostrar la fuente de entrada actual junto a áreas de texto y terminales activos." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Utilisé uniquement pour afficher la source de saisie actuelle près des zones de texte et terminaux actifs." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "フォーカス中のテキスト入力領域やターミナル付近に現在の入力ソースを表示するためにのみ使用します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포커스된 텍스트 입력 영역과 터미널 근처에 현재 입력 소스를 표시하는 데만 사용됩니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Usado apenas para mostrar a fonte de entrada atual perto de áreas de texto e terminais em foco." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Используется только для показа текущего источника ввода рядом с активными областями ввода текста и терминалами." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅用于在当前文本输入区域和终端附近显示输入法。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅用於在目前文字輸入區域和終端機附近顯示輸入法。" } }
       }
     },
     "permission.accessibility.footnote" : {

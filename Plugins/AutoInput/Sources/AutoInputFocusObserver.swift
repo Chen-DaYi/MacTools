@@ -258,13 +258,27 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             kAXValueAttribute as CFString,
             &isSettable
         )
-        return status != .success || isSettable.boolValue
+        return acceptsFocusedInput(
+            role: role,
+            valueIsSettable: status == .success ? isSettable.boolValue : nil
+        )
     }
 
     static func isEditableRole(_ role: String) -> Bool {
         role == kAXTextFieldRole as String
             || role == kAXTextAreaRole as String
             || role == kAXComboBoxRole as String
+    }
+
+    static func acceptsFocusedInput(role: String, valueIsSettable: Bool?) -> Bool {
+        guard isEditableRole(role) else { return false }
+
+        // Terminal surfaces expose their screen buffer as a focused text area, but intentionally
+        // do not allow Accessibility clients to replace that buffer through AXValue.
+        if role == kAXTextAreaRole as String {
+            return true
+        }
+        return valueIsSettable != false
     }
 
     private static func accessibilityFrame(of element: AXUIElement) -> CGRect? {
