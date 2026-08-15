@@ -602,6 +602,20 @@ final class InputSourceHUDControllerTests: XCTestCase {
         XCTAssertEqual(frame, CGRect(x: 1930, y: 340, width: 240, height: 52))
     }
 
+    func testScreenCenteredHUDUsesTheDisplayContainingTheFocusedField() {
+        let frame = InputSourceHUDController.panelFrame(
+            focusedFrame: CGRect(x: 2100, y: 400, width: 120, height: 24),
+            panelSize: CGSize(width: 200, height: 60),
+            visibleFrames: [
+                CGRect(x: 0, y: 0, width: 1920, height: 1080),
+                CGRect(x: 1920, y: 0, width: 1280, height: 1024),
+            ],
+            position: .screenCenter
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 2460, y: 482, width: 200, height: 60))
+    }
+
     func testHUDSizesScalePredictably() {
         let compact = InputSourceHUDController.panelSize(for: "ABC", size: .compact)
         let standard = InputSourceHUDController.panelSize(for: "ABC", size: .standard)

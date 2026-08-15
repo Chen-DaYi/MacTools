@@ -17,6 +17,7 @@ enum AutoInputHUDPosition: String, Codable, CaseIterable, Identifiable, Sendable
     case automatic
     case above
     case below
+    case screenCenter
 
     var id: String { rawValue }
 }

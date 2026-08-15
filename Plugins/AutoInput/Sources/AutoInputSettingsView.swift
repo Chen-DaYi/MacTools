@@ -132,7 +132,7 @@ struct AutoInputSettingsView: View {
             title: localization.string("settings.hud.position.title", defaultValue: "提示位置"),
             description: localization.string(
                 "settings.hud.position.description",
-                defaultValue: "选择提示优先显示在当前输入区域的上方或下方。"
+                defaultValue: "选择提示显示在当前输入区域附近或所在显示器中央。"
             )
         ) {
             Picker("", selection: Binding(
@@ -303,6 +303,8 @@ struct AutoInputSettingsView: View {
             localization.string("settings.hud.position.above", defaultValue: "优先显示在上方")
         case .below:
             localization.string("settings.hud.position.below", defaultValue: "优先显示在下方")
+        case .screenCenter:
+            localization.string("settings.hud.position.screen-center", defaultValue: "屏幕中央")
         }
     }
 

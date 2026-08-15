@@ -234,6 +234,15 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             return CGRect(origin: focusedFrame.origin, size: panelSize)
         }
 
+        if position == .screenCenter {
+            return CGRect(
+                x: visibleFrame.midX - panelSize.width / 2,
+                y: visibleFrame.midY - panelSize.height / 2,
+                width: panelSize.width,
+                height: panelSize.height
+            ).integral
+        }
+
         let gap: CGFloat = 8
         let minX = visibleFrame.minX + displayMargin
         let maxX = visibleFrame.maxX - panelSize.width - displayMargin
@@ -280,6 +289,8 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         case .above:
             if aboveFits { return aboveY }
             if belowFits { return belowY }
+        case .screenCenter:
+            return min(max(belowY, minY), maxY)
         }
         return min(max(position == .above ? aboveY : belowY, minY), maxY)
     }

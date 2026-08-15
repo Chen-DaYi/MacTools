@@ -324,17 +324,17 @@
     "settings.hud.position.description" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اختر ظهور المؤشر أعلى منطقة الإدخال الحالية أو أسفلها." } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wählen, ob das HUD bevorzugt über oder unter dem Eingabebereich erscheint." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose whether the HUD prefers appearing above or below the current input area." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Elige si el indicador aparece preferentemente encima o debajo del área de entrada." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisissez si l’indicateur apparaît de préférence au-dessus ou au-dessous de la zone de saisie." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力領域の上または下のどちらに優先して表示するかを選択します。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 영역 위 또는 아래 중 우선 표시할 위치를 선택합니다." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Escolha se o indicador aparece preferencialmente acima ou abaixo da área de entrada." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите предпочтительное положение над или под областью ввода." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择提示优先显示在当前输入区域的上方或下方。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇提示優先顯示在目前輸入區域的上方或下方。" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اختر ظهور المؤشر قرب منطقة الإدخال أو في وسط شاشتها." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wählen, ob das HUD nahe am Eingabebereich oder in der Mitte des zugehörigen Bildschirms erscheint." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose whether the HUD appears near the input area or in the center of its display." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Elige si el indicador aparece cerca del área de entrada o en el centro de su pantalla." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisissez si l’indicateur apparaît près de la zone de saisie ou au centre de son écran." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力領域の近くまたはその画面の中央に表示するかを選択します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 영역 근처 또는 해당 화면 중앙에 표시할지 선택합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Escolha se o indicador aparece perto da área de entrada ou no centro da tela correspondente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите, показывать индикатор рядом с областью ввода или по центру её экрана." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择提示显示在当前输入区域附近或所在显示器中央。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇提示顯示在目前輸入區域附近或所在顯示器中央。" } }
       }
     },
     "settings.hud.position.automatic" : {
@@ -383,6 +383,22 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предпочитать снизу" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "优先显示在下方" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "優先顯示在下方" } }
+      }
+    },
+    "settings.hud.position.screen-center" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "وسط الشاشة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bildschirmmitte" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Center of Screen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Centro de la pantalla" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Centre de l’écran" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "画面中央" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "화면 중앙" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Centro da tela" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По центру экрана" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "屏幕中央" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "螢幕中央" } }
       }
     },
     "permission.accessibility.title" : {
