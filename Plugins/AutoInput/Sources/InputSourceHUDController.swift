@@ -283,7 +283,18 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         maxY: CGFloat
     ) -> CGFloat {
         switch position {
-        case .automatic, .below:
+        case .automatic:
+            if belowFits && aboveFits {
+                let spaceBelow = belowY - minY
+                let spaceAbove = maxY - aboveY
+                return spaceBelow >= spaceAbove ? belowY : aboveY
+            }
+            if belowFits { return belowY }
+            if aboveFits { return aboveY }
+            let spaceBelow = belowY - minY
+            let spaceAbove = maxY - aboveY
+            return spaceBelow >= spaceAbove ? belowY : aboveY
+        case .below:
             if belowFits { return belowY }
             if aboveFits { return aboveY }
         case .above:
@@ -398,10 +409,15 @@ private struct InputSourceHUDView: View {
 struct InputSourceHUDPreview: View {
     let title: String
     let size: AutoInputHUDSize
+    let maximumWidth: CGFloat
 
     var body: some View {
         let metrics = InputSourceHUDController.metrics(for: size)
-        let panelSize = InputSourceHUDController.panelSize(for: title, size: size)
+        let panelSize = InputSourceHUDController.panelSize(
+            for: title,
+            size: size,
+            maximumWidth: maximumWidth
+        )
 
         InputSourceHUDView(
             label: InputSourceHUDLabel(title: title, modeIndicator: nil),

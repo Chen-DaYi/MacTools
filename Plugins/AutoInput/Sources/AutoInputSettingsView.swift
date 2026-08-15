@@ -102,16 +102,27 @@ struct AutoInputSettingsView: View {
                 }
                 .labelsHidden()
                 .frame(minWidth: 130, idealWidth: 160, maxWidth: 190)
+                .accessibilityLabel(Text(localization.string(
+                    "settings.hud.size.title",
+                    defaultValue: "提示大小"
+                )))
+                .accessibilityHint(Text(localization.string(
+                    "settings.hud.size.description",
+                    defaultValue: "调整提示的文字和面板大小。"
+                )))
                 .accessibilityIdentifier("auto-input.hud-size")
             }
 
-            HStack {
-                Spacer(minLength: 0)
-                InputSourceHUDPreview(
-                    title: hudPreviewSourceName,
-                    size: store.inputHUDSize
-                )
-                Spacer(minLength: 0)
+            GeometryReader { proxy in
+                HStack {
+                    Spacer(minLength: 0)
+                    InputSourceHUDPreview(
+                        title: hudPreviewSourceName,
+                        size: store.inputHUDSize,
+                        maximumWidth: max(proxy.size.width - 24, 1)
+                    )
+                    Spacer(minLength: 0)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 96)
             .pluginSettingsCardBackground(.recessed)
@@ -148,6 +159,14 @@ struct AutoInputSettingsView: View {
             }
             .labelsHidden()
             .frame(minWidth: 150, idealWidth: 180, maxWidth: 220)
+            .accessibilityLabel(Text(localization.string(
+                "settings.hud.position.title",
+                defaultValue: "提示位置"
+            )))
+            .accessibilityHint(Text(localization.string(
+                "settings.hud.position.description",
+                defaultValue: "选择提示显示在当前输入区域附近或所在显示器中央。"
+            )))
             .accessibilityIdentifier("auto-input.hud-position")
         }
     }
@@ -257,6 +276,8 @@ struct AutoInputSettingsView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .accessibilityLabel(Text(title))
+                .accessibilityHint(Text(description))
         }
         .pluginSettingsListRowPadding(interactive: true)
     }

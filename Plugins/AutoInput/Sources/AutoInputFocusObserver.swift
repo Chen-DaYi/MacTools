@@ -5,6 +5,12 @@ import MacToolsPluginKit
 
 struct AutoInputEditableFocus: Equatable, Sendable {
     let frame: CGRect
+    let applicationProcessIdentifier: pid_t?
+
+    init(frame: CGRect, applicationProcessIdentifier: pid_t? = nil) {
+        self.frame = frame
+        self.applicationProcessIdentifier = applicationProcessIdentifier
+    }
 }
 
 @MainActor
@@ -14,6 +20,7 @@ protocol AutoInputFocusObserving: AnyObject {
 
     func start()
     func stop()
+    func refreshFocusedElement()
 }
 
 @MainActor
@@ -22,6 +29,26 @@ protocol AutoInputAccessibilityChecking: AnyObject {
 
     @discardableResult
     func requestTrust(prompt: Bool) -> Bool
+}
+
+struct AutoInputObservationLifecycle {
+    private(set) var generation = 0
+    private(set) var isRunning = false
+
+    mutating func start() -> Int {
+        generation &+= 1
+        isRunning = true
+        return generation
+    }
+
+    mutating func stop() {
+        isRunning = false
+        generation &+= 1
+    }
+
+    func accepts(_ scheduledGeneration: Int) -> Bool {
+        isRunning && generation == scheduledGeneration
+    }
 }
 
 @MainActor
@@ -52,8 +79,11 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
     private var activationObserver: NSObjectProtocol?
     private var accessibilityObserver: AXObserver?
     private var observedApplication: AXUIElement?
+    private var observedApplicationProcessIdentifier: pid_t?
+    private var observedApplicationBundleIdentifier: String?
     private var callbackContext: CallbackContext?
     private var retainedCallbackPointer: UnsafeMutableRawPointer?
+    private var lifecycle = AutoInputObservationLifecycle()
 
     init(
         workspace: NSWorkspace = .shared,
@@ -67,9 +97,13 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
     func start() {
         guard activationObserver == nil else {
-            inspectFocusedElement()
+            if lifecycle.isRunning {
+                inspectFocusedElement()
+            }
             return
         }
+
+        let generation = lifecycle.start()
 
         activationObserver = notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -81,18 +115,20 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
                 return
             }
             DispatchQueue.main.async { [weak self] in
-                self?.observe(application)
+                guard let self, self.lifecycle.accepts(generation) else { return }
+                self.observe(application, generation: generation)
             }
         }
 
         if let application = workspace.frontmostApplication {
-            observe(application)
+            observe(application, generation: generation)
         } else {
             onEditableFocusChanged?(nil)
         }
     }
 
     func stop() {
+        lifecycle.stop()
         if let activationObserver {
             notificationCenter.removeObserver(activationObserver)
             self.activationObserver = nil
@@ -101,7 +137,13 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         onEditableFocusChanged?(nil)
     }
 
-    private func observe(_ application: NSRunningApplication) {
+    func refreshFocusedElement() {
+        guard lifecycle.isRunning else { return }
+        inspectFocusedElement()
+    }
+
+    private func observe(_ application: NSRunningApplication, generation: Int) {
+        guard lifecycle.accepts(generation) else { return }
         stopObservingApplication()
 
         guard AXIsProcessTrusted() else {
@@ -141,6 +183,8 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
         accessibilityObserver = observer
         observedApplication = applicationElement
+        observedApplicationProcessIdentifier = application.processIdentifier
+        observedApplicationBundleIdentifier = application.bundleIdentifier
         callbackContext = context
         retainedCallbackPointer = retainedPointer
         CFRunLoopAddSource(
@@ -170,6 +214,8 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
         accessibilityObserver = nil
         observedApplication = nil
+        observedApplicationProcessIdentifier = nil
+        observedApplicationBundleIdentifier = nil
         callbackContext = nil
         if let retainedCallbackPointer {
             Unmanaged<CallbackContext>.fromOpaque(retainedCallbackPointer).release()
@@ -204,7 +250,10 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         }
 
         let element = focusedValue as! AXUIElement
-        guard Self.isEditable(element),
+        guard Self.isEditable(
+            element,
+            applicationBundleIdentifier: observedApplicationBundleIdentifier
+        ),
               let accessibilityFrame = Self.accessibilityFrame(of: element) else {
             onEditableFocusChanged?(nil)
             return
@@ -214,7 +263,8 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             frame: Self.appKitFrame(
                 fromAccessibilityFrame: accessibilityFrame,
                 primaryScreenFrame: Self.primaryScreenFrame
-            )
+            ),
+            applicationProcessIdentifier: observedApplicationProcessIdentifier
         ))
     }
 
@@ -245,7 +295,15 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         }
     }
 
-    private static func isEditable(_ element: AXUIElement) -> Bool {
+    private static let terminalBundleIdentifiers: Set<String> = [
+        "com.apple.Terminal",
+        "com.mitchellh.ghostty",
+    ]
+
+    private static func isEditable(
+        _ element: AXUIElement,
+        applicationBundleIdentifier: String?
+    ) -> Bool {
         guard let role = stringAttribute(kAXRoleAttribute, from: element),
               isEditableRole(role),
               boolAttribute(kAXEnabledAttribute, from: element) != false else {
@@ -260,7 +318,8 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         )
         return acceptsFocusedInput(
             role: role,
-            valueIsSettable: status == .success ? isSettable.boolValue : nil
+            valueIsSettable: status == .success ? isSettable.boolValue : nil,
+            applicationBundleIdentifier: applicationBundleIdentifier
         )
     }
 
@@ -270,15 +329,20 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             || role == kAXComboBoxRole as String
     }
 
-    static func acceptsFocusedInput(role: String, valueIsSettable: Bool?) -> Bool {
+    static func acceptsFocusedInput(
+        role: String,
+        valueIsSettable: Bool?,
+        applicationBundleIdentifier: String?
+    ) -> Bool {
         guard isEditableRole(role) else { return false }
+        if valueIsSettable == true { return true }
+        guard valueIsSettable == false else { return false }
 
         // Terminal surfaces expose their screen buffer as a focused text area, but intentionally
-        // do not allow Accessibility clients to replace that buffer through AXValue.
-        if role == kAXTextAreaRole as String {
-            return true
-        }
-        return valueIsSettable != false
+        // do not allow Accessibility clients to replace that buffer through AXValue. Keep this
+        // narrow so read-only text areas in ordinary apps do not trigger the HUD.
+        return role == kAXTextAreaRole as String
+            && applicationBundleIdentifier.map(terminalBundleIdentifiers.contains) == true
     }
 
     private static func accessibilityFrame(of element: AXUIElement) -> CGRect? {
@@ -288,7 +352,59 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
               size.height > 0 else {
             return nil
         }
-        return CGRect(origin: position, size: size)
+        let elementFrame = CGRect(origin: position, size: size)
+        return preferredAccessibilityFrame(
+            elementFrame: elementFrame,
+            selectionFrame: selectedTextBounds(of: element)
+        )
+    }
+
+    static func preferredAccessibilityFrame(
+        elementFrame: CGRect,
+        selectionFrame: CGRect?
+    ) -> CGRect {
+        guard var selectionFrame,
+              selectionFrame.height > 0,
+              selectionFrame.minX.isFinite,
+              selectionFrame.minY.isFinite,
+              selectionFrame.width.isFinite,
+              selectionFrame.height.isFinite,
+              !selectionFrame.isNull else {
+            return elementFrame
+        }
+        selectionFrame.size.width = max(selectionFrame.width, 1)
+        return selectionFrame
+    }
+
+    private static func selectedTextBounds(of element: AXUIElement) -> CGRect? {
+        var rangeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            &rangeValue
+        ) == .success,
+        let rangeValue,
+        CFGetTypeID(rangeValue) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        var boundsValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            kAXBoundsForRangeParameterizedAttribute as CFString,
+            rangeValue,
+            &boundsValue
+        ) == .success,
+        let boundsValue,
+        CFGetTypeID(boundsValue) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        let axBounds = boundsValue as! AXValue
+        guard AXValueGetType(axBounds) == .cgRect else { return nil }
+        var bounds = CGRect.zero
+        guard AXValueGetValue(axBounds, .cgRect, &bounds) else { return nil }
+        return bounds
     }
 
     static func appKitFrame(

@@ -270,6 +270,35 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
     }
 
+    func testSameApplicationAutomaticSelectionPresentsHUDOnce() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        fixture.store.upsertRule(makeRule(bundleID: fixture.app.bundleIdentifier, sourceID: "zh"))
+        fixture.controller.configurationDidChange()
+        fixture.sources.emitChange()
+
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh"])
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
+    }
+
+    func testConfigurationChangeAttemptsAutomaticSelectionOnce() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.controller.start()
+        fixture.sources.selectionError = AutoInputSourceError.selectionFailed(-1)
+        fixture.store.upsertRule(makeRule(bundleID: fixture.app.bundleIdentifier, sourceID: "zh"))
+
+        fixture.controller.configurationDidChange()
+
+        XCTAssertEqual(fixture.sources.selectionAttemptIDs, ["zh"])
+        XCTAssertEqual(fixture.controller.errorMessage, "无法切换输入法")
+    }
+
     func testHUDDoesNotRepeatForFocusChangesInsideSameApplication() {
         let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
         fixture.store.setAutoSwitchEnabled(false)
@@ -305,6 +334,145 @@ final class AutoInputControllerTests: XCTestCase {
         ))
 
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "ABC"])
+    }
+
+    func testHUDFocusDeliveredBeforeMatchingApplicationActivationIsPreserved() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: 101
+        ))
+
+        let nextApplication = AutoInputApplication(
+            bundleIdentifier: "com.example.chat",
+            displayName: "Chat",
+            bundleURL: nil,
+            processIdentifier: 202
+        )
+        let nextFocus = AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: 202
+        )
+        fixture.focusObserver.focus(nextFocus)
+        fixture.applications.activate(nextApplication)
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            nextFocus.frame,
+        ])
+    }
+
+    func testHUDDoesNotPresentStaleFocusAfterChangingApplications() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: 101
+        ))
+
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: 101
+        ))
+        fixture.applications.activate(AutoInputApplication(
+            bundleIdentifier: "com.example.chat",
+            displayName: "Chat",
+            bundleURL: nil,
+            processIdentifier: 202
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+        ])
+    }
+
+    func testSourceChangeRefreshesCaretFrameBeforePresentingHUD() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: 101
+        ))
+
+        let refreshedFocus = AutoInputEditableFocus(
+            frame: CGRect(x: 360, y: 480, width: 1, height: 18),
+            applicationProcessIdentifier: 101
+        )
+        fixture.focusObserver.setCurrentFocusWithoutNotification(refreshedFocus)
+        fixture.sources.currentSourceID = "zh"
+        fixture.sources.emitChange()
+
+        XCTAssertEqual(fixture.focusObserver.refreshCount, 1)
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            refreshedFocus.frame,
+        ])
+    }
+
+    func testReverseFocusActivationOrderingPresentsOnlyAutomaticallySelectedSource() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setInputHUDEnabled(true)
+        let nextApplication = AutoInputApplication(
+            bundleIdentifier: "com.example.chat",
+            displayName: "Chat",
+            bundleURL: nil,
+            processIdentifier: 202
+        )
+        fixture.store.upsertRule(makeRule(
+            bundleID: nextApplication.bundleIdentifier,
+            sourceID: "zh"
+        ))
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: 101
+        ))
+
+        let nextFocus = AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: 202
+        )
+        fixture.focusObserver.focus(nextFocus)
+        fixture.applications.activate(nextApplication)
+
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh"])
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            nextFocus.frame,
+        ])
+
+        fixture.focusObserver.setCurrentFocusWithoutNotification(AutoInputEditableFocus(
+            frame: CGRect(x: 240, y: 520, width: 1, height: 18),
+            applicationProcessIdentifier: 202
+        ))
+        fixture.sources.emitChange()
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
+    }
+
+    func testSettingsVisibilityRefreshesSourcesWhenRuntimeMonitoringIsOff() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.controller.start()
+        XCTAssertEqual(fixture.sources.stopCount, 0)
+
+        fixture.sources.sources = [
+            AutoInputSource(id: "en", name: "ABC"),
+            AutoInputSource(id: "zh", name: "中文"),
+            AutoInputSource(id: "jp", name: "日本語"),
+        ]
+        fixture.controller.settingsVisibilityDidChange(true)
+
+        XCTAssertEqual(fixture.sources.refreshCount, 1)
+        XCTAssertEqual(fixture.controller.sources.map(\.id), ["en", "zh", "jp"])
     }
 
     func testHUDPermissionDenialDoesNotDisableAutomaticSwitching() {
@@ -355,6 +523,21 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.applications.stopCount, 0)
     }
 
+    func testAccessibilityRevocationStopsHUDServicesButKeepsPermissionRecoveryMonitor() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+
+        fixture.accessibility.isTrusted = false
+        fixture.focusObserver.invalidateAccessibility()
+
+        XCTAssertFalse(fixture.controller.isAccessibilityGranted)
+        XCTAssertEqual(fixture.sources.stopCount, 1)
+        XCTAssertEqual(fixture.focusObserver.stopCount, 1)
+        XCTAssertEqual(fixture.applications.stopCount, 0)
+    }
+
     func testApplicationActivationRechecksHUDPermissionWithoutPrompting() async {
         let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: false)
         fixture.store.setInputHUDEnabled(true)
@@ -370,6 +553,30 @@ final class AutoInputControllerTests: XCTestCase {
 
         XCTAssertTrue(fixture.controller.isAccessibilityGranted)
         XCTAssertEqual(fixture.accessibility.requestCount, 0)
+        XCTAssertEqual(fixture.focusObserver.startCount, 1)
+    }
+
+    func testExternalApplicationActivationRecoversNewlyGrantedHUDPermission() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: false)
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+
+        XCTAssertEqual(fixture.applications.startCount, 1)
+        XCTAssertEqual(fixture.sources.startCount, 0)
+        XCTAssertEqual(fixture.focusObserver.startCount, 0)
+
+        fixture.accessibility.isTrusted = true
+        fixture.applications.activate(AutoInputApplication(
+            bundleIdentifier: "com.example.chat",
+            displayName: "Chat",
+            bundleURL: nil,
+            processIdentifier: 202
+        ))
+
+        XCTAssertTrue(fixture.controller.isAccessibilityGranted)
+        XCTAssertEqual(fixture.accessibility.requestCount, 0)
+        XCTAssertEqual(fixture.sources.startCount, 1)
         XCTAssertEqual(fixture.focusObserver.startCount, 1)
     }
 
@@ -401,6 +608,33 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.focusObserver.stopCount, 1)
     }
 
+    func testNoninteractiveLifecycleSuspendsPermissionRecoveryObservation() async {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+
+        fixture.controller.setInteractive(false)
+        fixture.accessibility.isTrusted = false
+        fixture.applicationNotificationCenter.post(
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        await Task.yield()
+
+        XCTAssertTrue(fixture.controller.isAccessibilityGranted)
+
+        fixture.controller.setInteractive(true)
+        fixture.applicationNotificationCenter.post(
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        await Task.yield()
+
+        XCTAssertFalse(fixture.controller.isAccessibilityGranted)
+        XCTAssertEqual(fixture.focusObserver.startCount, 2)
+        XCTAssertEqual(fixture.focusObserver.stopCount, 2)
+    }
+
     private func makeFixture(
         currentSourceID: String,
         accessibilityGranted: Bool = false,
@@ -418,7 +652,8 @@ final class AutoInputControllerTests: XCTestCase {
         let app = AutoInputApplication(
             bundleIdentifier: "com.example.editor",
             displayName: "Editor",
-            bundleURL: URL(fileURLWithPath: "/Applications/Editor.app")
+            bundleURL: URL(fileURLWithPath: "/Applications/Editor.app"),
+            processIdentifier: 101
         )
         let applications = FakeAutoInputApplicationMonitor(frontmostApplication: app)
         let focusObserver = FakeAutoInputFocusObserver()
@@ -460,6 +695,7 @@ final class AutoInputApplicationMonitorTests: XCTestCase {
         monitor.onApplicationActivated = { application in
             XCTAssertTrue(Thread.isMainThread)
             XCTAssertEqual(application.bundleIdentifier, NSRunningApplication.current.bundleIdentifier)
+            XCTAssertEqual(application.processIdentifier, NSRunningApplication.current.processIdentifier)
             activated.fulfill()
         }
         monitor.start()
@@ -489,16 +725,57 @@ final class AutoInputFocusObserverTests: XCTestCase {
     func testFocusedTerminalTextAreaDoesNotRequireSettableValue() {
         XCTAssertTrue(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
             role: kAXTextAreaRole as String,
-            valueIsSettable: false
+            valueIsSettable: false,
+            applicationBundleIdentifier: "com.apple.Terminal"
+        ))
+        XCTAssertTrue(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
+            role: kAXTextAreaRole as String,
+            valueIsSettable: false,
+            applicationBundleIdentifier: "com.mitchellh.ghostty"
+        ))
+        XCTAssertFalse(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
+            role: kAXTextAreaRole as String,
+            valueIsSettable: false,
+            applicationBundleIdentifier: "com.example.viewer"
         ))
         XCTAssertFalse(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
             role: kAXTextFieldRole as String,
-            valueIsSettable: false
+            valueIsSettable: false,
+            applicationBundleIdentifier: "com.apple.Terminal"
         ))
         XCTAssertTrue(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
             role: kAXTextFieldRole as String,
-            valueIsSettable: true
+            valueIsSettable: true,
+            applicationBundleIdentifier: "com.example.editor"
         ))
+        XCTAssertFalse(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
+            role: kAXTextAreaRole as String,
+            valueIsSettable: nil,
+            applicationBundleIdentifier: "com.apple.Terminal"
+        ))
+        XCTAssertFalse(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
+            role: kAXTextFieldRole as String,
+            valueIsSettable: nil,
+            applicationBundleIdentifier: "com.example.editor"
+        ))
+        XCTAssertFalse(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
+            role: kAXComboBoxRole as String,
+            valueIsSettable: nil,
+            applicationBundleIdentifier: "com.example.editor"
+        ))
+    }
+
+    func testStoppedObservationLifecycleRejectsQueuedGeneration() {
+        var lifecycle = AutoInputObservationLifecycle()
+        let firstGeneration = lifecycle.start()
+        XCTAssertTrue(lifecycle.accepts(firstGeneration))
+
+        lifecycle.stop()
+        XCTAssertFalse(lifecycle.accepts(firstGeneration))
+
+        let nextGeneration = lifecycle.start()
+        XCTAssertFalse(lifecycle.accepts(firstGeneration))
+        XCTAssertTrue(lifecycle.accepts(nextGeneration))
     }
 
     func testAccessibilityCoordinatesConvertToAppKitCoordinates() {
@@ -508,6 +785,31 @@ final class AutoInputFocusObserverTests: XCTestCase {
         )
 
         XCTAssertEqual(converted, CGRect(x: 120, y: 976, width: 300, height: 24))
+    }
+
+    func testSelectedTextBoundsArePreferredForHUDPlacement() {
+        let elementFrame = CGRect(x: 100, y: 200, width: 500, height: 240)
+        let caretFrame = CGRect(x: 180, y: 250, width: 0, height: 18)
+
+        XCTAssertEqual(
+            AccessibilityAutoInputFocusObserver.preferredAccessibilityFrame(
+                elementFrame: elementFrame,
+                selectionFrame: caretFrame
+            ),
+            CGRect(x: 180, y: 250, width: 1, height: 18)
+        )
+    }
+
+    func testInvalidSelectedTextBoundsFallBackToElementFrame() {
+        let elementFrame = CGRect(x: 100, y: 200, width: 500, height: 240)
+
+        XCTAssertEqual(
+            AccessibilityAutoInputFocusObserver.preferredAccessibilityFrame(
+                elementFrame: elementFrame,
+                selectionFrame: CGRect(x: CGFloat.infinity, y: 250, width: 1, height: 18)
+            ),
+            elementFrame
+        )
     }
 }
 
@@ -596,10 +898,22 @@ final class InputSourceHUDControllerTests: XCTestCase {
             visibleFrames: [
                 CGRect(x: 0, y: 0, width: 1920, height: 1080),
                 CGRect(x: 1920, y: 0, width: 1280, height: 1024),
-            ]
+            ],
+            position: .below
         )
 
         XCTAssertEqual(frame, CGRect(x: 1930, y: 340, width: 240, height: 52))
+    }
+
+    func testAutomaticPlacementChoosesSideWithMoreAvailableSpace() {
+        let frame = InputSourceHUDController.panelFrame(
+            focusedFrame: CGRect(x: 300, y: 300, width: 200, height: 24),
+            panelSize: CGSize(width: 160, height: 52),
+            visibleFrames: [CGRect(x: 0, y: 0, width: 1000, height: 800)],
+            position: .automatic
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 320, y: 332, width: 160, height: 52))
     }
 
     func testScreenCenteredHUDUsesTheDisplayContainingTheFocusedField() {
@@ -661,6 +975,24 @@ final class InputSourceHUDControllerTests: XCTestCase {
 
 @MainActor
 final class AutoInputPluginPanelTests: XCTestCase {
+    func testSettingsVisibilityRefreshesTheInputSourceCatalog() throws {
+        let storage = AutoInputMemoryStorage()
+        AutoInputStore(storage: storage).setAutoSwitchEnabled(false)
+        let sources = FakeAutoInputSourceController(sources: [], currentSourceID: nil)
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
+            sourceController: sources,
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        let settingsPage = try XCTUnwrap(plugin.settingsPage)
+
+        settingsPage.visibilityHandler?(false)
+        XCTAssertEqual(sources.refreshCount, 0)
+
+        settingsPage.visibilityHandler?(true)
+        XCTAssertEqual(sources.refreshCount, 1)
+    }
+
     func testPanelReflectsDefaultsRulesAndPause() {
         let storage = AutoInputMemoryStorage()
         let sourceController = FakeAutoInputSourceController(sources: [], currentSourceID: nil)
@@ -838,8 +1170,10 @@ private final class FakeAutoInputSourceController: AutoInputSourceControlling {
     var sources: [AutoInputSource]
     var currentSourceID: String?
     var selectedIDs: [String] = []
+    var selectionAttemptIDs: [String] = []
     var startCount = 0
     var stopCount = 0
+    var refreshCount = 0
     var selectionError: Error?
 
     init(sources: [AutoInputSource], currentSourceID: String?) {
@@ -849,9 +1183,10 @@ private final class FakeAutoInputSourceController: AutoInputSourceControlling {
 
     func start() { startCount += 1 }
     func stop() { stopCount += 1 }
-    func refresh() {}
+    func refresh() { refreshCount += 1 }
 
     func selectSource(id: String) throws {
+        selectionAttemptIDs.append(id)
         if let selectionError { throw selectionError }
         selectedIDs.append(id)
         currentSourceID = id
@@ -888,16 +1223,29 @@ private final class FakeAutoInputFocusObserver: AutoInputFocusObserving {
     var onAccessibilityInvalidated: (() -> Void)?
     var startCount = 0
     var stopCount = 0
+    var refreshCount = 0
+    private(set) var currentFocus: AutoInputEditableFocus?
 
     func start() { startCount += 1 }
 
     func stop() {
         stopCount += 1
+        currentFocus = nil
         onEditableFocusChanged?(nil)
     }
 
+    func refreshFocusedElement() {
+        refreshCount += 1
+        onEditableFocusChanged?(currentFocus)
+    }
+
     func focus(_ focus: AutoInputEditableFocus?) {
+        currentFocus = focus
         onEditableFocusChanged?(focus)
+    }
+
+    func setCurrentFocusWithoutNotification(_ focus: AutoInputEditableFocus?) {
+        currentFocus = focus
     }
 
     func invalidateAccessibility() {

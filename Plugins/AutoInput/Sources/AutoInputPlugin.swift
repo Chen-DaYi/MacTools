@@ -182,6 +182,9 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                 .disabled(controller.sources.isEmpty)
             }
         ])
+        .onVisibilityChange { [weak self] isVisible in
+            self?.controller.settingsVisibilityDidChange(isVisible)
+        }
     }
 
     var actionDefinitions: [ActionDefinition] {

@@ -59,7 +59,8 @@ final class WorkspaceAutoInputApplicationMonitor: AutoInputApplicationMonitoring
         return AutoInputApplication(
             bundleIdentifier: bundleIdentifier,
             displayName: application.localizedName ?? bundleIdentifier,
-            bundleURL: application.bundleURL
+            bundleURL: application.bundleURL,
+            processIdentifier: application.processIdentifier
         )
     }
 }

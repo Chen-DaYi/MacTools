@@ -141,6 +141,7 @@ final class AutoInputController: ObservableObject {
     func setInteractive(_ value: Bool) {
         guard isInteractive != value else { return }
         isInteractive = value
+        reconcilePermissionObservation()
         if value {
             reconcileActiveServices()
         } else {
@@ -158,14 +159,7 @@ final class AutoInputController: ObservableObject {
         refreshAccessibilityPermission(prompt: promptForAccessibility && store.isInputHUDEnabled)
         reconcilePermissionObservation()
         reconcileActiveServices()
-
-        guard autoSwitchActive,
-              let application = applicationMonitor.frontmostApplication
-        else {
-            onStateChange?()
-            return
-        }
-        handleApplicationActivated(application)
+        onStateChange?()
     }
 
     func refresh() {
@@ -174,6 +168,13 @@ final class AutoInputController: ObservableObject {
         sourceController.refresh()
         sources = sourceController.sources
         reconcileActiveServices()
+        onStateChange?()
+    }
+
+    func settingsVisibilityDidChange(_ isVisible: Bool) {
+        guard isVisible else { return }
+        sourceController.refresh()
+        sources = sourceController.sources
         onStateChange?()
     }
 
@@ -210,7 +211,7 @@ final class AutoInputController: ObservableObject {
             return
         }
         if sourceChanged {
-            showPendingHUDForCurrentFocus()
+            refreshPendingHUDFromAccessibility()
         }
         onStateChange?()
     }
@@ -219,7 +220,15 @@ final class AutoInputController: ObservableObject {
         let applicationChanged = hudTriggerPolicy.applicationDidActivate(
             application.bundleIdentifier
         )
-        if applicationChanged && hudActive {
+        if hudPermissionObservationActive && !isAccessibilityGranted {
+            let wasGranted = isAccessibilityGranted
+            refreshAccessibilityPermission(prompt: false)
+            if !wasGranted && isAccessibilityGranted {
+                setSourceMonitoring(active: autoSwitchActive || hudActive)
+                setFocusMonitoring(active: hudActive)
+            }
+        }
+        if applicationChanged && hudActive && !focusBelongs(to: application) {
             focusedElement = nil
             hudPresenter.dismiss()
         }
@@ -230,6 +239,12 @@ final class AutoInputController: ObservableObject {
         currentApplication = application
         operationGeneration += 1
         let generation = operationGeneration
+        var shouldRefreshHUD = applicationChanged
+        defer {
+            if shouldRefreshHUD {
+                refreshPendingHUDFromAccessibility()
+            }
+        }
 
         guard autoSwitchActive else { return }
         guard let target = target(for: application.bundleIdentifier) else {
@@ -247,6 +262,8 @@ final class AutoInputController: ObservableObject {
                   currentApplication?.bundleIdentifier == application.bundleIdentifier
             else { return }
 
+            shouldRefreshHUD = hudTriggerPolicy.inputSourceDidChange(to: target.source.id)
+                || shouldRefreshHUD
             errorMessage = nil
             if store.remembersLastInputSource {
                 store.remember(inputSourceID: target.source.id, for: application.bundleIdentifier)
@@ -299,9 +316,13 @@ final class AutoInputController: ObservableObject {
         isStarted && isInteractive && store.isInputHUDEnabled && isAccessibilityGranted
     }
 
+    private var hudPermissionObservationActive: Bool {
+        isStarted && isInteractive && store.isInputHUDEnabled
+    }
+
     private func reconcileActiveServices() {
         let shouldMonitorSources = autoSwitchActive || hudActive
-        let shouldMonitorApplications = autoSwitchActive || hudActive
+        let shouldMonitorApplications = autoSwitchActive || hudPermissionObservationActive
         setSourceMonitoring(active: shouldMonitorSources)
         setApplicationMonitoring(active: shouldMonitorApplications)
 
@@ -393,6 +414,7 @@ final class AutoInputController: ObservableObject {
     private func showPendingHUDForCurrentFocus() {
         guard hudActive,
               let focusedElement,
+              focusBelongsToCurrentApplication(focusedElement),
               let sourceID = sourceController.currentSourceID,
               let source = sources.first(where: { $0.id == sourceID }),
               hudTriggerPolicy.consumePresentation()
@@ -407,6 +429,29 @@ final class AutoInputController: ObservableObject {
         )
     }
 
+    private func refreshPendingHUDFromAccessibility() {
+        guard hudActive, isFocusMonitoringActive else { return }
+        focusObserver.refreshFocusedElement()
+    }
+
+    private func focusBelongs(to application: AutoInputApplication) -> Bool {
+        guard let focusedElement else { return false }
+        guard let focusProcessIdentifier = focusedElement.applicationProcessIdentifier,
+              let applicationProcessIdentifier = application.processIdentifier else {
+            return true
+        }
+        return focusProcessIdentifier == applicationProcessIdentifier
+    }
+
+    private func focusBelongsToCurrentApplication(_ focus: AutoInputEditableFocus) -> Bool {
+        guard let currentApplication else { return false }
+        guard let focusProcessIdentifier = focus.applicationProcessIdentifier,
+              let applicationProcessIdentifier = currentApplication.processIdentifier else {
+            return true
+        }
+        return focusProcessIdentifier == applicationProcessIdentifier
+    }
+
     private func refreshAccessibilityPermission(prompt: Bool) {
         let previous = isAccessibilityGranted
         isAccessibilityGranted = prompt
@@ -419,16 +464,14 @@ final class AutoInputController: ObservableObject {
 
     private func handleAccessibilityInvalidated() {
         isAccessibilityGranted = false
-        if isFocusMonitoringActive {
-            stopFocusMonitoring()
-        }
         hudPresenter.dismiss()
         hudTriggerPolicy.reset(currentSourceID: sourceController.currentSourceID)
+        reconcileActiveServices()
         onStateChange?()
     }
 
     private func reconcilePermissionObservation() {
-        if isStarted && store.isInputHUDEnabled {
+        if hudPermissionObservationActive {
             observeApplicationActivation()
         } else {
             removeApplicationActivationObserver()

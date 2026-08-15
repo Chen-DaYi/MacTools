@@ -31,6 +31,19 @@ struct AutoInputApplication: Equatable, Sendable {
     let bundleIdentifier: String
     let displayName: String
     let bundleURL: URL?
+    let processIdentifier: pid_t?
+
+    init(
+        bundleIdentifier: String,
+        displayName: String,
+        bundleURL: URL?,
+        processIdentifier: pid_t? = nil
+    ) {
+        self.bundleIdentifier = bundleIdentifier
+        self.displayName = displayName
+        self.bundleURL = bundleURL
+        self.processIdentifier = processIdentifier
+    }
 }
 
 struct AutoInputRule: Codable, Identifiable, Equatable {
