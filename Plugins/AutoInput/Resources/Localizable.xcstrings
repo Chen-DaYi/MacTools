@@ -193,6 +193,86 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切換行為" } }
       }
     },
+    "settings.hud.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مؤشر مصدر الإدخال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequellenanzeige" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input Source HUD" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Indicador de fuente de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Indicateur de source de saisie" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソース表示" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스 표시" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Indicador de fonte de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Индикатор источника ввода" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入法提示" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入法提示" } }
+      }
+    },
+    "settings.hud.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اعرض مصدر الإدخال الحالي مؤقتًا قرب حقل النص النشط. يتطلب إذن تسهيلات الاستخدام." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktuelle Eingabequelle kurz neben dem aktiven Textfeld anzeigen. Benötigt Bedienungshilfen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Briefly show the current input source near the focused text field. Requires Accessibility." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Muestra brevemente la fuente de entrada actual junto al campo de texto activo. Requiere Accesibilidad." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Affiche brièvement la source de saisie près du champ de texte actif. Nécessite Accessibilité." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "フォーカス中のテキストフィールド付近に現在の入力ソースを一時表示します。アクセシビリティが必要です。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포커스된 텍스트 필드 근처에 현재 입력 소스를 잠시 표시합니다. 손쉬운 사용 권한이 필요합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostre brevemente a fonte de entrada atual perto do campo de texto em foco. Requer Acessibilidade." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кратко показывать текущий источник ввода рядом с активным текстовым полем. Требуется Универсальный доступ." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "聚焦可编辑文本框时，在附近短暂显示当前输入法。需要辅助功能权限。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "聚焦可編輯文字欄位時，在附近短暫顯示目前輸入法。需要輔助使用權限。" } }
+      }
+    },
+    "permission.accessibility.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تسهيلات الاستخدام" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bedienungshilfen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Accesibilidad" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Accessibilité" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アクセシビリティ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "손쉬운 사용" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Acessibilidade" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Универсальный доступ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "辅助功能" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輔助使用" } }
+      }
+    },
+    "permission.accessibility.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يُستخدم فقط لعرض مصدر الإدخال الحالي قرب حقول النص القابلة للتحرير." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wird nur verwendet, um die aktuelle Eingabequelle neben bearbeitbaren Textfeldern anzuzeigen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Used only to show the current input source near editable text fields." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solo se usa para mostrar la fuente de entrada actual junto a campos de texto editables." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Utilisé uniquement pour afficher la source de saisie actuelle près des champs de texte modifiables." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "編集可能なテキストフィールド付近に現在の入力ソースを表示するためにのみ使用します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "편집 가능한 텍스트 필드 근처에 현재 입력 소스를 표시하는 데만 사용됩니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Usado apenas para mostrar a fonte de entrada atual perto de campos de texto editáveis." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Используется только для показа текущего источника ввода рядом с редактируемыми текстовыми полями." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅用于在可编辑文本框附近显示当前输入法。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅用於在可編輯文字欄位附近顯示目前輸入法。" } }
+      }
+    },
+    "permission.accessibility.footnote" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اسمح لـ MacTools من إعدادات النظام ← الخصوصية والأمان ← تسهيلات الاستخدام. لا يتأثر التبديل التلقائي." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "MacTools unter Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen erlauben. Der automatische Wechsel bleibt verfügbar." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow MacTools in System Settings → Privacy & Security → Accessibility. Automatic switching remains available." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Permite MacTools en Ajustes del Sistema → Privacidad y seguridad → Accesibilidad. El cambio automático sigue disponible." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Autorisez MacTools dans Réglages Système → Confidentialité et sécurité → Accessibilité. Le changement automatique reste disponible." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "システム設定 → プライバシーとセキュリティ → アクセシビリティでMacToolsを許可してください。自動切り替えは引き続き利用できます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 MacTools를 허용하세요. 자동 전환은 계속 사용할 수 있습니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Permita o MacTools em Ajustes do Sistema → Privacidade e Segurança → Acessibilidade. A troca automática continua disponível." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разрешите MacTools в Системных настройках → Конфиденциальность и безопасность → Универсальный доступ. Автопереключение останется доступным." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在系统设置 → 隐私与安全性 → 辅助功能中允许 MacTools。自动切换输入法不受影响。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "在系統設定 → 隱私權與安全性 → 輔助使用中允許 MacTools。自動切換輸入法不受影響。" } }
+      }
+    },
     "settings.memory.title" : {
       "extractionState" : "manual",
       "localizations" : {

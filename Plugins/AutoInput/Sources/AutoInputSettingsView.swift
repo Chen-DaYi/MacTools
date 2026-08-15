@@ -13,6 +13,7 @@ struct AutoInputSettingsView: View {
     @ObservedObject var controller: AutoInputController
     let localization: PluginLocalization
     let onChange: () -> Void
+    let onHUDChange: (Bool) -> Void
     let section: SectionKind
 
     @ViewBuilder
@@ -26,21 +27,42 @@ struct AutoInputSettingsView: View {
     }
 
     private var behaviorSection: some View {
-        settingToggle(
-            icon: "arrow.counterclockwise",
-            title: localization.string("settings.memory.title", defaultValue: "自动记忆"),
-            description: localization.string(
-                "settings.memory.description",
-                defaultValue: "切回应用时恢复上次使用的输入法。"
-            ),
-            isOn: Binding(
-                get: { store.remembersLastInputSource },
-                set: { value in
-                    store.setRemembersLastInputSource(value)
-                    onChange()
-                }
+        VStack(spacing: 0) {
+            settingToggle(
+                icon: "arrow.counterclockwise",
+                title: localization.string("settings.memory.title", defaultValue: "自动记忆"),
+                description: localization.string(
+                    "settings.memory.description",
+                    defaultValue: "切回应用时恢复上次使用的输入法。"
+                ),
+                isOn: Binding(
+                    get: { store.remembersLastInputSource },
+                    set: { value in
+                        store.setRemembersLastInputSource(value)
+                        onChange()
+                    }
+                )
             )
-        )
+            PluginSettingsListDivider()
+            settingToggle(
+                icon: "text.cursor",
+                title: localization.string("settings.hud.title", defaultValue: "输入法提示"),
+                description: localization.string(
+                    "settings.hud.description",
+                    defaultValue: "聚焦可编辑文本框时，在附近短暂显示当前输入法。需要辅助功能权限。"
+                ),
+                isOn: Binding(
+                    get: { store.isInputHUDEnabled },
+                    set: { value in
+                        guard store.setInputHUDEnabled(value) == .committed else {
+                            onChange()
+                            return
+                        }
+                        onHUDChange(value)
+                    }
+                )
+            )
+        }
     }
 
     @ViewBuilder

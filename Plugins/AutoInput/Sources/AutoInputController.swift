@@ -5,12 +5,16 @@ import OSLog
 final class AutoInputController: ObservableObject {
     @Published private(set) var sources: [AutoInputSource] = []
     @Published private(set) var errorMessage: String?
+    @Published private(set) var isAccessibilityGranted: Bool
 
     var onStateChange: (() -> Void)?
 
     private let store: AutoInputStore
     private let sourceController: AutoInputSourceControlling
     private let applicationMonitor: AutoInputApplicationMonitoring
+    private let focusObserver: AutoInputFocusObserving
+    private let hudPresenter: InputSourceHUDPresenting
+    private let accessibilityCheck: AutoInputAccessibilityChecking
     private let switchErrorMessage: () -> String
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -18,8 +22,12 @@ final class AutoInputController: ObservableObject {
     )
 
     private var currentApplication: AutoInputApplication?
+    private var focusedElement: AutoInputEditableFocus?
     private var isStarted = false
     private var isInteractive = true
+    private var isSourceMonitoringActive = false
+    private var isApplicationMonitoringActive = false
+    private var isFocusMonitoringActive = false
     private var operationGeneration = 0
 
     var currentSourceID: String? {
@@ -30,13 +38,20 @@ final class AutoInputController: ObservableObject {
         store: AutoInputStore,
         sourceController: AutoInputSourceControlling,
         applicationMonitor: AutoInputApplicationMonitoring,
+        focusObserver: AutoInputFocusObserving = AccessibilityAutoInputFocusObserver(),
+        hudPresenter: InputSourceHUDPresenting = InputSourceHUDController(),
+        accessibilityCheck: AutoInputAccessibilityChecking = SystemAutoInputAccessibilityCheck(),
         switchErrorMessage: @escaping () -> String = { "无法切换输入法" }
     ) {
         self.store = store
         self.sourceController = sourceController
         self.applicationMonitor = applicationMonitor
+        self.focusObserver = focusObserver
+        self.hudPresenter = hudPresenter
+        self.accessibilityCheck = accessibilityCheck
         self.switchErrorMessage = switchErrorMessage
         self.sources = sourceController.sources
+        self.isAccessibilityGranted = accessibilityCheck.isTrusted
     }
 
     func start() {
@@ -48,23 +63,27 @@ final class AutoInputController: ObservableObject {
         applicationMonitor.onApplicationActivated = { [weak self] application in
             self?.handleApplicationActivated(application)
         }
-        sourceController.start()
-        applicationMonitor.start()
-        sourceController.refresh()
-        sources = sourceController.sources
-
-        if let application = applicationMonitor.frontmostApplication {
-            handleApplicationActivated(application)
+        focusObserver.onEditableFocusChanged = { [weak self] focus in
+            self?.handleEditableFocusChanged(focus)
         }
+        focusObserver.onAccessibilityInvalidated = { [weak self] in
+            self?.handleAccessibilityInvalidated()
+        }
+        refreshAccessibilityPermission(prompt: false)
+        reconcileActiveServices()
     }
 
     func stop() {
         guard isStarted else { return }
         operationGeneration += 1
-        sourceController.stop()
-        applicationMonitor.stop()
+        stopFocusMonitoring()
+        stopApplicationMonitoring()
+        stopSourceMonitoring()
+        hudPresenter.dismiss()
         sourceController.onSourcesChanged = nil
         applicationMonitor.onApplicationActivated = nil
+        focusObserver.onEditableFocusChanged = nil
+        focusObserver.onAccessibilityInvalidated = nil
         isStarted = false
     }
 
@@ -72,25 +91,23 @@ final class AutoInputController: ObservableObject {
         guard isInteractive != value else { return }
         isInteractive = value
         if value {
-            sourceController.refresh()
-            sources = sourceController.sources
-            if let application = applicationMonitor.frontmostApplication {
-                handleApplicationActivated(application)
-            }
+            reconcileActiveServices()
         } else {
             operationGeneration += 1
+            reconcileActiveServices()
         }
     }
 
-    func configurationDidChange() {
-        if !store.isEnabled {
+    func configurationDidChange(promptForAccessibility: Bool = false) {
+        if !store.isAutoSwitchEnabled {
             operationGeneration += 1
             errorMessage = nil
-            onStateChange?()
-            return
         }
 
-        guard isStarted, isInteractive,
+        refreshAccessibilityPermission(prompt: promptForAccessibility && store.isInputHUDEnabled)
+        reconcileActiveServices()
+
+        guard autoSwitchActive,
               let application = applicationMonitor.frontmostApplication
         else {
             onStateChange?()
@@ -100,9 +117,19 @@ final class AutoInputController: ObservableObject {
     }
 
     func refresh() {
+        refreshAccessibilityPermission(prompt: false)
         sourceController.refresh()
         sources = sourceController.sources
+        reconcileActiveServices()
         onStateChange?()
+    }
+
+    @discardableResult
+    func requestAccessibilityPermission() -> Bool {
+        refreshAccessibilityPermission(prompt: true)
+        reconcileActiveServices()
+        onStateChange?()
+        return isAccessibilityGranted
     }
 
     func target(for bundleIdentifier: String) -> AutoInputTarget? {
@@ -122,6 +149,11 @@ final class AutoInputController: ObservableObject {
     private func handleSourcesChanged() {
         sources = sourceController.sources
         rememberCurrentSourceIfNeeded()
+        if store.isInputHUDEnabled && !accessibilityCheck.isTrusted {
+            handleAccessibilityInvalidated()
+            return
+        }
+        showHUDForCurrentFocus()
         onStateChange?()
     }
 
@@ -134,7 +166,7 @@ final class AutoInputController: ObservableObject {
         operationGeneration += 1
         let generation = operationGeneration
 
-        guard isStarted, isInteractive, store.isEnabled else { return }
+        guard autoSwitchActive else { return }
         guard let target = target(for: application.bundleIdentifier) else {
             clearErrorIfNeeded()
             return
@@ -164,7 +196,7 @@ final class AutoInputController: ObservableObject {
     }
 
     private func rememberCurrentSourceIfNeeded() {
-        guard isStarted, isInteractive, store.isEnabled, store.remembersLastInputSource,
+        guard autoSwitchActive, store.remembersLastInputSource,
               let bundleIdentifier = currentApplication?.bundleIdentifier
                 ?? applicationMonitor.frontmostApplication?.bundleIdentifier,
               let sourceID = validCurrentSourceID
@@ -174,7 +206,7 @@ final class AutoInputController: ObservableObject {
     }
 
     private func rememberCurrentSourceIfNeeded(for bundleIdentifier: String) {
-        guard isStarted, isInteractive, store.isEnabled, store.remembersLastInputSource,
+        guard autoSwitchActive, store.remembersLastInputSource,
               let sourceID = validCurrentSourceID
         else { return }
 
@@ -191,6 +223,130 @@ final class AutoInputController: ObservableObject {
     private func clearErrorIfNeeded() {
         guard errorMessage != nil else { return }
         errorMessage = nil
+        onStateChange?()
+    }
+
+    private var autoSwitchActive: Bool {
+        isStarted && isInteractive && store.isAutoSwitchEnabled
+    }
+
+    private var hudActive: Bool {
+        isStarted && isInteractive && store.isInputHUDEnabled && isAccessibilityGranted
+    }
+
+    private func reconcileActiveServices() {
+        let shouldMonitorSources = autoSwitchActive || hudActive
+        setSourceMonitoring(active: shouldMonitorSources)
+        setApplicationMonitoring(active: autoSwitchActive)
+        setFocusMonitoring(active: hudActive)
+
+        if autoSwitchActive,
+           let application = applicationMonitor.frontmostApplication {
+            handleApplicationActivated(application)
+        }
+        if !hudActive {
+            focusedElement = nil
+            hudPresenter.dismiss()
+        }
+    }
+
+    private func setSourceMonitoring(active: Bool) {
+        guard active != isSourceMonitoringActive else { return }
+        isSourceMonitoringActive = active
+        if active {
+            sourceController.start()
+            sourceController.refresh()
+            sources = sourceController.sources
+        } else {
+            sourceController.stop()
+        }
+    }
+
+    private func setApplicationMonitoring(active: Bool) {
+        guard active != isApplicationMonitoringActive else { return }
+        isApplicationMonitoringActive = active
+        if active {
+            applicationMonitor.start()
+        } else {
+            applicationMonitor.stop()
+            currentApplication = nil
+        }
+    }
+
+    private func setFocusMonitoring(active: Bool) {
+        guard active != isFocusMonitoringActive else { return }
+        if active {
+            isFocusMonitoringActive = true
+            focusObserver.start()
+        } else {
+            stopFocusMonitoring()
+        }
+    }
+
+    private func stopSourceMonitoring() {
+        guard isSourceMonitoringActive else { return }
+        sourceController.stop()
+        isSourceMonitoringActive = false
+    }
+
+    private func stopApplicationMonitoring() {
+        guard isApplicationMonitoringActive else { return }
+        applicationMonitor.stop()
+        isApplicationMonitoringActive = false
+        currentApplication = nil
+    }
+
+    private func stopFocusMonitoring() {
+        guard isFocusMonitoringActive else { return }
+        focusObserver.stop()
+        isFocusMonitoringActive = false
+        focusedElement = nil
+        hudPresenter.dismiss()
+    }
+
+    private func handleEditableFocusChanged(_ focus: AutoInputEditableFocus?) {
+        guard hudActive else {
+            focusedElement = nil
+            hudPresenter.dismiss()
+            return
+        }
+        guard accessibilityCheck.isTrusted else {
+            handleAccessibilityInvalidated()
+            return
+        }
+
+        focusedElement = focus
+        guard focus != nil else {
+            hudPresenter.dismiss()
+            return
+        }
+        showHUDForCurrentFocus()
+    }
+
+    private func showHUDForCurrentFocus() {
+        guard hudActive,
+              let focusedElement,
+              let sourceID = sourceController.currentSourceID,
+              let source = sources.first(where: { $0.id == sourceID }) else { return }
+        hudPresenter.show(sourceName: source.name, near: focusedElement.frame)
+    }
+
+    private func refreshAccessibilityPermission(prompt: Bool) {
+        let previous = isAccessibilityGranted
+        isAccessibilityGranted = prompt
+            ? accessibilityCheck.requestTrust(prompt: true)
+            : accessibilityCheck.isTrusted
+        if previous != isAccessibilityGranted {
+            onStateChange?()
+        }
+    }
+
+    private func handleAccessibilityInvalidated() {
+        isAccessibilityGranted = false
+        if isFocusMonitoringActive {
+            stopFocusMonitoring()
+        }
+        hudPresenter.dismiss()
         onStateChange?()
     }
 }

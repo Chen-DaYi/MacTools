@@ -32,6 +32,28 @@ class InstallDebugAppTests(unittest.TestCase):
             stderr=subprocess.DEVNULL,
         )
 
+    def start_signed_sleep_app(
+        self,
+        app_path: pathlib.Path,
+    ) -> subprocess.Popen[bytes]:
+        # An executable whose path is inside an incomplete `.app` is assessed as
+        # an application by macOS even when the executable itself is signed. Build
+        # and sign the complete fixture bundle so the CLI test cannot leave a
+        # Gatekeeper "damaged app" dialog behind.
+        self.make_app(app_path, "running")
+        executable_name = "MacTools Test"
+        executable = app_path / "Contents/MacOS" / executable_name
+        subprocess.run(
+            ["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app_path)],
+            check=True,
+            capture_output=True,
+        )
+        return subprocess.Popen(
+            [str(executable), "30"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
     def make_app(
         self,
         path: pathlib.Path,
@@ -152,9 +174,10 @@ class InstallDebugAppTests(unittest.TestCase):
                 root / "Applications/MacTools Test.app/Contents/MacOS/MacTools Test"
             )
             decoy_executable = root / "decoy/MacTools Test"
-            installed_executable.parent.mkdir(parents=True)
             decoy_executable.parent.mkdir(parents=True)
-            installed_process = self.start_signed_sleep_at_path(installed_executable)
+            installed_process = self.start_signed_sleep_app(
+                root / "Applications/MacTools Test.app"
+            )
             decoy_process = self.start_signed_sleep_at_path(decoy_executable)
             installed_waiter = threading.Thread(target=installed_process.wait, daemon=True)
             installed_waiter.start()
