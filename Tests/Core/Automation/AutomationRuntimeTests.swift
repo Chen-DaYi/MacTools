@@ -295,6 +295,42 @@ final class AutomationRuntimeTests: XCTestCase {
         XCTAssertTrue(fixture.starter.starts.isEmpty)
     }
 
+    func testNetworkProviderRunsForNetworkConditionWithoutBecomingRuleTrigger() throws {
+        let fixture = try makeFixture()
+        let schedule = try XCTUnwrap(fixture.providers[.schedule])
+        let network = try XCTUnwrap(fixture.providers[.network])
+        let power = try XCTUnwrap(fixture.providers[.power])
+        let rule = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .schedule(ScheduleAutomationTrigger()),
+                conditions: [
+                    .network(NetworkAutomationCondition(status: .available, interface: .wifi)),
+                    .power(PowerAutomationCondition(source: .adapter)),
+                ]
+            )
+        ).get()
+
+        fixture.runtime.start()
+
+        XCTAssertEqual(schedule.startCount, 1)
+        XCTAssertEqual(schedule.refreshedRules.map(\.id), [rule.id])
+        XCTAssertEqual(network.startCount, 1)
+        XCTAssertTrue(network.refreshedRules.isEmpty)
+        XCTAssertEqual(power.startCount, 0)
+
+        network.emit(.network(status: .available, interface: .wifi, date: fixture.date))
+        XCTAssertTrue(fixture.starter.starts.isEmpty)
+
+        var disabled = rule
+        disabled.isEnabled = false
+        _ = try fixture.ruleStore.upsert(disabled).get()
+        fixture.runtime.refreshProviders()
+
+        XCTAssertEqual(schedule.stopCount, 1)
+        XCTAssertEqual(network.stopCount, 1)
+    }
+
     func testRefreshBeforeStartDoesNotActivateTriggerProviders() throws {
         let fixture = try makeFixture()
         let network = try XCTUnwrap(fixture.providers[.network])

@@ -170,6 +170,15 @@ enum AutomationCondition: Codable, Equatable, Hashable, Sendable, Identifiable {
         case .network: "network"
         }
     }
+
+    var liveStateProviderDependencies: Set<AutomationTriggerKind> {
+        switch self {
+        case .network:
+            [.network]
+        case .frontmostApplication, .power, .connectedDisplay, .timeRange:
+            []
+        }
+    }
 }
 
 struct AutomationRule: Codable, Equatable, Sendable, Identifiable {

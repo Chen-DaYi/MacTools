@@ -94,9 +94,16 @@ final class AutomationRuntime {
     func refreshProviders() {
         guard isStarted else { return }
         let rules = ruleStore.rules().filter(\.isEnabled)
+        let requiredProviderKinds = rules.reduce(into: Set<AutomationTriggerKind>()) {
+            requiredKinds, rule in
+            requiredKinds.insert(rule.trigger.kind)
+            for condition in rule.conditions {
+                requiredKinds.formUnion(condition.liveStateProviderDependencies)
+            }
+        }
         providers.forEach { provider in
-            let matchingRules = rules.filter { $0.trigger.kind == provider.kind }
-            if matchingRules.isEmpty {
+            let triggerRules = rules.filter { $0.trigger.kind == provider.kind }
+            if !requiredProviderKinds.contains(provider.kind) {
                 if activeProviderKinds.remove(provider.kind) != nil {
                     provider.stop()
                 }
@@ -107,7 +114,7 @@ final class AutomationRuntime {
                     self?.receive(event)
                 }
             }
-            provider.refresh(rules: matchingRules)
+            provider.refresh(rules: triggerRules)
         }
     }
 
