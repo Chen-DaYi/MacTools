@@ -43,6 +43,12 @@ final class MacToolsSearchTests: XCTestCase {
             $0.kind == .command && $0.title == AppShortcutAction.toggleDashboard.title
         })
         XCTAssertFalse(index.items.contains {
+            $0.kind == .command && $0.title == AppShortcutAction.openCommandPalette.title
+        })
+        XCTAssertFalse(index.items.contains {
+            $0.kind == .command && $0.title == AppShortcutAction.openSettings.title
+        })
+        XCTAssertFalse(index.items.contains {
             $0.id == "app-command.open-command-palette"
         })
         XCTAssertFalse(index.items.contains {
@@ -54,6 +60,47 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertTrue(index.items.contains {
             $0.id == "general-setting.preferencesBackup" && $0.kind == .setting
         })
+    }
+
+    func testCommandResultsCarryCanonicalActionReferences() throws {
+        let plugin = SearchableTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let result = try XCTUnwrap(
+            MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
+                $0.title == "让显示器休眠"
+            }
+        )
+
+        guard case let .executeAction(reference) = result.action else {
+            return XCTFail("Expected the shared action executor route")
+        }
+        XCTAssertEqual(reference.key, ActionKey(providerID: "searchable", actionID: "sleep"))
+        XCTAssertNotNil(try? host.actionRegistry.registeredAction(for: reference).get())
+        XCTAssertEqual(
+            host.actionShortcutCatalogItems.first(where: { $0.reference == reference })?.status,
+            .unassigned
+        )
+    }
+
+    func testMacToolsSearchActionExecutesThroughPresentationRouting() async throws {
+        let host = makePluginHostForTests(plugins: [])
+        var requests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { requests.append($0) }
+        let result = try XCTUnwrap(
+            MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
+                $0.title == AppShortcutAction.toggleDashboard.title
+            }
+        )
+        guard case let .executeAction(reference) = result.action else {
+            return XCTFail("Expected a canonical action")
+        }
+
+        let outcome = await host.actionExecutor.execute(
+            ActionInvocation(reference: reference, source: .unifiedSearch, mode: .foreground)
+        )
+
+        XCTAssertEqual(outcome, .completed(.succeeded()))
+        XCTAssertEqual(requests, [.toggleDashboard])
     }
 
     func testExcludedAppShortcutsDoNotLeakIntoSearchKeywords() {
@@ -324,12 +371,29 @@ final class MacToolsSearchTests: XCTestCase {
             [
                 "navigation.dashboard",
                 "navigation.feature-panel",
+                "navigation.actions-and-shortcuts",
+                "navigation.automation",
                 "navigation.marketplace",
                 "navigation.general",
                 "navigation.about"
             ]
         )
         XCTAssertTrue(results.allSatisfy { $0.kind == .navigation })
+    }
+
+    func testFeatureNavigationUsesRuntimeLocalizedTitles() {
+        let index = MacToolsSearchIndexBuilder.build(
+            pluginHost: makePluginHostForTests(plugins: [])
+        )
+
+        XCTAssertEqual(
+            index.results(matching: FeatureL10n.string("操作与快捷键")).first?.id,
+            "navigation.actions-and-shortcuts"
+        )
+        XCTAssertEqual(
+            index.results(matching: FeatureL10n.string("自动化")).first?.id,
+            "navigation.automation"
+        )
     }
 
     func testPresentationOrderMatchesVisibleGroupsAndQuickSelectionNumbers() {
@@ -356,6 +420,84 @@ final class MacToolsSearchTests: XCTestCase {
                 in: ordered
             )
         )
+    }
+
+    func testSearchIndexUsesUniqueStableIdentifiers() {
+        let index = MacToolsSearchIndexBuilder.build(
+            pluginHost: makePluginHostForTests(plugins: [SearchableTestPlugin()])
+        )
+
+        XCTAssertEqual(Set(index.items.map(\.id)).count, index.items.count)
+    }
+
+    func testUnifiedSearchFieldLeavesTabForInlineControlNavigation() {
+        XCTAssertNil(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertTab(_:)),
+                hasMarkedText: false
+            )
+        )
+        XCTAssertNil(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertBacktab(_:)),
+                hasMarkedText: false
+            )
+        )
+        XCTAssertEqual(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertNewline(_:)),
+                hasMarkedText: false,
+                modifierFlags: .command
+            ),
+            .openOwner
+        )
+        XCTAssertEqual(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)),
+                hasMarkedText: false
+            ),
+            .openOwner
+        )
+        XCTAssertTrue(UnifiedSearchTextField.isOpenOwnerKeyEquivalent(
+            keyCode: 36,
+            modifierFlags: .command
+        ))
+        XCTAssertTrue(UnifiedSearchTextField.isOpenOwnerKeyEquivalent(
+            keyCode: 76,
+            modifierFlags: [.command, .shift]
+        ))
+        XCTAssertFalse(UnifiedSearchTextField.isOpenOwnerKeyEquivalent(
+            keyCode: 36,
+            modifierFlags: []
+        ))
+        XCTAssertNil(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertTab(_:)),
+                hasMarkedText: true
+            )
+        )
+    }
+
+    func testUnifiedSearchShowsCommandAccessoriesOnlyForSelectedActionRows() {
+        let action = MacToolsSearchAction.executeAction(
+            ActionReference(key: ActionKey(providerID: "sidecar", actionID: "connect"))
+        )
+        let navigation = MacToolsSearchAction.navigate(destination: .general, target: nil)
+
+        XCTAssertTrue(UnifiedSearchResultRowLayout.showsInlineActions(
+            for: action,
+            isSelected: true
+        ))
+        XCTAssertFalse(UnifiedSearchResultRowLayout.showsInlineActions(
+            for: action,
+            isSelected: false
+        ))
+        XCTAssertFalse(UnifiedSearchResultRowLayout.showsInlineActions(
+            for: navigation,
+            isSelected: true
+        ))
+        XCTAssertEqual(UnifiedSearchResultRowLayout.quickSelectionColumnWidth, 32)
+        XCTAssertEqual(UnifiedSearchResultRowLayout.primaryActionColumnWidth, 56)
     }
 
     func testPluginHostPerformsOnlyDeclaredCommands() {
@@ -457,7 +599,7 @@ final class MacToolsSearchTests: XCTestCase {
         )
         let result = try XCTUnwrap(
             MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
-                $0.id == "plugin.com.example.future"
+                $0.id == "plugin.marketplace.com.example.future"
             }
         )
 

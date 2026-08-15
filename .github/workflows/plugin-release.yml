@@ -91,8 +91,13 @@ jobs:
           )"
           if [[ "$PLUGIN_KIT_VERSION" == "2" ]]; then
             PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/catalog.json"
+            PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.1.6"
+          elif [[ "$PLUGIN_KIT_VERSION" == "4" ]]; then
+            PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v4/host-1.2/catalog.json"
+            PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.2.0"
           else
             PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v${PLUGIN_KIT_VERSION}/catalog.json"
+            PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.1.6"
           fi
           {
             echo "TAG=$TAG"
@@ -104,6 +109,7 @@ jobs:
             echo "PLUGIN_PRERELEASE=$PRERELEASE"
             echo "PLUGIN_KIT_VERSION=$PLUGIN_KIT_VERSION"
             echo "PLUGIN_CATALOG_RELATIVE_PATH=$PLUGIN_CATALOG_RELATIVE_PATH"
+            echo "PLUGIN_CATALOG_MINIMUM_HOST_VERSION=$PLUGIN_CATALOG_MINIMUM_HOST_VERSION"
             echo "SIGNED_PLUGIN_CATALOG_PATH=$PLUGIN_CATALOG_RELATIVE_PATH"
           } >> "$GITHUB_ENV"
 
@@ -113,6 +119,9 @@ jobs:
           git fetch --force --tags origin +refs/heads/main:refs/remotes/origin/main
           if git show "origin/main:${PLUGIN_CATALOG_RELATIVE_PATH}" > "$PLUGIN_PREVIOUS_CATALOG_PATH" 2>/dev/null; then
             echo "Using ${PLUGIN_CATALOG_RELATIVE_PATH} from origin/main as the previous production catalog."
+          elif [[ "$PLUGIN_KIT_VERSION" == "4" ]] && \
+               git show origin/main:docs/plugins/v4/catalog.json > "$PLUGIN_PREVIOUS_CATALOG_PATH" 2>/dev/null; then
+            echo "Using the immutable legacy v4 catalog as the host-1.2 release baseline."
           elif PREVIOUS_VERSIONED_CATALOG="$(git ls-tree -r --name-only origin/main docs/plugins | \
                python3 -c 'import re,sys; current=int(sys.argv[1]); paths=[path.strip() for path in sys.stdin if re.fullmatch(r"docs/plugins/v\d+/catalog\.json", path.strip())]; candidates=[(int(re.search(r"/v(\d+)/", path).group(1)), path) for path in paths if int(re.search(r"/v(\d+)/", path).group(1)) < current]; print(max(candidates)[1] if candidates else "")' \
                "$PLUGIN_KIT_VERSION")" && \
@@ -318,6 +327,7 @@ jobs:
             --assets-dir "$PLUGIN_ASSETS_DIR"
             --base-url "$PLUGIN_ASSET_BASE_URL"
             --catalog-output "$PLUGIN_CATALOG_DELTA_PATH"
+            --minimum-host-version "$PLUGIN_CATALOG_MINIMUM_HOST_VERSION"
             --sign-identity "$SIGNING_IDENTITY"
             --destination "generic/platform=macOS"
             --xcodebuild "$PWD/scripts/xcodebuild-filtered.sh"
@@ -339,6 +349,7 @@ jobs:
             --updates "$PLUGIN_CATALOG_DELTA_PATH" \
             --plan "$PLUGIN_RELEASE_PLAN_PATH" \
             --plugin-kit-version "$PLUGIN_KIT_VERSION" \
+            --minimum-host-version "$PLUGIN_CATALOG_MINIMUM_HOST_VERSION" \
             --output "$PLUGIN_CATALOG_PATH"
 
           scripts/plugins/sign-plugin-catalog.sh \

@@ -1,7 +1,9 @@
 import CoreGraphics
 import XCTest
+import MacToolsPluginKit
 @testable import DisplayResolutionPlugin
 
+@MainActor
 final class DisplayResolutionPluginTests: XCTestCase {
     func testParseDisplayIDAcceptsOnlyExpectedPrefix() {
         XCTAssertEqual(DisplayResolutionPlugin.parseDisplayID(from: "display.1"), 1)
@@ -70,6 +72,97 @@ final class DisplayResolutionPluginTests: XCTestCase {
         XCTAssertEqual(DisplayResolutionController.sortModes(modes).map(\.modeId), [81, 82, 80, 83])
     }
 
+    func testCanonicalResolutionActionUsesStableDisplayAndModeProperties() async throws {
+        let display = DisplayInfo(
+            id: 42,
+            name: "Studio Display",
+            isBuiltin: false,
+            isMain: true,
+            vendorNumber: 1,
+            modelNumber: 2,
+            serialNumber: 3
+        )
+        let mode = makeMode(modeId: 9, width: 2560, height: 1440)
+        let controller = MockDisplayResolutionController(display: display, modes: [mode])
+        let plugin = DisplayResolutionPlugin(controller: controller)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+        XCTAssertTrue(try XCTUnwrap(plugin.actionDefinitions.first).capabilities.contains(
+            .changesDisplayConfiguration
+        ))
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(controller.appliedDisplayIDs, [42])
+        XCTAssertEqual(controller.appliedModes.map(\.modeId), [9])
+    }
+
+    func testStaleResolutionActionBecomesUnavailable() throws {
+        let display = DisplayInfo(
+            id: 42,
+            name: "Built-in Display",
+            isBuiltin: true,
+            isMain: true,
+            vendorNumber: nil,
+            modelNumber: nil,
+            serialNumber: nil
+        )
+        let controller = MockDisplayResolutionController(
+            display: display,
+            modes: [makeMode(modeId: 9, width: 2560, height: 1440)]
+        )
+        let plugin = DisplayResolutionPlugin(controller: controller)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        controller.modes = []
+        plugin.refresh()
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+    }
+
+    func testIdenticalExternalDisplaysResolveToTheSelectedLocalIdentifier() async throws {
+        let first = DisplayInfo(
+            id: 42,
+            name: "Identical Display",
+            isBuiltin: false,
+            isMain: true,
+            vendorNumber: 1,
+            modelNumber: 2,
+            serialNumber: nil
+        )
+        let second = DisplayInfo(
+            id: 43,
+            name: "Identical Display",
+            isBuiltin: false,
+            isMain: false,
+            vendorNumber: 1,
+            modelNumber: 2,
+            serialNumber: nil
+        )
+        let controller = MockDisplayResolutionController(
+            displays: [first, second],
+            modes: [makeMode(modeId: 9, width: 2560, height: 1440)]
+        )
+        let plugin = DisplayResolutionPlugin(
+            controller: controller,
+            displayIdentifier: { "local-display-\($0.id)" }
+        )
+        let secondReference = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.parameters["display"] == .string("local-display-43")
+        })?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: secondReference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(controller.appliedDisplayIDs, [43])
+    }
+
     private func makeMode(
         modeId: Int32,
         width: Int,
@@ -94,5 +187,40 @@ final class DisplayResolutionPluginTests: XCTestCase {
             isDefault: isDefault,
             isCurrent: isCurrent
         )
+    }
+}
+
+@MainActor
+private final class MockDisplayResolutionController: DisplayResolutionControlling {
+    let displays: [DisplayInfo]
+    var modes: [DisplayResolutionInfo]
+    private(set) var appliedDisplayIDs: [CGDirectDisplayID] = []
+    private(set) var appliedModes: [DisplayResolutionInfo] = []
+
+    init(display: DisplayInfo, modes: [DisplayResolutionInfo]) {
+        self.displays = [display]
+        self.modes = modes
+    }
+
+    init(displays: [DisplayInfo], modes: [DisplayResolutionInfo]) {
+        self.displays = displays
+        self.modes = modes
+    }
+
+    func listConnectedDisplays() -> [DisplayInfo] {
+        displays
+    }
+
+    func listAvailableResolutions(for displayID: CGDirectDisplayID) -> [DisplayResolutionInfo] {
+        modes
+    }
+
+    func applyResolution(
+        _ info: DisplayResolutionInfo,
+        for displayID: CGDirectDisplayID
+    ) -> Result<Void, DisplayResolutionError> {
+        appliedDisplayIDs.append(displayID)
+        appliedModes.append(info)
+        return .success(())
     }
 }

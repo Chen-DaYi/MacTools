@@ -18,6 +18,7 @@ Source of truth: yes
 - MacTools demande l’autorisation Accessibilité si elle manque.
 - Le curseur est retenu quelques points avant les bords inférieurs exposés des écrans qui n’affichent pas le Dock.
 - L’utilisateur désactive le commutateur pour restaurer le comportement macOS.
+- L’utilisateur peut aussi ajouter les actions bascule, activation et désactivation à Action Grid ou à un workflow ; les actions déterministes prennent en charge les Run Links.
 
 ## Règles métier
 
@@ -31,6 +32,7 @@ Source of truth: yes
 |---|---|---|---|
 | 2026-08-10 | Portée minimale, sans sélection d’écran, raccourci ni démarrage automatique | Reproduire le comportement de verrouillage demandé sans extension produit | Tous les écrans sont protégés au bord inférieur après activation explicite |
 | 2026-08-10 | Nom « Dock Lock » | Évite de reprendre la marque et l’identité visuelle de DockLock | Plugin `dock-lock` |
+| 2026-08-12 | Actions canoniques partagées | La grille, les workflows et les Run Links doivent réutiliser la même mutation et les mêmes contrôles de permission | Une bascule avec état plus des actions déterministes activer/désactiver |
 
 ## Plan
 
@@ -44,6 +46,7 @@ Source of truth: yes
 - [x] F001 — Définir le comportement du curseur — files: `docs/features/dock-lock.md` — status: done
 - [x] F002 — Créer le plugin — files: `Plugins/DockLock/` — status: done
 - [x] F003 — Ajouter la documentation utilisateur et le fragment de changelog — files: `README.md`, `changes/unreleased/` — status: done
+- [x] F004 — Publier les actions canoniques pour les surfaces partagées — files: `Plugins/DockLock/`, `docs/plugins/action-provider-coverage.md` — status: done
 
 ## Journal impl Codex
 

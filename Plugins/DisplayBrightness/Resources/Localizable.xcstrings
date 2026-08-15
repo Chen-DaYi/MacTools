@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "error.adjustTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "انتهت مهلة ضبط السطوع." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Helligkeitsanpassung hat das Zeitlimit überschritten." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Brightness adjustment timed out." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Se agotó el tiempo para ajustar el brillo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Le réglage de la luminosité a expiré." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "明るさの調整がタイムアウトしました。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "밝기 조절 시간이 초과되었습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "O ajuste do brilho excedeu o tempo limite." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Истекло время ожидания изменения яркости." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "亮度调节超时。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "亮度調整逾時。" } }
+      }
+    },
+    "action.unavailable.noDisplays": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لم يتم اكتشاف أي شاشات يمكن ضبط سطوعها." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Es wurden keine Displays mit einstellbarer Helligkeit erkannt." } },
+        "en": { "stringUnit": { "state": "translated", "value": "No displays with adjustable brightness were detected." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se detectaron pantallas con brillo ajustable." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun écran à luminosité réglable n’a été détecté." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "明るさを調整できるディスプレイが検出されませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "밝기를 조절할 수 있는 디스플레이가 감지되지 않았습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Nenhuma tela com brilho ajustável foi detectada." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Дисплеи с регулируемой яркостью не обнаружены." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未检测到可调节亮度的显示器。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "未偵測到可調整亮度的顯示器。" } }
+      }
+    },
     "metadata.title": {
       "extractionState": "manual",
       "localizations": {

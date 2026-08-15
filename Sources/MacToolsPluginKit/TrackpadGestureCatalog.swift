@@ -12,9 +12,27 @@ public enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Hashab
     case threeFingerTap, fourFingerTap, fiveFingerTap
     case threeFingerLongTouch, fourFingerLongTouch, fiveFingerLongTouch
     case threeFingerDoubleTap, fourFingerDoubleTap, fiveFingerDoubleTap
+    case twoFingerClick, threeFingerClick
 
     public var id: String { rawValue }
-    public static let configurableCases = allCases
+    public static let configurableCases: [TrackpadGesture] = [
+        .tipTapLeftOneFixed,
+        .tipTapRightOneFixed,
+        .tipTapLeftTwoFixed,
+        .tipTapMiddleTwoFixed,
+        .tipTapRightTwoFixed,
+        .threeFingerTap,
+        .fourFingerTap,
+        .fiveFingerTap,
+        .threeFingerDoubleTap,
+        .fourFingerDoubleTap,
+        .fiveFingerDoubleTap,
+        .twoFingerClick,
+        .threeFingerClick,
+        .threeFingerLongTouch,
+        .fourFingerLongTouch,
+        .fiveFingerLongTouch,
+    ]
 
     /// Human-readable fallback for settings pages that own their own localization bundle.
     public var displayTitle: String {
@@ -33,6 +51,8 @@ public enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Hashab
         case .threeFingerDoubleTap: "Three-finger double tap"
         case .fourFingerDoubleTap: "Four-finger double tap"
         case .fiveFingerDoubleTap: "Five-finger double tap"
+        case .twoFingerClick: "Two-finger click"
+        case .threeFingerClick: "Three-finger click"
         }
     }
 
@@ -55,6 +75,9 @@ public enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Hashab
     }
     public var doubleFingerTapCount: Int? {
         switch self { case .threeFingerDoubleTap: 3; case .fourFingerDoubleTap: 4; case .fiveFingerDoubleTap: 5; default: nil }
+    }
+    public var physicalClickFingerCount: Int? {
+        switch self { case .twoFingerClick: 2; case .threeFingerClick: 3; default: nil }
     }
     public static func fingerTap(count: Int) -> TrackpadGesture {
         switch count { case 4: .fourFingerTap; case 5: .fiveFingerTap; default: .threeFingerTap }

@@ -237,3 +237,32 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     }
     #endif
 }
+
+/// Keeps one-shot automation events from observing an incomplete action registry
+/// while installed dynamic plugins are still loading or updating.
+@MainActor
+final class AutomationStartupCoordinator {
+    private let startAutomaticRules: () -> Void
+    private(set) var hasStarted = false
+    private(set) var isPreparing = false
+
+    init(startAutomaticRules: @escaping () -> Void) {
+        self.startAutomaticRules = startAutomaticRules
+    }
+
+    func actionRegistryDidBecomeReady() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        startAutomaticRules()
+    }
+
+    func startAfterActionRegistryPreparation(
+        _ prepare: @MainActor () async -> Void
+    ) async {
+        guard !hasStarted, !isPreparing else { return }
+        isPreparing = true
+        await prepare()
+        isPreparing = false
+        actionRegistryDidBecomeReady()
+    }
+}

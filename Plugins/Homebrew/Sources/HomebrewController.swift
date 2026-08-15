@@ -26,6 +26,11 @@ public final class HomebrewController: ObservableObject {
     
     let runner: any HomebrewCommandRunning
     private let localization: PluginLocalization
+    private var scanTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
+    private var commandTask: Task<Void, Never>?
+    private var busyOperationID: UUID?
+    private var searchOperationID: UUID?
     
     public init(
         runner: any HomebrewCommandRunning = HomebrewCommandRunner(),
@@ -130,22 +135,33 @@ public final class HomebrewController: ObservableObject {
         currentOperationName = localization.string("operation.scanAll", defaultValue: "正在扫描包与更新...")
         clearLogs()
         appendLog(localization.string("log.scan.started", defaultValue: "[System] 开始扫描 Homebrew 状态..."))
-        
-        Task {
+        let operationID = UUID()
+        busyOperationID = operationID
+        scanTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                finishBusyOperation(id: operationID)
+            }
             do {
+                try Task.checkCancellation()
                 // 1. Load active Taps
                 try await loadTaps()
-                
+                try Task.checkCancellation()
+
                 // 2. Load installed packages (fast list first)
                 try await loadInstalledPackagesFast()
-                
+                try Task.checkCancellation()
+
                 // 3. Load outdated packages
                 try await loadOutdatedPackages()
-                
+                try Task.checkCancellation()
+
                 // 4. Load full package details in background (desc, homepage, etc.)
                 try await loadPackageDetails()
-                
+                try Task.checkCancellation()
+
                 appendLog(localization.string("log.scan.completed", defaultValue: "[System] 扫描完成。"))
+            } catch is CancellationError {
             } catch {
                 appendLog(localization.format(
                     "log.scan.failed",
@@ -153,10 +169,6 @@ public final class HomebrewController: ObservableObject {
                     error.localizedDescription
                 ), isError: true)
             }
-            
-            isBusy = false
-            currentOperationName = ""
-            onStateChange?()
         }
     }
     
@@ -173,6 +185,7 @@ public final class HomebrewController: ObservableObject {
             },
             onError: { _ in }
         )
+        try Task.checkCancellation()
         
         let rawOutput = outputLines.joined()
         let tapNames = rawOutput.components(separatedBy: .newlines)
@@ -194,6 +207,7 @@ public final class HomebrewController: ObservableObject {
             onOutput: { formulaOutput += $0 },
             onError: { _ in }
         )
+        try Task.checkCancellation()
         
         var caskOutput = ""
         _ = try await tempRunner.run(
@@ -202,6 +216,7 @@ public final class HomebrewController: ObservableObject {
             onOutput: { caskOutput += $0 },
             onError: { _ in }
         )
+        try Task.checkCancellation()
         
         var tempPackages: [BrewPackage] = []
         
@@ -256,6 +271,7 @@ public final class HomebrewController: ObservableObject {
             onOutput: { jsonOutput += $0 },
             onError: { _ in }
         )
+        try Task.checkCancellation()
         
         guard let data = jsonOutput.data(using: .utf8) else { return }
         
@@ -455,8 +471,13 @@ public final class HomebrewController: ObservableObject {
         searchQuery = trimmed
         isSearching = true
         searchResults.removeAll()
-        
-        Task {
+        let operationID = UUID()
+        searchOperationID = operationID
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                finishSearchOperation(id: operationID)
+            }
             do {
                 let tempRunner = self.runner
                 
@@ -468,6 +489,7 @@ public final class HomebrewController: ObservableObject {
                     onOutput: { formulaOutput += $0 },
                     onError: { _ in }
                 )
+                try Task.checkCancellation()
                 
                 // Search casks
                 var caskOutput = ""
@@ -477,6 +499,7 @@ public final class HomebrewController: ObservableObject {
                     onOutput: { caskOutput += $0 },
                     onError: { _ in }
                 )
+                try Task.checkCancellation()
                 
                 var results: [BrewPackage] = []
                 
@@ -516,8 +539,6 @@ public final class HomebrewController: ObservableObject {
                 
                 self.searchResults = results.sorted { $0.name.lowercased() < $1.name.lowercased() }
             } catch {}
-            
-            isSearching = false
         }
     }
     
@@ -632,55 +653,117 @@ public final class HomebrewController: ObservableObject {
         completion: @escaping @MainActor (Bool) -> Void
     ) {
         guard isBrewAvailable, !isBusy else { return }
+        let operationID = prepareCommand(name: name, args: args)
+
+        commandTask = Task { [weak self] in
+            guard let self else { return }
+            let success = await executePreparedCommand(args: args)
+            let wasCancelled = Task.isCancelled
+            finishBusyOperation(id: operationID)
+            guard !wasCancelled else { return }
+            completion(success)
+        }
+    }
+
+    func runMaintenanceAction(name: String, args: [String]) async -> Bool {
+        guard isBrewAvailable, !isBusy else { return false }
+        let operationID = prepareCommand(name: name, args: args)
+        let success = await executePreparedCommand(args: args)
+        finishBusyOperation(id: operationID)
+        return success
+    }
+
+    private func prepareCommand(name: String, args: [String]) -> UUID {
+        let operationID = UUID()
+        busyOperationID = operationID
         isBusy = true
         currentOperationName = name
         clearLogs()
         appendLog("[Command] brew \(args.joined(separator: " "))")
-        
-        Task { [self] in
-            let success: Bool
-            do {
-                let status = try await runner.run(
-                    executable: brewPath,
-                    arguments: args,
-                    onOutput: { [weak self] text in
-                        self?.appendLog(text)
-                    },
-                    onError: { [weak self] text in
-                        self?.appendLog(text, isError: true)
-                    }
-                )
-                
-                success = (status == 0)
-                appendLog(
-                    success
-                        ? localization.string("log.command.completed", defaultValue: "[System] 操作成功完成")
-                        : localization.format("log.command.failedStatus", defaultValue: "[System] 操作失败，错误码：%d", status),
-                    isError: !success
-                )
-            } catch {
-                appendLog(localization.format(
-                    "log.command.failed",
-                    defaultValue: "[System] 执行命令出错：%@",
-                    error.localizedDescription
-                ), isError: true)
-                success = false
-            }
-            
-            isBusy = false
-            currentOperationName = ""
-            onStateChange?()
-            completion(success)
+        onStateChange?()
+        return operationID
+    }
+
+    private func executePreparedCommand(args: [String]) async -> Bool {
+        do {
+            let status = try await runner.run(
+                executable: brewPath,
+                arguments: args,
+                onOutput: { [weak self] text in
+                    self?.appendLog(text)
+                },
+                onError: { [weak self] text in
+                    self?.appendLog(text, isError: true)
+                }
+            )
+
+            let success = status == 0
+            appendLog(
+                success
+                    ? localization.string("log.command.completed", defaultValue: "[System] 操作成功完成")
+                    : localization.format("log.command.failedStatus", defaultValue: "[System] 操作失败，错误码：%d", status),
+                isError: !success
+            )
+            return success
+        } catch {
+            appendLog(localization.format(
+                "log.command.failed",
+                defaultValue: "[System] 执行命令出错：%@",
+                error.localizedDescription
+            ), isError: true)
+            return false
         }
+    }
+
+    private func finishBusyOperation(id: UUID) {
+        guard busyOperationID == id else { return }
+        busyOperationID = nil
+        scanTask = nil
+        commandTask = nil
+        isBusy = false
+        currentOperationName = ""
+        onStateChange?()
+    }
+
+    private func finishSearchOperation(id: UUID) {
+        guard searchOperationID == id else { return }
+        searchOperationID = nil
+        searchTask = nil
+        isSearching = false
+        onStateChange?()
     }
     
     public func cancelCurrentOperation() {
-        Task {
+        let hasTrackedOperation = scanTask != nil || searchTask != nil || commandTask != nil
+        guard isBusy || isSearching || hasTrackedOperation else { return }
+        let cancelledBusyOperationID = busyOperationID
+        let cancelledSearchOperationID = searchOperationID
+        scanTask?.cancel()
+        searchTask?.cancel()
+        commandTask?.cancel()
+        Task { [weak self] in
+            guard let self else { return }
             await runner.cancel()
-            appendLog(localization.string("log.command.cancelled", defaultValue: "[System] 操作已被用户取消"), isError: true)
-            isBusy = false
-            currentOperationName = ""
-            onStateChange?()
+            if let cancelledBusyOperationID,
+               busyOperationID == cancelledBusyOperationID {
+                appendLog(localization.string("log.command.cancelled", defaultValue: "[System] 操作已被用户取消"), isError: true)
+                finishBusyOperation(id: cancelledBusyOperationID)
+            } else if cancelledBusyOperationID == nil,
+                      busyOperationID == nil,
+                      isBusy {
+                isBusy = false
+                currentOperationName = ""
+                onStateChange?()
+            }
+            if let cancelledSearchOperationID,
+               searchOperationID == cancelledSearchOperationID {
+                finishSearchOperation(id: cancelledSearchOperationID)
+            } else if cancelledSearchOperationID == nil,
+                      searchOperationID == nil,
+                      isSearching {
+                isSearching = false
+                onStateChange?()
+            }
         }
     }
 }

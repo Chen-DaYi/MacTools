@@ -9,10 +9,14 @@ protocol TrackpadGestureActionExecuting: AnyObject {
 }
 
 final class TrackpadGestureActionExecutor: TrackpadGestureActionExecuting {
-    static let keyboardEventMarker: Int64 = 0x4D_54_4B_45_59_42_4F_41
+    nonisolated static let keyboardEventMarker: Int64 = 0x4D_54_4B_45_59_42_4F_41
 
     func execute(_ action: TrackpadGestureAction) {
         switch action {
+        case .action:
+            // Canonical MacTools actions are executed by the injected host
+            // context so they share availability, confirmation, and logging.
+            break
         case let .keyboardShortcut(binding):
             postShortcut(binding)
         case .middleClick:
@@ -176,6 +180,19 @@ final class TrackpadGestureRecognitionWorker: @unchecked Sendable {
             queue.async { [self] in
                 guard isCurrent(suppressionGeneration) else { return }
                 engine.beginSuppression(activeDeviceIDs: activeDeviceIDs)
+            }
+        }
+    }
+
+    func recognizeNativeClick(_ gesture: TrackpadGesture, deviceID: UInt64) {
+        generation.advanceWithValue { recognitionGeneration in
+            queue.async { [self] in
+                guard isCurrent(recognitionGeneration) else { return }
+                // A physical click can otherwise resemble a tap when the contacts lift. Keep
+                // the rest of this contact episode suppressed, then deliver only the click.
+                engine.beginSuppression(activeDeviceIDs: [deviceID])
+                guard isCurrent(recognitionGeneration) else { return }
+                onRecognized(gesture, deviceID, recognitionGeneration)
             }
         }
     }

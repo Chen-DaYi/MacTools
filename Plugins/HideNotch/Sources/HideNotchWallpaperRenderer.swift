@@ -62,6 +62,7 @@ private final class SystemHideNotchDesktopMaskWindow: HideNotchDesktopMaskWindow
     }
 
     func show() {
+        PluginPresentationSafety.prepareForWindowOrdering(window)
         window.orderFrontRegardless()
     }
 

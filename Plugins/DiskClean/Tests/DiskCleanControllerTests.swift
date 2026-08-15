@@ -418,6 +418,28 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(executor.lastMode, .trash)
     }
 
+    func testCancelledCleanupPublishesItsCompletedPartialResult() async throws {
+        let partial = DiskCleanExecutionResult(
+            itemResults: [
+                DiskCleanExecutionItemResult(
+                    candidateID: "a",
+                    path: "/cache/a",
+                    outcome: .trashed(reclaimedBytes: 1_024, stagedName: ".mactools-staged-a")
+                ),
+            ],
+            mode: .trash,
+            wasCancelled: true
+        )
+        let executor = FakeDiskCleanExecutor(result: partial)
+        let controller = try await makeScannedController(executor: executor, mode: .trash)
+
+        controller.clean()
+        await waitUntil("partial clean published") { controller.snapshot.phase == .completed }
+
+        XCTAssertEqual(controller.snapshot.executionResult, partial)
+        XCTAssertEqual(controller.snapshot.executionResult?.removedCount, 1)
+    }
+
     func testPermanentModeEntersConfirmingWithFrozenSummary() async throws {
         let executor = FakeDiskCleanExecutor()
         let controller = try await makeScannedController(executor: executor, mode: .permanent)

@@ -1,6 +1,7 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import MacToolsPluginKit
 import OSLog
 
 struct MouseEnhancerSessionState: Equatable, Sendable {
@@ -77,6 +78,12 @@ protocol MouseEnhancerSessionManaging: AnyObject {
 }
 
 final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Sendable {
+    private typealias CallbackContext = PluginCallbackContext<MouseEnhancerSession>
+
+    private enum Timing {
+        static let wakeRestartDelay: TimeInterval = 2
+    }
+
     private static let gestureEventType = CGEventType(rawValue: UInt32(NSEvent.EventType.gesture.rawValue))!
     private static weak var activeSession: MouseEnhancerSession?
 
@@ -84,8 +91,11 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
 
     private var scrollTap: CFMachPort?
     private var scrollRunLoopSource: CFRunLoopSource?
+    private var scrollCallbackPointer: UnsafeMutableRawPointer?
     private var gestureTap: CFMachPort?
     private var gestureRunLoopSource: CFRunLoopSource?
+    private var gestureCallbackPointer: UnsafeMutableRawPointer?
+    private var wakeObserver: (any NSObjectProtocol)?
     private var restartWorkItem: DispatchWorkItem?
     private var restartGeneration = 0
     private var recoveryState = MouseEnhancerRecoveryState()
@@ -171,20 +181,26 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
 
     private func startScrollTap() {
         let mask = CGEventMask(1) << UInt64(CGEventType.scrollWheel.rawValue)
+        let context = CallbackContext(owner: self)
+        let callbackPointer = Unmanaged.passRetained(context).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .tailAppendEventTap,
             options: .defaultTap,
             eventsOfInterest: mask,
             callback: Self.eventTapCallback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
+            userInfo: callbackPointer
         ) else {
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             logger.error("failed to create scroll CGEvent tap; check Accessibility permission")
             return
         }
 
         guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
             CFMachPortInvalidate(tap)
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             logger.error("failed to create scroll CGEvent run loop source")
             return
         }
@@ -193,9 +209,11 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
         CGEvent.tapEnable(tap: tap, enable: true)
         scrollTap = tap
         scrollRunLoopSource = source
+        scrollCallbackPointer = callbackPointer
     }
 
     private func stopScrollTap() {
+        callbackContext(from: scrollCallbackPointer)?.invalidate()
         if let scrollTap {
             CGEvent.tapEnable(tap: scrollTap, enable: false)
         }
@@ -210,24 +228,31 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
 
         scrollRunLoopSource = nil
         scrollTap = nil
+        releaseCallbackPointer(&scrollCallbackPointer)
     }
 
     private func startGestureTap() {
         let mask = CGEventMask(1) << UInt64(Self.gestureEventType.rawValue)
+        let context = CallbackContext(owner: self)
+        let callbackPointer = Unmanaged.passRetained(context).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .tailAppendEventTap,
             options: .listenOnly,
             eventsOfInterest: mask,
             callback: Self.eventTapCallback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
+            userInfo: callbackPointer
         ) else {
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             logger.warning("failed to create gesture CGEvent tap; Input Monitoring may be missing")
             return
         }
 
         guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
             CFMachPortInvalidate(tap)
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             logger.warning("failed to create gesture CGEvent run loop source")
             return
         }
@@ -236,10 +261,12 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
         CGEvent.tapEnable(tap: tap, enable: true)
         gestureTap = tap
         gestureRunLoopSource = source
+        gestureCallbackPointer = callbackPointer
         processor.setGestureMonitoringAvailable(true)
     }
 
     private func stopGestureTap() {
+        callbackContext(from: gestureCallbackPointer)?.invalidate()
         if let gestureTap {
             CGEvent.tapEnable(tap: gestureTap, enable: false)
         }
@@ -254,6 +281,7 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
 
         gestureRunLoopSource = nil
         gestureTap = nil
+        releaseCallbackPointer(&gestureCallbackPointer)
         processor.setGestureMonitoringAvailable(false)
     }
 
@@ -337,23 +365,37 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
             return Unmanaged.passUnretained(event)
         }
 
-        let session = Unmanaged<MouseEnhancerSession>.fromOpaque(userInfo).takeUnretainedValue()
+        let context = Unmanaged<CallbackContext>.fromOpaque(userInfo).takeUnretainedValue()
 
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            session.enableTapsIfNeeded()
+            context.withOwner { $0.enableTapsIfNeeded() }
             return Unmanaged.passUnretained(event)
         }
 
         if type == MouseEnhancerSession.gestureEventType {
             let touching = NSEvent(cgEvent: event)?.touches(matching: .touching, in: nil).count ?? 0
-            session.processor.recordGestureTouchingCount(touching)
+            context.withOwner { $0.processor.recordGestureTouchingCount(touching) }
             return Unmanaged.passUnretained(event)
         }
 
         if type == .scrollWheel {
-            session.processor.process(event: event)
+            _ = context.withOwner { $0.processor.process(event: event) }
         }
 
         return Unmanaged.passUnretained(event)
+    }
+
+    private func callbackContext(
+        from pointer: UnsafeMutableRawPointer?
+    ) -> CallbackContext? {
+        guard let pointer else { return nil }
+        return Unmanaged<CallbackContext>.fromOpaque(pointer).takeUnretainedValue()
+    }
+
+    private func releaseCallbackPointer(_ pointer: inout UnsafeMutableRawPointer?) {
+        guard let retainedPointer = pointer else { return }
+        callbackContext(from: retainedPointer)?.invalidate()
+        Unmanaged<CallbackContext>.fromOpaque(retainedPointer).release()
+        pointer = nil
     }
 }

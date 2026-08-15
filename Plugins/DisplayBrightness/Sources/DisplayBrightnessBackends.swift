@@ -548,42 +548,20 @@ final class ShadeBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendabl
         let displayID = display.id
         let overlayController = self.overlayController
 
-        if Thread.isMainThread {
-            MainActor.assumeIsolated {
-                guard let screen = Self.screen(for: displayID) else {
-                    return
-                }
-
-                overlayController.apply(brightness: brightness, on: screen)
+        DispatchQueue.main.async {
+            guard let screen = Self.screen(for: displayID) else {
+                return
             }
-            return
-        }
 
-        DispatchQueue.main.sync {
-            MainActor.assumeIsolated {
-                guard let screen = Self.screen(for: displayID) else {
-                    return
-                }
-
-                overlayController.apply(brightness: brightness, on: screen)
-            }
+            overlayController.apply(brightness: brightness, on: screen)
         }
     }
 
     private func hideOverlay() {
         let overlayController = self.overlayController
 
-        if Thread.isMainThread {
-            MainActor.assumeIsolated {
-                overlayController.hide()
-            }
-            return
-        }
-
-        DispatchQueue.main.sync {
-            MainActor.assumeIsolated {
-                overlayController.hide()
-            }
+        DispatchQueue.main.async {
+            overlayController.hide()
         }
     }
 
@@ -609,6 +587,7 @@ private final class ShadeOverlayController {
         let window = self.window ?? self.makeWindow(screen: screen)
         window.setFrame(screen.frame, display: true)
         window.alphaValue = alpha
+        PluginPresentationSafety.prepareForWindowOrdering(window)
         window.orderFrontRegardless()
         self.window = window
     }

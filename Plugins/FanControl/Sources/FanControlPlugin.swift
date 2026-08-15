@@ -32,7 +32,18 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling {
+final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
+    PluginActionProviding, PluginPortablePreferencesProviding,
+    PluginPortablePreferencesRestorationReporting,
+    PluginPortablePreferencesActionReferencesProviding, PluginActionReferenceBackupProviding
+{
+    private enum ActionID {
+        static let applyPreset = "apply-preset"
+    }
+
+    private enum ActionParameterID {
+        static let preset = "preset"
+    }
 
     // MARK: Metadata
 
@@ -62,7 +73,9 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     private var isPrimaryPanelVisible = false
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
+    private var lastApplyError: FanWriteError?
     private var requiresAutoRestore = false
+    private var isActivated = false
     private var monitoringTask: Task<Void, Never>?
     private var sleepObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
@@ -94,11 +107,15 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
             order: 45,
             defaultDescription: localization.string("metadata.description", defaultValue: "管理风扇转速预设")
         )
+        presetStore.onCatalogChange = { [weak self] in
+            self?.onStateChange?()
+        }
     }
 
     // MARK: - MacToolsPlugin
 
     func activate(context: PluginRuntimeContext) {
+        isActivated = true
         startMonitoring()
         registerSleepWakeObservers()
         // Re-apply the persisted active preset so fan state is consistent
@@ -116,6 +133,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         if reason.requiresStateCleanup {
             restoreAutomaticControlIfNeeded(reason: String(describing: reason))
         }
+        isActivated = false
     }
 
     func refresh() {
@@ -139,6 +157,73 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.applyPreset),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "fan", "preset", "RPM"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: ActionParameterID.preset,
+                        title: metadata.title,
+                        kind: .string
+                    ),
+                ],
+                confirmation: ActionConfirmation(
+                    title: metadata.title,
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: metadata.title
+                ),
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        presetStore.allPresets.map { preset in
+            ActionCatalogEntry(
+                reference: presetActionReference(presetID: preset.id),
+                title: "\(metadata.title) · \(preset.displayName(localization: localization))"
+            )
+        }
+    }
+
+    func makePortablePreferencesBackup() -> Data? {
+        presetStore.makePortablePreferencesBackup()
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        _ = restorePortablePreferencesAndReconcileHardware(from: data)
+    }
+
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        restorePortablePreferencesAndReconcileHardware(from: data)
+    }
+
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
+        presetStore.customPresetIDs(inPortablePreferences: data)?.map {
+            presetActionReference(presetID: $0)
+        }
+    }
+
+    func backupDisposition(
+        for reference: ActionReference
+    ) -> PluginActionReferenceBackupDisposition {
+        guard let preset = preset(for: reference) else { return .excluded }
+        return preset.isBuiltIn ? .selfContained : .requiresPluginPreferences
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard preset(for: reference) != nil else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        return .available
+    }
 
     var settingsPage: PluginSettingsPage? {
         .form(description: metadata.defaultDescription, sections: [
@@ -194,20 +279,14 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
 
         case let .setSelection(controlID, optionID):
             guard controlID == ControlID.presetList else { return }
-            guard presetStore.allPresets.contains(where: { $0.id == optionID }) else { return }
-            presetStore.setActivePreset(id: optionID)
-            lastErrorMessage = nil
-            onStateChange?()
-            applyActivePreset()
+            guard let preset = presetStore.allPresets.first(where: { $0.id == optionID }) else { return }
+            _ = applyPresetFromAction(preset)
 
         case let .setSlider(controlID, value, phase):
             guard controlID == ControlID.customSlider, phase == .ended else { return }
             let rpm = Int(value)
             let activeID = presetStore.activePresetID
-            presetStore.updateCustomPresetRPM(id: activeID, rpm: rpm)
-            lastErrorMessage = nil
-            onStateChange?()
-            applyActivePreset()
+            applyCustomRPMFromPanel(id: activeID, rpm: rpm)
 
         case let .invokeAction(controlID):
             handleInvokeAction(controlID)
@@ -224,6 +303,95 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard let preset = preset(for: invocation.reference) else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        return ActionExecutionHandle { [weak self] in
+            self?.applyPresetFromAction(preset)
+                ?? .failed(message: PluginKitLocalization.actionUnavailable)
+        }
+    }
+
+    private func applyPresetFromAction(_ preset: FanPreset) -> ActionExecutionResult {
+        let previousPreset = presetStore.activePreset
+        guard apply(preset: preset) else {
+            let targetError = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
+            let rollbackSucceeded = lastApplyError?.mayHaveChangedFanState != true
+                || apply(preset: previousPreset)
+            lastErrorMessage = rollbackSucceeded
+                ? targetError
+                : localization.format(
+                    "error.action.rollbackFailed",
+                    defaultValue: "%@；恢复先前风扇策略失败。",
+                    targetError
+                )
+            onStateChange?()
+            let failureMessage = lastErrorMessage ?? targetError
+            return .failed(message: failureMessage)
+        }
+        guard presetStore.setActivePreset(id: preset.id) else {
+            let rollbackSucceeded = apply(preset: previousPreset)
+            lastErrorMessage = rollbackSucceeded
+                ? localization.string(
+                    "error.action.persistenceFailed",
+                    defaultValue: "无法保存风扇预设。"
+                )
+                : localization.string(
+                    "error.action.persistenceRollbackFailed",
+                    defaultValue: "无法保存风扇预设，且恢复先前风扇策略失败。"
+                )
+            onStateChange?()
+            let failureMessage = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
+            return .failed(message: failureMessage)
+        }
+        lastErrorMessage = nil
+        onStateChange?()
+        return .succeeded()
+    }
+
+    private func applyCustomRPMFromPanel(id: String, rpm: Int) {
+        guard var targetPreset = presetStore.allPresets.first(where: { $0.id == id }),
+              !targetPreset.isBuiltIn else {
+            return
+        }
+        let previousPreset = presetStore.activePreset
+        targetPreset.strategy = .fixed(rpm: max(
+            FanRPMLimits.absoluteMin,
+            min(FanRPMLimits.absoluteMax, rpm)
+        ))
+        guard apply(preset: targetPreset) else {
+            let targetError = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
+            let rollbackSucceeded = lastApplyError?.mayHaveChangedFanState != true
+                || apply(preset: previousPreset)
+            lastErrorMessage = rollbackSucceeded
+                ? targetError
+                : localization.format(
+                    "error.action.rollbackFailed",
+                    defaultValue: "%@；恢复先前风扇策略失败。",
+                    targetError
+                )
+            onStateChange?()
+            return
+        }
+        guard presetStore.updateCustomPresetRPM(id: id, rpm: rpm) else {
+            let rollbackSucceeded = apply(preset: previousPreset)
+            lastErrorMessage = rollbackSucceeded
+                ? localization.string(
+                    "error.action.persistenceFailed",
+                    defaultValue: "无法保存风扇预设。"
+                )
+                : localization.string(
+                    "error.action.persistenceRollbackFailed",
+                    defaultValue: "无法保存风扇预设，且恢复先前风扇策略失败。"
+                )
+            onStateChange?()
+            return
+        }
+        lastErrorMessage = nil
+        onStateChange?()
+    }
 
     // MARK: - PluginPanelSurfaceLifecycleHandling
 
@@ -258,21 +426,57 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         case ControlID.deletePreset:
             let idToDelete = presetStore.activePresetID
             guard !presetStore.activePreset.isBuiltIn else { return }
-            presetStore.deleteCustomPreset(id: idToDelete)
+            guard let previousPreferences = presetStore.makePortablePreferencesBackup() else {
+                lastErrorMessage = localization.string(
+                    "error.action.persistenceFailed",
+                    defaultValue: "无法保存风扇预设。"
+                )
+                onStateChange?()
+                return
+            }
+            let previousPreset = presetStore.activePreset
+            guard presetStore.deleteCustomPreset(id: idToDelete) else {
+                lastErrorMessage = localization.string(
+                    "error.action.persistenceFailed",
+                    defaultValue: "无法保存风扇预设。"
+                )
+                onStateChange?()
+                return
+            }
+            guard applyActivePreset() else {
+                let targetError = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
+                let preferencesRestored = presetStore.restorePortablePreferences(
+                    from: previousPreferences
+                )
+                let hardwareRestored = preferencesRestored && apply(preset: previousPreset)
+                lastErrorMessage = hardwareRestored
+                    ? targetError
+                    : localization.format(
+                        "error.action.rollbackFailed",
+                        defaultValue: "%@；恢复先前风扇策略失败。",
+                        targetError
+                    )
+                onStateChange?()
+                return
+            }
             lastErrorMessage = nil
             onStateChange?()
-            // Active preset has been reset to auto by the store
-            applyActivePreset()
 
         default:
             break
         }
     }
 
-    private func applyActivePreset() {
-        let preset = presetStore.activePreset
+    @discardableResult
+    private func applyActivePreset() -> Bool {
+        apply(preset: presetStore.activePreset)
+    }
+
+    @discardableResult
+    private func apply(preset: FanPreset) -> Bool {
         let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
         let result = smcWriter.apply(strategy: preset.strategy, snapshot: snapshot)
+        lastApplyError = result
         updateAutoRestoreRequirement(afterApplying: preset.strategy, result: result)
         if let err = result {
             lastErrorMessage = err.localizedDescription(localization: localization)
@@ -281,6 +485,47 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
             lastErrorMessage = nil
         }
         onStateChange?()
+        return result == nil
+    }
+
+    private func restorePortablePreferencesAndReconcileHardware(from data: Data) -> Bool {
+        guard let previousPreferences = presetStore.makePortablePreferencesBackup(),
+              presetStore.restorePortablePreferences(from: data) else {
+            return false
+        }
+        guard isActivated else { return true }
+        guard !applyActivePreset() else { return true }
+
+        let importedPresetError = lastErrorMessage
+        guard presetStore.restorePortablePreferences(from: previousPreferences) else {
+            FanControlLog.plugin.error("Failed to roll back fan preferences after restore failure")
+            return false
+        }
+        let didRestoreHardware = applyActivePreset()
+        if didRestoreHardware {
+            lastErrorMessage = importedPresetError
+            onStateChange?()
+        } else {
+            FanControlLog.plugin.error("Failed to restore prior fan strategy after restore failure")
+        }
+        return false
+    }
+
+    private func presetActionReference(presetID: String) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.applyPreset),
+            parameters: try! ActionParameterSet([
+                ActionParameterID.preset: .string(presetID),
+            ])
+        )
+    }
+
+    private func preset(for reference: ActionReference) -> FanPreset? {
+        guard reference.key.actionID == ActionID.applyPreset,
+              case let .string(presetID)? = reference.parameters[ActionParameterID.preset] else {
+            return nil
+        }
+        return presetStore.allPresets.first(where: { $0.id == presetID })
     }
 
     // MARK: - Monitoring

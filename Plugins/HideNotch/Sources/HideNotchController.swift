@@ -86,6 +86,45 @@ final class HideNotchController: HideNotchWallpaperControlling {
         scheduleSync(forceNotify: true)
     }
 
+    func setEnabledAndWait(_ isEnabled: Bool) async -> HideNotchSyncResult {
+        let previousValue = stateStore.desiredEnabled
+        setEnabled(isEnabled)
+        await waitForSynchronization()
+        guard let targetError = errorMessage else {
+            return stateStore.desiredEnabled == isEnabled
+                ? .succeeded
+                : .failed(message: PluginKitLocalization.actionUnavailable)
+        }
+
+        stateStore.desiredEnabled = previousValue
+        if !previousValue {
+            maskManager.hideAllMasks()
+        }
+        errorMessage = nil
+        scheduleSync(forceNotify: true)
+        await waitForSynchronization()
+        if let rollbackError = errorMessage {
+            return .failed(message: localizationFailure(
+                target: targetError,
+                rollback: rollbackError
+            ))
+        }
+        errorMessage = targetError
+        onStateChange?()
+        return .failed(message: targetError)
+    }
+
+    private func waitForSynchronization() async {
+        while isProcessing || pendingRefresh {
+            guard !Task.isCancelled else { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    private func localizationFailure(target: String, rollback: String) -> String {
+        "\(target)；恢复先前状态失败：\(rollback)"
+    }
+
     private func scheduleSync(forceNotify: Bool = false) {
         if isProcessing {
             pendingRefresh = true

@@ -514,9 +514,11 @@ final class FakeDiskCleanExecutor: DiskCleanExecuting, @unchecked Sendable {
     private let lock = NSLock()
     private var plans: [DiskCleanValidatedPlan] = []
     private var failure: Error?
+    private let result: DiskCleanExecutionResult?
 
-    init(failure: Error? = nil) {
+    init(failure: Error? = nil, result: DiskCleanExecutionResult? = nil) {
         self.failure = failure
+        self.result = result
     }
 
     var callCount: Int { lock.withLock { plans.count } }
@@ -532,6 +534,7 @@ final class FakeDiskCleanExecutor: DiskCleanExecuting, @unchecked Sendable {
             return self.failure
         }
         if let failure { throw failure }
+        if let result { return result }
         return DiskCleanExecutionResult(
             itemResults: plan.items.map {
                 DiskCleanExecutionItemResult(

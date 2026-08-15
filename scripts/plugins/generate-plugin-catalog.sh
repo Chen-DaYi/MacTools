@@ -22,7 +22,7 @@ Options:
   --base-url URL                Release asset base URL.
   --release-notes-url URL       Optional release notes URL used when plugin.json omits one.
   --catalog-id ID               Defaults to com.ggbond.mactools.plugins.
-  --minimum-host-version VER    Defaults to 0.15.2.
+  --minimum-host-version VER    Catalog schema compatibility floor. Defaults to 1.1.6.
   --plugin-kit-version INT      Override catalog PluginKit version; defaults to package manifests.
 
 The script does not sign the catalog. Run sign-plugin-catalog.sh for release catalogs.
@@ -34,7 +34,7 @@ OUTPUT=""
 BASE_URL=""
 RELEASE_NOTES_URL=""
 CATALOG_ID="com.ggbond.mactools.plugins"
-MINIMUM_HOST_VERSION="0.15.2"
+MINIMUM_HOST_VERSION="1.1.6"
 PLUGIN_KIT_VERSION=""
 PACKAGES=()
 

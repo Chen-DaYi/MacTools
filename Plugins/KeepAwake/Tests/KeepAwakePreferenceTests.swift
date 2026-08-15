@@ -123,6 +123,102 @@ final class KeepAwakePreferenceTests: XCTestCase {
         XCTAssertFalse(factory.virtualDisplayManager.isActive)
     }
 
+    func testIdempotentActionEnablesKeepAwakeThroughSessionFactory() async throws {
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
+        let reference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first { $0.title == "无限期阻止休眠" }?.reference
+        )
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), [
+            "切换阻止休眠",
+            "无限期阻止休眠",
+            "停用阻止休眠",
+            "阻止休眠 · 30min",
+            "阻止休眠 · 1h",
+            "阻止休眠 · 2h",
+            "阻止休眠 · 5h",
+        ])
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(factory.sessions.count, 1)
+    }
+
+    func testToggleActionReflectsAndChangesCurrentState() async throws {
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
+        let toggle = try XCTUnwrap(
+            plugin.actionCatalogEntries.first { $0.presentationState != nil }?.reference
+        )
+
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "切换阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+
+        let startResult = try await plugin.beginAction(
+            ActionInvocation(reference: toggle, source: .actionGrid, mode: .foreground)
+        ).result()
+        XCTAssertEqual(startResult, .succeeded())
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "切换阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.subtitle, "不会自动停止")
+
+        let stopResult = try await plugin.beginAction(
+            ActionInvocation(reference: toggle, source: .actionGrid, mode: .foreground)
+        ).result()
+        XCTAssertEqual(stopResult, .succeeded())
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "切换阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(
+            Set(plugin.actionCatalogEntries.map(\.title)).count,
+            plugin.actionCatalogEntries.count
+        )
+    }
+
+    func testCanonicalStopFailsWhenAutomaticLockCleanupFails() async throws {
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+        let stop = try XCTUnwrap(
+            plugin.actionCatalogEntries.first { $0.title == "停用阻止休眠" }?.reference
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: stop,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected cleanup failure, got \(result)")
+        }
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testDurationActionsStartBoundedKeepAwakeSessions() async throws {
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
+        let oneHour = try XCTUnwrap(
+            plugin.actionCatalogEntries.first { $0.title == "阻止休眠 · 1h" }?.reference
+        )
+        let before = Date()
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: oneHour, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        let endDate = try XCTUnwrap(factory.sessions.first?.startedConfigurations.last?.endDate)
+        XCTAssertEqual(endDate.timeIntervalSince(before), 60 * 60, accuracy: 2)
+    }
+
     func testBehaviorCanBeChangedWhileRunning() {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory(

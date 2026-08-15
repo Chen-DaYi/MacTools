@@ -20,7 +20,11 @@ private struct AppearancePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
+    }
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -77,6 +81,71 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("metadata.title", defaultValue: "深色模式"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "切换系统亮色与深色外观"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "深色模式"),
+                    localization.string("metadata.description", defaultValue: "切换系统亮色与深色外观"),
+                ],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: localization.string("metadata.title", defaultValue: "深色模式"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "切换系统亮色与深色外观"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "深色模式"),
+                    localization.string("metadata.description", defaultValue: "切换系统亮色与深色外观"),
+                ],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("metadata.title", defaultValue: "深色模式"),
+                        kind: .boolean
+                    ),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isDarkMode
+                    ? localization.string("action.enableLight.title", defaultValue: "启用浅色模式")
+                    : localization.string("action.enableDark.title", defaultValue: "启用深色模式"),
+                subtitle: isDarkMode
+                    ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                    : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
+                presentationState: isDarkMode ? .active : .inactive
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.enableDark.title", defaultValue: "启用深色模式")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.enableLight.title", defaultValue: "启用浅色模式")
+            ),
+        ]
+    }
+
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)
     }
@@ -84,6 +153,31 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !Self.readSystemDarkMode()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        let succeeded = setDarkMode(enabled)
+        let failureMessage = localization.string(
+            "error.toggleFailed",
+            defaultValue: "切换系统外观失败。"
+        )
+        return ActionExecutionHandle {
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
+        }
+    }
 
     func refresh() {
         let current = Self.readSystemDarkMode()
@@ -105,7 +199,19 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
         return style == "Dark"
     }
 
-    private func setDarkMode(_ enable: Bool) {
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    @discardableResult
+    private func setDarkMode(_ enable: Bool) -> Bool {
         let script = """
         tell application "System Events"
             tell appearance preferences
@@ -118,9 +224,11 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
         appleScript?.executeAndReturnError(&error)
         if let error {
             logger.error("Failed to set dark mode: \(error)")
+            return false
         } else {
             isDarkMode = enable
             onStateChange?()
+            return true
         }
     }
 

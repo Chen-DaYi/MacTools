@@ -7,7 +7,7 @@ enum UnifiedSearchPaletteLayout {
     static let maximumWidth: CGFloat = 672
     static let minimumWidth: CGFloat = 560
     static let outerHorizontalPadding: CGFloat = 48
-    static let maximumResultListHeight: CGFloat = 420
+    static let maximumResultListHeight: CGFloat = 468
     static let minimumResultListHeight: CGFloat = 260
     static let verticalChromeHeight: CGFloat = 202
 
@@ -24,6 +24,21 @@ enum UnifiedSearchPaletteLayout {
                 max(minimumResultListHeight, availableHeight - verticalChromeHeight)
             )
         )
+    }
+}
+
+enum UnifiedSearchResultRowLayout {
+    static let quickSelectionColumnWidth: CGFloat = 32
+    static let primaryActionColumnWidth: CGFloat = 56
+    static let rowVerticalPadding: CGFloat = 9
+
+    static func showsInlineActions(
+        for action: MacToolsSearchAction,
+        isSelected: Bool
+    ) -> Bool {
+        guard isSelected else { return false }
+        if case .executeAction = action { return true }
+        return false
     }
 }
 
@@ -125,6 +140,7 @@ struct UnifiedSearchTextField: NSViewRepresentable {
     enum Command: Equatable {
         case moveSelection(Int)
         case submit
+        case openOwner
         case cancel
     }
 
@@ -139,7 +155,10 @@ struct UnifiedSearchTextField: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+        let field = SearchTextField()
+        field.onOpenOwner = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.onCommand(.openOwner)
+        }
         field.delegate = context.coordinator
         field.isBezeled = false
         field.drawsBackground = false
@@ -165,7 +184,8 @@ struct UnifiedSearchTextField: NSViewRepresentable {
 
     static func command(
         for selector: Selector,
-        hasMarkedText: Bool
+        hasMarkedText: Bool,
+        modifierFlags: NSEvent.ModifierFlags = []
     ) -> Command? {
         guard !hasMarkedText else {
             return nil
@@ -177,11 +197,37 @@ struct UnifiedSearchTextField: NSViewRepresentable {
         case #selector(NSResponder.moveUp(_:)):
             return .moveSelection(-1)
         case #selector(NSResponder.insertNewline(_:)):
-            return .submit
+            return modifierFlags.contains(.command) ? .openOwner : .submit
+        case #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+            return .openOwner
         case #selector(NSResponder.cancelOperation(_:)):
             return .cancel
         default:
             return nil
+        }
+    }
+
+    static func isOpenOwnerKeyEquivalent(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> Bool {
+        let flags = modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return flags.contains(.command) && (keyCode == 36 || keyCode == 76)
+    }
+
+    @MainActor
+    final class SearchTextField: NSTextField {
+        var onOpenOwner: (() -> Void)?
+
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            if UnifiedSearchTextField.isOpenOwnerKeyEquivalent(
+                keyCode: event.keyCode,
+                modifierFlags: event.modifierFlags
+            ) {
+                onOpenOwner?()
+                return true
+            }
+            return super.performKeyEquivalent(with: event)
         }
     }
 
@@ -209,7 +255,8 @@ struct UnifiedSearchTextField: NSViewRepresentable {
         ) -> Bool {
             guard let command = UnifiedSearchTextField.command(
                 for: selector,
-                hasMarkedText: textView.hasMarkedText()
+                hasMarkedText: textView.hasMarkedText(),
+                modifierFlags: NSApp.currentEvent?.modifierFlags ?? []
             ) else {
                 return false
             }
@@ -262,8 +309,10 @@ struct UnifiedSearchPresentationView: View {
                     showsCustomShadow: true,
                     actions: UnifiedSearchPaletteActions(
                         dismiss: navigationCoordinator.dismissUnifiedSearch,
+                        dismissAfterSuccessfulExecution: navigationCoordinator.dismissUnifiedSearch,
                         navigate: navigationCoordinator.navigateFromSearch,
-                        consumeQuickSelection: navigationCoordinator.consumeUnifiedSearchQuickSelectionRequest
+                        consumeQuickSelection: navigationCoordinator.consumeUnifiedSearchQuickSelectionRequest,
+                        setPendingExecutionCancellation: { _ in }
                     )
                 )
                 .padding(24)
@@ -274,8 +323,10 @@ struct UnifiedSearchPresentationView: View {
 
 struct UnifiedSearchPaletteActions {
     let dismiss: () -> Void
+    let dismissAfterSuccessfulExecution: () -> Void
     let navigate: (SettingsNavigationDestination, SettingsSearchRevealTarget?) -> Bool
     let consumeQuickSelection: (UnifiedSearchQuickSelectionRequest) -> Bool
+    let setPendingExecutionCancellation: ((() -> Void)?) -> Void
 }
 
 private struct UnifiedSearchPaletteShadowModifier: ViewModifier {
@@ -296,6 +347,25 @@ struct UnifiedSearchPaletteView: View {
         static let rowCornerRadius: CGFloat = 8
     }
 
+    private enum PendingAlert: Identifiable {
+        case execute(MacToolsSearchResult)
+        case replaceShortcut(
+            reference: ActionReference,
+            assignmentID: UUID?,
+            binding: ShortcutBinding,
+            ownerDescription: String
+        )
+
+        var id: String {
+            switch self {
+            case let .execute(result):
+                "execute.\(result.id)"
+            case let .replaceShortcut(reference, assignmentID, _, _):
+                "shortcut.\(assignmentID?.uuidString ?? reference.key.id)"
+            }
+        }
+    }
+
     let pluginHost: PluginHost
     let commandContext: AppHostCommandContext
     let availableSize: CGSize
@@ -306,10 +376,14 @@ struct UnifiedSearchPaletteView: View {
     let quickSelectionRequest: UnifiedSearchQuickSelectionRequest?
     let showsCustomShadow: Bool
     let actions: UnifiedSearchPaletteActions
+    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @StateObject private var model: UnifiedSearchPaletteModel
     @State private var query = ""
     @State private var selectedResultID: String?
-    @State private var pendingConfirmation: MacToolsSearchResult?
+    @State private var pendingAlert: PendingAlert?
+    @State private var executionFeedback: String?
+    @State private var executionTask: Task<Void, Never>?
+    @State private var executionGeneration: UInt = 0
 
     init(
         pluginHost: PluginHost,
@@ -350,16 +424,28 @@ struct UnifiedSearchPaletteView: View {
 
             metadataRow
 
+            if let executionFeedback {
+                Label(executionFeedback, systemImage: "exclamationmark.triangle.fill")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("mactools.unified-search.execution-feedback")
+            }
+
             resultList
 
             footer
         }
         .padding(16)
         .frame(width: UnifiedSearchPaletteLayout.width(for: availableSize.width))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background {
+            UnifiedSearchPaletteSurface(
+                reducesTransparency: accessibilityReduceTransparency
+            )
+        }
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
+                .strokeBorder(PluginSettingsTheme.Palette.cardBorder, lineWidth: 1)
                 .allowsHitTesting(false)
         }
         .modifier(UnifiedSearchPaletteShadowModifier(isEnabled: showsCustomShadow))
@@ -368,6 +454,7 @@ struct UnifiedSearchPaletteView: View {
             handleQuickSelectionRequest(quickSelectionRequest)
         }
         .onChange(of: query) {
+            executionFeedback = nil
             model.updateQuery(query)
             syncSelection()
         }
@@ -380,24 +467,49 @@ struct UnifiedSearchPaletteView: View {
         .onChange(of: resetRequestID) {
             resetTransientState()
         }
+        .onDisappear {
+            invalidateExecution()
+        }
         .onExitCommand {
             actions.dismiss()
         }
-        .alert(item: $pendingConfirmation) { result in
-            let confirmation = result.confirmation
-            return Alert(
-                title: Text(confirmation?.title ?? result.title),
-                message: Text(confirmation?.message ?? result.detail),
-                primaryButton: .destructive(
-                    Text(
-                        confirmation?.confirmButtonTitle
-                            ?? AppL10n.search("search.action.run", defaultValue: "执行")
-                    )
-                ) {
-                    execute(result)
-                },
-                secondaryButton: .cancel()
-            )
+        .alert(item: $pendingAlert) { pendingAlert in
+            switch pendingAlert {
+            case let .execute(result):
+                let confirmation = result.confirmation
+                return Alert(
+                    title: Text(confirmation?.title ?? result.title),
+                    message: Text(confirmation?.message ?? result.detail),
+                    primaryButton: .destructive(
+                        Text(
+                            confirmation?.confirmButtonTitle
+                                ?? AppL10n.search("search.action.run", defaultValue: "执行")
+                        )
+                    ) {
+                        execute(result)
+                    },
+                    secondaryButton: .cancel()
+                )
+            case let .replaceShortcut(reference, assignmentID, binding, ownerDescription):
+                return Alert(
+                    title: Text(FeatureL10n.string("替换快捷键？")),
+                    message: Text(
+                        FeatureL10n.format(
+                            "此快捷键已分配给“%@”。替换后，原操作将不再使用它。",
+                            ownerDescription
+                        )
+                    ),
+                    primaryButton: .destructive(Text(FeatureL10n.string("替换"))) {
+                        _ = pluginHost.setActionShortcutBinding(
+                            binding,
+                            to: reference,
+                            assignmentID: assignmentID,
+                            replacingConflictingActionAssignments: true
+                        )
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
@@ -469,11 +581,11 @@ struct UnifiedSearchPaletteView: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(PluginSettingsTheme.Palette.fieldBackground)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+                .strokeBorder(PluginSettingsTheme.Palette.cardBorder, lineWidth: 1)
         }
     }
 
@@ -504,7 +616,7 @@ struct UnifiedSearchPaletteView: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
-                    LazyVStack(alignment: .leading, spacing: 6) {
+                    LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(MacToolsSearchResultKind.allCases, id: \.self) { kind in
                             let group = results.filter { $0.kind == kind }
                             if !group.isEmpty {
@@ -512,7 +624,7 @@ struct UnifiedSearchPaletteView: View {
                                     .font(PluginSettingsTheme.Typography.secondaryLabel)
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 8)
-                                    .padding(.top, 4)
+                                    .padding(.top, 6)
 
                                 ForEach(group) { result in
                                     resultRow(
@@ -524,6 +636,8 @@ struct UnifiedSearchPaletteView: View {
                             }
                         }
                     }
+                    .padding(.trailing, 6)
+                    .padding(.bottom, 8)
                 }
             }
             .frame(
@@ -548,63 +662,149 @@ struct UnifiedSearchPaletteView: View {
         quickSelectionNumber: Int?
     ) -> some View {
         let isSelected = result.id == selectedResultID
+        let showsInlineActions = UnifiedSearchResultRowLayout.showsInlineActions(
+            for: result.action,
+            isSelected: isSelected
+        )
 
-        return Button {
-            selectedResultID = result.id
-            activate(result)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: result.systemImage)
-                    .frame(width: 18)
-                    .foregroundStyle(isSelected ? Color.white : Color.accentColor)
+        return VStack(alignment: .leading, spacing: showsInlineActions ? 7 : 0) {
+            Button {
+                selectedResultID = result.id
+                activate(result)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: PluginSystemImage.resolvedName(result.systemImage))
+                        .frame(width: 18)
+                        .foregroundStyle(isSelected ? Color.white : Color.accentColor)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(result.title)
-                        .font(PluginSettingsTheme.Typography.rowTitle)
-                        .foregroundStyle(isSelected ? Color.white : Color.primary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(result.title)
+                            .font(PluginSettingsTheme.Typography.rowTitle)
+                            .foregroundStyle(isSelected ? Color.white : Color.primary)
+                            .lineLimit(1)
 
-                    Text(result.subtitle)
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(isSelected ? Color.white.opacity(0.78) : Color.secondary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(result.subtitle)
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(
+                                isSelected ? Color.white.opacity(0.78) : Color.secondary
+                            )
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let quickSelectionNumber {
-                    Text("⌘\(quickSelectionNumber)")
+                    Text(quickSelectionNumber.map { "⌘\($0)" } ?? "")
                         .font(PluginSettingsTheme.Typography.statusBadge)
                         .foregroundStyle(isSelected ? Color.white.opacity(0.78) : Color.secondary)
+                        .frame(
+                            width: UnifiedSearchResultRowLayout.quickSelectionColumnWidth,
+                            alignment: .trailing
+                        )
                         .accessibilityHidden(true)
-                }
 
-                Text(result.kind.actionTitle)
-                    .font(PluginSettingsTheme.Typography.statusBadge)
-                    .foregroundStyle(isSelected ? Color.white : Color.accentColor)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(
-                                isSelected
-                                    ? Color.white.opacity(0.16)
-                                    : Color.accentColor.opacity(0.1)
-                            )
-                    )
+                    Text(result.kind.actionTitle)
+                        .font(PluginSettingsTheme.Typography.statusBadge)
+                        .foregroundStyle(isSelected ? Color.white : Color.accentColor)
+                        .frame(width: UnifiedSearchResultRowLayout.primaryActionColumnWidth)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(
+                                    isSelected
+                                        ? Color.white.opacity(0.16)
+                                        : Color.accentColor.opacity(0.1)
+                                )
+                        )
+                }
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: Layout.rowCornerRadius, style: .continuous)
-                    .fill(isSelected ? Color.accentColor : Color.clear)
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            if showsInlineActions {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 42)
+                    shortcutControls(for: result, isSelected: isSelected)
+                }
+                .tint(Color.white)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, UnifiedSearchResultRowLayout.rowVerticalPadding)
+        .background(
+            RoundedRectangle(cornerRadius: Layout.rowCornerRadius, style: .continuous)
+                .fill(isSelected ? Color.accentColor : Color.clear)
+        )
         .accessibilityLabel(result.accessibilityLabel)
         .accessibilityHint(accessibilityHint(for: result, number: quickSelectionNumber))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("mactools.unified-search.result.\(result.id)")
+    }
+
+    @ViewBuilder
+    private func shortcutControls(
+        for result: MacToolsSearchResult,
+        isSelected: Bool
+    ) -> some View {
+        if case let .executeAction(reference) = result.action {
+            let shortcut = pluginHost.actionShortcutSettingsItem(for: reference)
+            PluginShortcutRecorder(
+                title: FeatureL10n.format("%@ 快捷键", result.title),
+                displayText: shortcut?.bindingText ?? "",
+                minWidth: 72,
+                onRecord: { binding in
+                    switch pluginHost.setActionShortcutBinding(
+                        binding,
+                        to: reference,
+                        assignmentID: shortcut?.assignment.id
+                    ) {
+                    case .success:
+                        return .accepted
+                    case let .failure(.conflict(ownerDescription)):
+                        pendingAlert = .replaceShortcut(
+                            reference: reference,
+                            assignmentID: shortcut?.assignment.id,
+                            binding: binding,
+                            ownerDescription: ownerDescription
+                        )
+                        return .accepted
+                    case let .failure(error):
+                        return .rejected(error.localizedDescription)
+                    }
+                }
+            )
+            .frame(width: 72)
+
+            if shortcut != nil {
+                Button {
+                    pluginHost.clearActionShortcut(
+                        for: reference,
+                        assignmentID: shortcut?.assignment.id
+                    )
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isSelected ? Color.white.opacity(0.9) : Color.secondary)
+                .help(FeatureL10n.string("清除快捷键"))
+            }
+
+            ActionRunLinkCopyButton(
+                pluginHost: pluginHost,
+                reference: reference
+            )
+
+            if pluginHost.canPresentActionOwner(for: reference) {
+                Button {
+                    pluginHost.presentActionOwner(for: reference)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isSelected ? Color.white.opacity(0.9) : Color.secondary)
+                .help(FeatureL10n.string("打开所属功能的设置"))
+                .accessibilityLabel(FeatureL10n.string("打开所属功能的设置"))
+            }
+        }
     }
 
     private var footer: some View {
@@ -633,7 +833,7 @@ struct UnifiedSearchPaletteView: View {
             Text(
                 AppL10n.search(
                     "search.footer.keyboard",
-                    defaultValue: "↑↓ 选择　↩ 打开　⌘1–9 快速打开"
+                    defaultValue: "↑↓ 选择　↩ 打开　⌘↩ 设置　Tab 操作　⌘1–9 快速打开"
                 )
             )
         }
@@ -767,9 +967,23 @@ struct UnifiedSearchPaletteView: View {
             moveSelection(by: offset)
         case .submit:
             activateSelectedResult()
+        case .openOwner:
+            openSelectedResultOwner()
         case .cancel:
             actions.dismiss()
         }
+    }
+
+    private func openSelectedResultOwner() {
+        guard
+            let selectedResult,
+            case let .executeAction(reference) = selectedResult.action,
+            pluginHost.canPresentActionOwner(for: reference)
+        else {
+            return
+        }
+
+        _ = pluginHost.presentActionOwner(for: reference)
     }
 
     private func handleQuickSelectionRequest(
@@ -792,9 +1006,10 @@ struct UnifiedSearchPaletteView: View {
     }
 
     private func activate(_ result: MacToolsSearchResult) {
+        guard executionTask == nil else { return }
         switch MacToolsSearchActivationDecision.resolve(for: result) {
         case .confirm:
-            pendingConfirmation = result
+            pendingAlert = .execute(result)
         case .execute:
             execute(result)
         }
@@ -806,12 +1021,113 @@ struct UnifiedSearchPaletteView: View {
             if !actions.navigate(destination, target) {
                 model.refresh()
             }
+        case let .executeAction(reference):
+            let generation = executionGeneration
+            executionTask = Task { @MainActor in
+                guard case let .success(action) = pluginHost.actionRegistry.registeredAction(
+                    for: reference
+                ), let mode = ActionSurfaceExecutionSupport.preferredMode(
+                    for: action.definition
+                ) else {
+                    guard generation == executionGeneration else { return }
+                    actions.setPendingExecutionCancellation(nil)
+                    executionTask = nil
+                    executionFeedback = FeatureL10n.string("找不到对应操作。")
+                    model.refresh()
+                    return
+                }
+                let confirmationService: (any ActionConfirmationRequesting)? =
+                    result.confirmation.map { confirmation in
+                        MatchingApprovedActionConfirmationService(
+                            expectedRequest: ActionConfirmationRequest(
+                                reference: reference,
+                                confirmation: ActionConfirmation(
+                                    title: confirmation.title,
+                                    message: confirmation.message,
+                                    confirmButtonTitle: confirmation.confirmButtonTitle
+                                ),
+                                source: .unifiedSearch
+                            )
+                        )
+                    }
+                let invocation = ActionInvocation(
+                    reference: reference,
+                    source: .unifiedSearch,
+                    mode: mode
+                )
+                if ActionSurfaceExecutionSupport.continuesAfterSurfaceDismissal(
+                    for: action.definition
+                ) {
+                    let startOutcome = await pluginHost.actionExecutor.startContinuing(
+                        invocation,
+                        expectedDefinition: action.definition,
+                        confirmationService: confirmationService
+                    )
+                    guard generation == executionGeneration else { return }
+                    actions.setPendingExecutionCancellation(nil)
+                    executionTask = nil
+                    switch startOutcome {
+                    case .started:
+                        actions.dismissAfterSuccessfulExecution()
+                    case .cancelled:
+                        executionFeedback = FeatureL10n.string("操作已取消。")
+                        model.refresh()
+                    case let .rejected(rejection):
+                        executionFeedback = ActionSurfaceExecutionSupport.message(for: rejection)
+                        model.refresh()
+                    }
+                    return
+                }
+                let start = await pluginHost.actionExecutor
+                    .startSurfaceIndependentTrackingCompletion(
+                    invocation,
+                    expectedDefinition: action.definition,
+                    confirmationService: confirmationService
+                )
+                guard generation == executionGeneration else { return }
+                actions.setPendingExecutionCancellation(nil)
+                switch start.outcome {
+                case .started:
+                    guard let completion = start.completion else {
+                        executionTask = nil
+                        executionFeedback = FeatureL10n.string("操作未能开始。")
+                        model.refresh()
+                        return
+                    }
+                    executionTask = Task { @MainActor in
+                        var iterator = completion.makeAsyncIterator()
+                        guard let outcome = await iterator.next(),
+                              !Task.isCancelled,
+                              generation == executionGeneration else {
+                            return
+                        }
+                        executionTask = nil
+                        if case .completed(.succeeded) = outcome {
+                            actions.dismissAfterSuccessfulExecution()
+                        } else {
+                            executionFeedback = ActionSurfaceExecutionSupport.feedback(for: outcome)
+                            model.refresh()
+                        }
+                    }
+                case .cancelled:
+                    executionTask = nil
+                    executionFeedback = FeatureL10n.string("操作已取消。")
+                    model.refresh()
+                case let .rejected(rejection):
+                    executionTask = nil
+                    executionFeedback = ActionSurfaceExecutionSupport.message(for: rejection)
+                    model.refresh()
+                }
+            }
+            actions.setPendingExecutionCancellation {
+                invalidateExecution()
+            }
         case let .pluginCommand(pluginID, expectedDefinition):
             if pluginHost.performCommand(
                 pluginID: pluginID,
                 expectedDefinition: expectedDefinition
             ) {
-                actions.dismiss()
+                actions.dismissAfterSuccessfulExecution()
             } else {
                 model.refresh()
             }
@@ -821,7 +1137,7 @@ struct UnifiedSearchPaletteView: View {
                 context: commandContext
             ) {
             case .performed(.dismissPalette):
-                actions.dismiss()
+                actions.dismissAfterSuccessfulExecution()
             case .performed(.refreshIndex), .unavailable, .failed:
                 model.refresh()
             }
@@ -829,12 +1145,40 @@ struct UnifiedSearchPaletteView: View {
     }
 
     private func resetTransientState() {
+        invalidateExecution()
         query = ""
-        pendingConfirmation = nil
+        pendingAlert = nil
+        executionFeedback = nil
         model.updateQuery("")
         model.refresh()
         selectedResultID = nil
         syncSelection()
     }
 
+    private func invalidateExecution() {
+        executionGeneration &+= 1
+        actions.setPendingExecutionCancellation(nil)
+        executionTask?.cancel()
+        executionTask = nil
+    }
+
+}
+
+private struct UnifiedSearchPaletteSurface: View {
+    let reducesTransparency: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        shape
+            .fill(
+                reducesTransparency
+                    ? AnyShapeStyle(SettingsStyle.contentBackground)
+                    : AnyShapeStyle(.regularMaterial)
+            )
+            .overlay {
+                if !reducesTransparency {
+                    shape.fill(SettingsStyle.contentBackground.opacity(0.88))
+                }
+            }
+    }
 }

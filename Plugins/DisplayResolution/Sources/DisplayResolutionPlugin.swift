@@ -44,8 +44,23 @@ struct WorkspaceDisplaySystemSettingsLauncher: DisplaySystemSettingsLauncher {
 }
 
 @MainActor
-final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, DisplayTopologyRefreshing {
+final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, DisplayTopologyRefreshing,
+    PluginActionProviding
+{
     private static let openSystemSettingsIcon = "gearshape"
+
+    private enum ActionID {
+        static let setResolution = "set-resolution"
+    }
+
+    private enum ActionParameterID {
+        static let display = "display"
+        static let width = "width"
+        static let height = "height"
+        static let pixelWidth = "pixel-width"
+        static let pixelHeight = "pixel-height"
+        static let refreshRate = "refresh-rate"
+    }
 
     let metadata: PluginMetadata
 
@@ -63,6 +78,7 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
     private var lastErrorMessage: String?
     private let controller: DisplayResolutionControlling
     private let systemSettingsLauncher: DisplaySystemSettingsLauncher
+    private let displayIdentifier: (DisplayInfo) -> String?
     private let localization: PluginLocalization
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayResolutionPlugin")
     private var snapshot = DisplayResolutionSnapshot(displays: [])
@@ -70,11 +86,15 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
     init(
         controller: DisplayResolutionControlling = DisplayResolutionController(),
         systemSettingsLauncher: DisplaySystemSettingsLauncher = WorkspaceDisplaySystemSettingsLauncher(),
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        displayIdentifier: @escaping (DisplayInfo) -> String? = {
+            DisplayResolutionPlugin.stableDisplayIdentifier($0)
+        }
     ) {
         self.localization = localization
         self.controller = controller
         self.systemSettingsLauncher = systemSettingsLauncher
+        self.displayIdentifier = displayIdentifier
         self.metadata = PluginMetadata(
             id: "display-resolution",
             title: localization.string("metadata.title", defaultValue: "显示器分辨率"),
@@ -136,6 +156,82 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setResolution),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "resolution", "display"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: ActionParameterID.display,
+                        title: metadata.title,
+                        kind: .string,
+                        portability: .localOnly
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.width,
+                        title: localization.string("action.parameter.width", defaultValue: "宽度"),
+                        kind: .integer
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.height,
+                        title: localization.string("action.parameter.height", defaultValue: "高度"),
+                        kind: .integer
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.pixelWidth,
+                        title: localization.string("action.parameter.pixelWidth", defaultValue: "像素宽度"),
+                        kind: .integer
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.pixelHeight,
+                        title: localization.string("action.parameter.pixelHeight", defaultValue: "像素高度"),
+                        kind: .integer
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.refreshRate,
+                        title: localization.string("action.parameter.refreshRate", defaultValue: "刷新率"),
+                        kind: .double
+                    ),
+                ],
+                confirmation: ActionConfirmation(
+                    title: metadata.title,
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: metadata.title
+                ),
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        snapshot.displays.flatMap { panelDisplay in
+            panelDisplay.modes.compactMap { mode in
+                guard let reference = resolutionActionReference(
+                    display: panelDisplay.display,
+                    mode: mode
+                ) else {
+                    return nil
+                }
+                return ActionCatalogEntry(
+                    reference: reference,
+                    title: "\(panelDisplay.display.name) · \(Self.optionTitle(for: mode, localization: localization))",
+                    subtitle: metadata.title
+                )
+            }
+        }
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        resolutionTarget(for: reference) == nil
+            ? .unavailable(localization.string("error.modeNotFound", defaultValue: "分辨率模式已失效"))
+            : .available
+    }
 
     func refresh() {
         refreshSnapshot()
@@ -226,6 +322,31 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        refreshSnapshot()
+        guard let target = resolutionTarget(for: invocation.reference) else {
+            return ActionExecutionHandle {
+                .failed(message: self.localization.string(
+                    "error.modeNotFound",
+                    defaultValue: "分辨率模式已失效"
+                ))
+            }
+        }
+
+        let result = controller.applyResolution(target.mode, for: target.displayID)
+        switch result {
+        case .success:
+            refreshSnapshot()
+            lastErrorMessage = nil
+            onStateChange?()
+            return ActionExecutionHandle { .succeeded() }
+        case let .failure(error):
+            handleApplyFailure(error, displayID: target.displayID, modeId: target.mode.modeId)
+            let message = lastErrorMessage ?? error.localizedDescription(localization: localization)
+            return ActionExecutionHandle { .failed(message: message) }
+        }
+    }
 
     nonisolated static func visibleModes(_ modes: [DisplayResolutionInfo]) -> [DisplayResolutionInfo] {
         guard let first = modes.first else { return [] }
@@ -380,6 +501,66 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
             error.localizedDescription(localization: localization)
         )
         onStateChange?()
+    }
+
+    private func resolutionActionReference(
+        display: DisplayInfo,
+        mode: DisplayResolutionInfo
+    ) -> ActionReference? {
+        guard let identifier = displayIdentifier(display) else { return nil }
+        return ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setResolution),
+            parameters: try! ActionParameterSet([
+                ActionParameterID.display: .string(identifier),
+                ActionParameterID.width: .integer(Int64(mode.width)),
+                ActionParameterID.height: .integer(Int64(mode.height)),
+                ActionParameterID.pixelWidth: .integer(Int64(mode.pixelWidth)),
+                ActionParameterID.pixelHeight: .integer(Int64(mode.pixelHeight)),
+                ActionParameterID.refreshRate: .double(mode.refreshRate),
+            ])
+        )
+    }
+
+    private func resolutionTarget(
+        for reference: ActionReference
+    ) -> (displayID: CGDirectDisplayID, mode: DisplayResolutionInfo)? {
+        guard reference.key.actionID == ActionID.setResolution,
+              case let .string(displayIdentifier)? = reference.parameters[ActionParameterID.display],
+              case let .integer(width)? = reference.parameters[ActionParameterID.width],
+              case let .integer(height)? = reference.parameters[ActionParameterID.height],
+              case let .integer(pixelWidth)? = reference.parameters[ActionParameterID.pixelWidth],
+              case let .integer(pixelHeight)? = reference.parameters[ActionParameterID.pixelHeight],
+              case let .double(refreshRate)? = reference.parameters[ActionParameterID.refreshRate],
+              let display = snapshot.displays.first(where: {
+                  self.displayIdentifier($0.display) == displayIdentifier
+              }),
+              let mode = display.allModes.first(where: {
+                  $0.width == Int(width)
+                      && $0.height == Int(height)
+                      && $0.pixelWidth == Int(pixelWidth)
+                      && $0.pixelHeight == Int(pixelHeight)
+                      && abs($0.refreshRate - refreshRate) < 0.01
+              }) else {
+            return nil
+        }
+
+        return (display.display.id, mode)
+    }
+
+    nonisolated static func stableDisplayIdentifier(_ display: DisplayInfo) -> String? {
+        if display.isBuiltin {
+            return "builtin"
+        }
+        if let vendor = display.vendorNumber,
+           let model = display.modelNumber,
+           let serial = display.serialNumber,
+           serial > 0 {
+            return "display-\(vendor)-\(model)-\(serial)"
+        }
+        guard let uuid = CGDisplayCreateUUIDFromDisplayID(display.id)?.takeRetainedValue() else {
+            return nil
+        }
+        return "display-uuid-\((CFUUIDCreateString(nil, uuid) as String).uppercased())"
     }
 }
 

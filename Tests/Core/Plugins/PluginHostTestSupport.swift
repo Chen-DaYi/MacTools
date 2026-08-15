@@ -7,7 +7,8 @@ func makePluginHostForTests(
     plugins: [any MacToolsPlugin],
     suiteName: String = "PluginHostTestSupport-\(UUID().uuidString)",
     dynamicPluginManager: DynamicPluginManager? = nil,
-    loadDynamicPluginsOnInit: Bool = true
+    loadDynamicPluginsOnInit: Bool = true,
+    globalShortcutManager: GlobalShortcutManager? = nil
 ) -> PluginHost {
     let defaults = UserDefaults(suiteName: suiteName)!
     defaults.removePersistentDomain(forName: suiteName)
@@ -18,7 +19,7 @@ func makePluginHostForTests(
         shortcutStore: ShortcutStore(userDefaults: defaults),
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
         preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
-        globalShortcutManager: GlobalShortcutManager(),
+        globalShortcutManager: globalShortcutManager ?? GlobalShortcutManager(),
         loadDynamicPluginsOnInit: loadDynamicPluginsOnInit
     )
 }

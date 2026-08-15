@@ -152,9 +152,14 @@ final class FakeDiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving, @unchecked
     private var calls: [(path: String, mode: DiskCleanRemovalMode)] = []
     private var dispositionsByPath: [String: DiskCleanRemovalDisposition] = [:]
     private var defaultDisposition: DiskCleanRemovalDisposition
+    private let onRemove: (@Sendable (String) -> Void)?
 
-    init(defaultDisposition: DiskCleanRemovalDisposition = .removed) {
+    init(
+        defaultDisposition: DiskCleanRemovalDisposition = .removed,
+        onRemove: (@Sendable (String) -> Void)? = nil
+    ) {
         self.defaultDisposition = defaultDisposition
+        self.onRemove = onRemove
     }
 
     func setDisposition(_ disposition: DiskCleanRemovalDisposition, forPath path: String) {
@@ -169,10 +174,12 @@ final class FakeDiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving, @unchecked
         _ item: DiskCleanValidatedPlan.PlanItem,
         mode: DiskCleanRemovalMode
     ) -> DiskCleanRemovalDisposition {
-        lock.withLock {
+        let disposition = lock.withLock {
             calls.append((path: item.path, mode: mode))
             return dispositionsByPath[item.path] ?? defaultDisposition
         }
+        onRemove?(item.path)
+        return disposition
     }
 }
 
@@ -216,6 +223,32 @@ struct FakeDiskCleanStagedEntryDeviceResolver: DiskCleanStagedEntryDeviceResolvi
             buffer.baseAddress.map { String(cString: $0) } ?? ""
         }
         return crossedMountEntryNames.contains(name) ? realDevice &+ 1 : realDevice
+    }
+}
+
+/// Device resolver whose per-name answers change between the read-only prewalk and deletion.
+final class SequencedDiskCleanStagedEntryDeviceResolver:
+    DiskCleanStagedEntryDeviceResolving, @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var crossingsByName: [String: [Bool]]
+
+    init(crossingsByName: [String: [Bool]]) {
+        self.crossingsByName = crossingsByName
+    }
+
+    func deviceID(ofEntry nameBytes: [CChar], statResult: stat) -> UInt64 {
+        let name = nameBytes.withUnsafeBufferPointer { buffer in
+            buffer.baseAddress.map { String(cString: $0) } ?? ""
+        }
+        let crossed = lock.withLock { () -> Bool in
+            guard var sequence = crossingsByName[name], !sequence.isEmpty else { return false }
+            let value = sequence.removeFirst()
+            crossingsByName[name] = sequence
+            return value
+        }
+        let actual = UInt64(UInt32(bitPattern: statResult.st_dev))
+        return crossed ? actual &+ 1 : actual
     }
 }
 

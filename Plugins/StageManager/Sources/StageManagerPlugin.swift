@@ -61,7 +61,12 @@ private struct StageManagerPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class StageManagerPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class StageManagerPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -120,6 +125,55 @@ final class StageManagerPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "Stage Manager"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "Stage Manager"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(id: "enabled", title: metadata.title, kind: .boolean),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isStageManagerEnabled
+                    ? localization.string("action.disable.title", defaultValue: "关闭台前调度")
+                    : localization.string("action.enable.title", defaultValue: "开启台前调度"),
+                subtitle: isStageManagerEnabled
+                    ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                    : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
+                presentationState: isStageManagerEnabled ? .active : .inactive
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.enabled", defaultValue: "已开启"))"
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.disabled", defaultValue: "已关闭"))"
+            ),
+        ]
+    }
+
     func refresh() {
         let latestState = stateReader()
         if latestState != isStageManagerEnabled {
@@ -144,17 +198,54 @@ final class StageManagerPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
-    private func setStageManagerEnabled(_ isEnabled: Bool) {
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !stateReader()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        let succeeded = setStageManagerEnabled(enabled)
+        let failureMessage = lastErrorMessage ?? localization.string(
+            "error.preferencesUnavailable",
+            defaultValue: "无法访问台前调度偏好设置"
+        )
+        return ActionExecutionHandle {
+            succeeded ? .succeeded() : .failed(message: failureMessage)
+        }
+    }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    @discardableResult
+    private func setStageManagerEnabled(_ isEnabled: Bool) -> Bool {
         do {
             try commandRunner.setStageManagerEnabled(isEnabled)
             isStageManagerEnabled = isEnabled
             lastErrorMessage = nil
             onStateChange?()
+            return true
         } catch {
             logger.error("Failed to update Stage Manager state: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = error.localizedDescription
             refresh()
             onStateChange?()
+            return false
         }
     }
 

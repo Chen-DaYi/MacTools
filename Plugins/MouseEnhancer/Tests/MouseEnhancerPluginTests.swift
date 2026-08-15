@@ -135,7 +135,7 @@ final class MouseEnhancerPluginTests: XCTestCase {
         let plugin = makePlugin(
             storage: storage,
             middleClickSession: middleClickSession,
-            hostVersion: "1.1.6"
+            hostVersion: "1.2.0"
         )
 
         plugin.activate(context: PluginRuntimeContext(pluginID: "mouse-enhancer"))
@@ -163,8 +163,8 @@ final class MouseEnhancerPluginTests: XCTestCase {
 
     func testLegacyMiddleClickOwnershipUsesHostVersionBoundary() {
         XCTAssertTrue(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.1.5"))
-        XCTAssertFalse(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.1.6"))
-        XCTAssertFalse(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.1.6-beta.1"))
+        XCTAssertTrue(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.1.6"))
+        XCTAssertTrue(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.1.6-beta.1"))
         XCTAssertFalse(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.2.0"))
         XCTAssertFalse(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: nil))
     }

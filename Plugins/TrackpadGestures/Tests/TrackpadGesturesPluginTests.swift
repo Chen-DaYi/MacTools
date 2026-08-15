@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 import MacToolsPluginKit
+import MultitouchSupport
 @testable import TrackpadGesturesPlugin
 
 @MainActor
@@ -69,6 +70,148 @@ private final class TrackpadFrameDeliveryBarrier: @unchecked Sendable {
     }
 }
 
+private final class FakeMultitouchRuntime: MultitouchRuntimeProviding {
+    private struct Registration {
+        let deviceSourceID: UInt
+        let callback: MTFrameCallbackWithRefconFunction
+        let refcon: UnsafeMutableRawPointer
+        var isActive: Bool
+    }
+
+    private var retainedDevices: [NSObject]
+    private var descriptors: [MultitouchDeviceDescriptor]
+    private var registrations: [Registration] = []
+    private(set) weak var collectionLifetimeOwner: NSObject?
+    private(set) var registerCount = 0
+    private(set) var unregisterCount = 0
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+
+    init(deviceCount: Int) {
+        var retainedDevices: [NSObject] = []
+        var descriptors: [MultitouchDeviceDescriptor] = []
+        retainedDevices.reserveCapacity(deviceCount)
+        descriptors.reserveCapacity(deviceCount)
+
+        for index in 0 ..< deviceCount {
+            retainedDevices.append(NSObject())
+            let transport: MultitouchDeviceTransport = index == 0 ? .builtIn : .bluetooth
+            descriptors.append(MultitouchDeviceDescriptor(
+                deviceID: UInt64(index + 1),
+                isBuiltIn: index == 0,
+                transport: transport
+            ))
+        }
+
+        self.retainedDevices = retainedDevices
+        self.descriptors = descriptors
+    }
+
+    init(descriptors: [MultitouchDeviceDescriptor]) {
+        retainedDevices = descriptors.map { _ in NSObject() }
+        self.descriptors = descriptors
+    }
+
+    func replaceDevices(with descriptors: [MultitouchDeviceDescriptor]) {
+        retainedDevices = descriptors.map { _ in NSObject() }
+        self.descriptors = descriptors
+    }
+
+    func createDeviceCollection() -> MultitouchDeviceCollection? {
+        let owner = NSObject()
+        collectionLifetimeOwner = owner
+        return MultitouchDeviceCollection(
+            entries: zip(retainedDevices, descriptors).map { object, descriptor in
+                MultitouchDeviceEntry(
+                    device: unsafeBitCast(object, to: MTDevice.self),
+                    descriptor: descriptor
+                )
+            },
+            lifetimeOwner: owner
+        )
+    }
+
+    func register(
+        _ device: MTDevice,
+        callback: MTFrameCallbackWithRefconFunction,
+        refcon: UnsafeMutableRawPointer
+    ) {
+        registerCount += 1
+        registrations.append(Registration(
+            deviceSourceID: callbackSourceID(device),
+            callback: callback,
+            refcon: refcon,
+            isActive: true
+        ))
+    }
+
+    func unregister(_ device: MTDevice, callback: MTFrameCallbackWithRefconFunction) {
+        unregisterCount += 1
+        let sourceID = callbackSourceID(device)
+        guard let index = registrations.lastIndex(where: {
+            $0.deviceSourceID == sourceID && $0.isActive
+        }) else { return }
+        registrations[index].isActive = false
+    }
+
+    func start(_ device: MTDevice) {
+        startCount += 1
+    }
+
+    func stop(_ device: MTDevice) {
+        stopCount += 1
+    }
+
+    func emitFrame(
+        deviceIndex: Int,
+        timestamp: TimeInterval,
+        registrationOrdinal: Int? = nil
+    ) {
+        let device = unsafeBitCast(retainedDevices[deviceIndex], to: MTDevice.self)
+        let sourceID = callbackSourceID(device)
+        let matchingRegistrations = registrations.filter { $0.deviceSourceID == sourceID }
+        let registration: Registration?
+        if let registrationOrdinal {
+            registration = matchingRegistrations.indices.contains(registrationOrdinal)
+                ? matchingRegistrations[registrationOrdinal]
+                : nil
+        } else {
+            registration = matchingRegistrations.last(where: \.isActive)
+        }
+        registration?.callback(device, nil, 0, timestamp, 0, registration?.refcon)
+    }
+
+    func resolvedCallbackGate(
+        deviceIndex: Int,
+        registrationOrdinal: Int
+    ) -> MultitouchFrameCallbackGate? {
+        let device = unsafeBitCast(retainedDevices[deviceIndex], to: MTDevice.self)
+        let sourceID = callbackSourceID(device)
+        let matchingRegistrations = registrations.filter { $0.deviceSourceID == sourceID }
+        guard matchingRegistrations.indices.contains(registrationOrdinal) else { return nil }
+        return MultitouchCallbackContextRegistry.shared.gate(
+            for: matchingRegistrations[registrationOrdinal].refcon
+        )
+    }
+
+    private func callbackSourceID(_ device: MTDevice) -> UInt {
+        UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
+    }
+}
+
+private final class LockedFrameRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var frames: [TrackpadContactFrame] = []
+
+    func append(_ frame: TrackpadContactFrame) {
+        lock.withLock { frames.append(frame) }
+    }
+
+    var snapshot: [TrackpadContactFrame] {
+        lock.withLock { frames }
+    }
+}
+
 private final class TrackpadRecognitionFrameBarrier: @unchecked Sendable {
     private let lock = NSLock()
     private let framePaused = DispatchSemaphore(value: 0)
@@ -99,9 +242,16 @@ private final class TrackpadRecognitionFrameBarrier: @unchecked Sendable {
     }
 }
 
+private struct TrackpadRestoreTransactionFixture: Codable {
+    let mappings: Data?
+    let ignoresGesturesWhileTyping: Bool?
+    let typingGracePeriod: TimeInterval?
+}
+
 @MainActor
 private final class TrackpadGestureMemoryStorage: PluginStorage {
     var values: [String: Any] = [:]
+    var blockedSetKeys: Set<String> = []
 
     func object(forKey key: String) -> Any? { values[key] }
     func data(forKey key: String) -> Data? { values[key] as? Data }
@@ -109,7 +259,10 @@ private final class TrackpadGestureMemoryStorage: PluginStorage {
     func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
     func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
-    func set(_ value: Any?, forKey key: String) { values[key] = value }
+    func set(_ value: Any?, forKey key: String) {
+        guard !blockedSetKeys.contains(key) else { return }
+        values[key] = value
+    }
     func removeObject(forKey key: String) { values.removeValue(forKey: key) }
     func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
         guard values[key] == nil, let value = values[legacyKey] else { return }
@@ -231,7 +384,95 @@ private final class MockMultitouchFrameListener: MultitouchFrameListening {
 }
 
 @MainActor
+private final class MockTrackpadListenerLease: TrackpadListenerLeaseManaging {
+    var acquireSucceeds = true
+    var shouldRetryAfterFailedAcquisition = true
+    private(set) var acquireCount = 0
+    private(set) var releaseCount = 0
+    private var isHeld = false
+
+    func acquire() -> Bool {
+        acquireCount += 1
+        guard acquireSucceeds else { return false }
+        isHeld = true
+        return true
+    }
+
+    func release() {
+        guard isHeld else { return }
+        isHeld = false
+        releaseCount += 1
+    }
+}
+
+@MainActor
 final class TrackpadGestureStoreTests: XCTestCase {
+    func testCanonicalSettingsOrderGroupsGestureFamilies() {
+        XCTAssertEqual(TrackpadGesture.configurableCases, [
+            .tipTapLeftOneFixed,
+            .tipTapRightOneFixed,
+            .tipTapLeftTwoFixed,
+            .tipTapMiddleTwoFixed,
+            .tipTapRightTwoFixed,
+            .threeFingerTap,
+            .fourFingerTap,
+            .fiveFingerTap,
+            .threeFingerDoubleTap,
+            .fourFingerDoubleTap,
+            .fiveFingerDoubleTap,
+            .twoFingerClick,
+            .threeFingerClick,
+            .threeFingerLongTouch,
+            .fourFingerLongTouch,
+            .fiveFingerLongTouch,
+        ])
+        XCTAssertEqual(TrackpadGesture.threeFingerTap.settingsOrder, 5)
+        XCTAssertEqual(TrackpadGesture.threeFingerClick.settingsOrder, 12)
+    }
+
+    func testMiddleClickOverlapFingerCountsCoverShortContactFamilies() {
+        XCTAssertEqual(TrackpadGesture.threeFingerTap.middleClickOverlapFingerCount, 3)
+        XCTAssertEqual(TrackpadGesture.fourFingerDoubleTap.middleClickOverlapFingerCount, 4)
+        XCTAssertEqual(TrackpadGesture.threeFingerClick.middleClickOverlapFingerCount, 3)
+        XCTAssertEqual(TrackpadGesture.tipTapLeftTwoFixed.middleClickOverlapFingerCount, 3)
+
+        XCTAssertNil(TrackpadGesture.twoFingerClick.middleClickOverlapFingerCount)
+        XCTAssertNil(TrackpadGesture.tipTapLeftOneFixed.middleClickOverlapFingerCount)
+        XCTAssertNil(TrackpadGesture.threeFingerLongTouch.middleClickOverlapFingerCount)
+    }
+
+    func testMappingViewPreferencesPersistWithoutChangingMappingOrder() throws {
+        let storage = TrackpadGestureMemoryStorage()
+        let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let first = TrackpadGestureMapping(
+            gesture: .fiveFingerLongTouch,
+            action: .middleClick
+        )
+        let second = TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )
+        XCTAssertTrue(store.save(first))
+        XCTAssertTrue(store.save(second))
+
+        store.setMappingSort(.actionName)
+        store.setMappingStatusFilter(.disabled)
+        store.setMappingActionFilter(.middleClick)
+
+        let reloaded = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reloaded.mappingSort, .actionName)
+        XCTAssertEqual(reloaded.mappingStatusFilter, .disabled)
+        XCTAssertEqual(reloaded.mappingActionFilter, .middleClick)
+        XCTAssertEqual(reloaded.mappings.map(\.id), [first.id, second.id])
+
+        reloaded.resetMappingViewPreferences()
+        let reset = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reset.mappingSort, .gesture)
+        XCTAssertEqual(reset.mappingStatusFilter, .all)
+        XCTAssertEqual(reset.mappingActionFilter, .all)
+        XCTAssertEqual(reset.mappings.map(\.id), [first.id, second.id])
+    }
+
     func testTypingProtectionDefaultsPersistAndClampGracePeriod() {
         let storage = TrackpadGestureMemoryStorage()
         let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
@@ -274,6 +515,196 @@ final class TrackpadGestureStoreTests: XCTestCase {
 
         reloaded.delete(id: mapping.id)
         XCTAssertTrue(TrackpadGestureStore(storage: storage, legacyMiddleClick: nil).mappings.isEmpty)
+    }
+
+    func testMappingMutationsPublishOnlyAfterDurablePersistence() throws {
+        let storage = TrackpadGestureMemoryStorage()
+        let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let mapping = TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )
+        XCTAssertTrue(store.save(mapping))
+        storage.blockedSetKeys = ["mappings"]
+        var edited = mapping
+        edited.action = .action(ActionReference(
+            key: ActionKey(providerID: "test", actionID: "blocked-edit")
+        ))
+
+        XCTAssertFalse(store.save(edited))
+        XCTAssertFalse(store.setEnabled(false, id: mapping.id))
+        XCTAssertFalse(store.delete(id: mapping.id))
+        XCTAssertEqual(store.mappings, [mapping])
+        XCTAssertEqual(store.enabledGestures, [mapping.gesture])
+
+        storage.blockedSetKeys = []
+        let reloaded = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reloaded.mappings, [mapping])
+    }
+
+    func testMacToolsActionPersistsMigratesAndPortableBackupRoundTrips() throws {
+        let storage = TrackpadGestureMemoryStorage()
+        let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let original = ActionReference(
+            key: ActionKey(providerID: "example", actionID: "run"),
+            schemaVersion: 1
+        )
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .fourFingerLongTouch,
+            action: .action(original)
+        )))
+
+        let reloaded = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reloaded.mapping(for: .fourFingerLongTouch)?.action, .action(original))
+        let context = TrackpadActionHostContext(
+            catalog: { [] },
+            item: { _ in nil },
+            migrate: { reference in
+                ActionReference(
+                    key: reference.key,
+                    schemaVersion: 2,
+                    parameters: reference.parameters
+                )
+            },
+            execute: { _ in }
+        )
+        XCTAssertTrue(reloaded.migrateActions(using: context))
+        guard case let .action(migrated)? = reloaded.mapping(for: .fourFingerLongTouch)?.action else {
+            return XCTFail("Expected a canonical action mapping")
+        }
+        XCTAssertEqual(migrated.schemaVersion, 2)
+
+        let backup = try XCTUnwrap(reloaded.portableBackup())
+        let restored = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        XCTAssertTrue(restored.restorePortableBackup(backup))
+        XCTAssertEqual(restored.mappings, reloaded.mappings)
+    }
+
+    func testPortableBackupFiltersOnlyNonportableCanonicalActions() throws {
+        let store = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        let portable = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "portable")
+        )
+        let local = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "local")
+        )
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .action(portable)
+        )))
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .fourFingerTap,
+            action: .action(local)
+        )))
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .fiveFingerTap,
+            action: .middleClick
+        )))
+        let context = TrackpadActionHostContext(
+            catalog: { [] },
+            item: { _ in nil },
+            migrate: { $0 },
+            canExport: { $0 != local },
+            canRestore: { $0 != local },
+            execute: { _ in }
+        )
+
+        let backup = try XCTUnwrap(store.portableBackup(using: context))
+        XCTAssertEqual(store.actionReferences(inPortableBackup: backup), [portable])
+        let restored = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        XCTAssertTrue(restored.restorePortableBackup(backup, using: context))
+        XCTAssertEqual(Set(restored.mappings.map(\.gesture)), [.threeFingerTap, .fiveFingerTap])
+
+        let unfiltered = try XCTUnwrap(store.portableBackup())
+        XCTAssertFalse(restored.restorePortableBackup(unfiltered, using: context))
+    }
+
+    func testPortableBackupWriteFailureRollsBackAllSettings() throws {
+        let source = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        XCTAssertTrue(source.save(TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )))
+        source.setTypingGracePeriod(1.2)
+        let backup = try XCTUnwrap(source.portableBackup())
+
+        let storage = TrackpadGestureMemoryStorage()
+        let destination = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let original = TrackpadGestureMapping(
+            gesture: .fourFingerTap,
+            action: .middleClick
+        )
+        XCTAssertTrue(destination.save(original))
+        destination.setIgnoresGesturesWhileTyping(false)
+        destination.setTypingGracePeriod(0.8)
+        storage.blockedSetKeys = ["ignore-while-typing"]
+
+        XCTAssertFalse(destination.restorePortableBackup(backup))
+        storage.blockedSetKeys = []
+        let reloaded = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reloaded.mappings, [original])
+        XCTAssertFalse(reloaded.ignoresGesturesWhileTyping)
+        XCTAssertEqual(reloaded.typingGracePeriod, 0.8)
+    }
+
+    func testPortableRestoreRejectsWrongTypedRawMappingWithoutRemovingIt() throws {
+        let source = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        XCTAssertTrue(source.save(TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )))
+        let backup = try XCTUnwrap(source.portableBackup())
+        let storage = TrackpadGestureMemoryStorage()
+        storage.values["mappings"] = "sentinel"
+        let destination = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+
+        XCTAssertFalse(destination.restorePortableBackup(backup))
+        XCTAssertEqual(storage.object(forKey: "mappings") as? String, "sentinel")
+    }
+
+    func testInitializationRecoversInterruptedPortableRestoreJournal() throws {
+        let storage = TrackpadGestureMemoryStorage()
+        let originalStore = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let original = TrackpadGestureMapping(
+            gesture: .fourFingerTap,
+            action: .middleClick
+        )
+        XCTAssertTrue(originalStore.save(original))
+        originalStore.setIgnoresGesturesWhileTyping(false)
+        originalStore.setTypingGracePeriod(0.8)
+        let transaction = TrackpadRestoreTransactionFixture(
+            mappings: storage.data(forKey: "mappings"),
+            ignoresGesturesWhileTyping: false,
+            typingGracePeriod: 0.8
+        )
+        storage.values["portable-restore-transaction.v1"] = try JSONEncoder().encode(transaction)
+        storage.values["mappings"] = try JSONEncoder().encode([
+            TrackpadGestureMapping(gesture: .threeFingerTap, action: .middleClick),
+        ])
+        storage.values["ignore-while-typing"] = true
+        storage.values["typing-grace-period"] = 1.2
+
+        let recovered = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+
+        XCTAssertEqual(recovered.mappings, [original])
+        XCTAssertFalse(recovered.ignoresGesturesWhileTyping)
+        XCTAssertEqual(recovered.typingGracePeriod, 0.8)
+        XCTAssertNil(storage.data(forKey: "portable-restore-transaction.v1"))
     }
 
     func testDuplicateGestureIsRejectedEvenWhenExistingMappingIsDisabled() {
@@ -342,6 +773,23 @@ final class TrackpadGestureStoreTests: XCTestCase {
             )))
         }
         XCTAssertEqual(store.mappings.count, 3)
+    }
+
+    func testPhysicalClickGesturesCanBePersistedAsMappings() {
+        let store = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .twoFingerClick,
+            action: .keyboardShortcut(ShortcutBinding(keyCode: 0, modifiers: .command))
+        )))
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .threeFingerClick,
+            action: .middleClick
+        )))
+        XCTAssertEqual(store.mappings.map(\.gesture), [.twoFingerClick, .threeFingerClick])
     }
 
     func testShortcutReuseLookupAllowsButReportsOtherMappings() {
@@ -519,6 +967,41 @@ final class TrackpadGestureStoreTests: XCTestCase {
 
 @MainActor
 final class TrackpadGesturesPluginTests: XCTestCase {
+    func testActionPickerAccessibilityExposesConfirmationRequirement() {
+        XCTAssertNil(TrackpadActionPickerAccessibility(
+            isSafe: true,
+            confirmationRequiredText: "Confirmation is required before running."
+        ).confirmationValue)
+        XCTAssertEqual(
+            TrackpadActionPickerAccessibility(
+                isSafe: false,
+                confirmationRequiredText: "Confirmation is required before running."
+            ).confirmationValue,
+            "Confirmation is required before running."
+        )
+    }
+
+    func testGestureRawValuesRemainCompatibleWithExistingMappingsAndBackups() {
+        XCTAssertEqual(TrackpadGesture.allCases.map(\.rawValue), [
+            "tipTapLeftOneFixed",
+            "tipTapRightOneFixed",
+            "tipTapLeftTwoFixed",
+            "tipTapMiddleTwoFixed",
+            "tipTapRightTwoFixed",
+            "threeFingerTap",
+            "fourFingerTap",
+            "fiveFingerTap",
+            "threeFingerLongTouch",
+            "fourFingerLongTouch",
+            "fiveFingerLongTouch",
+            "threeFingerDoubleTap",
+            "fourFingerDoubleTap",
+            "fiveFingerDoubleTap",
+            "twoFingerClick",
+            "threeFingerClick",
+        ])
+    }
+
     func testMultitouchRuntimeResolvesRequiredSymbolsDynamically() {
         XCTAssertNotNil(MultitouchSupportRuntime.load())
     }
@@ -530,11 +1013,213 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(driver.deviceCount, 0)
     }
 
+    func testMultitouchDriverStartsEveryDiscoveredDeviceWithoutSynchronousStatusCheck() {
+        let runtime = FakeMultitouchRuntime(deviceCount: 2)
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+
+        XCTAssertTrue(driver.start { _ in })
+        XCTAssertEqual(driver.deviceCount, 2)
+        XCTAssertEqual(runtime.registerCount, 2)
+        XCTAssertEqual(runtime.startCount, 2)
+        XCTAssertNotNil(runtime.collectionLifetimeOwner)
+
+        driver.stop()
+        XCTAssertEqual(runtime.unregisterCount, 2)
+        XCTAssertEqual(runtime.stopCount, 2)
+        XCTAssertNil(runtime.collectionLifetimeOwner)
+    }
+
+    func testMultitouchDriverTranslatesCallbackPointerToStableDeviceIDWithoutClockFiltering() {
+        let runtime = FakeMultitouchRuntime(descriptors: [
+            MultitouchDeviceDescriptor(
+                deviceID: 42,
+                isBuiltIn: false,
+                transport: .bluetooth
+            ),
+        ])
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 0.01)
+
+        XCTAssertEqual(recorder.snapshot.map(\.deviceID), [42])
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [0.01])
+        XCTAssertEqual(driver.deviceDiagnostics, [
+            MultitouchDeviceDiagnostics(
+                descriptor: MultitouchDeviceDescriptor(
+                    deviceID: 42,
+                    isBuiltIn: false,
+                    transport: .bluetooth
+                ),
+                deliveredFrameCount: 1,
+                lastFrameTimestamp: 0.01
+            ),
+        ])
+        driver.stop()
+    }
+
+    func testMultitouchDriverKeepsStableIDWhenRuntimeReturnsANewDevicePointer() {
+        let descriptor = MultitouchDeviceDescriptor(
+            deviceID: 42,
+            isBuiltIn: false,
+            transport: .usb
+        )
+        let runtime = FakeMultitouchRuntime(descriptors: [descriptor])
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 1)
+        driver.stop()
+
+        runtime.replaceDevices(with: [descriptor])
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 0.001)
+
+        XCTAssertEqual(recorder.snapshot.map(\.deviceID), [42, 42])
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [1, 0.001])
+        driver.stop()
+    }
+
+    func testMultitouchDriverSeparatesDuplicateOrUnavailableDeviceIDs() {
+        let runtime = FakeMultitouchRuntime(descriptors: [
+            MultitouchDeviceDescriptor(deviceID: 0, isBuiltIn: true, transport: .builtIn),
+            MultitouchDeviceDescriptor(deviceID: 0, isBuiltIn: false, transport: .bluetooth),
+        ])
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 0.1)
+        runtime.emitFrame(deviceIndex: 1, timestamp: 0.2)
+
+        XCTAssertEqual(Set(recorder.snapshot.map(\.deviceID)).count, 2)
+        XCTAssertFalse(recorder.snapshot.map(\.deviceID).contains(0))
+        driver.stop()
+    }
+
+    func testMultitouchDriverRejectsLateCallbackAfterStop() {
+        let runtime = FakeMultitouchRuntime(deviceCount: 1)
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 1)
+        driver.stop()
+        runtime.emitFrame(deviceIndex: 0, timestamp: 2)
+
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [1])
+        XCTAssertEqual(runtime.registerCount, 1)
+        XCTAssertEqual(runtime.unregisterCount, 1)
+        XCTAssertEqual(runtime.stopCount, 1)
+    }
+
+    func testMultitouchDriverRejectsPreviousRegistrationAfterRestartWithReusedDevicePointer() {
+        let runtime = FakeMultitouchRuntime(deviceCount: 1)
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 1)
+        driver.stop()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 2, registrationOrdinal: 0)
+        runtime.emitFrame(deviceIndex: 0, timestamp: 3, registrationOrdinal: 1)
+
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [1, 3])
+        XCTAssertEqual(runtime.registerCount, 2)
+        XCTAssertEqual(runtime.unregisterCount, 1)
+        driver.stop()
+    }
+
+    func testMultitouchDriverDoesNotReactivateGateResolvedBeforeRestart() throws {
+        let runtime = FakeMultitouchRuntime(deviceCount: 1)
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        let oldGate = try XCTUnwrap(runtime.resolvedCallbackGate(
+            deviceIndex: 0,
+            registrationOrdinal: 0
+        ))
+        driver.stop()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        XCTAssertFalse(oldGate.deliver(TrackpadContactFrame(
+            deviceID: 1,
+            timestamp: 1,
+            contacts: []
+        )))
+        runtime.emitFrame(deviceIndex: 0, timestamp: 2, registrationOrdinal: 1)
+
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [2])
+        driver.stop()
+    }
+
     func testMetadataAndEmptyState() {
         let plugin = makePlugin().plugin
         XCTAssertEqual(plugin.metadata.id, "trackpad-gestures")
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "尚未配置手势")
         XCTAssertEqual(plugin.permissionRequirements.map(\.id), ["accessibility", "input-monitoring"])
+    }
+
+    func testEnabledOverlappingMappingsPublishDeduplicatedSharedGestureClaims() {
+        let fixture = makePlugin()
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .fourFingerTap,
+            action: .keyboardShortcut(ShortcutBinding(keyCode: 0, modifiers: [.command]))
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .fiveFingerLongTouch,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .fiveFingerDoubleTap,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .threeFingerDoubleTap,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .threeFingerClick,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .tipTapLeftTwoFixed,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .twoFingerClick,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .tipTapLeftOneFixed,
+            action: .middleClick
+        )))
+
+        XCTAssertEqual(
+            fixture.plugin.activeInputGestureClaims.map(\.id),
+            ["trackpad.tap.3", "trackpad.tap.4", "trackpad.tap.5"]
+        )
+        XCTAssertEqual(fixture.plugin.activeInputGestureClaims.count, 3)
+    }
+
+    func testTestingPublishesEveryOverlappingSharedGestureClaim() {
+        let fixture = makePlugin()
+
+        fixture.plugin.store.setTesting(true)
+
+        XCTAssertEqual(
+            fixture.plugin.activeInputGestureClaims.map(\.id),
+            ["trackpad.tap.3", "trackpad.tap.4", "trackpad.tap.5"]
+        )
     }
 
     func testEnabledMappingExecutesEveryRepeatedRecognizedAction() {
@@ -562,6 +1247,34 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(fixture.session.typingProtectionUpdates.last?.1, 0.4)
     }
 
+    func testMacToolsActionUsesSharedHostExecutorAndConsumesTipTapClick() {
+        let fixture = makePlugin()
+        let reference = ActionReference(
+            key: ActionKey(providerID: "action-grid", actionID: "show")
+        )
+        var executed: [ActionReference] = []
+        fixture.plugin.trackpadActionHostContext = TrackpadActionHostContext(
+            catalog: { [] },
+            item: { _ in nil },
+            migrate: { $0 },
+            execute: { executed.append($0) }
+        )
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .tipTapRightOneFixed,
+            action: .action(reference)
+        )))
+
+        fixture.plugin.configurationDidChange()
+        fixture.session.recognize(.tipTapRightOneFixed)
+
+        XCTAssertEqual(executed, [reference])
+        XCTAssertTrue(fixture.executor.actions.isEmpty)
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.tipTapRightOneFixed],
+            .consume
+        )
+    }
+
     func testConfiguredDoubleTapExecutesItsAction() {
         let fixture = makePlugin()
         let shortcut = ShortcutBinding(keyCode: 2, modifiers: [.command, .option])
@@ -586,6 +1299,45 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         fixture.plugin.configurationDidChange()
 
         XCTAssertNil(fixture.session.nativeClickResolutionUpdates.last?[.fourFingerTap])
+    }
+
+    func testPhysicalClickShortcutConsumesNativeClickAndExecutesWithoutResolvingTwice() {
+        let fixture = makePlugin()
+        let shortcut = ShortcutBinding(keyCode: 0, modifiers: [.command, .shift])
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .twoFingerClick,
+            action: .keyboardShortcut(shortcut)
+        )))
+
+        fixture.plugin.configurationDidChange()
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.twoFingerClick],
+            .consume
+        )
+
+        fixture.session.recognize(.twoFingerClick)
+
+        XCTAssertEqual(fixture.executor.actions, [.keyboardShortcut(shortcut)])
+        XCTAssertTrue(fixture.session.resolvedMiddleClicks.isEmpty)
+    }
+
+    func testPhysicalClickMappedToMiddleClickUsesNativeRewriteOnly() {
+        let fixture = makePlugin()
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .threeFingerClick,
+            action: .middleClick
+        )))
+
+        fixture.plugin.configurationDidChange()
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.threeFingerClick],
+            .middleClick
+        )
+
+        fixture.session.recognize(.threeFingerClick)
+
+        XCTAssertTrue(fixture.executor.actions.isEmpty)
+        XCTAssertTrue(fixture.session.resolvedMiddleClicks.isEmpty)
     }
 
     func testTypingProtectionConfigurationIsForwardedToSession() {
@@ -709,6 +1461,14 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         fixture.plugin.configurationDidChange()
 
         XCTAssertEqual(fixture.session.activations.last, Set(TrackpadGesture.allCases))
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.twoFingerClick],
+            .consume
+        )
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.threeFingerClick],
+            .consume
+        )
         fixture.session.recognize(.threeFingerTap)
         XCTAssertEqual(fixture.plugin.store.lastTestGesture, .threeFingerTap)
         XCTAssertTrue(fixture.executor.actions.isEmpty)
@@ -763,14 +1523,22 @@ final class TrackpadGesturesPluginTests: XCTestCase {
 
         inputMonitoringGranted.value = true
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        await Task.yield()
+        await drainMainQueue()
         XCTAssertTrue(fixture.session.isActive)
 
         inputMonitoringGranted.value = false
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        await Task.yield()
+        await drainMainQueue()
         XCTAssertFalse(fixture.session.isActive)
         fixture.plugin.deactivate(reason: .disabled)
+    }
+
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
+        }
     }
 
     func testDeactivationStopsListenerAndClearsTestMode() {
@@ -818,6 +1586,154 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(driver.stopCount, 2)
         XCTAssertEqual(tapStarts, 3)
         XCTAssertEqual(tapStops, 2)
+        session.deactivate()
+    }
+
+    func testInterprocessListenerLeaseAllowsOnlyOneOwner() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TrackpadListenerLeaseTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let first = TrackpadInterprocessListenerLease(
+            bundleIdentifier: "test.mactools",
+            temporaryDirectory: directory,
+            isAcquisitionAllowed: true
+        )
+        let second = TrackpadInterprocessListenerLease(
+            bundleIdentifier: "media.jenny.mactools.dev",
+            temporaryDirectory: directory,
+            isAcquisitionAllowed: true
+        )
+
+        XCTAssertTrue(first.acquire())
+        XCTAssertFalse(second.acquire())
+        first.release()
+        XCTAssertTrue(second.acquire())
+        second.release()
+    }
+
+    func testInterprocessListenerLeaseNeverLetsATestHostOwnTheProductionListener() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TrackpadListenerTestHostLeaseTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let testHostLease = TrackpadInterprocessListenerLease(
+            bundleIdentifier: "test.mactools",
+            temporaryDirectory: directory,
+            isAcquisitionAllowed: false
+        )
+        let installedAppLease = TrackpadInterprocessListenerLease(
+            bundleIdentifier: "test.mactools",
+            temporaryDirectory: directory,
+            isAcquisitionAllowed: true
+        )
+
+        XCTAssertFalse(testHostLease.acquire())
+        XCTAssertTrue(installedAppLease.acquire())
+        installedAppLease.release()
+    }
+
+    func testListenerProcessPolicyPrefersTheStableInstalledDebugApp() {
+        let home = URL(fileURLWithPath: "/Users/developer", isDirectory: true)
+        let installedApp = home.appendingPathComponent(
+            "Applications/MacTools Dev.app",
+            isDirectory: true
+        )
+        let staleBuild = URL(fileURLWithPath: "/repo/build/Debug/MacTools Dev.app")
+
+        XCTAssertFalse(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: false,
+            bundleIdentifier: "com.example.mactools.dev",
+            currentBundleURL: staleBuild,
+            productName: "MacTools Dev",
+            homeDirectory: home,
+            fileExists: { $0 == installedApp.path }
+        ))
+        XCTAssertTrue(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: false,
+            bundleIdentifier: "com.example.mactools.dev",
+            currentBundleURL: installedApp,
+            productName: "MacTools Dev",
+            homeDirectory: home,
+            fileExists: { $0 == installedApp.path }
+        ))
+    }
+
+    func testListenerProcessPolicyDoesNotChangeProductionOrFirstRunBehavior() {
+        let home = URL(fileURLWithPath: "/Users/developer", isDirectory: true)
+        let buildApp = URL(fileURLWithPath: "/repo/build/Debug/MacTools.app")
+
+        XCTAssertTrue(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: false,
+            bundleIdentifier: "com.example.mactools",
+            currentBundleURL: buildApp,
+            productName: "MacTools",
+            homeDirectory: home,
+            fileExists: { _ in true }
+        ))
+        XCTAssertTrue(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: false,
+            bundleIdentifier: "com.example.mactools.dev",
+            currentBundleURL: buildApp,
+            productName: "MacTools Dev",
+            homeDirectory: home,
+            fileExists: { _ in false }
+        ))
+        XCTAssertFalse(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: true,
+            bundleIdentifier: "com.example.mactools",
+            currentBundleURL: buildApp,
+            productName: "MacTools",
+            homeDirectory: home,
+            fileExists: { _ in false }
+        ))
+    }
+
+    func testSessionWaitsForExclusiveListenerLeaseBeforeStartingDeviceCallbacks() {
+        let driver = MockMultitouchFrameListener()
+        let lease = MockTrackpadListenerLease()
+        lease.acquireSucceeds = false
+        var tapStarts = 0
+        var availability: [Bool] = []
+        let session = MultitouchDeviceSession(
+            driver: driver,
+            listenerLease: lease,
+            testEventTapStart: { tapStarts += 1; return true },
+            testEventTapStop: {}
+        )
+        session.onAvailabilityChange = { availability.append($0) }
+
+        XCTAssertFalse(session.activate(gestures: [.threeFingerTap]))
+        XCTAssertEqual(driver.startCount, 0)
+        XCTAssertEqual(tapStarts, 0)
+        XCTAssertEqual(availability, [false])
+
+        lease.acquireSucceeds = true
+        session.restartImmediatelyForTests()
+
+        XCTAssertTrue(session.isActive)
+        XCTAssertEqual(driver.startCount, 1)
+        XCTAssertEqual(tapStarts, 1)
+        XCTAssertEqual(availability, [false, true])
+        session.deactivate()
+        XCTAssertEqual(lease.releaseCount, 1)
+    }
+
+    func testSessionReleasesExclusiveListenerLeaseWhenStartupFails() {
+        let driver = MockMultitouchFrameListener()
+        driver.startSucceeds = false
+        let lease = MockTrackpadListenerLease()
+        let session = MultitouchDeviceSession(
+            driver: driver,
+            listenerLease: lease,
+            testEventTapStart: { true },
+            testEventTapStop: {}
+        )
+
+        XCTAssertFalse(session.activate(gestures: [.threeFingerTap]))
+        XCTAssertEqual(lease.acquireCount, 1)
+        XCTAssertEqual(lease.releaseCount, 1)
         session.deactivate()
     }
 
@@ -912,6 +1828,17 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(session.nativeClickResolutionUpdates.last?[gesture], .consume)
     }
 
+    func testExternalPhysicalClickClaimConsumesNativeClickAndPublishesMiddleClickConflict() {
+        let (plugin, session, _) = makePlugin()
+        let gesture = TrackpadGesture.threeFingerClick
+
+        plugin.setTrackpadGestureOwnership(localGestures: [], externalGestures: [gesture]) { _, _ in }
+        plugin.activate(context: PluginRuntimeContext(pluginID: "trackpad-gestures"))
+
+        XCTAssertEqual(session.nativeClickResolutionUpdates.last?[gesture], .consume)
+        XCTAssertEqual(plugin.activeInputGestureClaims.map(\.id), ["trackpad.tap.3"])
+    }
+
     func testSessionRestartsDriverWhenDeviceRemovalNotificationArrives() async throws {
         let driver = MockMultitouchFrameListener()
         let session = MultitouchDeviceSession(
@@ -930,27 +1857,43 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         session.deactivate()
     }
 
-    func testFrameCallbackGateRejectsWrongDeviceOldTimestampAndInvalidatedRegistration() {
+    func testSessionCoalescesRepeatedDeviceChangeNotifications() async throws {
+        let driver = MockMultitouchFrameListener()
+        let session = MultitouchDeviceSession(
+            driver: driver,
+            testEventTapStart: { true },
+            testEventTapStop: {},
+            deviceChangeRestartDelay: 0.01
+        )
+
+        XCTAssertTrue(session.activate(gestures: [.threeFingerTap]))
+        session.simulateDeviceRemovalNotificationForTests()
+        session.simulateDeviceRemovalNotificationForTests()
+        try await Task.sleep(nanoseconds: 40_000_000)
+
+        XCTAssertEqual(driver.startCount, 2)
+        session.deactivate()
+    }
+
+    func testFrameCallbackGateMapsStableDeviceIDAndAcceptsIndependentDeviceClock() {
         let gate = MultitouchFrameCallbackGate()
-        let deliveryCount = LockedTestCounter()
-        gate.activate(deviceIDs: [7], startedAt: 10) { _ in deliveryCount.increment() }
+        let recorder = LockedFrameRecorder()
+        gate.activate(deviceIDsByCallbackSource: [7: 70]) { recorder.append($0) }
 
         XCTAssertFalse(gate.deliver(TrackpadContactFrame(
             deviceID: 8, timestamp: 11, contacts: []
         )))
-        XCTAssertFalse(gate.deliver(TrackpadContactFrame(
-            deviceID: 7, timestamp: 9.99, contacts: []
-        )))
         XCTAssertTrue(gate.deliver(TrackpadContactFrame(
-            deviceID: 7, timestamp: 10, contacts: []
+            deviceID: 7, timestamp: 0.001, contacts: []
         )))
-        XCTAssertEqual(deliveryCount.value, 1)
+        XCTAssertEqual(recorder.snapshot.map(\.deviceID), [70])
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [0.001])
 
         gate.invalidate()
         XCTAssertFalse(gate.deliver(TrackpadContactFrame(
             deviceID: 7, timestamp: 11, contacts: []
         )))
-        XCTAssertEqual(deliveryCount.value, 1)
+        XCTAssertEqual(recorder.snapshot.count, 1)
     }
 
     func testFrameCallbackGateInvalidationWaitsForAdmittedHandler() {
@@ -958,7 +1901,7 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         let barrier = TrackpadFrameDeliveryBarrier()
         let deliveryFinished = DispatchSemaphore(value: 0)
         let invalidationFinished = DispatchSemaphore(value: 0)
-        gate.activate(deviceIDs: [7], startedAt: 10) { _ in barrier.pauseDelivery() }
+        gate.activate(deviceIDsByCallbackSource: [7: 70]) { _ in barrier.pauseDelivery() }
 
         DispatchQueue.global().async {
             gate.deliver(TrackpadContactFrame(deviceID: 7, timestamp: 10, contacts: []))

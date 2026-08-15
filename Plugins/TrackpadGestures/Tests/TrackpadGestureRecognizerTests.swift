@@ -3,6 +3,19 @@ import MacToolsPluginKit
 @testable import TrackpadGesturesPlugin
 
 final class TrackpadGestureRecognizerTests: XCTestCase {
+    func testPhysicalClickGesturesRequireNativeClickEvents() {
+        var engine = TrackpadGestureEngine(gestures: [.twoFingerClick, .threeFingerClick])
+
+        _ = engine.process(frame(time: 0, contacts: []))
+        XCTAssertTrue(engine.process(frame(
+            time: 0.01,
+            contacts: Array(threeContacts.prefix(2))
+        )).recognized.isEmpty)
+        XCTAssertTrue(engine.process(frame(time: 0.08, contacts: [])).recognized.isEmpty)
+        XCTAssertTrue(engine.process(frame(time: 0.40, contacts: threeContacts)).recognized.isEmpty)
+        XCTAssertTrue(engine.process(frame(time: 0.48, contacts: [])).recognized.isEmpty)
+    }
+
     func testTipTapClassifiesLeftAndRightAndTriggersAfterTapRelease() {
         var left = TipTapRecognizer(fixedFingerCount: 1, region: .left)
         XCTAssertFalse(left.process(frame(time: 0, contacts: [])))

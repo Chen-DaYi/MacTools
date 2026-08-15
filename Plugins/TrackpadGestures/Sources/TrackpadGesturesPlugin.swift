@@ -38,7 +38,10 @@ private struct TrackpadGestureReadinessError: LocalizedError {
 @MainActor
 final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     AccessibilityPermissionRefreshing, PluginSettingsPresenting,
-    PluginFeatureExtractionReadinessProviding, TrackpadGestureEventProviding {
+    PluginFeatureExtractionReadinessProviding, TrackpadActionHostContextConsuming,
+    PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
+    PluginPortablePreferencesActionReferencesProviding, PluginInputGestureClaimProviding,
+    TrackpadGestureEventProviding {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -51,10 +54,30 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
+    var trackpadActionHostContext: TrackpadActionHostContext? {
+        didSet {
+            if let trackpadActionHostContext {
+                _ = store.migrateActions(using: trackpadActionHostContext)
+            }
+        }
+    }
     var requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
     var onTrackpadGestureRequestsChange: (() -> Void)?
 
     let store: TrackpadGestureStore
+
+    var activeInputGestureClaims: [PluginInputGestureClaim] {
+        let gestures = store.isTesting
+            ? TrackpadGesture.allCases
+            : Array(store.enabledGestures.union(externalGestureClaims))
+        let claimedFingerCounts = Set(gestures.compactMap(\.middleClickOverlapFingerCount))
+        return claimedFingerCounts.sorted().map { count in
+            return PluginInputGestureClaim(
+                id: "trackpad.tap.\(count)",
+                title: TrackpadGesture.fingerTap(count: count).title(localization: localization)
+            )
+        }
+    }
 
     private let localization: PluginLocalization
     private let session: any MultitouchDeviceSessionManaging
@@ -132,7 +155,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             order: 57,
             defaultDescription: resolvedLocalization.string(
                 "metadata.description",
-                defaultValue: "将触控板手势映射为快捷键或中键点击"
+                defaultValue: "将触控板手势映射为 MacTools 操作、快捷键或中键点击"
             )
         )
 
@@ -222,6 +245,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     TrackpadGesturesSettingsView(
                         store: self.store,
                         localization: self.localization,
+                        actionHostContext: self.trackpadActionHostContext,
                         isGestureOwned: { self.isGestureOwned($0) },
                         onChange: { [weak self] in self?.configurationDidChange() },
                         onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
@@ -239,6 +263,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     TrackpadGesturesSettingsView(
                         store: self.store,
                         localization: self.localization,
+                        actionHostContext: self.trackpadActionHostContext,
                         isGestureOwned: { self.isGestureOwned($0) },
                         onChange: { [weak self] in self?.configurationDidChange() },
                         onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
@@ -256,6 +281,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     TrackpadGesturesSettingsView(
                         store: self.store,
                         localization: self.localization,
+                        actionHostContext: self.trackpadActionHostContext,
                         isGestureOwned: { self.isGestureOwned($0) },
                         onChange: { [weak self] in self?.configurationDidChange() },
                         onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
@@ -380,11 +406,22 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         guard let mapping = store.mapping(for: gesture), mapping.isEnabled else {
             return
         }
-        if let clickResolution = session.resolveNativeClick(for: gesture, deviceID: deviceID),
-           clickResolution == .middleClick {
+        if gesture.physicalClickFingerCount != nil {
+            // The native event was already consumed or rewritten synchronously by the event tap.
+            if case .middleClick = mapping.action {
+                return
+            }
+        } else if let clickResolution = session.resolveNativeClick(
+            for: gesture,
+            deviceID: deviceID
+        ), clickResolution == .middleClick {
             return
         }
-        actionExecutor.execute(mapping.action)
+        if case let .action(reference) = mapping.action {
+            trackpadActionHostContext?.execute(reference)
+        } else {
+            actionExecutor.execute(mapping.action)
+        }
     }
 
     private func refreshPermissionsAndApply() {
@@ -414,7 +451,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.refreshPermissionsAndApply()
                 self.onStateChange?()
@@ -462,7 +499,10 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             : localGestures.union(externalGestureClaims)
         let clickResolutions: [TrackpadGesture: TrackpadNativeClickResolution]
         if store.isTesting {
-            clickResolutions = [:]
+            clickResolutions = Dictionary(uniqueKeysWithValues: TrackpadGesture.allCases.compactMap {
+                gesture in
+                gesture.physicalClickFingerCount.map { _ in (gesture, .consume) }
+            })
         } else {
             let localResolutions: [TrackpadGesture: TrackpadNativeClickResolution] = Dictionary(
                 uniqueKeysWithValues: store.mappings.compactMap { mapping -> (TrackpadGesture, TrackpadNativeClickResolution)? in
@@ -470,16 +510,21 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                 switch mapping.action {
                 case .middleClick:
                     return (mapping.gesture, .middleClick)
-                case .keyboardShortcut where mapping.gesture.tipTapConfiguration != nil:
+                case .action where mapping.gesture.tipTapConfiguration != nil
+                    || mapping.gesture.physicalClickFingerCount != nil:
                     return (mapping.gesture, .consume)
-                case .keyboardShortcut:
+                case .keyboardShortcut where mapping.gesture.tipTapConfiguration != nil
+                    || mapping.gesture.physicalClickFingerCount != nil:
+                    return (mapping.gesture, .consume)
+                case .action, .keyboardShortcut:
                     return nil
                 }
                 }
             )
             let externalResolutions: [TrackpadGesture: TrackpadNativeClickResolution] = Dictionary(
                 uniqueKeysWithValues: externalGestureClaims.compactMap { gesture -> (TrackpadGesture, TrackpadNativeClickResolution)? in
-                    guard gesture.tipTapConfiguration != nil else {
+                    guard gesture.tipTapConfiguration != nil
+                        || gesture.physicalClickFingerCount != nil else {
                         return nil
                     }
                     return (gesture, .consume)
@@ -534,6 +579,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         externalGestureClaims = externalGestures
         externalGestureHandler = handler
         applyConfiguration()
+        onStateChange?()
     }
 
     private var managedLocalGestures: Set<TrackpadGesture> {
@@ -569,5 +615,32 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             return localization.string("panel.subtitle.needsPermission", defaultValue: "需要完成权限设置")
         }
         return localization.format("panel.subtitle.enabledCountFormat", defaultValue: "%d 个手势已启用", count)
+    }
+
+    func trackpadActionCatalogDidChange() {
+        guard let trackpadActionHostContext else { return }
+        if store.migrateActions(using: trackpadActionHostContext) {
+            onStateChange?()
+        }
+    }
+
+    func makePortablePreferencesBackup() -> Data? {
+        store.portableBackup(using: trackpadActionHostContext)
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        if store.restorePortableBackup(data, using: trackpadActionHostContext) {
+            configurationDidChange()
+        }
+    }
+
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        let restored = store.restorePortableBackup(data, using: trackpadActionHostContext)
+        if restored { configurationDidChange() }
+        return restored
+    }
+
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
+        store.actionReferences(inPortableBackup: data)
     }
 }

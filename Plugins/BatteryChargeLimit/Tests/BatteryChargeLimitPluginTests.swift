@@ -29,6 +29,9 @@ private final class MockBatteryWriter: BatteryChargeLimitWriting {
     var resumeCalls: Int = 0
     var dischargeCalls: [Bool] = []
     var nextError: BatteryChargeWriteError?
+    var inhibitError: BatteryChargeWriteError?
+    var resumeError: BatteryChargeWriteError?
+    var dischargeError: BatteryChargeWriteError?
 
     init(
         isHelperAvailable: Bool = true,
@@ -47,19 +50,19 @@ private final class MockBatteryWriter: BatteryChargeLimitWriting {
     @discardableResult
     func inhibitCharging(limitPercent: Int) -> BatteryChargeWriteError? {
         inhibitCalls.append(limitPercent)
-        return nextError
+        return inhibitError ?? nextError
     }
 
     @discardableResult
     func resumeCharging() -> BatteryChargeWriteError? {
         resumeCalls += 1
-        return nextError
+        return resumeError ?? nextError
     }
 
     @discardableResult
     func setForceDischarge(_ on: Bool) -> BatteryChargeWriteError? {
         dischargeCalls.append(on)
-        return nextError
+        return dischargeError ?? nextError
     }
 }
 
@@ -107,6 +110,53 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(writer.resumeCalls, 1)
     }
 
+    func testFailedDisableFromDischargingReappliesPreviousHardwareMode() {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 90)),
+            writer: writer
+        )
+        plugin.refresh()
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        plugin.handleAction(.invokeAction(controlID: "battery-discharge-action"))
+        writer.inhibitCalls = []
+        writer.dischargeCalls = []
+        writer.resumeCalls = 0
+        writer.resumeError = .writeFailed(.resumeCharging)
+
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertEqual(plugin.store.mode, .discharging)
+        XCTAssertEqual(writer.dischargeCalls, [false, true])
+        XCTAssertEqual(writer.inhibitCalls, [BatteryChargeLimits.defaultPercent])
+        XCTAssertEqual(writer.resumeCalls, 1)
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testFailedDisableFromHoldReappliesInhibitAndReportsRollbackFailure() {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        writer.inhibitCalls = []
+        writer.dischargeCalls = []
+        writer.resumeCalls = 0
+        writer.dischargeError = .writeFailed(.toggleDischarge)
+
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertEqual(plugin.store.mode, .holdAtLimit)
+        XCTAssertEqual(writer.dischargeCalls, [false, false])
+        XCTAssertEqual(writer.inhibitCalls, [BatteryChargeLimits.defaultPercent])
+        XCTAssertEqual(writer.resumeCalls, 1)
+        XCTAssertTrue(plugin.primaryPanelState.errorMessage?.contains("恢复先前状态失败") == true)
+    }
+
     func testEnableWithUnsupportedHardwareSurfacesError() {
         let writer = MockBatteryWriter(capabilities: .none)
         let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)), writer: writer)
@@ -116,6 +166,136 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
 
         XCTAssertFalse(plugin.store.isEnabled)
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testFailedEnableRestoresDisabledStateAndReportsFailure() async throws {
+        let writer = MockBatteryWriter()
+        writer.inhibitError = .writeFailed(.inhibitCharging)
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        let enable = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.key.actionID == "set-enabled"
+            })?.reference
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: enable,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected enable failure, got \(result)")
+        }
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertEqual(plugin.store.mode, .holdAtLimit)
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertTrue(writer.dischargeCalls.contains(false))
+        XCTAssertGreaterThan(writer.resumeCalls, 0)
+    }
+
+    func testFailedEnableReportsRollbackFailure() async throws {
+        let writer = MockBatteryWriter()
+        writer.inhibitError = .writeFailed(.inhibitCharging)
+        writer.resumeError = .writeFailed(.resumeCharging)
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        let enable = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.key.actionID == "set-enabled"
+        })?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: enable,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case let .failed(message) = result else {
+            return XCTFail("Expected enable failure, got \(result)")
+        }
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertTrue(message.contains("恢复先前状态失败"))
+    }
+
+    func testIdempotentCanonicalDisableClearsEarlierEnableFailure() async throws {
+        let writer = MockBatteryWriter()
+        writer.inhibitError = .writeFailed(.inhibitCharging)
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        let enable = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.key.actionID == "set-enabled"
+                && $0.reference.parameters["enabled"] == .boolean(true)
+        })?.reference)
+        let disable = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.key.actionID == "set-enabled"
+                && $0.reference.parameters["enabled"] == .boolean(false)
+        })?.reference)
+
+        let failedEnable = try await plugin.beginAction(ActionInvocation(
+            reference: enable,
+            source: .test,
+            mode: .background
+        )).result()
+        writer.inhibitError = nil
+        let disableResult = try await plugin.beginAction(ActionInvocation(
+            reference: disable,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = failedEnable else {
+            return XCTFail("Expected enable failure, got \(failedEnable)")
+        }
+        XCTAssertEqual(disableResult, .succeeded())
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testCanonicalLimitWhileDisabledClearsEarlierEnableFailure() async throws {
+        let writer = MockBatteryWriter()
+        writer.inhibitError = .writeFailed(.inhibitCharging)
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        let enable = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.key.actionID == "set-enabled"
+                && $0.reference.parameters["enabled"] == .boolean(true)
+        })?.reference)
+        let limit = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.key.actionID == "set-limit"
+                && $0.reference.parameters["limit"] == .integer(70)
+        })?.reference)
+
+        let failedEnable = try await plugin.beginAction(ActionInvocation(
+            reference: enable,
+            source: .test,
+            mode: .background
+        )).result()
+        let limitResult = try await plugin.beginAction(ActionInvocation(
+            reference: limit,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = failedEnable else {
+            return XCTFail("Expected enable failure, got \(failedEnable)")
+        }
+        XCTAssertEqual(limitResult, .succeeded())
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertEqual(plugin.store.limitPercent, 70)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 
     func testActivateWhenDisabledReadsOnceWithoutStartingMonitoring() async {
@@ -233,6 +413,32 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
         XCTAssertEqual(plugin.store.limitPercent, BatteryChargeLimits.defaultPercent)
     }
 
+    func testFailedLimitChangeReportsRollbackFailure() async throws {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        writer.inhibitError = .writeFailed(.inhibitCharging)
+        let limit = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.title.contains("70%")
+        })?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: limit,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case let .failed(message) = result else {
+            return XCTFail("Expected limit failure, got \(result)")
+        }
+        XCTAssertEqual(plugin.store.limitPercent, BatteryChargeLimits.defaultPercent)
+        XCTAssertTrue(message.contains("恢复先前状态失败"))
+    }
+
     func testSettingsSliderDeclaresLivePercentageFormatting() throws {
         let plugin = makePlugin()
         guard case let .form(sections) = plugin.settingsPage?.body,
@@ -322,6 +528,216 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
         XCTAssertTrue(writer.dischargeCalls.contains(true))
     }
 
+    func testCanonicalActionsPublishLimitsAndExplicitModes() {
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 90)))
+        plugin.refresh()
+
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), [
+            "set-enabled", "set-limit", "hold", "resume", "discharge",
+        ])
+        XCTAssertTrue(plugin.actionCatalogEntries.contains(where: { $0.title.contains("80%") }))
+        XCTAssertEqual(
+            plugin.actionDefinitions.first(where: { $0.key.actionID == "discharge" })?.risk,
+            .confirmationRequired
+        )
+    }
+
+    func testCanonicalEnableAndLimitActionsUseExistingMutationPaths() async throws {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)), writer: writer)
+        plugin.refresh()
+        let enable = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.reference.key.actionID == "set-enabled" })?.reference
+        )
+        let limit = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.title.contains("70%") })?.reference
+        )
+
+        let enableResult = try await plugin.beginAction(
+            ActionInvocation(reference: enable, source: .test, mode: .background)
+        ).result()
+        let limitResult = try await plugin.beginAction(
+            ActionInvocation(reference: limit, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(enableResult, .succeeded())
+        XCTAssertEqual(limitResult, .succeeded())
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertEqual(plugin.store.limitPercent, 70)
+        XCTAssertTrue(writer.inhibitCalls.contains(70))
+    }
+
+    func testCanonicalActionDefersMutationUntilHandleStarts() async throws {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        let enable = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.key.actionID == "set-enabled"
+            })?.reference
+        )
+
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: enable,
+            source: .test,
+            mode: .foreground
+        ))
+
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertTrue(writer.inhibitCalls.isEmpty)
+        let result = await handle.result()
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertFalse(writer.inhibitCalls.isEmpty)
+    }
+
+    func testEnablePersistenceFailureRollsHardwareBackAndKeepsDisabledState() {
+        let storage = BatteryChargeLimitMemoryStorage()
+        storage.blockedSetKeys = ["is-enabled"]
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(
+            storage: storage,
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertFalse(writer.inhibitCalls.isEmpty)
+        XCTAssertGreaterThan(writer.resumeCalls, 0)
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertFalse(BatteryChargeLimitStore(storage: storage).isEnabled)
+    }
+
+    func testDisabledLimitPersistenceFailureReportsFailureWithoutHardwareWrites() async throws {
+        let storage = BatteryChargeLimitMemoryStorage()
+        storage.blockedSetKeys = ["limit-percent"]
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(storage: storage, writer: writer)
+        let reference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.title.contains("70%") })?.reference
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else { return XCTFail("expected persistence failure") }
+        XCTAssertEqual(plugin.store.limitPercent, BatteryChargeLimits.defaultPercent)
+        XCTAssertTrue(writer.inhibitCalls.isEmpty)
+        XCTAssertEqual(writer.resumeCalls, 0)
+        XCTAssertEqual(
+            BatteryChargeLimitStore(storage: storage).limitPercent,
+            BatteryChargeLimits.defaultPercent
+        )
+    }
+
+    func testCanonicalActionsRequireForegroundWhenHelperIsNotInstalled() async throws {
+        let writer = MockBatteryWriter(isInstalledHelperAvailable: false)
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        let enable = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.key.actionID == "set-enabled"
+            })?.reference
+        )
+
+        XCTAssertTrue(plugin.actionDefinitions.allSatisfy {
+            !$0.capabilities.contains(.background)
+                && $0.capabilities.contains(.foregroundInteractive)
+        })
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: enable,
+            source: .workflow,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .failed(message: PluginKitLocalization.actionUnavailable))
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertTrue(writer.inhibitCalls.isEmpty)
+    }
+
+    func testCanonicalDischargeRequiresEnabledSupportedState() async throws {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 90)), writer: writer)
+        plugin.refresh()
+        let discharge = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.reference.key.actionID == "discharge" })?.reference
+        )
+
+        XCTAssertFalse(plugin.actionAvailability(for: discharge).isAvailable)
+
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        XCTAssertTrue(plugin.actionAvailability(for: discharge).isAvailable)
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: discharge, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(plugin.store.mode, .discharging)
+        XCTAssertTrue(writer.dischargeCalls.contains(true))
+    }
+
+    func testCanonicalDischargeFailsWhenInhibitFailsEvenIfForceDischargeSucceeds() async throws {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 90)),
+            writer: writer
+        )
+        plugin.refresh()
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        let discharge = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.key.actionID == "discharge"
+            })?.reference
+        )
+        writer.inhibitError = .writeFailed(.inhibitCharging)
+        writer.dischargeCalls = []
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: discharge,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected discharge failure, got \(result)")
+        }
+        XCTAssertEqual(plugin.store.mode, .holdAtLimit)
+        XCTAssertTrue(writer.dischargeCalls.contains(true))
+        XCTAssertTrue(writer.dischargeCalls.contains(false))
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testPanelDischargeFailureRestoresPreviousMode() {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 90)),
+            writer: writer
+        )
+        plugin.refresh()
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        writer.inhibitError = .writeFailed(.inhibitCharging)
+        writer.dischargeCalls = []
+
+        plugin.handleAction(.invokeAction(controlID: "battery-discharge-action"))
+
+        XCTAssertEqual(plugin.store.mode, .holdAtLimit)
+        XCTAssertTrue(writer.dischargeCalls.contains(true))
+        XCTAssertTrue(writer.dischargeCalls.contains(false))
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
     func testForceDischargeStopsWhenReachingLimit() {
         let writer = MockBatteryWriter()
         let reader = MockBatteryReader(snapshot: makeSnapshot(level: 90))
@@ -338,14 +754,26 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
 
     // MARK: Permissions
     private func makePlugin(
+        storage: PluginStorage? = nil,
         reader: MockBatteryReader? = nil,
         writer: MockBatteryWriter? = nil
     ) -> BatteryChargeLimitPlugin {
-        let suiteName = "BatteryChargeLimitPluginTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let storage = UserDefaultsPluginStorage(pluginID: "battery-charge-limit", userDefaults: defaults)
-        let context = PluginRuntimeContext(pluginID: "battery-charge-limit", storage: storage)
+        let resolvedStorage: PluginStorage
+        if let supplied = storage {
+            resolvedStorage = supplied
+        } else {
+            let suiteName = "BatteryChargeLimitPluginTests-\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suiteName)!
+            defaults.removePersistentDomain(forName: suiteName)
+            resolvedStorage = UserDefaultsPluginStorage(
+                pluginID: "battery-charge-limit",
+                userDefaults: defaults
+            )
+        }
+        let context = PluginRuntimeContext(
+            pluginID: "battery-charge-limit",
+            storage: resolvedStorage
+        )
         return BatteryChargeLimitPlugin(
             context: context,
             reader: reader ?? MockBatteryReader(),
@@ -361,4 +789,23 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
             isOnAdapter: isOnAdapter
         )
     }
+}
+
+@MainActor
+private final class BatteryChargeLimitMemoryStorage: PluginStorage {
+    var blockedSetKeys: Set<String> = []
+    private var values: [String: Any] = [:]
+
+    func object(forKey key: String) -> Any? { values[key] }
+    func data(forKey key: String) -> Data? { values[key] as? Data }
+    func string(forKey key: String) -> String? { values[key] as? String }
+    func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
+    func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
+    func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
+    func set(_ value: Any?, forKey key: String) {
+        guard !blockedSetKeys.contains(key) else { return }
+        values[key] = value
+    }
+    func removeObject(forKey key: String) { values.removeValue(forKey: key) }
+    func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {}
 }

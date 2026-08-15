@@ -57,6 +57,8 @@ extension FeatureSettingsPane {
         configurationIDs: some Sequence<String>
     ) -> [FeatureSettingsPane] {
         [
+            .actionsAndShortcuts,
+            .automation,
             .dashboardLayout,
             .featurePanelLayout,
             .marketplace
@@ -93,6 +95,11 @@ enum SettingsSearchRevealTarget: Hashable {
     case marketplace(MarketplacePluginSearchTarget)
     case plugin(PluginSettingsSearchTarget)
     case surface(SurfaceSettingsSearchTarget)
+    case automation(AutomationWorkflowSearchTarget)
+}
+
+struct AutomationWorkflowSearchTarget: Hashable {
+    let workflowID: UUID
 }
 
 struct SettingsSearchRevealRequest: Equatable {
@@ -151,6 +158,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private let isPluginSettingsSearchTargetAvailable: (PluginSettingsSearchTarget) -> Bool
     private let isPluginManagementAvailable: (String) -> Bool
     private let isPluginSurfaceAvailable: (SurfaceSettingsSearchTarget) -> Bool
+    private let isAutomationWorkflowAvailable: (UUID) -> Bool
     private let selectPluginSettingsPane: (FeatureSettingsPane) -> Bool
     private var nextSearchFocusRequestID: UInt = 0
     private var nextAboutUpdateActionRequestID: UInt = 0
@@ -183,6 +191,9 @@ final class SettingsNavigationCoordinator: ObservableObject {
                 }
                 return items.contains { $0.id == target.pluginID }
             },
+            isAutomationWorkflowAvailable: { workflowID in
+                pluginHost.automationController.workflows.contains { $0.id == workflowID }
+            },
             selectPluginSettingsPane: { pluginHost.selectFeatureSettingsPane($0) }
         )
     }
@@ -195,6 +206,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
         isPluginSettingsSearchTargetAvailable: @escaping (PluginSettingsSearchTarget) -> Bool = { _ in true },
         isPluginManagementAvailable: @escaping (String) -> Bool = { _ in true },
         isPluginSurfaceAvailable: @escaping (SurfaceSettingsSearchTarget) -> Bool = { _ in true },
+        isAutomationWorkflowAvailable: @escaping (UUID) -> Bool = { _ in true },
         selectPluginSettingsPane: @escaping (FeatureSettingsPane) -> Bool = { _ in true }
     ) {
         self.destination = initialDestination
@@ -206,6 +218,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
         self.isPluginSettingsSearchTargetAvailable = isPluginSettingsSearchTargetAvailable
         self.isPluginManagementAvailable = isPluginManagementAvailable
         self.isPluginSurfaceAvailable = isPluginSurfaceAvailable
+        self.isAutomationWorkflowAvailable = isAutomationWorkflowAvailable
         self.selectPluginSettingsPane = selectPluginSettingsPane
     }
 
@@ -471,6 +484,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
             isPluginSettingsSearchTargetAvailable(target)
         case let .surface(target):
             isPluginSurfaceAvailable(target)
+        case let .automation(target):
+            isAutomationWorkflowAvailable(target.workflowID)
         }
     }
 
@@ -492,6 +507,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
             default:
                 false
             }
+        case (.automation, .plugins(.automation)):
+            true
         default:
             false
         }

@@ -129,7 +129,7 @@ struct TranslatorPanelView: View {
     private func tipCard(_ tip: TranslatorPanelPresentation.Tip) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: tip.systemImage)
+                Image(systemName: PluginSystemImage.resolvedName(tip.systemImage))
                     .font(.system(size: 15, weight: .semibold))
                     .symbolRenderingMode(.multicolor)
                 Text(tip.title)

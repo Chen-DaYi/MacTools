@@ -22,6 +22,11 @@ struct DisplayBrightnessSnapshot: Equatable {
     let errorMessage: String?
 }
 
+enum DisplayBrightnessWriteResult: Equatable {
+    case succeeded
+    case failed(message: String)
+}
+
 enum DisplayBrightnessControllerError: Error, LocalizedError {
     case displayUnavailable(displayID: CGDirectDisplayID)
     case brightnessUnavailable(displayName: String)
@@ -83,6 +88,15 @@ protocol DisplayBrightnessControlling: AnyObject {
         for displayID: CGDirectDisplayID,
         phase: PluginPanelAction.SliderPhase
     )
+    func setBrightnessAndWait(
+        _ value: Double,
+        for displayID: CGDirectDisplayID
+    ) async -> DisplayBrightnessWriteResult
+    func cancelOutstandingWrites()
+}
+
+extension DisplayBrightnessControlling {
+    func cancelOutstandingWrites() {}
 }
 
 protocol DisplayBrightnessBackend: AnyObject, Sendable {

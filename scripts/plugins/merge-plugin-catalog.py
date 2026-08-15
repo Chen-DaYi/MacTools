@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 DEFAULT_CATALOG_ID = "com.ggbond.mactools.plugins"
+DEFAULT_MINIMUM_HOST_VERSION = "1.1.6"
 
 
 def parse_args():
@@ -17,6 +18,10 @@ def parse_args():
     parser.add_argument("--plan", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--plugin-kit-version", type=int, required=True)
+    parser.add_argument(
+        "--minimum-host-version",
+        help="Override the merged catalog host floor for a host-specific endpoint.",
+    )
     return parser.parse_args()
 
 
@@ -115,7 +120,20 @@ def main():
         "schemaVersion": schema_version,
         "catalogID": update_field(base_catalog, updates, "catalogID", DEFAULT_CATALOG_ID),
         "generatedAt": now_iso8601(),
-        "minimumHostVersion": update_field(base_catalog, updates, "minimumHostVersion", "0.15.2"),
+        # The catalog floor describes schema compatibility. Per-entry host
+        # requirements may be newer and are enforced by each client.
+        "minimumHostVersion": args.minimum_host_version or min(
+            (
+                value
+                for value in [
+                    (previous or {}).get("minimumHostVersion"),
+                    (updates or {}).get("minimumHostVersion"),
+                ]
+                if value
+            ),
+            key=lambda value: tuple(int(part) for part in value.split(".")),
+            default=DEFAULT_MINIMUM_HOST_VERSION,
+        ),
         "pluginKitVersion": plugin_kit_version,
         "plugins": sorted(merged_entries.values(), key=lambda entry: entry["id"]),
         "revoked": update_field(base_catalog, updates, "revoked", []),

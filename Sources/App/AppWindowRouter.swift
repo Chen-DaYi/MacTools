@@ -83,7 +83,7 @@ final class MacToolsCommandWindow: NSWindow {
 }
 
 enum StandaloneCommandPaletteLayout {
-    static let contentSize = NSSize(width: 720, height: 660)
+    static let contentSize = NSSize(width: 720, height: 710)
 
     static func frame(
         contentSize: NSSize = contentSize,
@@ -159,6 +159,7 @@ final class StandaloneCommandPaletteState: ObservableObject {
     @Published private(set) var localizationRevision: UInt = 0
 
     private var nextQuickSelectionRequestID: UInt = 0
+    private var pendingExecutionCancellation: (() -> Void)?
 
     func prepareForPresentation(shortcutLabel: String) {
         presentationOrigin = .globalShortcut(shortcutLabel)
@@ -166,6 +167,16 @@ final class StandaloneCommandPaletteState: ObservableObject {
         quickSelectionRequest = nil
         resetRequestID &+= 1
         focusRequestID &+= 1
+    }
+
+    func prepareForDismissal() {
+        let cancellation = pendingExecutionCancellation
+        pendingExecutionCancellation = nil
+        cancellation?()
+    }
+
+    func setPendingExecutionCancellation(_ cancellation: (() -> Void)?) {
+        pendingExecutionCancellation = cancellation
     }
 
     @discardableResult
@@ -285,6 +296,49 @@ enum SettingsWindowLayout {
 }
 
 @MainActor
+final class StandaloneCommandPaletteFocusRestoration {
+    typealias Restoration = () -> Void
+
+    private let captureRestoration: () -> Restoration?
+    private let canRestore: () -> Bool
+    private var pendingRestoration: Restoration?
+
+    init(
+        captureRestoration: @escaping () -> Restoration? = {
+            guard let application = NSWorkspace.shared.frontmostApplication,
+                  application != .current else {
+                return nil
+            }
+            return { application.activate() }
+        },
+        canRestore: @escaping () -> Bool = { NSApp.isActive }
+    ) {
+        self.captureRestoration = captureRestoration
+        self.canRestore = canRestore
+    }
+
+    func prepareForPresentation() {
+        pendingRestoration = captureRestoration()
+    }
+
+    func dismiss(wasVisible: Bool, restoringFocus: Bool) {
+        let restoration = pendingRestoration
+        pendingRestoration = nil
+        guard wasVisible, restoringFocus, canRestore() else { return }
+        restoration?()
+    }
+}
+
+enum StandaloneCommandPaletteSuccessfulExecutionFocusPolicy {
+    static func shouldRestorePreviousApplication(
+        paletteIsKey: Bool,
+        applicationIsActive: Bool
+    ) -> Bool {
+        paletteIsKey && applicationIsActive
+    }
+}
+
+@MainActor
 final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let pluginHost: PluginHost
     private let appUpdater: AppUpdater
@@ -293,6 +347,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let launchAtLoginController: LaunchAtLoginController
     private let menuBarPanelThemeStore: MenuBarPanelThemeStore
     private let appearanceUserDefaults: UserDefaults
+    private let commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration
     private(set) var settingsWindow: NSWindow?
     private(set) var settingsNavigationCoordinator: SettingsNavigationCoordinator?
     private(set) var commandPalettePanel: NSPanel?
@@ -318,7 +373,8 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         menuBarIconGallery: MenuBarIconGalleryLibrary,
         launchAtLoginController: LaunchAtLoginController,
         menuBarPanelThemeStore: MenuBarPanelThemeStore = .shared,
-        appearanceUserDefaults: UserDefaults = .standard
+        appearanceUserDefaults: UserDefaults = .standard,
+        commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration = .init()
     ) {
         self.pluginHost = pluginHost
         self.appUpdater = appUpdater
@@ -327,11 +383,12 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.launchAtLoginController = launchAtLoginController
         self.menuBarPanelThemeStore = menuBarPanelThemeStore
         self.appearanceUserDefaults = appearanceUserDefaults
+        self.commandPaletteFocusRestoration = commandPaletteFocusRestoration
         super.init()
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
+                DispatchQueue.main.async { [weak self] in
                     self?.settingsWindow?.title = Self.settingsWindowTitle
                     self?.commandPalettePanel?.setAccessibilityTitle(Self.commandPaletteWindowTitle)
                     self?.commandPaletteState?.refreshLocalization()
@@ -342,8 +399,8 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.dismissCommandPalette()
+            DispatchQueue.main.async { [weak self] in
+                self?.dismissCommandPalette(restoringFocus: false)
             }
         }
         appearanceObserver = NotificationCenter.default.addObserver(
@@ -356,6 +413,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             }
             Task { @MainActor [weak self] in
                 preference.apply(to: self?.settingsWindow)
+                self?.applyCommandPaletteAppearance()
             }
         }
     }
@@ -378,6 +436,11 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         launchAtLoginController.refreshStatus()
         presentSettings(.settings)
         settingsNavigationCoordinator?.presentUnifiedSearch(origin: .keyboard)
+    }
+
+    func windowForActionConfirmation() -> NSWindow? {
+        presentSettings(.settings)
+        return settingsWindow
     }
 
     func toggleCommandPalette() {
@@ -411,6 +474,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             $0.action == .openCommandPalette
         }?.bindingText ?? ""
         state.prepareForPresentation(shortcutLabel: shortcutLabel)
+        applyCommandPaletteAppearance()
 
         let screens = NSScreen.screens
         let pointerLocation = NSEvent.mouseLocation
@@ -426,12 +490,28 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             ),
             display: true
         )
+        commandPaletteFocusRestoration.prepareForPresentation()
         NSApplication.shared.activate(ignoringOtherApps: true)
+        PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.makeKeyAndOrderFront(nil)
     }
 
-    func dismissCommandPalette() {
+    func dismissCommandPalette(restoringFocus: Bool = true) {
+        let wasVisible = commandPalettePanel?.isVisible == true
+        if wasVisible {
+            commandPaletteState?.prepareForDismissal()
+        }
         commandPalettePanel?.orderOut(nil)
+        commandPaletteFocusRestoration.dismiss(
+            wasVisible: wasVisible,
+            restoringFocus: restoringFocus
+        )
+    }
+
+    private func applyCommandPaletteAppearance() {
+        let preference = AppAppearancePreference.stored(in: appearanceUserDefaults)
+        preference.apply(to: commandPalettePanel)
+        preference.apply(to: commandPalettePanel?.contentView)
     }
 
     func setPanelPresentationActions(
@@ -458,6 +538,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 window.deminiaturize(nil)
             },
             orderFront: {
+                PluginPresentationSafety.prepareForWindowOrdering(window)
                 window.makeKeyAndOrderFront(nil)
             }
         )
@@ -517,10 +598,16 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             dismiss: { [weak self] in
                 self?.dismissCommandPalette()
             },
+            dismissAfterSuccessfulExecution: { [weak self] in
+                self?.dismissCommandPaletteAfterSuccessfulExecution()
+            },
             navigate: { [weak self] destination, target in
                 self?.navigateFromStandaloneSearch(to: destination, target: target) ?? false
             },
-            consumeQuickSelection: state.consumeQuickSelectionRequest
+            consumeQuickSelection: state.consumeQuickSelectionRequest,
+            setPendingExecutionCancellation: { [weak state] cancellation in
+                state?.setPendingExecutionCancellation(cancellation)
+            }
         )
         let hostingView = NSHostingView(
             rootView: StandaloneCommandPaletteRootView(
@@ -533,6 +620,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         )
         hostingView.sizingOptions = []
         panel.contentView = hostingView
+        let preference = AppAppearancePreference.stored(in: appearanceUserDefaults)
+        preference.apply(to: panel)
+        preference.apply(to: hostingView)
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
@@ -550,6 +640,15 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         return panel
     }
 
+    private func dismissCommandPaletteAfterSuccessfulExecution() {
+        let shouldRestoreFocus = StandaloneCommandPaletteSuccessfulExecutionFocusPolicy
+            .shouldRestorePreviousApplication(
+                paletteIsKey: commandPalettePanel?.isKeyWindow == true,
+                applicationIsActive: NSApp.isActive
+            )
+        dismissCommandPalette(restoringFocus: shouldRestoreFocus)
+    }
+
     @discardableResult
     func navigateFromStandaloneSearch(
         to destination: SettingsNavigationDestination,
@@ -561,7 +660,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             return false
         }
 
-        dismissCommandPalette()
+        dismissCommandPalette(restoringFocus: false)
         presentSettings(.settings)
         return settingsNavigationCoordinator?.navigateFromSearch(
             to: destination,
@@ -570,7 +669,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     func presentSettings(_ request: SettingsPresentationRequest) {
-        dismissCommandPalette()
+        dismissCommandPalette(restoringFocus: false)
         let window = settingsWindow ?? makeSettingsWindow()
         let wasVisible = window.isVisible
         let pendingAppUpdateVersion: String?
@@ -595,6 +694,15 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         case let .pluginConfiguration(pluginID):
             pendingAppUpdateVersion = nil
             settingsNavigationCoordinator?.navigate(to: .plugins(.configuration(pluginID)))
+        case let .automationWorkflow(workflowID):
+            pendingAppUpdateVersion = nil
+            _ = settingsNavigationCoordinator?.navigateFromSearch(
+                to: .plugins(.automation),
+                target: .automation(.init(workflowID: workflowID))
+            )
+        case let .feature(pane):
+            pendingAppUpdateVersion = nil
+            settingsNavigationCoordinator?.navigate(to: .plugins(pane))
         }
 
         let contentSize = window.contentView?.bounds.size ?? SettingsWindowLayout.defaultContentSize
@@ -624,8 +732,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private func clearAutomaticInitialFocusAfterPresentation(in window: NSWindow) {
         // SwiftUI assigns an initial responder after installing the visible hierarchy.
         // Wait for that pass, then leave focus entry to Tab or an explicit search request.
-        Task { @MainActor [weak self, weak window] in
-            await Task.yield()
+        DispatchQueue.main.async { [weak self, weak window] in
             guard
                 let self,
                 let window,

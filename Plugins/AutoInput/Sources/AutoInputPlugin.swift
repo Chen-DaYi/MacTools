@@ -19,7 +19,14 @@ private struct AutoInputPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicationActivityStateHandling {
+final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicationActivityStateHandling,
+    PluginActionProviding
+{
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
+    }
+
     let metadata: PluginMetadata
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -76,7 +83,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             isEnabled: true,
             isVisible: true,
             detail: nil,
-            errorMessage: controller.errorMessage
+            errorMessage: persistenceErrorMessage ?? controller.errorMessage
         )
     }
 
@@ -140,6 +147,57 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         ])
     }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: metadata.title,
+                        kind: .boolean
+                    ),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: store.isEnabled
+                    ? localization.string("action.disable.title", defaultValue: "暂停自动切换输入法")
+                    : localization.string("action.enable.title", defaultValue: "开启自动切换输入法"),
+                subtitle: panelSubtitle,
+                presentationState: store.isEnabled ? .active : .inactive
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.remembering", defaultValue: "自动记忆已开启"))"
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.paused", defaultValue: "已暂停"))"
+            ),
+        ]
+    }
+
     func activate(context: PluginRuntimeContext) {
         controller.start()
     }
@@ -154,9 +212,27 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
 
     func handleAction(_ action: PluginPanelAction) {
         guard case let .setSwitch(value) = action else { return }
-        store.setEnabled(value)
-        controller.configurationDidChange()
-        onStateChange?()
+        _ = setEnabled(value)
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            return ActionExecutionHandle { [weak self] in
+                guard let self else { return .cancelled }
+                return self.setEnabled(!self.store.isEnabled)
+            }
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            return ActionExecutionHandle { [weak self] in
+                guard let self else { return .cancelled }
+                return self.setEnabled(value)
+            }
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
     }
 
     func applicationActivityStateDidChange(_ state: PluginApplicationActivityState) {
@@ -178,5 +254,41 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             return localization.string("panel.subtitle.remembering", defaultValue: "自动记忆已开启")
         }
         return localization.string("panel.subtitle.noRules", defaultValue: "暂无切换规则")
+    }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    private var persistenceErrorMessage: String? {
+        guard case let .rejected(rollbackSucceeded)? = store.persistenceFailure else {
+            return nil
+        }
+        return rollbackSucceeded
+            ? localization.string(
+                "error.persistenceFailed",
+                defaultValue: "无法保存自动切换输入法设置。"
+            )
+            : localization.string(
+                "error.persistenceRollbackFailed",
+                defaultValue: "无法保存自动切换输入法设置，且恢复先前设置失败。"
+            )
+    }
+
+    private func setEnabled(_ enabled: Bool) -> ActionExecutionResult {
+        guard store.setEnabled(enabled) == .committed else {
+            onStateChange?()
+            return .failed(message: persistenceErrorMessage ?? PluginKitLocalization.actionUnavailable)
+        }
+        controller.configurationDidChange()
+        onStateChange?()
+        return .succeeded()
     }
 }

@@ -19,6 +19,14 @@ struct MacToolsCommandConfirmation: Hashable {
             confirmButtonTitle: confirmation.confirmButtonTitle
         )
     }
+
+    init(_ confirmation: ActionConfirmation) {
+        self.init(
+            title: confirmation.title,
+            message: confirmation.message,
+            confirmButtonTitle: confirmation.confirmButtonTitle
+        )
+    }
 }
 
 struct AppHostCommandDefinition: Identifiable, Hashable {

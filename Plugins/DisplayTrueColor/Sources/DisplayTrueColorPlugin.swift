@@ -21,7 +21,12 @@ private struct DisplayTrueColorPluginProvider: PluginProvider {
 
 /// Controls True Tone through CoreBrightness's private `CBAdaptationClient`.
 @MainActor
-final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -75,6 +80,59 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "True Tone"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "True Tone"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(id: "enabled", title: metadata.title, kind: .boolean),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isTrueColorEnabled
+                    ? localization.string("action.disable.title", defaultValue: "关闭原彩显示")
+                    : localization.string("action.enable.title", defaultValue: "开启原彩显示"),
+                subtitle: subtitle,
+                presentationState: isTrueColorEnabled ? .active : .inactive
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.enabled", defaultValue: "已开启"))"
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.disabled", defaultValue: "已关闭"))"
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        isSupported
+            ? .available
+            : .unavailable(localization.string("panel.subtitle.unsupported", defaultValue: "不支持"))
+    }
+
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)
     }
@@ -94,11 +152,27 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func handleAction(_ action: PluginPanelAction) {
         guard case let .setSwitch(enable) = action else { return }
-        guard isSupported else { return }
-        client.setEnabled(enable)
-        isTrueColorEnabled = client.isEnabled ?? enable
-        onStateChange?()
-        logger.info("True Tone set to \(enable ? "enabled" : "disabled")")
+        _ = setEnabled(enable)
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !(client.isEnabled ?? isTrueColorEnabled)
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        let succeeded = setEnabled(enabled)
+        let failureMessage = localization.string("panel.subtitle.unsupported", defaultValue: "不支持")
+        return ActionExecutionHandle {
+            succeeded ? .succeeded() : .failed(message: failureMessage)
+        }
     }
 
     // MARK: - Private
@@ -111,6 +185,32 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
             ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
             : localization.string("panel.subtitle.disabled", defaultValue: "已关闭")
     }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    @discardableResult
+    private func setEnabled(_ enabled: Bool) -> Bool {
+        guard isSupported else { return false }
+        guard client.setEnabled(enabled), client.isEnabled == enabled else {
+            isTrueColorEnabled = client.isEnabled ?? isTrueColorEnabled
+            onStateChange?()
+            logger.error("True Tone did not reach requested state")
+            return false
+        }
+        isTrueColorEnabled = enabled
+        onStateChange?()
+        logger.info("True Tone set to \(enabled ? "enabled" : "disabled")")
+        return true
+    }
 }
 
 // MARK: - TrueToneClient Protocol
@@ -119,7 +219,8 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
 protocol TrueToneClient {
     var isSupported: Bool { get }
     var isEnabled: Bool? { get }
-    func setEnabled(_ enabled: Bool)
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> Bool
 }
 
 // MARK: - CoreBrightness Implementation
@@ -145,6 +246,7 @@ final class CoreBrightnessTrueToneClient: TrueToneClient {
 
     var isSupported: Bool {
         guard let obj = adaptationClient,
+              obj.responds(to: supportedSel),
               let imp = class_getMethodImplementation(type(of: obj), supportedSel) else {
             return false
         }
@@ -153,17 +255,21 @@ final class CoreBrightnessTrueToneClient: TrueToneClient {
 
     var isEnabled: Bool? {
         guard let obj = adaptationClient,
+              obj.responds(to: getEnabledSel),
               let imp = class_getMethodImplementation(type(of: obj), getEnabledSel) else {
             return nil
         }
         return unsafeBitCast(imp, to: BoolIMP.self)(obj, getEnabledSel)
     }
 
-    func setEnabled(_ enabled: Bool) {
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> Bool {
         guard let obj = adaptationClient,
+              obj.responds(to: setEnabledSel),
               let imp = class_getMethodImplementation(type(of: obj), setEnabledSel) else {
-            return
+            return false
         }
         unsafeBitCast(imp, to: SetBoolIMP.self)(obj, setEnabledSel, enabled)
+        return isEnabled == enabled
     }
 }

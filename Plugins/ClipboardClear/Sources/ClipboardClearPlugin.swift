@@ -20,11 +20,15 @@ private struct ClipboardClearPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
     static let pluginID = "clipboard-clear"
     static let pluginOrder: Int = 120
 
-    private let pasteboard = NSPasteboard.general
+    private enum ActionID {
+        static let clear = "clear"
+    }
+
+    private let pasteboard: NSPasteboard
     private let localization: PluginLocalization
     private var canClearClipboard = false
 
@@ -32,7 +36,11 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
-    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+    init(
+        pasteboard: NSPasteboard = .general,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.pasteboard = pasteboard
         self.localization = localization
         self.metadata = PluginMetadata(
             id: ClipboardClearPlugin.pluginID,
@@ -59,6 +67,32 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.clear),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "clipboard", "pasteboard"],
+                systemImage: metadata.iconName,
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: metadata.title,
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: localization.string("panel.button.clear", defaultValue: "清空")
+                ),
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        canClearClipboard
+            ? .available
+            : .unavailable(metadata.defaultDescription)
+    }
+
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: metadata.defaultDescription,
@@ -73,10 +107,19 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func handleAction(_ action: PluginPanelAction) {
         if case .invokeAction(let controlID) = action, controlID == "execute" {
-            pasteboard.clearContents()
-            syncPasteboardState(forceNotify: true)
-            Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.mactools", category: "ClipboardClearPlugin").info("Clipboard cleared")
+            clearClipboard()
         }
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key.actionID == ActionID.clear else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        guard canClearClipboard else {
+            return ActionExecutionHandle { .failed(message: self.metadata.defaultDescription) }
+        }
+        clearClipboard()
+        return ActionExecutionHandle { .succeeded() }
     }
 
     func refresh() {
@@ -96,6 +139,15 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
         if forceNotify || didChange {
             onStateChange?()
         }
+    }
+
+    private func clearClipboard() {
+        pasteboard.clearContents()
+        syncPasteboardState(forceNotify: true)
+        Logger(
+            subsystem: Bundle.main.bundleIdentifier ?? "com.example.mactools",
+            category: "ClipboardClearPlugin"
+        ).info("Clipboard cleared")
     }
 
     nonisolated private static func hasClipboardContents(in pasteboard: NSPasteboard) -> Bool {

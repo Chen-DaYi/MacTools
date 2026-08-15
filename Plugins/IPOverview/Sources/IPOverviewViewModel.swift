@@ -82,6 +82,7 @@ final class IPOverviewViewModel: ObservableObject {
     private let networkQualityMeasurer: any IPOverviewNetworkQualityMeasuring
     private let storage: PluginStorage
     private let localization: PluginLocalization
+    private let pasteboard: NSPasteboard
     private let currentDate: @MainActor () -> Date
     private var refreshTask: Task<Void, Never>?
     private var refreshMode: RefreshMode?
@@ -117,6 +118,7 @@ final class IPOverviewViewModel: ObservableObject {
         networkQualityMeasurer: (any IPOverviewNetworkQualityMeasuring)? = nil,
         storage: PluginStorage = UserDefaultsPluginStorage(pluginID: "ip-overview"),
         localization: PluginLocalization = PluginLocalization(bundle: .main),
+        pasteboard: NSPasteboard = .general,
         currentDate: @escaping @MainActor () -> Date = { Date() }
     ) {
         self.localization = localization
@@ -126,6 +128,7 @@ final class IPOverviewViewModel: ObservableObject {
         self.networkQualityMeasurer = networkQualityMeasurer ?? IPOverviewNetworkQualityService(localization: localization)
         self.storage = storage
         self.currentDate = currentDate
+        self.pasteboard = pasteboard
         self.hidesSensitiveInfo = storage.bool(forKey: StorageKey.hidesSensitiveInfo)
         self.connectivityResults = Self.loadConnectivityTargets(storage: storage).map {
             IPOverviewConnectivityResult(id: $0.id, target: $0, status: .waiting)
@@ -207,6 +210,11 @@ final class IPOverviewViewModel: ObservableObject {
         return task
     }
 
+    func refreshAddressesAndWait() async {
+        let task = refreshAddresses() ?? refreshTask
+        await task?.value
+    }
+
     func refreshAllIfNeeded() {
         guard !hasFreshDetailState else {
             checkDiagnosticsIfNeeded()
@@ -265,8 +273,8 @@ final class IPOverviewViewModel: ObservableObject {
             return
         }
 
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(value, forType: .string)
+        pasteboard.clearContents()
+        pasteboard.setString(value, forType: .string)
     }
 
     func checkConnectivity() {

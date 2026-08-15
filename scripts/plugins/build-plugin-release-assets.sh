@@ -127,10 +127,12 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
 if [[ -z "$MINIMUM_HOST_VERSION" ]]; then
-    MINIMUM_HOST_VERSION="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configs/AppVersion.xcconfig)"
+    # This is the catalog schema compatibility floor, not the newest package's
+    # host requirement. Individual entries retain their manifest minimums.
+    MINIMUM_HOST_VERSION="1.1.6"
 fi
 if [[ -z "$MINIMUM_HOST_VERSION" ]]; then
-    echo "Unable to determine minimum host version from Configs/AppVersion.xcconfig." >&2
+    echo "Unable to determine the catalog minimum host version." >&2
     exit 1
 fi
 

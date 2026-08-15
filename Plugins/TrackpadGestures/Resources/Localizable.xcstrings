@@ -1,6 +1,14 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "editor.action.confirmationRequired": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"يلزم التأكيد قبل التشغيل."}},"de":{"stringUnit":{"state":"translated","value":"Vor der Ausführung ist eine Bestätigung erforderlich."}},"en":{"stringUnit":{"state":"translated","value":"Confirmation is required before running."}},"es":{"stringUnit":{"state":"translated","value":"Se requiere confirmación antes de ejecutar."}},"fr":{"stringUnit":{"state":"translated","value":"Une confirmation est requise avant l’exécution."}},"ja":{"stringUnit":{"state":"translated","value":"実行前に確認が必要です。"}},"ko":{"stringUnit":{"state":"translated","value":"실행 전에 확인이 필요합니다."}},"pt":{"stringUnit":{"state":"translated","value":"É necessária confirmação antes de executar."}},"ru":{"stringUnit":{"state":"translated","value":"Перед запуском требуется подтверждение."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"执行前需要确认。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"執行前需要確認。"}}}},
+    "action.macToolsAction": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"إجراء MacTools"}},"de":{"stringUnit":{"state":"translated","value":"MacTools-Aktion"}},"en":{"stringUnit":{"state":"translated","value":"MacTools Action"}},"es":{"stringUnit":{"state":"translated","value":"Acción de MacTools"}},"fr":{"stringUnit":{"state":"translated","value":"Action MacTools"}},"ja":{"stringUnit":{"state":"translated","value":"MacToolsアクション"}},"ko":{"stringUnit":{"state":"translated","value":"MacTools 동작"}},"pt":{"stringUnit":{"state":"translated","value":"Ação do MacTools"}},"ru":{"stringUnit":{"state":"translated","value":"Действие MacTools"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"MacTools 操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"MacTools 操作"}}}},
+    "editor.action.choose": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"اختيار إجراء"}},"de":{"stringUnit":{"state":"translated","value":"Aktion auswählen"}},"en":{"stringUnit":{"state":"translated","value":"Choose Action"}},"es":{"stringUnit":{"state":"translated","value":"Elegir acción"}},"fr":{"stringUnit":{"state":"translated","value":"Choisir une action"}},"ja":{"stringUnit":{"state":"translated","value":"アクションを選択"}},"ko":{"stringUnit":{"state":"translated","value":"동작 선택"}},"pt":{"stringUnit":{"state":"translated","value":"Escolher ação"}},"ru":{"stringUnit":{"state":"translated","value":"Выбрать действие"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"选择操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"選擇操作"}}}},
+    "editor.action.inputGroup": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"الإدخال"}},"de":{"stringUnit":{"state":"translated","value":"Eingabe"}},"en":{"stringUnit":{"state":"translated","value":"Input"}},"es":{"stringUnit":{"state":"translated","value":"Entrada"}},"fr":{"stringUnit":{"state":"translated","value":"Entrée"}},"ja":{"stringUnit":{"state":"translated","value":"入力"}},"ko":{"stringUnit":{"state":"translated","value":"입력"}},"pt":{"stringUnit":{"state":"translated","value":"Entrada"}},"ru":{"stringUnit":{"state":"translated","value":"Ввод"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"输入"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"輸入"}}}},
+    "editor.action.empty": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"لا توجد إجراءات مطابقة"}},"de":{"stringUnit":{"state":"translated","value":"Keine passenden Aktionen"}},"en":{"stringUnit":{"state":"translated","value":"No Matching Actions"}},"es":{"stringUnit":{"state":"translated","value":"No hay acciones coincidentes"}},"fr":{"stringUnit":{"state":"translated","value":"Aucune action correspondante"}},"ja":{"stringUnit":{"state":"translated","value":"一致するアクションがありません"}},"ko":{"stringUnit":{"state":"translated","value":"일치하는 동작 없음"}},"pt":{"stringUnit":{"state":"translated","value":"Nenhuma ação correspondente"}},"ru":{"stringUnit":{"state":"translated","value":"Нет подходящих действий"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有匹配的操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"沒有符合的操作"}}}},
+    "editor.action.search": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"البحث عن إجراءات"}},"de":{"stringUnit":{"state":"translated","value":"Aktionen suchen"}},"en":{"stringUnit":{"state":"translated","value":"Search Actions"}},"es":{"stringUnit":{"state":"translated","value":"Buscar acciones"}},"fr":{"stringUnit":{"state":"translated","value":"Rechercher des actions"}},"ja":{"stringUnit":{"state":"translated","value":"アクションを検索"}},"ko":{"stringUnit":{"state":"translated","value":"동작 검색"}},"pt":{"stringUnit":{"state":"translated","value":"Buscar ações"}},"ru":{"stringUnit":{"state":"translated","value":"Поиск действий"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"搜索操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"搜尋操作"}}}},
+    "editor.action.unavailable": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"إجراء MacTools غير متاح"}},"de":{"stringUnit":{"state":"translated","value":"MacTools-Aktion nicht verfügbar"}},"en":{"stringUnit":{"state":"translated","value":"Unavailable MacTools Action"}},"es":{"stringUnit":{"state":"translated","value":"Acción de MacTools no disponible"}},"fr":{"stringUnit":{"state":"translated","value":"Action MacTools indisponible"}},"ja":{"stringUnit":{"state":"translated","value":"利用できないMacToolsアクション"}},"ko":{"stringUnit":{"state":"translated","value":"사용할 수 없는 MacTools 동작"}},"pt":{"stringUnit":{"state":"translated","value":"Ação do MacTools indisponível"}},"ru":{"stringUnit":{"state":"translated","value":"Недоступное действие MacTools"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"不可用的 MacTools 操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"不可用的 MacTools 操作"}}}},
+    "editor.error.actionRequired": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"اختر إجراءً."}},"de":{"stringUnit":{"state":"translated","value":"Wähle eine Aktion aus."}},"en":{"stringUnit":{"state":"translated","value":"Choose an action."}},"es":{"stringUnit":{"state":"translated","value":"Elige una acción."}},"fr":{"stringUnit":{"state":"translated","value":"Choisissez une action."}},"ja":{"stringUnit":{"state":"translated","value":"アクションを選択してください。"}},"ko":{"stringUnit":{"state":"translated","value":"동작을 선택하십시오."}},"pt":{"stringUnit":{"state":"translated","value":"Escolha uma ação."}},"ru":{"stringUnit":{"state":"translated","value":"Выберите действие."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"请选择一个操作。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"請選擇一個操作。"}}}},
     "metadata.title": {
       "localizations": {
         "en": {
@@ -76,67 +84,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Map trackpad gestures to keyboard shortcuts or middle clicks."
+            "value": "Map trackpad gestures to MacTools actions, keyboard shortcuts, or middle clicks."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将触控板手势映射为快捷键或中键点击"
+            "value": "将触控板手势映射为 MacTools 操作、快捷键或中键点击"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "قم بتعيين إيماءات لوحة التتبع على اختصارات لوحة المفاتيح أو النقرات الوسطى."
+            "value": "عيّن إيماءات لوحة التتبع لإجراءات MacTools أو اختصارات لوحة المفاتيح أو النقرات الوسطى."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ordnen Sie Trackpad-Gesten Tastaturkürzeln oder Mittelklicks zu."
+            "value": "Ordnen Sie Trackpad-Gesten MacTools-Aktionen, Tastaturkürzeln oder Mittelklicks zu."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Asigne gestos del trackpad a atajos de teclado o clics centrales."
+            "value": "Asigne gestos del trackpad a acciones de MacTools, atajos de teclado o clics centrales."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mappez les gestes du trackpad sur les raccourcis clavier ou les clics du milieu."
+            "value": "Associez les gestes du trackpad aux actions MacTools, aux raccourcis clavier ou aux clics du milieu."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "トラックパッドのジェスチャをキーボード ショートカットまたは中クリックにマップします。"
+            "value": "トラックパッドジェスチャをMacToolsアクション、キーボードショートカット、または中クリックに割り当てます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "트랙패드 제스처를 키보드 단축키 또는 가운데 클릭에 매핑합니다."
+            "value": "트랙패드 제스처를 MacTools 동작, 키보드 단축키 또는 가운데 클릭에 매핑합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mapeie gestos do trackpad para atalhos de teclado ou cliques do meio."
+            "value": "Mapeie gestos do trackpad para ações do MacTools, atalhos de teclado ou cliques do meio."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Сопоставьте жесты трекпада с сочетаниями клавиш или средним щелчком мыши."
+            "value": "Назначьте жестам трекпада действия MacTools, сочетания клавиш или средний щелчок мыши."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "將觸控板手勢對應到鍵盤快速鍵或中鍵點選。"
+            "value": "將觸控板手勢對應到 MacTools 操作、鍵盤快速鍵或中鍵點選。"
           }
         }
       }
@@ -3794,18 +3802,44 @@
       "zh-Hans": {"stringUnit": {"state": "translated", "value": "五指长触"}},
       "zh-Hant": {"stringUnit": {"state": "translated", "value": "五指長觸摸"}}
     }},
-    "gesture.doubleTapFormat": {"localizations": {
-      "ar": {"stringUnit": {"state": "translated", "value": "نقر مزدوج بـ %d أصابع"}},
-      "de": {"stringUnit": {"state": "translated", "value": "%d-Finger-Doppeltippen"}},
-      "en": {"stringUnit": {"state": "translated", "value": "%d-Finger Double Tap"}},
-      "es": {"stringUnit": {"state": "translated", "value": "Doble toque con %d dedos"}},
-      "fr": {"stringUnit": {"state": "translated", "value": "Double toucher à %d doigts"}},
-      "ja": {"stringUnit": {"state": "translated", "value": "%d本指ダブルタップ"}},
-      "ko": {"stringUnit": {"state": "translated", "value": "%d손가락 이중 탭"}},
-      "pt": {"stringUnit": {"state": "translated", "value": "Toque duplo com %d dedos"}},
-      "ru": {"stringUnit": {"state": "translated", "value": "Двойное касание %d пальцами"}},
-      "zh-Hans": {"stringUnit": {"state": "translated", "value": "%d 指双击"}},
-      "zh-Hant": {"stringUnit": {"state": "translated", "value": "%d 指雙擊"}}
+    "gesture.threeFingerDoubleTap": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نقر مزدوج بثلاثة أصابع"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Drei-Finger-Doppeltippen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Three-Finger Double Tap"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Doble toque con tres dedos"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Double toucher à trois doigts"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "3本指ダブルタップ"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "세 손가락 이중 탭"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Toque duplo com três dedos"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Двойное касание тремя пальцами"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "三指双击"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "三指雙擊"}}
+    }},
+    "gesture.fourFingerDoubleTap": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نقر مزدوج بأربعة أصابع"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Vier-Finger-Doppeltippen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Four-Finger Double Tap"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Doble toque con cuatro dedos"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Double toucher à quatre doigts"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "4本指ダブルタップ"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "네 손가락 이중 탭"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Toque duplo com quatro dedos"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Двойное касание четырьмя пальцами"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "四指双击"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "四指雙擊"}}
+    }},
+    "gesture.fiveFingerDoubleTap": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نقر مزدوج بخمسة أصابع"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Fünf-Finger-Doppeltippen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Five-Finger Double Tap"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Doble toque con cinco dedos"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Double toucher à cinq doigts"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "5本指ダブルタップ"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "다섯 손가락 이중 탭"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Toque duplo com cinco dedos"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Двойное касание пятью пальцами"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "五指双击"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "五指雙擊"}}
     }},
     "gesture.demo.doubleTapFormat": {"localizations": {
       "ar": {"stringUnit": {"state": "translated", "value": "المس ثم حرّر مرتين متتاليتين باستخدام %d أصابع."}},
@@ -4318,6 +4352,123 @@
         }
       }
     },
+    "gesture.category.tipTap": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "de": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "en": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "es": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "TipTap"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "TipTap"}}
+    }},
+    "gesture.category.tap": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نقرة"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Tippen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Tap"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Toque"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Toucher"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "タップ"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "탭"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Toque"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Касание"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "轻点"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "輕點"}}
+    }},
+    "gesture.category.doubleTap": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نقرة مزدوجة"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Doppeltippen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Double Tap"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Doble toque"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Double toucher"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "ダブルタップ"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "이중 탭"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Toque duplo"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Двойное касание"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "双击"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "雙擊"}}
+    }},
+    "gesture.category.click": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نقرة فعلية"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Physischer Klick"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Physical Click"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Clic físico"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Clic physique"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "物理クリック"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "물리적 클릭"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Clique físico"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Физический щелчок"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "按下点击"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "按下點按"}}
+    }},
+    "gesture.category.longTouch": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "لمس مطول"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Langes Berühren"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Touch and Hold"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Mantener pulsado"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Toucher prolongé"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "長押し"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "길게 터치"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Toque prolongado"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Долгое касание"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "长触"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "長觸"}}
+    }},
+    "gesture.twoFingerClick": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نقرة فعلية بإصبعين"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Zwei-Finger-Klick"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Two-Finger Click"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Clic con dos dedos"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Clic à deux doigts"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "2本指クリック"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "두 손가락 클릭"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Clique com dois dedos"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Щелчок двумя пальцами"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "双指按下点击"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "雙指按下點按"}}
+    }},
+    "gesture.threeFingerClick": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نقرة فعلية بثلاثة أصابع"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Drei-Finger-Klick"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Three-Finger Click"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Clic con tres dedos"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Clic à trois doigts"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "3本指クリック"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "세 손가락 클릭"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Clique com três dedos"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Щелчок тремя пальцами"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "三指按下点击"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "三指按下點按"}}
+    }},
+    "gesture.demo.clickFormat": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "أبقِ %d أصابع ملامسة واضغط على لوحة التعقب حتى تسمع نقرة فعلية واحدة."}},
+      "de": {"stringUnit": {"state": "translated", "value": "%d Finger auflegen und das Trackpad drücken, bis es einmal physisch klickt."}},
+      "en": {"stringUnit": {"state": "translated", "value": "Keep %d fingers touching and press the trackpad until it physically clicks once."}},
+      "es": {"stringUnit": {"state": "translated", "value": "Mantén %d dedos apoyados y presiona el trackpad hasta producir un clic físico."}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Gardez %d doigts posés et appuyez sur le trackpad jusqu’à produire un clic physique."}},
+      "ja": {"stringUnit": {"state": "translated", "value": "%d本の指を触れたまま、1回物理的にクリックするまでトラックパッドを押します。"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "%d개의 손가락을 댄 채 한 번 물리적으로 클릭될 때까지 트랙패드를 누르세요."}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Mantenha %d dedos apoiados e pressione o trackpad até produzir um clique físico."}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Удерживайте %d пальца на трекпаде и нажмите до одного физического щелчка."}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "保持 %d 指接触并按下触控板，直到产生一次物理点击。"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "保持 %d 指接觸並按下觸控板，直到產生一次實體點按。"}}
+    }},
+    "gesture.conflict.twoFingerClick": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "يستبدل هذا عادةً النقر الثانوي بإصبعين (النقر بزر الماوس الأيمن) في macOS."}},
+      "de": {"stringUnit": {"state": "translated", "value": "Ersetzt normalerweise den Zwei-Finger-Sekundärklick (Rechtsklick) von macOS."}},
+      "en": {"stringUnit": {"state": "translated", "value": "This usually replaces macOS two-finger secondary click (right-click)."}},
+      "es": {"stringUnit": {"state": "translated", "value": "Normalmente sustituye el clic secundario con dos dedos de macOS (clic derecho)."}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Remplace généralement le clic secondaire à deux doigts de macOS (clic droit)."}},
+      "ja": {"stringUnit": {"state": "translated", "value": "通常、macOSの2本指の副ボタンクリック（右クリック）に置き換わります。"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "일반적으로 macOS의 두 손가락 보조 클릭(오른쪽 클릭)을 대체합니다."}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Normalmente substitui o clique secundário com dois dedos do macOS (botão direito)."}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Обычно заменяет вторичный щелчок двумя пальцами (правую кнопку) в macOS."}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "通常会替代 macOS 的双指辅助点按（右键）。"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "通常會取代 macOS 的雙指輔助點按（右鍵）。"}}
+    }},
     "settings.mappings.tipTapGuide.hold": {"localizations": {
       "ar": {"stringUnit": {"state": "translated", "value": "ضع إصبعًا أو إصبعين وأبقِهما ثابتين."}},
       "de": {"stringUnit": {"state": "translated", "value": "Legen Sie einen oder zwei Finger auf und halten Sie sie ruhig."}},
@@ -4369,6 +4520,292 @@
       "ru": {"stringUnit": {"state": "translated", "value": "Это сочетание также используется для: %@. Повторное использование разрешено."}},
       "zh-Hans": {"stringUnit": {"state": "translated", "value": "此快捷键也用于：%@。允许重复使用。"}},
       "zh-Hant": {"stringUnit": {"state": "translated", "value": "此快速鍵也用於：%@。允許重複使用。"}}
+    }},
+    "settings.mapping.disable": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "تعطيل"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Deaktivieren"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Disable"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Desactivar"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Désactiver"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "無効にする"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "비활성화"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Desativar"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Отключить"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "停用"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "停用"}}
+    }},
+    "settings.mapping.enable": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "تفعيل"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Aktivieren"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Enable"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Activar"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Activer"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "有効にする"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "활성화"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Ativar"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Включить"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "启用"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "啟用"}}
+    }},
+    "settings.mapping.manage": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "إدارة التعيين"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Zuordnung verwalten"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Manage Mapping"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Gestionar asignación"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Gérer l’association"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "マッピングを管理"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "매핑 관리"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Gerenciar mapeamento"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Управление сопоставлением"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "管理映射"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "管理映射"}}
+    }},
+    "settings.mappings.filter.action": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "نوع الإجراء"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Aktionstyp"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Action Type"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Tipo de acción"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Type d’action"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "アクションの種類"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "동작 유형"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Tipo de ação"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Тип действия"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "操作类型"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "操作類型"}}
+    }},
+    "settings.mappings.filter.action.all": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "كل الإجراءات"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Alle Aktionen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "All Actions"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Todas las acciones"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Toutes les actions"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "すべてのアクション"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "모든 동작"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Todas as ações"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Все действия"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "所有操作"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "所有操作"}}
+    }},
+    "settings.mappings.filter.action.macTools": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "إجراءات MacTools"}},
+      "de": {"stringUnit": {"state": "translated", "value": "MacTools-Aktionen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "MacTools Actions"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Acciones de MacTools"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Actions MacTools"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "MacToolsアクション"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "MacTools 동작"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Ações do MacTools"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Действия MacTools"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "MacTools 操作"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "MacTools 操作"}}
+    }},
+    "settings.mappings.filter.all": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "الكل"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Alle"}},
+      "en": {"stringUnit": {"state": "translated", "value": "All"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Todos"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Tous"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "すべて"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "모두"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Todos"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Все"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "全部"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "全部"}}
+    }},
+    "settings.mappings.filter.disabled": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "معطّلة"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Deaktiviert"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Disabled"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Desactivados"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Désactivés"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "無効"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "비활성화됨"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Desativados"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Отключённые"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "已停用"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "已停用"}}
+    }},
+    "settings.mappings.filter.enabled": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "مفعّلة"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Aktiviert"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Enabled"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Activados"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Activés"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "有効"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "활성화됨"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Ativados"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Включённые"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "已启用"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "已啟用"}}
+    }},
+    "settings.mappings.filter.status": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "الحالة"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Status"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Status"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Estado"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "État"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "状態"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "상태"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Status"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Состояние"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "状态"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "狀態"}}
+    }},
+    "settings.mappings.noMatches.title": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "لا توجد تعيينات مطابقة"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Keine passenden Zuordnungen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "No Matching Mappings"}},
+      "es": {"stringUnit": {"state": "translated", "value": "No hay asignaciones coincidentes"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Aucune association correspondante"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "一致するマッピングがありません"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "일치하는 매핑 없음"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Nenhum mapeamento correspondente"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Нет подходящих сопоставлений"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "没有符合条件的映射"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "沒有符合條件的映射"}}
+    }},
+    "settings.mappings.search": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "البحث في التعيينات"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Zuordnungen durchsuchen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Search Mappings"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Buscar asignaciones"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Rechercher des associations"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "マッピングを検索"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "매핑 검색"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Buscar mapeamentos"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Поиск сопоставлений"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "搜索映射"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "搜尋映射"}}
+    }},
+    "settings.mappings.search.clear": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "مسح البحث"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Suche löschen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Clear Search"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Borrar búsqueda"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Effacer la recherche"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "検索を消去"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "검색 지우기"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Limpar busca"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Очистить поиск"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "清除搜索"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "清除搜尋"}}
+    }},
+    "settings.mappings.search.placeholder": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "ابحث عن إيماءات أو إجراءات أو موفّرين"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Gesten, Aktionen oder Anbieter suchen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Search gestures, actions, or providers"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Buscar gestos, acciones o proveedores"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Rechercher des gestes, actions ou fournisseurs"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "ジェスチャ、アクション、提供元を検索"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "제스처, 동작 또는 제공자 검색"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Buscar gestos, ações ou provedores"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Поиск жестов, действий или поставщиков"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "搜索手势、操作或提供者"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "搜尋手勢、操作或提供者"}}
+    }},
+    "settings.mappings.sort.action": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "اسم الإجراء"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Aktionsname"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Action Name"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Nombre de la acción"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Nom de l’action"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "アクション名"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "동작 이름"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Nome da ação"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Название действия"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "操作名称"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "操作名稱"}}
+    }},
+    "settings.mappings.sort.added": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "ترتيب الإضافة"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Hinzufügungsreihenfolge"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Added Order"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Orden de incorporación"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Ordre d’ajout"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "追加順"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "추가 순서"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Ordem de adição"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Порядок добавления"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "添加顺序"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "加入順序"}}
+    }},
+    "settings.mappings.sort.enabled": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "المفعّلة أولاً"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Aktivierte zuerst"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Enabled First"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Activados primero"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Activés en premier"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "有効を優先"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "활성화 우선"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Ativados primeiro"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Сначала включённые"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "已启用优先"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "已啟用優先"}}
+    }},
+    "settings.mappings.sort.gesture": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "ترتيب الإيماءات"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Gestenreihenfolge"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Gesture Order"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Orden de gestos"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Ordre des gestes"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "ジェスチャ順"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "제스처 순서"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Ordem dos gestos"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Порядок жестов"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "手势顺序"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "手勢順序"}}
+    }},
+    "settings.mappings.sort.title": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "الترتيب حسب"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Sortieren nach"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Sort By"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Ordenar por"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Trier par"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "並べ替え"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "정렬 기준"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Ordenar por"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Сортировать по"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "排序方式"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "排序方式"}}
+    }},
+    "settings.mappings.summaryFormat": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "التعيينات: %d · المفعّلة: %d"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Zuordnungen: %d · Aktiviert: %d"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Mappings: %d · Enabled: %d"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Asignaciones: %d · Activadas: %d"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Associations : %d · Activées : %d"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "マッピング: %d · 有効: %d"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "매핑: %d · 활성화: %d"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Mapeamentos: %d · Ativados: %d"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Сопоставления: %d · Включено: %d"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "映射：%d · 已启用：%d"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "映射：%d · 已啟用：%d"}}
+    }},
+    "settings.mappings.view.reset": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "استعادة العرض الافتراضي"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Standardansicht wiederherstellen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "Reset View"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Restablecer vista"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Réinitialiser la vue"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "表示をリセット"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "보기 재설정"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Redefinir visualização"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Сбросить вид"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "还原默认视图"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "還原預設檢視"}}
+    }},
+    "settings.mappings.viewOptions": {"localizations": {
+      "ar": {"stringUnit": {"state": "translated", "value": "خيارات العرض"}},
+      "de": {"stringUnit": {"state": "translated", "value": "Ansichtsoptionen"}},
+      "en": {"stringUnit": {"state": "translated", "value": "View Options"}},
+      "es": {"stringUnit": {"state": "translated", "value": "Opciones de visualización"}},
+      "fr": {"stringUnit": {"state": "translated", "value": "Options d’affichage"}},
+      "ja": {"stringUnit": {"state": "translated", "value": "表示オプション"}},
+      "ko": {"stringUnit": {"state": "translated", "value": "보기 옵션"}},
+      "pt": {"stringUnit": {"state": "translated", "value": "Opções de visualização"}},
+      "ru": {"stringUnit": {"state": "translated", "value": "Параметры просмотра"}},
+      "zh-Hans": {"stringUnit": {"state": "translated", "value": "查看选项"}},
+      "zh-Hant": {"stringUnit": {"state": "translated", "value": "檢視選項"}}
     }},
     "settings.mapping.deleteMapping": {"localizations": {
       "ar": {"stringUnit": {"state": "translated", "value": "حذف التعيين"}},

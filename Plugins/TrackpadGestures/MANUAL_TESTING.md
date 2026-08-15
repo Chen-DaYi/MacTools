@@ -11,7 +11,8 @@ Status for issue #237: **Not run**. Record the tested Mac model, trackpad model,
 | Built-in MacBook trackpad | macOS 14 and each newer supported major version | Configured three- to five-finger taps and long touches recognize once; every distinct TipTap release recognizes while its fixed fingers remain down; disabled mappings do nothing | Not run |
 | Magic Trackpad | USB and Bluetooth when available | Recognition matches the built-in trackpad and remains isolated per physical device | Not run |
 | Tap to click | Enabled and disabled | A recognized TipTap performs exactly its mapped action and does not activate the link, button, or text field under the pointer; a failed gesture preserves the original click | Not run |
-| Secondary click | Two-finger click and corner-click configurations | TipTap click consumption and middle-click conversion work without duplicates; unrelated clicks outside an active gesture candidate remain usable | Not run |
+| Physical clicks | Map two- and three-finger clicks to a shortcut, MacTools action, and middle click | Each physical press fires exactly once, suppresses or rewrites its matching native click, and does not also recognize as a tap when the fingers lift | Not run |
+| Secondary click | Two-finger click and corner-click configurations | The two-finger conflict warning is visible; assigning that gesture deliberately replaces its matching secondary click, while unrelated clicks outside an active gesture candidate remain usable | Not run |
 | Simultaneous external-mouse click | Click an external mouse while exactly one configured click-producing gesture candidate is active | The settings warning is visible; record whether the external click conflicts because macOS does not expose a reliable native-click device source | Not run |
 | Typing protection | Built-in keyboard and an external keyboard; 0.2, 0.4, and 1.0 second delays | Ordinary key events still reach the frontmost app, gestures stay inactive while a key is held and during the configured delay, and recognition rearms only after every trackpad contact lifts | Not run |
 | Typing protection disabled | Built-in keyboard with protection switched off | Keyboard activity does not pause configured gestures | Not run |
@@ -31,6 +32,9 @@ On each available device, sample every initial gesture twice: once with a config
 - Three-, four-, and five-finger tap.
 - Three-, four-, and five-finger double tap.
 - Three-, four-, and five-finger long touch.
+- Two- and three-finger physical click.
+
+For physical clicks, keep the required fingers touching and press until the trackpad clicks. Test each with a keyboard shortcut, a MacTools action, and middle click. Expect one action and no native click-through; after release, the same contact episode must not also fire a tap or long touch. Confirm an unconfigured finger count and an external mouse click pass through unchanged. When two-finger click is configured, verify the UI warning makes clear that it replaces the matching macOS secondary click.
 
 For each double tap, touch and fully release twice in quick succession; expect its configured action exactly once on the second release. Repeat in Test Gestures and confirm the first release reports the ordinary single tap while the second release reports only the double tap. A gap longer than about 320 ms, excessive movement, an overlong contact, or a finger rebound before full release must not recognize a double tap.
 

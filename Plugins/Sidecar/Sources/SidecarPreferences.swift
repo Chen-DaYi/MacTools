@@ -70,12 +70,19 @@ final class SidecarPreferencesStore: ObservableObject {
         static let devices = "savedDevices"
         static let disconnectAllShortcut = "disconnectAllShortcut"
         static let connectFirstAvailableShortcut = "connectFirstAvailableShortcut"
+        static let portableRestoreTransaction = "portable-restore-transaction.v1"
     }
 
     private struct PortablePreferences: Codable {
         let devices: [SidecarDevicePreference]
         let disconnectAllShortcut: ShortcutBinding?
         let connectFirstAvailableShortcut: ShortcutBinding?
+    }
+
+    private struct PortableRestoreTransaction: Codable {
+        let devices: Data?
+        let disconnectAllShortcut: Data?
+        let connectFirstAvailableShortcut: Data?
     }
 
     @Published private(set) var devices: [SidecarDevicePreference]
@@ -88,6 +95,11 @@ final class SidecarPreferencesStore: ObservableObject {
 
     init(storage: PluginStorage) {
         self.storage = storage
+        _ = Self.recoverInterruptedPortableRestore(
+            storage: storage,
+            encoder: JSONEncoder(),
+            decoder: JSONDecoder()
+        )
         let storedDevices: [SidecarDevicePreference]
         if let data = storage.data(forKey: StorageKey.devices),
            let savedDevices = try? decoder.decode([SidecarDevicePreference].self, from: data) {
@@ -190,6 +202,20 @@ final class SidecarPreferencesStore: ObservableObject {
         normalizeAndPersistShortcuts(persistWhenUnchanged: true)
     }
 
+    func clearLegacyShortcuts() {
+        var updatedDevices = devices
+        for index in updatedDevices.indices {
+            updatedDevices[index].shortcut = nil
+            updatedDevices[index].hasShortcutConfiguration = false
+        }
+        devices = updatedDevices
+        disconnectAllShortcut = nil
+        connectFirstAvailableShortcut = nil
+        persistDevices()
+        persistShortcut(nil, forKey: StorageKey.disconnectAllShortcut)
+        persistShortcut(nil, forKey: StorageKey.connectFirstAvailableShortcut)
+    }
+
     func move(deviceID: String, before beforeDeviceID: String?) {
         guard let sourceIndex = devices.firstIndex(where: { $0.id == deviceID }) else { return }
         var updated = devices
@@ -215,21 +241,161 @@ final class SidecarPreferencesStore: ObservableObject {
         ))
     }
 
-    func restorePortablePreferences(from data: Data) {
+    @discardableResult
+    func restorePortablePreferences(from data: Data) -> Bool {
         guard let portablePreferences = try? decoder.decode(PortablePreferences.self, from: data) else {
-            return
+            return false
         }
         let normalized = Self.normalizedShortcuts(
             devices: portablePreferences.devices,
             disconnectAllShortcut: portablePreferences.disconnectAllShortcut,
             connectFirstAvailableShortcut: portablePreferences.connectFirstAvailableShortcut
         )
+        guard let devicesData = try? encoder.encode(normalized.devices) else { return false }
+        let disconnectData: Data?
+        if let shortcut = normalized.disconnectAllShortcut {
+            guard let encoded = try? encoder.encode(shortcut) else { return false }
+            disconnectData = encoded
+        } else {
+            disconnectData = nil
+        }
+        let connectData: Data?
+        if let shortcut = normalized.connectFirstAvailableShortcut {
+            guard let encoded = try? encoder.encode(shortcut) else { return false }
+            connectData = encoded
+        } else {
+            connectData = nil
+        }
+        guard recoverInterruptedPortableRestore(),
+              beginPortableRestoreTransaction(),
+              writePortableValues(
+                  devices: devicesData,
+                  disconnectAllShortcut: disconnectData,
+                  connectFirstAvailableShortcut: connectData
+              ),
+              finishPortableRestoreTransaction() else {
+            rollbackPortableRestoreTransaction()
+            return false
+        }
         devices = normalized.devices
         disconnectAllShortcut = normalized.disconnectAllShortcut
         connectFirstAvailableShortcut = normalized.connectFirstAvailableShortcut
-        persistDevices()
-        persistShortcut(disconnectAllShortcut, forKey: StorageKey.disconnectAllShortcut)
-        persistShortcut(connectFirstAvailableShortcut, forKey: StorageKey.connectFirstAvailableShortcut)
+        return true
+    }
+
+    func deviceIDs(inPortablePreferences data: Data) -> [String]? {
+        guard let portablePreferences = try? decoder.decode(PortablePreferences.self, from: data)
+        else {
+            return nil
+        }
+        return Self.normalizedShortcuts(
+            devices: portablePreferences.devices,
+            disconnectAllShortcut: portablePreferences.disconnectAllShortcut,
+            connectFirstAvailableShortcut: portablePreferences.connectFirstAvailableShortcut
+        ).devices.map(\.id)
+    }
+
+    private func beginPortableRestoreTransaction() -> Bool {
+        guard Self.hasExpectedData(forKey: StorageKey.devices, storage: storage),
+              Self.hasExpectedData(forKey: StorageKey.disconnectAllShortcut, storage: storage),
+              Self.hasExpectedData(forKey: StorageKey.connectFirstAvailableShortcut, storage: storage)
+        else {
+            return false
+        }
+        let transaction = PortableRestoreTransaction(
+            devices: storage.data(forKey: StorageKey.devices),
+            disconnectAllShortcut: storage.data(forKey: StorageKey.disconnectAllShortcut),
+            connectFirstAvailableShortcut: storage.data(forKey: StorageKey.connectFirstAvailableShortcut)
+        )
+        guard let data = try? encoder.encode(transaction) else { return false }
+        storage.set(data, forKey: StorageKey.portableRestoreTransaction)
+        return storage.data(forKey: StorageKey.portableRestoreTransaction) == data
+    }
+
+    private func recoverInterruptedPortableRestore() -> Bool {
+        Self.recoverInterruptedPortableRestore(
+            storage: storage,
+            encoder: encoder,
+            decoder: decoder
+        )
+    }
+
+    private static func recoverInterruptedPortableRestore(
+        storage: PluginStorage,
+        encoder: JSONEncoder,
+        decoder: JSONDecoder
+    ) -> Bool {
+        guard let rawTransaction = storage.object(forKey: StorageKey.portableRestoreTransaction) else {
+            return true
+        }
+        guard let transactionData = rawTransaction as? Data else { return false }
+        guard let transaction = try? decoder.decode(
+            PortableRestoreTransaction.self,
+            from: transactionData
+        ), writePortableValues(transaction, storage: storage) else {
+            return false
+        }
+        storage.removeObject(forKey: StorageKey.portableRestoreTransaction)
+        return storage.object(forKey: StorageKey.portableRestoreTransaction) == nil
+    }
+
+    @discardableResult
+    private func rollbackPortableRestoreTransaction() -> Bool {
+        recoverInterruptedPortableRestore()
+    }
+
+    private func finishPortableRestoreTransaction() -> Bool {
+        storage.removeObject(forKey: StorageKey.portableRestoreTransaction)
+        return storage.object(forKey: StorageKey.portableRestoreTransaction) == nil
+    }
+
+    private func writePortableValues(
+        devices: Data?,
+        disconnectAllShortcut: Data?,
+        connectFirstAvailableShortcut: Data?
+    ) -> Bool {
+        Self.writePortableValues(
+            PortableRestoreTransaction(
+                devices: devices,
+                disconnectAllShortcut: disconnectAllShortcut,
+                connectFirstAvailableShortcut: connectFirstAvailableShortcut
+            ),
+            storage: storage
+        )
+    }
+
+    private static func writePortableValues(
+        _ values: PortableRestoreTransaction,
+        storage: PluginStorage
+    ) -> Bool {
+        setOptional(values.devices, forKey: StorageKey.devices, storage: storage)
+        setOptional(
+            values.disconnectAllShortcut,
+            forKey: StorageKey.disconnectAllShortcut,
+            storage: storage
+        )
+        setOptional(
+            values.connectFirstAvailableShortcut,
+            forKey: StorageKey.connectFirstAvailableShortcut,
+            storage: storage
+        )
+        return storage.data(forKey: StorageKey.devices) == values.devices
+            && storage.data(forKey: StorageKey.disconnectAllShortcut) == values.disconnectAllShortcut
+            && storage.data(forKey: StorageKey.connectFirstAvailableShortcut)
+                == values.connectFirstAvailableShortcut
+    }
+
+    private static func setOptional(_ value: Any?, forKey key: String, storage: PluginStorage) {
+        if let value {
+            storage.set(value, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
+    }
+
+    private static func hasExpectedData(forKey key: String, storage: PluginStorage) -> Bool {
+        guard let rawValue = storage.object(forKey: key) else { return true }
+        return rawValue is Data
     }
 
     private func update(deviceID: String, _ change: (inout SidecarDevicePreference) -> Void) {

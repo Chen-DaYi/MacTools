@@ -202,6 +202,57 @@ final class DockLockPluginTests: XCTestCase {
         XCTAssertEqual(monitor.stopCallCount, 1)
     }
 
+    func testCanonicalActionsExposeStatefulToggleAndDeterministicChoices() throws {
+        let plugin = DockLockPlugin(
+            context: makeContext(),
+            monitor: MockDockLockMonitor(),
+            accessibilityTrusted: { true }
+        )
+
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.count, 3)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+        XCTAssertEqual(plugin.actionDefinitions.map(\.externalInvocationPolicy), [.allowed, .allowed])
+    }
+
+    func testCanonicalEnableAndDisableActionsUseTheSharedMutationPath() async throws {
+        let monitor = MockDockLockMonitor()
+        let plugin = DockLockPlugin(
+            context: makeContext(),
+            monitor: monitor,
+            accessibilityTrusted: { true }
+        )
+        let enable = try XCTUnwrap(plugin.actionCatalogEntries.dropFirst().first?.reference)
+        let disable = try XCTUnwrap(plugin.actionCatalogEntries.last?.reference)
+
+        let enableResult = try await plugin.beginAction(
+            ActionInvocation(reference: enable, source: .test, mode: .background)
+        ).result()
+        XCTAssertEqual(enableResult, .succeeded())
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
+
+        let disableResult = try await plugin.beginAction(
+            ActionInvocation(reference: disable, source: .test, mode: .background)
+        ).result()
+        XCTAssertEqual(disableResult, .succeeded())
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertGreaterThanOrEqual(monitor.stopCallCount, 1)
+    }
+
+    func testEnableActionIsUnavailableWithoutAccessibilityPermission() throws {
+        let plugin = DockLockPlugin(
+            context: makeContext(),
+            monitor: MockDockLockMonitor(),
+            accessibilityTrusted: { false }
+        )
+        let enable = try XCTUnwrap(plugin.actionCatalogEntries.dropFirst().first?.reference)
+        let disable = try XCTUnwrap(plugin.actionCatalogEntries.last?.reference)
+
+        XCTAssertFalse(plugin.actionAvailability(for: enable).isAvailable)
+        XCTAssertTrue(plugin.actionAvailability(for: disable).isAvailable)
+    }
+
     private func makeContext(isEnabled: Bool? = nil) -> PluginRuntimeContext {
         let storage = DockLockMemoryStorage()
         if let isEnabled {

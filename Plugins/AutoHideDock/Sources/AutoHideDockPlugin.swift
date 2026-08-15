@@ -62,7 +62,11 @@ private struct AutoHideDockPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
+    }
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -121,6 +125,65 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("metadata.title", defaultValue: "自动隐藏程序坞"),
+                description: localization.string("metadata.description", defaultValue: "自动隐藏程序坞，提供更干净的桌面环境"),
+                keywords: [localization.string("metadata.title", defaultValue: "自动隐藏程序坞"), "Dock"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: localization.string("metadata.title", defaultValue: "自动隐藏程序坞"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "自动隐藏程序坞，提供更干净的桌面环境"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "自动隐藏程序坞"),
+                    "Dock",
+                ],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("metadata.title", defaultValue: "自动隐藏程序坞"),
+                        kind: .boolean
+                    ),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isDockHidden
+                    ? localization.string("action.show.title", defaultValue: "显示程序坞")
+                    : localization.string("action.hide.title", defaultValue: "隐藏程序坞"),
+                subtitle: isDockHidden
+                    ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                    : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
+                presentationState: isDockHidden ? .active : .inactive
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.hide.title", defaultValue: "隐藏程序坞")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.show.title", defaultValue: "显示程序坞")
+            ),
+        ]
+    }
+
     func refresh() {
         let latestState = stateReader()
         if latestState != isDockHidden {
@@ -145,17 +208,56 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
-    private func setDockHidden(_ isEnabled: Bool) {
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !stateReader()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        let succeeded = setDockHidden(enabled)
+        let failureMessage = localization.string(
+            "error.toggleFailed",
+            defaultValue: "切换 Dock 自动隐藏失败"
+        )
+        return ActionExecutionHandle {
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
+        }
+    }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    @discardableResult
+    private func setDockHidden(_ isEnabled: Bool) -> Bool {
         do {
             try commandRunner.setDockAutohide(isEnabled)
             isDockHidden = isEnabled
             lastErrorMessage = nil
             onStateChange?()
+            return true
         } catch {
             logger.error("Failed to update Dock auto-hide: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = error.localizedDescription
             refresh()
             onStateChange?()
+            return false
         }
     }
 

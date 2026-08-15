@@ -194,6 +194,10 @@ final class DynamicPluginManager: ObservableObject {
         packageStore.temporaryDirectory
     }
 
+    var hostVersion: String {
+        packageStore.hostVersion
+    }
+
     init(
         packageStore: PluginPackageStore = PluginPackageStore(),
         pluginLoader: (any DynamicPluginLoading)? = nil
@@ -545,8 +549,16 @@ final class DynamicPluginManager: ObservableObject {
             )
         }
         for plugin in plugins {
-            try (plugin as! any PluginFeatureExtractionReadinessProviding)
-                .validateFeatureExtractionReadiness()
+            guard let readinessProvider = plugin as? any PluginFeatureExtractionReadinessProviding else {
+                throw DynamicPluginManagerOperationError.pluginRuntimeValidationFailed(
+                    pluginID,
+                    AppL10n.plugins(
+                        "plugin.error.dynamic.runtimeValidationReadinessUnsupported",
+                        defaultValue: "插件不支持功能迁移就绪检查。"
+                    )
+                )
+            }
+            try readinessProvider.validateFeatureExtractionReadiness()
         }
     }
 
@@ -911,21 +923,41 @@ final class DynamicPluginManager: ObservableObject {
             }
 
             if let result = installedItems[entry.id] {
+                let compatibleCatalogEntry = PluginVersionComparator.isVersion(
+                    packageStore.hostVersion,
+                    atLeast: entry.minimumHostVersion
+                ) ? entry : nil
                 items.append(
                     managementItem(
                         for: result,
-                        catalogEntry: entry,
+                        catalogEntry: compatibleCatalogEntry,
                         revocation: revocation
                     )
                 )
             } else {
+                let state: PluginManagementItem.State
+                if !PluginVersionComparator.isVersion(
+                    packageStore.hostVersion,
+                    atLeast: entry.minimumHostVersion
+                ) {
+                    state = .incompatible(
+                        PluginPackageManifestError.incompatibleHostVersion(
+                            required: entry.minimumHostVersion,
+                            current: packageStore.hostVersion
+                        ).localizedDescription
+                    )
+                } else {
+                    state = catalogSnapshot?.isLocalDevelopment == true
+                        ? .localDevelopment
+                        : .available
+                }
                 items.append(
                     PluginManagementItem(
                         id: entry.id,
                         title: entry.localizedDisplayName,
                         summary: entry.localizedSummary,
                         version: entry.version,
-                        state: catalogSnapshot?.isLocalDevelopment == true ? .localDevelopment : .available,
+                        state: state,
                         packageURL: nil,
                         requiresRestartToFullyUnload: false,
                         releaseNotesURL: entry.releaseNotesURL,

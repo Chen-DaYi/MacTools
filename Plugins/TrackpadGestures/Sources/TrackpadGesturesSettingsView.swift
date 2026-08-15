@@ -2,6 +2,27 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
+struct TrackpadActionPickerAccessibility: Equatable {
+    let confirmationValue: String?
+
+    init(isSafe: Bool, confirmationRequiredText: String) {
+        confirmationValue = isSafe ? nil : confirmationRequiredText
+    }
+}
+
+private struct TrackpadConfirmationAccessibilityModifier: ViewModifier {
+    let value: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let value {
+            content.accessibilityValue(Text(value))
+        } else {
+            content
+        }
+    }
+}
+
 struct TrackpadGesturesSettingsView: View {
     enum SectionKind {
         case mappings
@@ -11,6 +32,7 @@ struct TrackpadGesturesSettingsView: View {
 
     @ObservedObject var store: TrackpadGestureStore
     let localization: PluginLocalization
+    let actionHostContext: TrackpadActionHostContext?
     let isGestureOwned: (TrackpadGesture) -> Bool
     let onChange: () -> Void
     let onSetTesting: (Bool) -> Void
@@ -18,6 +40,9 @@ struct TrackpadGesturesSettingsView: View {
 
     @State private var editingDraft: TrackpadGestureMappingDraft?
     @State private var isShowingTipTapGuide = false
+    @State private var mappingSearchQuery = ""
+    @State private var isShowingMappingSearch = false
+    @FocusState private var isMappingSearchFocused: Bool
 
     @ViewBuilder
     var body: some View {
@@ -38,9 +63,10 @@ struct TrackpadGesturesSettingsView: View {
                 draft: draft,
                 store: store,
                 localization: localization,
+                actionHostContext: actionHostContext,
                 onCancel: { editingDraft = nil },
                 onDelete: store.mappings.contains(where: { $0.id == draft.id }) ? {
-                    store.delete(id: draft.id)
+                    guard store.delete(id: draft.id) else { return }
                     editingDraft = nil
                     onChange()
                 } : nil,
@@ -163,18 +189,12 @@ struct TrackpadGesturesSettingsView: View {
             HStack {
                 Spacer(minLength: PluginSettingsTheme.Spacing.controlCluster)
 
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
-                        tipTapGuideButton(compact: false)
-                        addMappingButton(compact: false)
-                    }
-                    .fixedSize()
-                    HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
-                        tipTapGuideButton(compact: true)
-                        addMappingButton(compact: true)
-                    }
-                    .fixedSize()
+                HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                    mappingViewMenu
+                    tipTapGuideButton
+                    addMappingButton
                 }
+                .fixedSize()
                 .popover(isPresented: $isShowingTipTapGuide, arrowEdge: .top) {
                     tipTapGuide
                 }
@@ -184,30 +204,156 @@ struct TrackpadGesturesSettingsView: View {
             if store.mappings.isEmpty {
                 emptyState
             } else {
-                mappingList
+                if isShowingMappingSearch {
+                    mappingSearchField
+                }
+                if visibleMappings.isEmpty {
+                    noMatchingMappingsState
+                } else {
+                    mappingList
+                }
             }
         }
     }
 
+    private var mappingViewMenu: some View {
+        let title = localization.string(
+            "settings.mappings.viewOptions",
+            defaultValue: "查看选项"
+        )
+        return Menu {
+            Button {
+                toggleMappingSearch()
+            } label: {
+                Label(
+                    localization.string(
+                        "settings.mappings.search",
+                        defaultValue: "搜索映射"
+                    ),
+                    systemImage: isShowingMappingSearch ? "checkmark" : "magnifyingglass"
+                )
+            }
+
+            Divider()
+
+            Menu {
+                ForEach(TrackpadGestureMappingSort.allCases, id: \.self) { sort in
+                    Button {
+                        store.setMappingSort(sort)
+                    } label: {
+                        menuChoiceLabel(
+                            sort.title(localization: localization),
+                            selected: store.mappingSort == sort
+                        )
+                    }
+                }
+            } label: {
+                Label(
+                    localization.string(
+                        "settings.mappings.sort.title",
+                        defaultValue: "排序方式"
+                    ),
+                    systemImage: "arrow.up.arrow.down"
+                )
+            }
+
+            Menu {
+                ForEach(TrackpadGestureMappingStatusFilter.allCases, id: \.self) { filter in
+                    Button {
+                        store.setMappingStatusFilter(filter)
+                    } label: {
+                        menuChoiceLabel(
+                            filter.title(localization: localization),
+                            selected: store.mappingStatusFilter == filter
+                        )
+                    }
+                }
+            } label: {
+                Label(
+                    localization.string(
+                        "settings.mappings.filter.status",
+                        defaultValue: "状态"
+                    ),
+                    systemImage: "checkmark.circle"
+                )
+            }
+
+            Menu {
+                ForEach(TrackpadGestureMappingActionFilter.allCases, id: \.self) { filter in
+                    Button {
+                        store.setMappingActionFilter(filter)
+                    } label: {
+                        menuChoiceLabel(
+                            filter.title(localization: localization),
+                            selected: store.mappingActionFilter == filter
+                        )
+                    }
+                }
+            } label: {
+                Label(
+                    localization.string(
+                        "settings.mappings.filter.action",
+                        defaultValue: "操作类型"
+                    ),
+                    systemImage: "bolt.circle"
+                )
+            }
+
+            if hasCustomizedMappingView {
+                Divider()
+
+                Button {
+                    resetMappingView()
+                } label: {
+                    Label(
+                        localization.string(
+                            "settings.mappings.view.reset",
+                            defaultValue: "还原默认视图"
+                        ),
+                        systemImage: "arrow.counterclockwise"
+                    )
+                }
+            }
+        } label: {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: hasCustomizedMappingView
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle")
+                    .foregroundStyle(hasCustomizedMappingView ? Color.accentColor : Color.primary)
+            }
+            .font(PluginSettingsTheme.Typography.controlLabel)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .fixedSize()
+        .help(title)
+        .accessibilityLabel(Text(title))
+    }
+
     @ViewBuilder
-    private func tipTapGuideButton(compact: Bool) -> some View {
+    private func menuChoiceLabel(_ title: String, selected: Bool) -> some View {
+        if selected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
+    }
+
+    private var tipTapGuideButton: some View {
         let title = localization.string(
             "settings.mappings.tipTapGuide",
             defaultValue: "了解 TipTap"
         )
-        Button {
+        return Button {
             isShowingTipTapGuide.toggle()
         } label: {
-            if compact {
-                Image(systemName: "questionmark.circle")
-                    .frame(
-                        width: PluginSettingsTheme.Size.controlHeight,
-                        height: PluginSettingsTheme.Size.controlHeight
-                    )
-            } else {
-                Label(title, systemImage: "questionmark.circle")
-                    .font(PluginSettingsTheme.Typography.controlLabel)
-            }
+            Image(systemName: "questionmark.circle")
+                .frame(
+                    width: PluginSettingsTheme.Size.controlHeight,
+                    height: PluginSettingsTheme.Size.controlHeight
+                )
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
@@ -215,26 +361,27 @@ struct TrackpadGesturesSettingsView: View {
         .accessibilityLabel(Text(title))
     }
 
-    @ViewBuilder
-    private func addMappingButton(compact: Bool) -> some View {
+    private var addMappingButton: some View {
         let title = localization.string("settings.mappings.add", defaultValue: "添加手势")
-        Button(action: addMapping) {
-            if compact {
-                Image(systemName: "plus")
-                    .frame(
-                        width: PluginSettingsTheme.Size.controlHeight,
-                        height: PluginSettingsTheme.Size.controlHeight
-                    )
-            } else {
-                Label(title, systemImage: "plus")
-                    .font(PluginSettingsTheme.Typography.controlLabel)
-            }
+        return Button(action: addMapping) {
+            Label(title, systemImage: "plus")
+                .font(PluginSettingsTheme.Typography.controlLabel)
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
         .help(title)
         .accessibilityLabel(Text(title))
         .disabled(store.mappings.count == TrackpadGesture.configurableCases.count)
+    }
+
+    private func toggleMappingSearch() {
+        withAnimation(.easeOut(duration: 0.16)) {
+            isShowingMappingSearch.toggle()
+            if !isShowingMappingSearch {
+                mappingSearchQuery = ""
+            }
+        }
+        isMappingSearchFocused = isShowingMappingSearch
     }
 
     private var tipTapGuide: some View {
@@ -322,11 +469,77 @@ struct TrackpadGesturesSettingsView: View {
         }
     }
 
+    private var mappingSearchField: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(
+                localization.string(
+                    "settings.mappings.search.placeholder",
+                    defaultValue: "搜索手势、操作或提供者"
+                ),
+                text: $mappingSearchQuery
+            )
+            .textFieldStyle(.plain)
+            .focused($isMappingSearchFocused)
+            .accessibilityIdentifier("mactools.trackpad.mapping-search")
+
+            if !mappingSearchQuery.isEmpty {
+                Button {
+                    mappingSearchQuery = ""
+                    isMappingSearchFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(localization.string(
+                    "settings.mappings.search.clear",
+                    defaultValue: "清除搜索"
+                ))
+                .accessibilityLabel(Text(localization.string(
+                    "settings.mappings.search.clear",
+                    defaultValue: "清除搜索"
+                )))
+            }
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+        .pluginSettingsCardBackground(.standard)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    private var noMatchingMappingsState: some View {
+        VStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon))
+                .foregroundStyle(.secondary)
+            Text(localization.string(
+                "settings.mappings.noMatches.title",
+                defaultValue: "没有符合条件的映射"
+            ))
+            .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+            Button {
+                resetMappingView()
+            } label: {
+                Text(localization.string(
+                    "settings.mappings.view.reset",
+                    defaultValue: "还原默认视图"
+                ))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
+        .pluginSettingsCardBackground(.standard)
+    }
+
     private var mappingList: some View {
-        VStack(spacing: 0) {
-            ForEach(store.mappings) { mapping in
+        let mappings = visibleMappings
+        return VStack(spacing: 0) {
+            ForEach(mappings) { mapping in
                 mappingRow(mapping)
-                if mapping.id != store.mappings.last?.id {
+                if mapping.id != mappings.last?.id {
                     PluginSettingsListDivider()
                 }
             }
@@ -342,17 +555,39 @@ struct TrackpadGesturesSettingsView: View {
                 editingDraft = TrackpadGestureMappingDraft(mapping: mapping)
             } label: {
                 HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    Image(systemName: PluginSystemImage.resolvedName(mapping.gesture.systemImage))
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 34, height: 34)
+                        .background(Color.accentColor.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 9))
+
                     VStack(
                         alignment: .leading,
                         spacing: PluginSettingsTheme.Spacing.rowTitleDescription
                     ) {
-                        Text(mapping.gesture.title(localization: localization))
-                            .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                            .lineLimit(1)
-                        Text(mapping.action.title(localization: localization))
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        HStack(spacing: 7) {
+                            Text(mapping.gesture.title(localization: localization))
+                                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                                .lineLimit(1)
+                            Text(mapping.gesture.category.title(localization: localization))
+                                .font(PluginSettingsTheme.Typography.statusBadge)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.secondary.opacity(0.10))
+                                .clipShape(Capsule())
+                        }
+                        HStack(spacing: 5) {
+                            Image(systemName: PluginSystemImage.resolvedName(
+                                mappingActionSystemImage(mapping.action)
+                            ))
+                            .frame(width: 13)
+                            Text(mappingActionTitle(mapping.action))
+                                .lineLimit(1)
+                        }
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
                         if mapping.isEnabled && !isGestureOwned(mapping.gesture) {
                             Text(localization.string(
                                 "settings.mapping.usedByAnotherPlugin",
@@ -364,7 +599,7 @@ struct TrackpadGesturesSettingsView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Image(systemName: "chevron.right")
+                    Image(systemName: "chevron.forward")
                         .pluginSettingsRowIconStyle(.secondary)
                         .frame(
                             width: PluginSettingsTheme.Size.rowIcon,
@@ -378,7 +613,7 @@ struct TrackpadGesturesSettingsView: View {
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel(gestureTitle)
-            .accessibilityValue(mapping.action.title(localization: localization))
+            .accessibilityValue(mappingActionTitle(mapping.action))
             .accessibilityHint(editTitle)
             .onHover { hovering in
                 TrackpadSettingsCursor.update(isHovering: hovering)
@@ -390,7 +625,7 @@ struct TrackpadGesturesSettingsView: View {
             Toggle(gestureTitle, isOn: Binding(
                 get: { mapping.isEnabled },
                 set: { enabled in
-                    store.setEnabled(enabled, id: mapping.id)
+                    guard store.setEnabled(enabled, id: mapping.id) else { return }
                     onChange()
                 }
             ))
@@ -401,16 +636,132 @@ struct TrackpadGesturesSettingsView: View {
         }
         .pluginSettingsListRowPadding(interactive: true)
         .contextMenu {
-            Button(role: .destructive) {
-                store.delete(id: mapping.id)
-                onChange()
-            } label: {
-                Label(
-                    localization.string("settings.mapping.delete", defaultValue: "删除"),
-                    systemImage: "trash"
+            mappingManagementMenuItems(mapping)
+        }
+    }
+
+    @ViewBuilder
+    private func mappingManagementMenuItems(_ mapping: TrackpadGestureMapping) -> some View {
+        Button {
+            editingDraft = TrackpadGestureMappingDraft(mapping: mapping)
+        } label: {
+            Label(
+                localization.string("settings.mapping.edit", defaultValue: "编辑映射"),
+                systemImage: "pencil"
+            )
+        }
+
+        Button {
+            guard store.setEnabled(!mapping.isEnabled, id: mapping.id) else { return }
+            onChange()
+        } label: {
+            Label(
+                mapping.isEnabled
+                    ? localization.string("settings.mapping.disable", defaultValue: "停用")
+                    : localization.string("settings.mapping.enable", defaultValue: "启用"),
+                systemImage: mapping.isEnabled ? "pause.circle" : "play.circle"
+            )
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            guard store.delete(id: mapping.id) else { return }
+            onChange()
+        } label: {
+            Label(
+                localization.string("settings.mapping.delete", defaultValue: "删除"),
+                systemImage: "trash"
+            )
+        }
+    }
+
+    private var hasCustomizedMappingView: Bool {
+        !mappingSearchQuery.isEmpty
+            || store.mappingSort != .gesture
+            || store.mappingStatusFilter != .all
+            || store.mappingActionFilter != .all
+    }
+
+    private var visibleMappings: [TrackpadGestureMapping] {
+        let sourceIndices = Dictionary(
+            uniqueKeysWithValues: store.mappings.enumerated().map { ($0.element.id, $0.offset) }
+        )
+        let query = mappingSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return store.mappings
+            .filter { mappingMatchesStatus($0) && mappingMatchesActionType($0) }
+            .filter { mapping in
+                guard !query.isEmpty else { return true }
+                let ownerTitle: String? = if case let .action(reference) = mapping.action {
+                    actionHostContext?.item(for: reference)?.ownerTitle
+                } else {
+                    nil
+                }
+                return [
+                    mapping.gesture.title(localization: localization),
+                    mapping.gesture.category.title(localization: localization),
+                    mappingActionTitle(mapping.action),
+                    ownerTitle,
+                ]
+                .compactMap { $0 }
+                .contains { $0.localizedCaseInsensitiveContains(query) }
+            }
+            .sorted { lhs, rhs in
+                mappingComesBefore(
+                    lhs,
+                    rhs,
+                    sourceIndices: sourceIndices
                 )
             }
+    }
+
+    private func mappingMatchesStatus(_ mapping: TrackpadGestureMapping) -> Bool {
+        switch store.mappingStatusFilter {
+        case .all: true
+        case .enabled: mapping.isEnabled
+        case .disabled: !mapping.isEnabled
         }
+    }
+
+    private func mappingMatchesActionType(_ mapping: TrackpadGestureMapping) -> Bool {
+        switch (store.mappingActionFilter, mapping.action) {
+        case (.all, _), (.macToolsAction, .action),
+             (.keyboardShortcut, .keyboardShortcut), (.middleClick, .middleClick):
+            true
+        default:
+            false
+        }
+    }
+
+    private func mappingComesBefore(
+        _ lhs: TrackpadGestureMapping,
+        _ rhs: TrackpadGestureMapping,
+        sourceIndices: [UUID: Int]
+    ) -> Bool {
+        switch store.mappingSort {
+        case .gesture:
+            return lhs.gesture.settingsOrder < rhs.gesture.settingsOrder
+        case .enabledFirst:
+            if lhs.isEnabled != rhs.isEnabled {
+                return lhs.isEnabled && !rhs.isEnabled
+            }
+            return lhs.gesture.settingsOrder < rhs.gesture.settingsOrder
+        case .actionName:
+            let comparison = mappingActionTitle(lhs.action)
+                .localizedStandardCompare(mappingActionTitle(rhs.action))
+            if comparison != .orderedSame {
+                return comparison == .orderedAscending
+            }
+            return lhs.gesture.settingsOrder < rhs.gesture.settingsOrder
+        case .addedOrder:
+            return (sourceIndices[lhs.id] ?? .max) < (sourceIndices[rhs.id] ?? .max)
+        }
+    }
+
+    private func resetMappingView() {
+        mappingSearchQuery = ""
+        store.resetMappingViewPreferences()
+        isMappingSearchFocused = isShowingMappingSearch
     }
 
     private var testingSection: some View {
@@ -483,9 +834,33 @@ struct TrackpadGesturesSettingsView: View {
         }
         editingDraft = TrackpadGestureMappingDraft(gesture: gesture)
     }
+
+    private func mappingActionTitle(_ action: TrackpadGestureAction) -> String {
+        if case let .action(reference) = action {
+            return actionHostContext?.item(for: reference)?.title
+                ?? localization.string(
+                    "editor.action.unavailable",
+                    defaultValue: "不可用的 MacTools 操作"
+                )
+        }
+        return action.title(localization: localization)
+    }
+
+    private func mappingActionSystemImage(_ action: TrackpadGestureAction) -> String {
+        switch action {
+        case let .action(reference):
+            actionHostContext?.item(for: reference)?.systemImage ?? "questionmark.square.dashed"
+        case .keyboardShortcut:
+            "keyboard"
+        case .middleClick:
+            "computermouse"
+        }
+    }
 }
 
-private enum TrackpadGestureEditorActionKind: String, CaseIterable, Identifiable {
+private enum TrackpadGestureEditorActionKind: String, Identifiable {
+    case none
+    case action
     case keyboardShortcut
     case middleClick
 
@@ -496,13 +871,15 @@ private struct TrackpadGestureMappingDraft: Identifiable {
     let id: UUID
     var gesture: TrackpadGesture
     var actionKind: TrackpadGestureEditorActionKind
+    var actionReference: ActionReference?
     var shortcut: ShortcutBinding?
     var isEnabled: Bool
 
     init(gesture: TrackpadGesture) {
         self.id = UUID()
         self.gesture = gesture
-        self.actionKind = .keyboardShortcut
+        self.actionKind = .none
+        self.actionReference = nil
         self.shortcut = nil
         self.isEnabled = true
     }
@@ -512,11 +889,17 @@ private struct TrackpadGestureMappingDraft: Identifiable {
         self.gesture = mapping.gesture
         self.isEnabled = mapping.isEnabled
         switch mapping.action {
+        case let .action(reference):
+            self.actionKind = .action
+            self.actionReference = reference
+            self.shortcut = nil
         case let .keyboardShortcut(shortcut):
             self.actionKind = .keyboardShortcut
+            self.actionReference = nil
             self.shortcut = shortcut
         case .middleClick:
             self.actionKind = .middleClick
+            self.actionReference = nil
             self.shortcut = nil
         }
     }
@@ -524,6 +907,11 @@ private struct TrackpadGestureMappingDraft: Identifiable {
     var mapping: TrackpadGestureMapping? {
         let action: TrackpadGestureAction
         switch actionKind {
+        case .none:
+            return nil
+        case .action:
+            guard let actionReference else { return nil }
+            action = .action(actionReference)
         case .keyboardShortcut:
             guard let shortcut, shortcut.isValid else { return nil }
             action = .keyboardShortcut(shortcut)
@@ -539,9 +927,219 @@ private struct TrackpadGestureMappingDraft: Identifiable {
     }
 }
 
+private extension TrackpadGestureMappingSort {
+    func title(localization: PluginLocalization) -> String {
+        switch self {
+        case .gesture:
+            localization.string("settings.mappings.sort.gesture", defaultValue: "手势顺序")
+        case .enabledFirst:
+            localization.string("settings.mappings.sort.enabled", defaultValue: "已启用优先")
+        case .actionName:
+            localization.string("settings.mappings.sort.action", defaultValue: "操作名称")
+        case .addedOrder:
+            localization.string("settings.mappings.sort.added", defaultValue: "添加顺序")
+        }
+    }
+}
+
+private extension TrackpadGestureMappingStatusFilter {
+    func title(localization: PluginLocalization) -> String {
+        switch self {
+        case .all:
+            localization.string("settings.mappings.filter.all", defaultValue: "全部")
+        case .enabled:
+            localization.string("settings.mappings.filter.enabled", defaultValue: "已启用")
+        case .disabled:
+            localization.string("settings.mappings.filter.disabled", defaultValue: "已停用")
+        }
+    }
+}
+
+private extension TrackpadGestureMappingActionFilter {
+    func title(localization: PluginLocalization) -> String {
+        switch self {
+        case .all:
+            localization.string("settings.mappings.filter.action.all", defaultValue: "所有操作")
+        case .macToolsAction:
+            localization.string(
+                "settings.mappings.filter.action.macTools",
+                defaultValue: "MacTools 操作"
+            )
+        case .keyboardShortcut:
+            localization.string("action.shortcut", defaultValue: "键盘快捷键")
+        case .middleClick:
+            localization.string("action.middleClick", defaultValue: "鼠标中键")
+        }
+    }
+}
+
+private enum TrackpadGestureCategory: String, CaseIterable, Identifiable {
+    case tipTap
+    case tap
+    case doubleTap
+    case click
+    case longTouch
+
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .tipTap, .tap, .doubleTap: "hand.tap"
+        case .click: "computermouse"
+        case .longTouch: "hand.raised"
+        }
+    }
+
+    func title(localization: PluginLocalization) -> String {
+        switch self {
+        case .tipTap:
+            localization.string("gesture.category.tipTap", defaultValue: "TipTap")
+        case .tap:
+            localization.string("gesture.category.tap", defaultValue: "轻点")
+        case .doubleTap:
+            localization.string("gesture.category.doubleTap", defaultValue: "双击")
+        case .click:
+            localization.string("gesture.category.click", defaultValue: "按下点击")
+        case .longTouch:
+            localization.string("gesture.category.longTouch", defaultValue: "长触")
+        }
+    }
+}
+
+private struct TrackpadGesturePickerControl: View {
+    let gestures: [TrackpadGesture]
+    let localization: PluginLocalization
+    let actionKind: TrackpadGestureEditorActionKind
+    @Binding var selection: TrackpadGesture
+
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Image(systemName: PluginSystemImage.resolvedName(selection.systemImage))
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 30, height: 30)
+                    .background(Color.accentColor.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selection.title(localization: localization))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(selection.category.title(localization: localization))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(minWidth: 340, idealWidth: 390, maxWidth: 440, minHeight: 52)
+            .contentShape(Rectangle())
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control))
+            .overlay {
+                RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            pickerContent
+        }
+        .accessibilityIdentifier("mactools.trackpad.gesture-picker")
+        .accessibilityLabel(localization.string("editor.gesture.title", defaultValue: "手势"))
+        .accessibilityValue(selection.title(localization: localization))
+    }
+
+    private var pickerContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                ForEach(TrackpadGestureCategory.allCases) { category in
+                    let categoryGestures = gestures.filter { $0.category == category }
+                    if !categoryGestures.isEmpty {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Label(
+                                category.title(localization: localization),
+                                systemImage: category.systemImage
+                            )
+                            .font(PluginSettingsTheme.Typography.sectionTitle)
+                            .foregroundStyle(.secondary)
+
+                            ForEach(categoryGestures) { gesture in
+                                gestureRow(gesture)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(14)
+        }
+        .frame(width: 440, height: 500)
+    }
+
+    private func gestureRow(_ gesture: TrackpadGesture) -> some View {
+        let hasConflict = !gesture.conflictGuidance(
+            localization: localization,
+            actionKind: actionKind
+        ).isEmpty
+
+        return Button {
+            selection = gesture
+            isPresented = false
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: PluginSystemImage.resolvedName(gesture.systemImage))
+                    .frame(width: 20)
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(gesture.title(localization: localization))
+                        .foregroundStyle(.primary)
+                    Text(gesture.demonstration(localization: localization))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if hasConflict {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .help(gesture.conflictGuidance(
+                            localization: localization,
+                            actionKind: actionKind
+                        ).joined(separator: "\n"))
+                }
+                if gesture == selection {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .background(
+                gesture == selection ? Color.accentColor.opacity(0.08) : Color.clear
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("mactools.trackpad.gesture-picker.\(gesture.rawValue)")
+    }
+}
+
 private struct TrackpadGestureEditor: View {
     @ObservedObject var store: TrackpadGestureStore
     let localization: PluginLocalization
+    let actionHostContext: TrackpadActionHostContext?
     let onCancel: () -> Void
     let onDelete: (() -> Void)?
     let onSave: (TrackpadGestureMapping) -> Void
@@ -552,6 +1150,7 @@ private struct TrackpadGestureEditor: View {
         draft: TrackpadGestureMappingDraft,
         store: TrackpadGestureStore,
         localization: PluginLocalization,
+        actionHostContext: TrackpadActionHostContext?,
         onCancel: @escaping () -> Void,
         onDelete: (() -> Void)?,
         onSave: @escaping (TrackpadGestureMapping) -> Void
@@ -559,6 +1158,7 @@ private struct TrackpadGestureEditor: View {
         _draft = State(initialValue: draft)
         self.store = store
         self.localization = localization
+        self.actionHostContext = actionHostContext
         self.onCancel = onCancel
         self.onDelete = onDelete
         self.onSave = onSave
@@ -575,16 +1175,12 @@ private struct TrackpadGestureEditor: View {
                         title: localization.string("editor.gesture.title", defaultValue: "手势"),
                         icon: "hand.tap"
                     ) {
-                        Picker(
-                            localization.string("editor.gesture.title", defaultValue: "手势"),
+                        TrackpadGesturePickerControl(
+                            gestures: store.availableGestures(excludingID: draft.id),
+                            localization: localization,
+                            actionKind: draft.actionKind,
                             selection: $draft.gesture
-                        ) {
-                            ForEach(store.availableGestures(excludingID: draft.id)) { gesture in
-                                Text(gesture.title(localization: localization)).tag(gesture)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(minWidth: 260, idealWidth: 300, maxWidth: 340)
+                        )
 
                         Label(
                             draft.gesture.demonstration(localization: localization),
@@ -611,17 +1207,13 @@ private struct TrackpadGestureEditor: View {
                         title: localization.string("editor.action.title", defaultValue: "操作"),
                         icon: "arrow.right.circle"
                     ) {
-                        Picker(
-                            localization.string("editor.action.title", defaultValue: "操作"),
-                            selection: $draft.actionKind
-                        ) {
-                            Text(localization.string("action.shortcut", defaultValue: "键盘快捷键"))
-                                .tag(TrackpadGestureEditorActionKind.keyboardShortcut)
-                            Text(localization.string("action.middleClick", defaultValue: "鼠标中键"))
-                                .tag(TrackpadGestureEditorActionKind.middleClick)
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(minWidth: 300, idealWidth: 340, maxWidth: 380)
+                        TrackpadUnifiedActionPickerControl(
+                            localization: localization,
+                            context: actionHostContext,
+                            actionKind: $draft.actionKind,
+                            actionReference: $draft.actionReference,
+                            shortcut: $draft.shortcut
+                        )
 
                         if draft.actionKind == .keyboardShortcut {
                             PluginSettingsShortcutControlLayout {
@@ -736,10 +1328,22 @@ private struct TrackpadGestureEditor: View {
                 defaultValue: "该手势已配置，请选择其他手势。"
             )
         }
+        if draft.actionKind == .none {
+            return localization.string(
+                "editor.error.actionRequired",
+                defaultValue: "请选择一个操作。"
+            )
+        }
         if draft.actionKind == .keyboardShortcut, draft.shortcut == nil {
             return localization.string(
                 "editor.error.shortcutRequired",
                 defaultValue: "请录制一个键盘快捷键。"
+            )
+        }
+        if draft.actionKind == .action, draft.actionReference == nil {
+            return localization.string(
+                "editor.error.actionRequired",
+                defaultValue: "请选择一个操作。"
             )
         }
         return nil
@@ -773,6 +1377,327 @@ private struct TrackpadGestureEditor: View {
     }
 }
 
+private struct TrackpadActionPickerGroup: Identifiable {
+    let title: String
+    let items: [ActionSurfaceCatalogItem]
+
+    var id: String { title }
+}
+
+private enum TrackpadInputActionChoice: String, CaseIterable, Identifiable {
+    case keyboardShortcut
+    case middleClick
+
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .keyboardShortcut: "keyboard"
+        case .middleClick: "computermouse"
+        }
+    }
+
+    func title(localization: PluginLocalization) -> String {
+        switch self {
+        case .keyboardShortcut:
+            localization.string("action.shortcut", defaultValue: "键盘快捷键")
+        case .middleClick:
+            localization.string("action.middleClick", defaultValue: "鼠标中键")
+        }
+    }
+}
+
+private struct TrackpadUnifiedActionPickerControl: View {
+    let localization: PluginLocalization
+    let context: TrackpadActionHostContext?
+    @Binding var actionKind: TrackpadGestureEditorActionKind
+    @Binding var actionReference: ActionReference?
+    @Binding var shortcut: ShortcutBinding?
+
+    @State private var isPresented = false
+    @State private var query = ""
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Image(systemName: PluginSystemImage.resolvedName(selectedSystemImage))
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(actionKind == .none ? Color.secondary : Color.accentColor)
+                    .frame(width: 30, height: 30)
+                    .background(Color.accentColor.opacity(actionKind == .none ? 0.06 : 0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selectedTitle)
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if let selectedSubtitle {
+                        Text(selectedSubtitle)
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(minWidth: 340, idealWidth: 390, maxWidth: 440, minHeight: 52)
+            .contentShape(Rectangle())
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control))
+            .overlay {
+                RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            pickerContent
+        }
+        .accessibilityIdentifier("mactools.trackpad.action-picker")
+        .accessibilityLabel(localization.string("editor.action.title", defaultValue: "操作"))
+        .accessibilityValue(selectedTitle)
+    }
+
+    private var pickerContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField(
+                localization.string("editor.action.search", defaultValue: "搜索操作"),
+                text: $query
+            )
+            .textFieldStyle(.roundedBorder)
+            .accessibilityIdentifier("mactools.trackpad.action-picker.search")
+
+            Divider()
+
+            if !hasResults {
+                ContentUnavailableView(
+                    localization.string("editor.action.empty", defaultValue: "没有匹配的操作"),
+                    systemImage: "magnifyingglass"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        if !filteredInputActions.isEmpty {
+                            pickerGroup(
+                                title: localization.string(
+                                    "editor.action.inputGroup",
+                                    defaultValue: "输入"
+                                )
+                            ) {
+                                ForEach(filteredInputActions) { choice in
+                                    inputActionRow(choice)
+                                }
+                            }
+                        }
+
+                        ForEach(groups) { group in
+                            pickerGroup(title: group.title) {
+                                ForEach(group.items) { item in
+                                    macToolsActionRow(item)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 460, height: 500)
+    }
+
+    private var selectedItem: ActionSurfaceCatalogItem? {
+        guard actionKind == .action, let actionReference else { return nil }
+        return context?.item(for: actionReference)
+    }
+
+    private var selectedTitle: String {
+        switch actionKind {
+        case .none:
+            localization.string("editor.action.choose", defaultValue: "选择操作")
+        case .action:
+            selectedItem?.title ?? localization.string(
+                "editor.action.unavailable",
+                defaultValue: "不可用的 MacTools 操作"
+            )
+        case .keyboardShortcut:
+            localization.string("action.shortcut", defaultValue: "键盘快捷键")
+        case .middleClick:
+            localization.string("action.middleClick", defaultValue: "鼠标中键")
+        }
+    }
+
+    private var selectedSubtitle: String? {
+        switch actionKind {
+        case .none, .middleClick:
+            nil
+        case .action:
+            selectedItem?.ownerTitle
+        case .keyboardShortcut:
+            shortcut.map(ShortcutFormatter.displayString(for:))
+                ?? localization.string("editor.shortcut.unset", defaultValue: "未设置")
+        }
+    }
+
+    private var selectedSystemImage: String {
+        switch actionKind {
+        case .none: "bolt.circle"
+        case .action: selectedItem?.systemImage ?? "questionmark.square.dashed"
+        case .keyboardShortcut: TrackpadInputActionChoice.keyboardShortcut.systemImage
+        case .middleClick: TrackpadInputActionChoice.middleClick.systemImage
+        }
+    }
+
+    private var hasResults: Bool {
+        !filteredInputActions.isEmpty || !groups.isEmpty
+    }
+
+    private var filteredInputActions: [TrackpadInputActionChoice] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return TrackpadInputActionChoice.allCases.filter { choice in
+            normalizedQuery.isEmpty
+                || choice.title(localization: localization)
+                    .localizedCaseInsensitiveContains(normalizedQuery)
+        }
+    }
+
+    private var groups: [TrackpadActionPickerGroup] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = (context?.catalog ?? []).filter { item in
+            guard item.availability.isAvailable else { return false }
+            guard !normalizedQuery.isEmpty else { return true }
+            return [item.title, item.subtitle, item.ownerTitle]
+                .compactMap { $0 }
+                .contains { $0.localizedCaseInsensitiveContains(normalizedQuery) }
+        }
+        let grouped = Dictionary(grouping: items, by: \.ownerTitle)
+        return grouped.keys.sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }.map { owner in
+            TrackpadActionPickerGroup(title: owner, items: grouped[owner] ?? [])
+        }
+    }
+
+    @ViewBuilder
+    private func pickerGroup<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    private func inputActionRow(_ choice: TrackpadInputActionChoice) -> some View {
+        Button {
+            actionReference = nil
+            switch choice {
+            case .keyboardShortcut:
+                actionKind = .keyboardShortcut
+            case .middleClick:
+                actionKind = .middleClick
+                shortcut = nil
+            }
+            isPresented = false
+        } label: {
+            pickerRow(
+                title: choice.title(localization: localization),
+                subtitle: choice == .keyboardShortcut
+                    ? shortcut.map(ShortcutFormatter.displayString(for:))
+                    : nil,
+                systemImage: choice.systemImage,
+                isSafe: true,
+                isSelected: isSelected(choice)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func macToolsActionRow(_ item: ActionSurfaceCatalogItem) -> some View {
+        Button {
+            actionKind = .action
+            actionReference = item.reference
+            shortcut = nil
+            isPresented = false
+        } label: {
+            pickerRow(
+                title: item.title,
+                subtitle: item.subtitle,
+                systemImage: item.systemImage,
+                isSafe: item.isSafe,
+                isSelected: actionKind == .action && actionReference == item.reference
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!item.availability.isAvailable)
+    }
+
+    private func pickerRow(
+        title: String,
+        subtitle: String?,
+        systemImage: String,
+        isSafe: Bool,
+        isSelected: Bool
+    ) -> some View {
+        let accessibility = TrackpadActionPickerAccessibility(
+            isSafe: isSafe,
+            confirmationRequiredText: localization.string(
+                "editor.action.confirmationRequired",
+                defaultValue: "执行前需要确认。"
+            )
+        )
+        return HStack(spacing: 9) {
+            Image(systemName: PluginSystemImage.resolvedName(systemImage))
+                .frame(width: 20)
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .foregroundStyle(.primary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !isSafe {
+                Image(systemName: "exclamationmark.shield")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+            }
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .modifier(TrackpadConfirmationAccessibilityModifier(
+            value: accessibility.confirmationValue
+        ))
+    }
+
+    private func isSelected(_ choice: TrackpadInputActionChoice) -> Bool {
+        switch choice {
+        case .keyboardShortcut: actionKind == .keyboardShortcut
+        case .middleClick: actionKind == .middleClick
+        }
+    }
+}
+
 @MainActor
 private enum TrackpadSettingsCursor {
     static func update(isHovering: Bool) {
@@ -786,7 +1711,23 @@ private enum TrackpadSettingsCursor {
 
 extension TrackpadGesture {
     var systemImage: String {
-        longTouchFingerCount == nil ? "hand.tap" : "hand.raised"
+        category.systemImage
+    }
+
+    fileprivate var category: TrackpadGestureCategory {
+        if tipTapConfiguration != nil {
+            return .tipTap
+        }
+        if fingerTapCount != nil {
+            return .tap
+        }
+        if doubleFingerTapCount != nil {
+            return .doubleTap
+        }
+        if physicalClickFingerCount != nil {
+            return .click
+        }
+        return .longTouch
     }
 
     func title(localization: PluginLocalization) -> String {
@@ -813,12 +1754,16 @@ extension TrackpadGesture {
             localization.string("gesture.fourFingerLongTouch", defaultValue: "四指长触")
         case .fiveFingerLongTouch:
             localization.string("gesture.fiveFingerLongTouch", defaultValue: "五指长触")
-        case .threeFingerDoubleTap, .fourFingerDoubleTap, .fiveFingerDoubleTap:
-            localization.format(
-                "gesture.doubleTapFormat",
-                defaultValue: "%d 指双击",
-                doubleFingerTapCount ?? 3
-            )
+        case .threeFingerDoubleTap:
+            localization.string("gesture.threeFingerDoubleTap", defaultValue: "三指双击")
+        case .fourFingerDoubleTap:
+            localization.string("gesture.fourFingerDoubleTap", defaultValue: "四指双击")
+        case .fiveFingerDoubleTap:
+            localization.string("gesture.fiveFingerDoubleTap", defaultValue: "五指双击")
+        case .twoFingerClick:
+            localization.string("gesture.twoFingerClick", defaultValue: "双指按下点击")
+        case .threeFingerClick:
+            localization.string("gesture.threeFingerClick", defaultValue: "三指按下点击")
         }
     }
 
@@ -844,6 +1789,13 @@ extension TrackpadGesture {
                 count
             )
         }
+        if let count = physicalClickFingerCount {
+            return localization.format(
+                "gesture.demo.clickFormat",
+                defaultValue: "保持 %d 指接触并按下触控板，直到产生一次物理点击。",
+                count
+            )
+        }
         return localization.format(
             "gesture.demo.longTouchFormat",
             defaultValue: "%d 指保持接触约半秒。",
@@ -856,7 +1808,8 @@ extension TrackpadGesture {
         actionKind: TrackpadGestureEditorActionKind
     ) -> [String] {
         var guidance: [String] = []
-        if tipTapConfiguration != nil || actionKind == .middleClick {
+        if tipTapConfiguration != nil || physicalClickFingerCount != nil
+            || actionKind == .middleClick {
             guidance.append(localization.string(
                 "gesture.conflict.secondaryClick",
                 defaultValue: "macOS 不提供原生点击来源。MacTools 仅在一个手势候选活动时关联点击；同时点击外接鼠标时可能发生冲突。"
@@ -864,7 +1817,8 @@ extension TrackpadGesture {
         }
 
         switch self {
-        case .threeFingerTap, .threeFingerLongTouch, .threeFingerDoubleTap:
+        case .threeFingerTap, .threeFingerLongTouch, .threeFingerDoubleTap,
+             .threeFingerClick:
             guidance.append(localization.string(
                 "gesture.conflict.threeFinger",
                 defaultValue: "可能与“查询与数据检测器”或三指拖移冲突。"
@@ -878,6 +1832,11 @@ extension TrackpadGesture {
              .tipTapLeftTwoFixed, .tipTapMiddleTwoFixed, .tipTapRightTwoFixed,
              .fiveFingerTap, .fiveFingerLongTouch, .fiveFingerDoubleTap:
             break
+        case .twoFingerClick:
+            guidance.append(localization.string(
+                "gesture.conflict.twoFingerClick",
+                defaultValue: "通常会替代 macOS 的双指辅助点按（右键）。"
+            ))
         }
         return guidance
     }
@@ -886,6 +1845,8 @@ extension TrackpadGesture {
 extension TrackpadGestureAction {
     func title(localization: PluginLocalization) -> String {
         switch self {
+        case .action:
+            localization.string("action.macToolsAction", defaultValue: "MacTools 操作")
         case let .keyboardShortcut(binding):
             localization.format(
                 "action.shortcutFormat",

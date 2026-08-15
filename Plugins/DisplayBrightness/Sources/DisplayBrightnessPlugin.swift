@@ -127,13 +127,17 @@ final class DisplayBrightnessPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
     PluginShortcutEventHandling,
-    DisplayTopologyRefreshing
+    DisplayTopologyRefreshing,
+    PluginSettingsSearchProviding,
+    PluginActionProviding
 {
     private enum Constants {
         static let displayControlPrefix = "display."
         static let brightnessControlSuffix = ".brightness"
         static let disableBuiltInDisplayControlID = "built-in-display-disable"
         static let restoreBuiltInDisplayControlID = "built-in-display-restore"
+        static let disableBuiltInDisplayActionID = "disable-built-in-display"
+        static let restoreBuiltInDisplayActionID = "restore-built-in-display"
         static let shortcutGroupID = "display-brightness.shortcuts"
     }
 
@@ -265,6 +269,204 @@ final class DisplayBrightnessPlugin:
         ]
     }
 
+    var actionDefinitions: [ActionDefinition] {
+        let brightnessActions = [DisplayBrightnessShortcutDirection.decrease, .increase].map { direction in
+            let title = localization.format(
+                "shortcut.titleFormat",
+                defaultValue: "%@亮度",
+                direction.title(localization: localization)
+            )
+            return ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: direction.actionID),
+                title: title,
+                description: localization.format(
+                    "shortcut.descriptionFormat",
+                    defaultValue: "%@显示器亮度。",
+                    direction.title(localization: localization)
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "显示器亮度"),
+                    direction.title(localization: localization),
+                ],
+                systemImage: direction.systemImage,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive, .cancellable]
+            )
+        }
+        return brightnessActions + [
+            ActionDefinition(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: Constants.disableBuiltInDisplayActionID
+                ),
+                title: localization.string(
+                    "displayDisable.action.disable",
+                    defaultValue: "关闭内建显示屏"
+                ),
+                description: localization.string(
+                    "displayDisable.message.needsExternalDisplay",
+                    defaultValue: "连接外接显示器后可关闭内建显示屏"
+                ),
+                keywords: [metadata.title, "display", "disable"],
+                systemImage: "display",
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: localization.string(
+                        "displayDisable.action.disable",
+                        defaultValue: "关闭内建显示屏"
+                    ),
+                    message: localization.string(
+                        "displayDisable.message.needsExternalDisplay",
+                        defaultValue: "连接外接显示器后可关闭内建显示屏"
+                    ),
+                    confirmButtonTitle: localization.string(
+                        "displayDisable.action.disable",
+                        defaultValue: "关闭内建显示屏"
+                    )
+                ),
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration]
+            ),
+            ActionDefinition(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: Constants.restoreBuiltInDisplayActionID
+                ),
+                title: localization.string(
+                    "displayDisable.action.restore",
+                    defaultValue: "恢复内建显示屏"
+                ),
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, "display", "restore"],
+                systemImage: "display",
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.automatic, .background, .foregroundInteractive, .changesDisplayConfiguration]
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        if Self.shortcutDirection(for: reference.key.actionID) != nil {
+            return controller.snapshot().displays.isEmpty
+                ? .unavailable(
+                    localization.string(
+                        "action.unavailable.noDisplays",
+                        defaultValue: "未检测到可调节亮度的显示器。"
+                    )
+                )
+                : .available
+        }
+
+        displayDisableCoordinator.refreshSnapshot()
+        let snapshot = displayDisableCoordinator.snapshot
+        switch reference.key.actionID {
+        case Constants.disableBuiltInDisplayActionID:
+            return snapshot.isDisableAllowed
+                ? .available
+                : .unavailable(snapshot.message ?? PluginKitLocalization.actionUnavailable)
+        case Constants.restoreBuiltInDisplayActionID:
+            return snapshot.isRestoreAllowed
+                ? .available
+                : .unavailable(snapshot.message ?? PluginKitLocalization.actionUnavailable)
+        default:
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        if invocation.reference.key.actionID == Constants.disableBuiltInDisplayActionID {
+            let coordinator = displayDisableCoordinator
+            return ActionExecutionHandle { [weak self, coordinator] in
+                await coordinator.disableBuiltInDisplay()
+                self?.onStateChange?()
+                let snapshot = coordinator.snapshot
+                return snapshot.status == .disabled
+                    ? .succeeded()
+                    : .failed(message: snapshot.message ?? PluginKitLocalization.actionUnavailable)
+            }
+        }
+        if invocation.reference.key.actionID == Constants.restoreBuiltInDisplayActionID {
+            let coordinator = displayDisableCoordinator
+            return ActionExecutionHandle { [weak self, coordinator] in
+                coordinator.restoreBuiltInDisplay()
+                self?.onStateChange?()
+                let snapshot = coordinator.snapshot
+                if snapshot.status == .failed || snapshot.isRestoreAllowed {
+                    return .failed(message: snapshot.message ?? PluginKitLocalization.actionUnavailable)
+                }
+                return .succeeded()
+            }
+        }
+
+        guard let direction = Self.shortcutDirection(for: invocation.reference.key.actionID) else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionUnavailable) }
+        }
+        let snapshot = controller.snapshot()
+        let targetDisplayIDs = shortcutTargetDisplayIDs(in: snapshot)
+        guard !targetDisplayIDs.isEmpty else {
+            let failureMessage = localization.string(
+                "action.unavailable.noDisplays",
+                defaultValue: "未检测到可调节亮度的显示器。"
+            )
+            return ActionExecutionHandle {
+                .failed(message: failureMessage)
+            }
+        }
+        let action = DisplayBrightnessShortcutAction(
+            id: invocation.reference.key.actionID,
+            direction: direction,
+            targetDisplayIDs: targetDisplayIDs
+        )
+        let targets = displays(for: action.targetDisplayIDs).map { display in
+            (
+                display.id,
+                min(1, max(0, display.brightness + action.direction.multiplier / 100))
+            )
+        }
+        let controller = controller
+        return ActionExecutionHandle {
+            var failures: [String] = []
+            for (displayID, target) in targets {
+                switch await controller.setBrightnessAndWait(target, for: displayID) {
+                case .succeeded:
+                    continue
+                case let .failed(message):
+                    failures.append(message)
+                }
+            }
+            return failures.isEmpty
+                ? .succeeded()
+                : .failed(message: failures.joined(separator: "；"))
+        }
+    }
+
+    var settingsSearchEntries: [PluginSettingsSearchEntry] {
+        [
+            PluginSettingsSearchEntry(
+                id: DisplayBrightnessSettingsSearchEntryID.shortcutTarget,
+                title: localization.string(
+                    "settings.shortcutTarget.title",
+                    defaultValue: "快捷键目标"
+                ),
+                description: localization.string(
+                    "settings.shortcutTarget.searchDescription",
+                    defaultValue: "选择亮度快捷键控制的显示器范围。"
+                ),
+                keywords: [
+                    localization.string(
+                        "settings.shortcutTarget.sectionTitle",
+                        defaultValue: "作用范围"
+                    ),
+                    localization.string(
+                        "settings.shortcutTarget.searchKeyword",
+                        defaultValue: "屏幕"
+                    )
+                ],
+                systemImage: "display.2"
+            )
+        ]
+    }
+
     func refresh() {
         controller.refresh()
         displayDisableCoordinator.refreshSnapshot()
@@ -336,6 +538,7 @@ final class DisplayBrightnessPlugin:
         displayDisableActionTask?.cancel()
         displayTopologyTask?.cancel()
         stopAllShortcutActions()
+        controller.cancelOutstandingWrites()
         guard reason.requiresStateCleanup else { return }
         displayDisableCoordinator.restoreBuiltInDisplay()
     }

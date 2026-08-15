@@ -32,6 +32,10 @@ enum AppL10n {
         string(key, defaultValue: defaultValue, table: "PreferencesBackup")
     }
 
+    static func feature(_ key: String, defaultValue: String) -> String {
+        string(key, defaultValue: defaultValue, table: "FeatureUI")
+    }
+
     static func settingsFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: settings(key, defaultValue: defaultValue),
@@ -74,5 +78,31 @@ enum AppL10n {
             locale: Locale.current,
             arguments: arguments
         )
+    }
+}
+
+/// Localization for the Actions, Run Links, and Automation surfaces.
+///
+/// These newer surfaces use their Simplified Chinese source copy as the stable
+/// String Catalog key. Keeping lookup and formatting here makes runtime language
+/// switching behave the same way as the rest of Settings while also giving the
+/// localization audit one consistent call site to discover.
+enum FeatureL10n {
+    static func string(_ source: String) -> String {
+        AppL10n.feature(source, defaultValue: source)
+    }
+
+    static func format(_ source: String, _ arguments: CVarArg...) -> String {
+        String(
+            format: string(source),
+            locale: PluginRuntimeLocalization.locale,
+            arguments: arguments
+        )
+    }
+
+    static func joined(_ values: [String]) -> String {
+        let formatter = ListFormatter()
+        formatter.locale = PluginRuntimeLocalization.locale
+        return formatter.string(from: values) ?? values.joined(separator: ", ")
     }
 }

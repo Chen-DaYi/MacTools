@@ -1,6 +1,53 @@
 import Carbon
 import MacToolsPluginKit
 
+enum GlobalShortcutRegistrationError: Error, Equatable {
+    case invalidBinding
+    case system(OSStatus)
+}
+
+enum GlobalShortcutRegistrationStatus: Equatable {
+    case registered
+    case failed(GlobalShortcutRegistrationError)
+}
+
+@MainActor
+protocol CarbonHotKeyRegistering: AnyObject {
+    func register(
+        binding: ShortcutBinding,
+        signature: OSType,
+        carbonID: UInt32
+    ) -> Result<EventHotKeyRef, GlobalShortcutRegistrationError>
+    func unregister(_ reference: EventHotKeyRef)
+}
+
+@MainActor
+final class SystemCarbonHotKeyRegistrar: CarbonHotKeyRegistering {
+    func register(
+        binding: ShortcutBinding,
+        signature: OSType,
+        carbonID: UInt32
+    ) -> Result<EventHotKeyRef, GlobalShortcutRegistrationError> {
+        var reference: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            UInt32(binding.keyCode),
+            binding.modifiers.carbonFlags,
+            EventHotKeyID(signature: signature, id: carbonID),
+            GetEventDispatcherTarget(),
+            0,
+            &reference
+        )
+        guard status == noErr, let reference else {
+            return .failure(.system(status))
+        }
+        return .success(reference)
+    }
+
+    func unregister(_ reference: EventHotKeyRef) {
+        UnregisterEventHotKey(reference)
+    }
+}
+
 enum MacToolsReservedShortcutBindings {
     private static let pluginNavigationBindings: Set<ShortcutBinding> = [
         kVK_UpArrow,
@@ -52,24 +99,40 @@ final class GlobalShortcutManager {
     private var registeredHotKeys: [ShortcutBinding: RegisteredHotKey] = [:]
     private var shortcutIDsByCarbonID: [UInt32: [String]] = [:]
     private var nextCarbonID: UInt32 = 1
+    private let registrar: any CarbonHotKeyRegistering
+
+    private(set) var registrationStatuses: [String: GlobalShortcutRegistrationStatus] = [:]
 
     #if DEBUG
     private(set) var debugRegistrationsForTests: [Registration] = []
     #endif
 
-    init() {
+    init(registrar: any CarbonHotKeyRegistering = SystemCarbonHotKeyRegistrar()) {
+        self.registrar = registrar
         installHandlerIfNeeded()
     }
 
-    func updateBindings(_ registrations: [Registration]) {
+    isolated deinit {
+        unregisterAll()
+        if let handlerRef {
+            RemoveEventHandler(handlerRef)
+        }
+    }
+
+    @discardableResult
+    func updateBindings(
+        _ registrations: [Registration]
+    ) -> [String: GlobalShortcutRegistrationStatus] {
         installHandlerIfNeeded()
 
         #if DEBUG
         debugRegistrationsForTests = registrations
         #endif
 
+        var statuses: [String: GlobalShortcutRegistrationStatus] = [:]
         let targetGroups = registrations.reduce(into: [ShortcutBinding: [String]]()) { result, registration in
             guard registration.binding.isValid else {
+                statuses[registration.shortcutID] = .failed(.invalidBinding)
                 return
             }
 
@@ -89,11 +152,24 @@ final class GlobalShortcutManager {
                 existing.shortcutIDs = shortcutIDs
                 registeredHotKeys[binding] = existing
                 shortcutIDsByCarbonID[existing.carbonID] = shortcutIDs
+                for shortcutID in shortcutIDs {
+                    statuses[shortcutID] = .registered
+                }
                 continue
             }
 
-            register(binding: binding, shortcutIDs: shortcutIDs)
+            if let error = register(binding: binding, shortcutIDs: shortcutIDs) {
+                for shortcutID in shortcutIDs {
+                    statuses[shortcutID] = .failed(error)
+                }
+            } else {
+                for shortcutID in shortcutIDs {
+                    statuses[shortcutID] = .registered
+                }
+            }
         }
+        registrationStatuses = statuses
+        return statuses
     }
 
     #if DEBUG
@@ -133,27 +209,23 @@ final class GlobalShortcutManager {
         }
     }
 
-    private func register(binding: ShortcutBinding, shortcutIDs: [String]) {
-        var hotKeyReference: EventHotKeyRef?
+    private func register(
+        binding: ShortcutBinding,
+        shortcutIDs: [String]
+    ) -> GlobalShortcutRegistrationError? {
         let carbonID = nextCarbonID
         nextCarbonID += 1
 
-        let hotKeyID = EventHotKeyID(
+        let hotKeyReference: EventHotKeyRef
+        switch registrar.register(
+            binding: binding,
             signature: Self.signature,
-            id: carbonID
-        )
-
-        let status = RegisterEventHotKey(
-            UInt32(binding.keyCode),
-            binding.modifiers.carbonFlags,
-            hotKeyID,
-            GetEventDispatcherTarget(),
-            0,
-            &hotKeyReference
-        )
-
-        guard status == noErr, let hotKeyReference else {
-            return
+            carbonID: carbonID
+        ) {
+        case let .success(reference):
+            hotKeyReference = reference
+        case let .failure(error):
+            return error
         }
 
         registeredHotKeys[binding] = RegisteredHotKey(
@@ -163,6 +235,7 @@ final class GlobalShortcutManager {
             shortcutIDs: shortcutIDs
         )
         shortcutIDsByCarbonID[carbonID] = shortcutIDs
+        return nil
     }
 
     private func unregister(binding: ShortcutBinding) {
@@ -171,7 +244,7 @@ final class GlobalShortcutManager {
         }
 
         shortcutIDsByCarbonID.removeValue(forKey: registered.carbonID)
-        UnregisterEventHotKey(registered.reference)
+        registrar.unregister(registered.reference)
     }
 
     private func unregisterAll() {
@@ -224,7 +297,11 @@ final class GlobalShortcutManager {
         let manager = Unmanaged<GlobalShortcutManager>.fromOpaque(userData).takeUnretainedValue()
         let isReleased = GetEventKind(event) == UInt32(kEventHotKeyReleased)
 
-        Task { @MainActor in
+        // Carbon invokes this C callback outside Swift concurrency. Scheduling a
+        // main-queue block avoids carrying that foreign callback's executor state
+        // into SwiftUI presentation, while the strong capture keeps the manager
+        // alive until delivery finishes.
+        DispatchQueue.main.async {
             manager.dispatchShortcut(carbonID: hotKeyID.id, isReleased: isReleased)
         }
 

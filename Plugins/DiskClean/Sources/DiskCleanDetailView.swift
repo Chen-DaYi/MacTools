@@ -265,8 +265,10 @@ struct DiskCleanDetailView: View {
         if let executionResult = snapshot.executionResult {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
                 DiskCleanSectionHeader(
-                    title: localization.string("detail.result.title", defaultValue: "清理结果"),
-                    symbolName: "checkmark.seal"
+                    title: executionResult.wasCancelled
+                        ? localization.string("detail.result.cancelledTitle", defaultValue: "已停止的清理结果")
+                        : localization.string("detail.result.title", defaultValue: "清理结果"),
+                    symbolName: executionResult.wasCancelled ? "stop.circle" : "checkmark.seal"
                 )
 
                 VStack(spacing: 0) {

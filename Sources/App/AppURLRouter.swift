@@ -1,11 +1,14 @@
 import Foundation
 import OSLog
+import MacToolsPluginKit
 
 enum AppDeepLink: Equatable {
     enum SettingsDestination: Equatable {
         case root
         case general
         case about
+        case actionsAndShortcuts
+        case automation
         case pluginMarketplace
         case pluginConfiguration(String)
     }
@@ -27,6 +30,10 @@ enum AppDeepLink: Equatable {
             return .settings(.general)
         case .settings(.about):
             return .settings(.about)
+        case .settings(.actionsAndShortcuts):
+            return .settings(.feature(.actionsAndShortcuts))
+        case .settings(.automation):
+            return .settings(.feature(.automation))
         case .settings(.pluginMarketplace):
             return .settings(.pluginMarketplace)
         case let .settings(.pluginConfiguration(pluginID)):
@@ -41,6 +48,11 @@ enum AppDeepLink: Equatable {
     }
 }
 
+enum AppURLRoute: Equatable {
+    case navigation(AppDeepLink)
+    case run(ActionRunLinkRequest)
+}
+
 enum AppURLRoutingError: Error, Equatable {
     case malformedURL
     case oversizedInput
@@ -50,8 +62,13 @@ enum AppURLRoutingError: Error, Equatable {
     case unsupportedURLComponents
     case duplicatedParameter(String)
     case malformedPluginID
+    case malformedActionID
+    case invalidPresetID
+    case unexpectedActionParameters
     case unavailablePlugin(String)
     case pendingQueueFull
+    case actionAlreadyRunning
+    case recursiveActionInvocation
 
     var diagnosticCode: String {
         switch self {
@@ -71,10 +88,20 @@ enum AppURLRoutingError: Error, Equatable {
             return "duplicated-parameter"
         case .malformedPluginID:
             return "malformed-plugin-id"
+        case .malformedActionID:
+            return "malformed-action-id"
+        case .invalidPresetID:
+            return "invalid-preset-id"
+        case .unexpectedActionParameters:
+            return "unexpected-action-parameters"
         case .unavailablePlugin:
             return "unavailable-plugin"
         case .pendingQueueFull:
             return "pending-queue-full"
+        case .actionAlreadyRunning:
+            return "action-already-running"
+        case .recursiveActionInvocation:
+            return "recursive-action-invocation"
         }
     }
 }
@@ -83,7 +110,20 @@ enum AppURLHandlingResult: Equatable {
     case delegatedToRightClick
     case queued(AppDeepLink)
     case handled(AppDeepLink)
+    case queuedAction(ActionRunLinkRequest)
     case rejected(AppURLRoutingError)
+}
+
+struct AppURLActionHandlingDisposition {
+    let completion: Task<Void, Never>?
+
+    static let completed = AppURLActionHandlingDisposition(completion: nil)
+
+    static func continuing(
+        until completion: Task<Void, Never>
+    ) -> AppURLActionHandlingDisposition {
+        AppURLActionHandlingDisposition(completion: completion)
+    }
 }
 
 enum AppDeepLinkParser {
@@ -93,6 +133,20 @@ enum AppDeepLinkParser {
         _ url: URL,
         acceptedSchemes: Set<String>
     ) -> Result<AppDeepLink, AppURLRoutingError> {
+        switch parseRoute(url, acceptedSchemes: acceptedSchemes) {
+        case let .success(.navigation(deepLink)):
+            return .success(deepLink)
+        case .success(.run):
+            return .failure(.unsupportedRoute)
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    static func parseRoute(
+        _ url: URL,
+        acceptedSchemes: Set<String>
+    ) -> Result<AppURLRoute, AppURLRoutingError> {
         guard url.absoluteString.utf8.count <= maximumURLByteCount else {
             return .failure(.oversizedInput)
         }
@@ -142,13 +196,17 @@ enum AppDeepLinkParser {
 
         switch pathComponents {
         case ["settings"]:
-            return .success(.settings(.root))
+            return .success(.navigation(.settings(.root)))
         case ["settings", "general"]:
-            return .success(.settings(.general))
+            return .success(.navigation(.settings(.general)))
         case ["settings", "about"]:
-            return .success(.settings(.about))
+            return .success(.navigation(.settings(.about)))
+        case ["settings", "features", "actions-and-shortcuts"]:
+            return .success(.navigation(.settings(.actionsAndShortcuts)))
+        case ["settings", "features", "automation"]:
+            return .success(.navigation(.settings(.automation)))
         case ["settings", "plugins", "marketplace"]:
-            return .success(.settings(.pluginMarketplace))
+            return .success(.navigation(.settings(.pluginMarketplace)))
         case let components where components.count == 3
             && components[0] == "settings"
             && components[1] == "plugins":
@@ -156,15 +214,49 @@ enum AppDeepLinkParser {
             guard PluginPackageManifestLoader.isValidPluginID(pluginID) else {
                 return .failure(.malformedPluginID)
             }
-            return .success(.settings(.pluginConfiguration(pluginID)))
+            return .success(.navigation(.settings(.pluginConfiguration(pluginID))))
         case ["panels", "dashboard"]:
-            return .success(.panel(.dashboard))
+            return .success(.navigation(.panel(.dashboard)))
         case ["panels", "feature"]:
-            return .success(.panel(.feature))
+            return .success(.navigation(.panel(.feature)))
         case ["search"]:
-            return .success(.search)
+            return .success(.navigation(.search))
+        case let path where path.count == 3 && path[0] == "actions":
+            guard components.percentEncodedQuery == nil else {
+                return .failure(.unexpectedActionParameters)
+            }
+            let providerID = path[1]
+            let actionID = path[2]
+            guard PluginPackageManifestLoader.isValidPluginID(providerID),
+                  isValidActionIdentifier(actionID) else {
+                return .failure(.malformedActionID)
+            }
+            return .success(
+                .run(.direct(ActionKey(providerID: providerID, actionID: actionID)))
+            )
+        case let path where path.count == 2 && path[0] == "presets":
+            guard components.percentEncodedQuery == nil else {
+                return .failure(.unexpectedActionParameters)
+            }
+            let presetID = path[1]
+            guard let id = UUID(uuidString: presetID) else {
+                return .failure(.invalidPresetID)
+            }
+            return .success(.run(.preset(id)))
         default:
             return .failure(.unsupportedRoute)
+        }
+    }
+
+    private static func isValidActionIdentifier(_ value: String) -> Bool {
+        guard !value.isEmpty, value.utf8.count <= 128 else {
+            return false
+        }
+        return value.unicodeScalars.allSatisfy { scalar in
+            CharacterSet.alphanumerics.contains(scalar)
+                || scalar == "."
+                || scalar == "_"
+                || scalar == "-"
         }
     }
 
@@ -220,14 +312,51 @@ enum AppDeepLinkParser {
 
 @MainActor
 final class AppURLRouter {
+    private enum ActionExecutionIdentity: Hashable {
+        case canonical(ActionReference)
+        case raw(ActionRunLinkRequest)
+    }
+
+    @TaskLocal private static var currentActionAncestry: Set<ActionExecutionIdentity> = []
+
+    private struct PendingRoute {
+        let route: AppURLRoute
+        let actionAncestry: Set<ActionExecutionIdentity>
+        var reservedActionIdentity: ActionExecutionIdentity?
+        var actionResolution: Result<ActionReference, ActionRunLinkResolutionError>?
+    }
+
+    private struct ActiveActionLease {
+        let identity: ActionExecutionIdentity
+    }
+
     private let acceptedURLSchemes: Set<String>
-    private let maximumPendingDeepLinks: Int
+    private let maximumPendingRoutes: Int
     private let rightClickHandler: (URL) -> Void
+    private let actionRejectionHandler: (
+        ActionRunLinkRequest,
+        AppURLRoutingError
+    ) -> Void
     private let logger: Logger
 
-    private var pendingDeepLinks: [AppDeepLink] = []
+    private var pendingRoutes: [PendingRoute] = []
+    private var pendingActionIdentities: Set<ActionExecutionIdentity> = []
     private var presentationHandler: ((AppPresentationRequest) -> Void)?
     private var isPluginConfigurationAvailable: ((String) -> Bool)?
+    private var actionHandler: (
+        (
+            ActionRunLinkRequest,
+            Result<ActionReference, ActionRunLinkResolutionError>?
+        ) async -> AppURLActionHandlingDisposition
+    )?
+    private var actionIdentityResolver: (
+        (ActionRunLinkRequest) -> Result<ActionReference, ActionRunLinkResolutionError>?
+    )?
+    private var activeActionLeases: [UUID: ActiveActionLease] = [:]
+    private var dispatchingActionIdentity: ActionExecutionIdentity?
+    private var dispatchingActionAncestry: Set<ActionExecutionIdentity> = []
+    private var drainTask: Task<Void, Never>?
+    private var isDraining = false
 
     nonisolated static func acceptsDeferredInput(
         _ url: URL,
@@ -253,12 +382,17 @@ final class AppURLRouter {
         acceptedURLSchemes: Set<String> = RightClickURLRouter.bundleURLSchemes(),
         maximumPendingDeepLinks: Int = 32,
         rightClickHandler: @escaping (URL) -> Void = { RightClickURLRouter.shared.handle($0) },
+        actionRejectionHandler: @escaping (
+            ActionRunLinkRequest,
+            AppURLRoutingError
+        ) -> Void = { _, _ in },
         logger: Logger = AppLog.appURLRouter
     ) {
         precondition(maximumPendingDeepLinks > 0)
         self.acceptedURLSchemes = Set(acceptedURLSchemes.map { $0.lowercased() })
-        self.maximumPendingDeepLinks = maximumPendingDeepLinks
+        self.maximumPendingRoutes = maximumPendingDeepLinks
         self.rightClickHandler = rightClickHandler
+        self.actionRejectionHandler = actionRejectionHandler
         self.logger = logger
     }
 
@@ -283,25 +417,63 @@ final class AppURLRouter {
             return .delegatedToRightClick
         }
 
-        switch AppDeepLinkParser.parse(url, acceptedSchemes: acceptedURLSchemes) {
+        switch AppDeepLinkParser.parseRoute(url, acceptedSchemes: acceptedURLSchemes) {
         case let .failure(error):
             return reject(error, url: url)
-        case let .success(deepLink):
-            guard presentationHandler != nil else {
-                guard pendingDeepLinks.count < maximumPendingDeepLinks else {
+        case let .success(route):
+            switch route {
+            case let .run(request):
+                let resolution = actionIdentityResolver?(request)
+                let identity = actionIdentity(for: request, resolution: resolution)
+                if isRecursiveActionRequest(identity) {
+                    return rejectAction(
+                        .recursiveActionInvocation,
+                        request: request,
+                        url: url
+                    )
+                }
+                if isActionAlreadyRunning(identity) || pendingActionIdentities.contains(identity) {
+                    return rejectAction(.actionAlreadyRunning, request: request, url: url)
+                }
+                guard enqueue(
+                    route,
+                    reservedActionIdentity: identity,
+                    actionResolution: resolution
+                ) else {
+                    return rejectAction(.pendingQueueFull, request: request, url: url)
+                }
+                if presentationHandler != nil {
+                    startDrainIfNeeded()
+                }
+                return queuedResult(for: route)
+            case let .navigation(deepLink)
+                where presentationHandler != nil
+                    && pendingRoutes.isEmpty
+                    && !isDraining:
+                return deliver(deepLink)
+            default:
+                guard enqueue(route) else {
                     return reject(.pendingQueueFull, url: url)
                 }
-                pendingDeepLinks.append(deepLink)
-                return .queued(deepLink)
+                if presentationHandler != nil {
+                    startDrainIfNeeded()
+                }
+                return queuedResult(for: route)
             }
-            return deliver(deepLink)
         }
     }
 
     @discardableResult
     func activate(
         presentationHandler: @escaping (AppPresentationRequest) -> Void,
-        isPluginConfigurationAvailable: @escaping (String) -> Bool
+        isPluginConfigurationAvailable: @escaping (String) -> Bool,
+        actionIdentityResolver: @escaping (
+            ActionRunLinkRequest
+        ) -> Result<ActionReference, ActionRunLinkResolutionError>? = { _ in nil },
+        actionHandler: @escaping (
+            ActionRunLinkRequest,
+            Result<ActionReference, ActionRunLinkResolutionError>?
+        ) async -> AppURLActionHandlingDisposition = { _, _ in .completed }
     ) -> [AppURLHandlingResult] {
         guard self.presentationHandler == nil else {
             return []
@@ -309,10 +481,218 @@ final class AppURLRouter {
 
         self.presentationHandler = presentationHandler
         self.isPluginConfigurationAvailable = isPluginConfigurationAvailable
+        self.actionIdentityResolver = actionIdentityResolver
+        self.actionHandler = actionHandler
 
-        let queuedDeepLinks = pendingDeepLinks
-        pendingDeepLinks.removeAll(keepingCapacity: false)
-        return queuedDeepLinks.map(deliver)
+        var synchronousResults: [AppURLHandlingResult] = []
+        while let first = pendingRoutes.first {
+            guard case let .navigation(deepLink) = first.route else {
+                break
+            }
+            _ = dequeueFirstPendingRoute()
+            synchronousResults.append(deliver(deepLink))
+        }
+        startDrainIfNeeded()
+        return synchronousResults
+    }
+
+    func waitUntilIdle() async {
+        while isDraining || !pendingRoutes.isEmpty {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    private func enqueue(
+        _ route: AppURLRoute,
+        reservedActionIdentity: ActionExecutionIdentity? = nil,
+        actionResolution: Result<ActionReference, ActionRunLinkResolutionError>? = nil
+    ) -> Bool {
+        guard pendingRoutes.count < maximumPendingRoutes else {
+            return false
+        }
+        var actionAncestry = Self.currentActionAncestry
+        actionAncestry.formUnion(dispatchingActionAncestry)
+        pendingRoutes.append(PendingRoute(
+            route: route,
+            actionAncestry: actionAncestry,
+            reservedActionIdentity: reservedActionIdentity,
+            actionResolution: actionResolution
+        ))
+        if let reservedActionIdentity {
+            let inserted = pendingActionIdentities.insert(reservedActionIdentity).inserted
+            precondition(
+                inserted,
+                "Duplicate pending action identity must be rejected before enqueue"
+            )
+        }
+        return true
+    }
+
+    private func dequeueFirstPendingRoute() -> PendingRoute {
+        let pendingRoute = pendingRoutes.removeFirst()
+        if let identity = pendingRoute.reservedActionIdentity {
+            pendingActionIdentities.remove(identity)
+        }
+        return pendingRoute
+    }
+
+    private func queuedResult(for route: AppURLRoute) -> AppURLHandlingResult {
+        switch route {
+        case let .navigation(deepLink):
+            .queued(deepLink)
+        case let .run(request):
+            .queuedAction(request)
+        }
+    }
+
+    private func startDrainIfNeeded() {
+        guard presentationHandler != nil,
+              actionHandler != nil,
+              !isDraining,
+              !pendingRoutes.isEmpty else {
+            return
+        }
+
+        isDraining = true
+        drainTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !pendingRoutes.isEmpty {
+                refreshPendingActionReservations()
+                guard !pendingRoutes.isEmpty else { break }
+                let pendingRoute = dequeueFirstPendingRoute()
+                let route = pendingRoute.route
+                switch route {
+                case let .navigation(deepLink):
+                    _ = deliver(deepLink)
+                case let .run(request):
+                    // Reservation refresh resolves mutable presets immediately before leasing.
+                    // Dispatch that same immutable reference so the guard and executor agree.
+                    let resolution = pendingRoute.actionResolution
+                    let identity = actionIdentity(for: request, resolution: resolution)
+                    if pendingRoute.actionAncestry.contains(identity)
+                        || isRecursiveActionRequest(identity) {
+                        reportDeferredActionRejection(
+                            .recursiveActionInvocation,
+                            request: request
+                        )
+                        continue
+                    }
+                    if isActionAlreadyRunning(identity) {
+                        reportDeferredActionRejection(.actionAlreadyRunning, request: request)
+                        continue
+                    }
+                    let ancestry = pendingRoute.actionAncestry.union([identity])
+                    let leaseID = UUID()
+                    activeActionLeases[leaseID] = ActiveActionLease(
+                        identity: identity
+                    )
+                    dispatchingActionIdentity = identity
+                    dispatchingActionAncestry = ancestry
+                    let disposition = await Self.$currentActionAncestry.withValue(ancestry) {
+                        await actionHandler?(request, resolution) ?? .completed
+                    }
+                    dispatchingActionIdentity = nil
+                    dispatchingActionAncestry = []
+                    if let completion = disposition.completion {
+                        Task { @MainActor [weak self] in
+                            await completion.value
+                            self?.activeActionLeases[leaseID] = nil
+                        }
+                    } else {
+                        activeActionLeases[leaseID] = nil
+                    }
+                }
+            }
+            isDraining = false
+            drainTask = nil
+        }
+    }
+
+    /// Re-resolves mutable presets in arrival order and reserves their current canonical
+    /// identities. Earlier accepted routes win; later aliases receive an explicit deferred
+    /// rejection instead of disappearing silently during the drain.
+    private func refreshPendingActionReservations() {
+        pendingActionIdentities.removeAll(keepingCapacity: true)
+        var refreshedRoutes: [PendingRoute] = []
+        refreshedRoutes.reserveCapacity(pendingRoutes.count)
+
+        for var pendingRoute in pendingRoutes {
+            guard case let .run(request) = pendingRoute.route else {
+                pendingRoute.reservedActionIdentity = nil
+                pendingRoute.actionResolution = nil
+                refreshedRoutes.append(pendingRoute)
+                continue
+            }
+
+            let resolution = actionIdentityResolver?(request)
+            let identity = actionIdentity(for: request, resolution: resolution)
+            let isRecursive = pendingRoute.actionAncestry.contains(identity)
+                || isRecursiveActionRequest(identity)
+            if isRecursive {
+                reportDeferredActionRejection(.recursiveActionInvocation, request: request)
+                continue
+            }
+            if isActionAlreadyRunning(identity)
+                || pendingActionIdentities.contains(identity) {
+                reportDeferredActionRejection(.actionAlreadyRunning, request: request)
+                continue
+            }
+
+            pendingRoute.reservedActionIdentity = identity
+            pendingRoute.actionResolution = resolution
+            pendingActionIdentities.insert(identity)
+            refreshedRoutes.append(pendingRoute)
+        }
+
+        pendingRoutes = refreshedRoutes
+    }
+
+    private func actionIdentity(for request: ActionRunLinkRequest) -> ActionExecutionIdentity {
+        actionIdentity(
+            for: request,
+            resolution: actionIdentityResolver?(request)
+        )
+    }
+
+    private func actionIdentity(
+        for request: ActionRunLinkRequest,
+        resolution: Result<ActionReference, ActionRunLinkResolutionError>?
+    ) -> ActionExecutionIdentity {
+        guard case let .success(reference)? = resolution else {
+            return .raw(request)
+        }
+        return .canonical(reference)
+    }
+
+    private func isRecursiveActionRequest(_ identity: ActionExecutionIdentity) -> Bool {
+        Self.currentActionAncestry.contains(identity)
+            || (
+                dispatchingActionIdentity != identity
+                    && dispatchingActionAncestry.contains(identity)
+            )
+    }
+
+    private func isActionAlreadyRunning(_ identity: ActionExecutionIdentity) -> Bool {
+        activeActionLeases.values.contains { $0.identity == identity }
+    }
+
+    private func reportDeferredActionRejection(
+        _ error: AppURLRoutingError,
+        request: ActionRunLinkRequest
+    ) {
+        logger.error(
+            "Rejected queued action route: \(error.diagnosticCode, privacy: .public)"
+        )
+        actionRejectionHandler(request, error)
+    }
+
+    private func rejectAction(
+        _ error: AppURLRoutingError,
+        request: ActionRunLinkRequest,
+        url: URL
+    ) -> AppURLHandlingResult {
+        actionRejectionHandler(request, error)
+        return reject(error, url: url)
     }
 
     private func deliver(_ deepLink: AppDeepLink) -> AppURLHandlingResult {

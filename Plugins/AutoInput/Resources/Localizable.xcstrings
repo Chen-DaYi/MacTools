@@ -1,6 +1,70 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "error.persistenceFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذر حفظ إعدادات التبديل التلقائي لمصدر الإدخال." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Einstellungen für den automatischen Eingabequellenwechsel konnten nicht gesichert werden." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to save automatic input source settings." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se han podido guardar los ajustes de cambio automático de fuente de entrada." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible d’enregistrer les réglages de changement automatique de source de saisie." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースの自動切り替え設定を保存できませんでした。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "자동 입력 소스 전환 설정을 저장할 수 없습니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível salvar os ajustes de troca automática da fonte de entrada." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось сохранить настройки автоматического переключения источника ввода." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法保存自动切换输入法设置。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法儲存自動切換輸入法設定。" } }
+      }
+    },
+    "error.persistenceRollbackFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذر حفظ إعدادات التبديل التلقائي لمصدر الإدخال، كما تعذرت استعادة الإعدادات السابقة." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Einstellungen konnten nicht gesichert und die vorherigen Einstellungen nicht wiederhergestellt werden." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to save automatic input source settings or restore the previous settings." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se han podido guardar los ajustes ni restaurar los anteriores." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible d’enregistrer les réglages et de restaurer les précédents." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソース設定を保存できず、以前の設定も復元できませんでした。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스 설정을 저장하거나 이전 설정을 복원할 수 없습니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível salvar os ajustes nem restaurar os anteriores." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось сохранить настройки и восстановить предыдущие." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法保存自动切换输入法设置，且恢复先前设置失败。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法儲存自動切換輸入法設定，且無法還原先前設定。" } }
+      }
+    },
+    "action.disable.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "إيقاف تبديل الإدخال التلقائي مؤقتًا" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Automatischen Eingabewechsel pausieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pause Auto Input" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Pausar cambio automático de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Suspendre le changement automatique" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力の自動切り替えを一時停止" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 자동 전환 일시 정지" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Pausar troca automática de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Приостановить автопереключение ввода" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂停自动切换输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫停自動切換輸入法" } }
+      }
+    },
+    "action.enable.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تشغيل تبديل الإدخال التلقائي" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Automatischen Eingabewechsel aktivieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Turn On Auto Input" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Activar cambio automático de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Activer le changement automatique" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力の自動切り替えをオン" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 자동 전환 켜기" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ativar troca automática de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Включить автопереключение ввода" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开启自动切换输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開啟自動切換輸入法" } }
+      }
+    },
     "error.switchFailed" : {
       "extractionState" : "manual",
       "localizations" : {

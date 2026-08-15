@@ -88,7 +88,9 @@ make run
 
 Finder Sync, Share, Quick Look, and other macOS app extensions are host-level targets. A plugin may expose settings or status for that feature, but the extension target itself must be embedded by the main app through `project.yml`; it cannot be installed into Finder by a dynamic `.mactoolsplugin` bundle at runtime.
 
-In Debug development, `make run` builds the main `MacTools` scheme, then synchronizes the freshly built plugin bundles from `build/DerivedData/Build/Products/Debug` into `build/LocalPlugins/Packages`, generates `build/LocalPlugins/catalog.dev.json`, and updates `~/Library/Application Support/MacTools Dev/Plugins/Installed`. This keeps the local marketplace and installed plugins on the latest source code without running a separate plugin build.
+In Debug development, `make run` builds the main `MacTools` scheme, synchronizes the freshly built plugin bundles from `build/DerivedData/Build/Products/Debug` into `build/LocalPlugins/Packages`, generates `build/LocalPlugins/catalog.dev.json`, and updates `~/Library/Application Support/MacTools Dev/Plugins/Installed`. It then stages and verifies a rollback-safe replacement of `~/Applications/MacTools Dev.app` before launching that stable path. The installer refuses a replacement whose designated code-signing requirement differs from the previously installed app, preserving macOS permission grants across rebuilds. When that stable Debug app exists, Derived Data copies do not start the exclusive trackpad listener, and the generated XCTest action explicitly disables it for the test host. This prevents an old build or a lingering hosted test app from taking gesture input after the installed app restarts.
+
+A full Debug sync mirrors the current checkout: packages missing from its local catalog are moved from `Installed` to the sibling `Quarantined` directory so packages left by another worktree cannot appear as incompatible. A filtered sync such as `make sync-debug-plugins PLUGIN=calendar` preserves unrelated installed packages.
 
 Debug package copies normalize `minHostVersion` to the locally built app version because the host and plugin bundles come from the same checkout. Release packages preserve each source manifest's declared minimum host version.
 
@@ -164,6 +166,24 @@ MacTools automatically indexes visible declarative row titles, descriptions, key
 
 Commands are never inferred from panel buttons. A plugin must explicitly conform to `PluginCommandProviding` and publish only actions that are safe and useful in the global palette. Commands that need an extra user decision should provide confirmation metadata. Destructive actions should remain in their contextual plugin UI unless their complete safety flow can be represented by that confirmation.
 
+New executable capabilities should use `PluginActionProviding` rather than adding new legacy commands or shortcut-owned callbacks. Publish stable `ActionKey` values, versioned parameter schemas, availability snapshots, risk/confirmation policy, external-invocation policy, execution capabilities, and bounded timeouts. If discovery surfaces should name system permissions before execution, also implement `PluginActionPermissionProviding` and map each action to IDs declared by `permissionRequirements`.
+
+Host-owned system integrations may additionally consult the optional `PluginActionExposureProviding` contract. `.excluded` is a provider veto; `.automatic` delegates to the host's conservative eligibility checks and does not bypass risk, availability, permission, parameter, or foreground requirements. Unknown surfaces and provider failures must fail closed, and exposure is revalidated at execution time. Keep `externalInvocationPolicy` separate because it governs Run Links rather than general system discovery.
+
+If an action executes mutable provider-owned content that is not represented by its `ActionDefinition` or catalog entry, also implement `PluginActionExecutionRevisionProviding`. Advance the revision after every successful persisted mutation. The host snapshots and revalidates it around confirmation so a user never approves one payload and executes another.
+
+Treat action execution capabilities as explicit safety contracts. Add `.automatic` only when the action can run unattended without confirmation or foreground UI; `.background` alone does not permit automatic rules. Choose an `ActionConcurrencyPolicy` for overlap-sensitive actions (`.rejectWhileRunning` is the safe default, `.serialize` queues, and `.allowConcurrent` is opt-in). `beginAction` must validate and return an `ActionExecutionHandle` promptly; move substantive work into the handle operation. Every action has a host-enforced deadline, while `.cancellable` additionally authorizes the host to invoke the provider cancellation callback.
+
+Ordinary action shortcuts are owned by the host's `ShortcutAssignmentService`. A plugin may declare or migrate a default binding, but it must not persist or register a second binding for the same action. Workflows, Run Links, and Action Grid also retain `ActionReference` values and invoke through the host executor. See [Actions, Automation, Run Links, and Action Grid](../actions-automation.md) for the ownership and verification contract.
+
+The current migration coverage, intentional exclusions, and design-first backlog are tracked in [Canonical action provider coverage](action-provider-coverage.md). Consult that inventory before adding a new plugin-only command or shortcut so reusable operations remain available consistently across shortcuts, gestures, Action Grid, Automation, Unified Search, and eligible Run Links.
+
+Action Grid is the reference implementation for an optional action surface. Its package can be built independently with:
+
+```bash
+make build-plugin PLUGIN=ActionGrid
+```
+
 ## Install Location
 
 Installed plugins are copied into:
@@ -191,6 +211,7 @@ Install and update are staged before moving into `Installed`. Per-plugin runtime
 - The manifest ID, versions, and bundle relative path are validated before loading code.
 - Host version and plugin kit version are checked before loading code.
 - Installed packages built for an older PluginKit are kept on disk but marked incompatible and are never passed to the native bundle loader.
+- Public value types within one PluginKit version must preserve their stored binary layout. CI compiles the frozen v4 `PluginShortcutRecorder` client declaration and links that client against the current framework so source-only tests cannot hide an incompatible in-place layout change.
 - The plugin bundle signature is validated before loading code.
 - When the host has a Team ID, the plugin bundle must have the same Team ID.
 - Untrusted third-party native plugins should use a future isolated process or XPC model instead of in-process bundle loading.

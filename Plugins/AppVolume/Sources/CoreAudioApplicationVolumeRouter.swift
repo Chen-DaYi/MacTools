@@ -23,6 +23,13 @@ final class CoreAudioApplicationVolumeRouter: ApplicationVolumeRouting {
         worker.update(targets: targets, outputDeviceUID: outputDeviceUID)
     }
 
+    func applyAndWait(
+        targets: [ApplicationVolumeTarget],
+        outputDeviceUID: String?
+    ) async -> ApplicationVolumeRouteResult {
+        await worker.applyAndWait(targets: targets, outputDeviceUID: outputDeviceUID)
+    }
+
     func requestSystemAudioAccess() async -> Bool {
         await worker.requestSystemAudioAccess()
     }
@@ -34,18 +41,52 @@ final class CoreAudioApplicationVolumeRouter: ApplicationVolumeRouting {
 
 private protocol ApplicationVolumeRouteWorking: Sendable {
     func update(targets: [ApplicationVolumeTarget], outputDeviceUID: String?)
+    func applyAndWait(
+        targets: [ApplicationVolumeTarget],
+        outputDeviceUID: String?
+    ) async -> ApplicationVolumeRouteResult
     func requestSystemAudioAccess() async -> Bool
     func stop()
 }
 
 private final class UnsupportedApplicationVolumeRouteWorker: ApplicationVolumeRouteWorking {
     func update(targets: [ApplicationVolumeTarget], outputDeviceUID: String?) {}
+    func applyAndWait(
+        targets: [ApplicationVolumeTarget],
+        outputDeviceUID: String?
+    ) async -> ApplicationVolumeRouteResult { .failed }
     func requestSystemAudioAccess() async -> Bool { false }
     func stop() {}
 }
 
 @available(macOS 15.0, *)
-private final class ApplicationVolumeRouteWorker: ApplicationVolumeRouteWorking, @unchecked Sendable {
+protocol ApplicationVolumeRouteSession: AnyObject {
+    var processObjectIDs: [AudioObjectID] { get }
+    var outputDeviceUID: String { get }
+    var isStopped: Bool { get }
+
+    func setGain(_ gain: Float)
+    func stop() -> Bool
+}
+
+@available(macOS 15.0, *)
+final class ApplicationVolumeRouteWorker: ApplicationVolumeRouteWorking, @unchecked Sendable {
+    typealias SessionFactory = (
+        _ processObjectIDs: [AudioObjectID],
+        _ outputDeviceUID: String,
+        _ initialGain: Float
+    ) -> (any ApplicationVolumeRouteSession)?
+
+    private enum SessionPhase {
+        case active
+        case retiring
+    }
+
+    private struct SessionEntry {
+        let session: any ApplicationVolumeRouteSession
+        var phase: SessionPhase
+    }
+
     private let queue = DispatchQueue(
         label: "cc.ggbond.mactools.app-volume.route",
         qos: .userInitiated
@@ -54,11 +95,55 @@ private final class ApplicationVolumeRouteWorker: ApplicationVolumeRouteWorking,
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "AppVolumeRouter"
     )
-    private var sessions: [String: AudioRouteGainSession] = [:]
+    private let makeSession: SessionFactory
+    private let uptime: () -> TimeInterval
+    private let sleep: (TimeInterval) -> Void
+    private let stopTimeout: TimeInterval
+    private let stopRetryInterval: TimeInterval
+    private let fadeDelay: TimeInterval
+    private var sessions: [String: SessionEntry] = [:]
+
+    init(
+        makeSession: @escaping SessionFactory = { processObjectIDs, outputDeviceUID, gain in
+            AudioRouteGainSession(
+                processObjectIDs: processObjectIDs,
+                outputDeviceUID: outputDeviceUID,
+                initialGain: gain
+            )
+        },
+        uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        sleep: @escaping (TimeInterval) -> Void = Thread.sleep(forTimeInterval:),
+        stopTimeout: TimeInterval = 0.6,
+        stopRetryInterval: TimeInterval = 0.02,
+        fadeDelay: TimeInterval = 0.015
+    ) {
+        self.makeSession = makeSession
+        self.uptime = uptime
+        self.sleep = sleep
+        self.stopTimeout = stopTimeout
+        self.stopRetryInterval = stopRetryInterval
+        self.fadeDelay = fadeDelay
+    }
 
     func update(targets: [ApplicationVolumeTarget], outputDeviceUID: String?) {
         queue.async { [weak self] in
-            self?.apply(targets: targets, outputDeviceUID: outputDeviceUID)
+            _ = self?.apply(targets: targets, outputDeviceUID: outputDeviceUID)
+        }
+    }
+
+    func applyAndWait(
+        targets: [ApplicationVolumeTarget],
+        outputDeviceUID: String?
+    ) async -> ApplicationVolumeRouteResult {
+        await withCheckedContinuation { continuation in
+            queue.async { [weak self] in
+                continuation.resume(
+                    returning: self?.apply(
+                        targets: targets,
+                        outputDeviceUID: outputDeviceUID
+                    ) ?? .failed
+                )
+            }
         }
     }
 
@@ -72,14 +157,23 @@ private final class ApplicationVolumeRouteWorker: ApplicationVolumeRouteWorking,
 
     func stop() {
         queue.sync {
-            stopAllSessions()
+            _ = stopAllSessions()
         }
     }
 
-    private func apply(targets: [ApplicationVolumeTarget], outputDeviceUID: String?) {
+    private func apply(
+        targets: [ApplicationVolumeTarget],
+        outputDeviceUID: String?
+    ) -> ApplicationVolumeRouteResult {
+        guard retryRetiringSessions() else {
+            return .failed
+        }
+        let requiresRoutes = targets.contains {
+            !$0.processObjectIDs.isEmpty && !Self.isUnity($0.gain)
+        }
         guard let outputDeviceUID else {
-            stopAllSessions()
-            return
+            let stopped = stopAllSessions()
+            return requiresRoutes || !stopped ? .failed : .succeeded
         }
 
         let desiredTargets = Dictionary(
@@ -89,66 +183,90 @@ private final class ApplicationVolumeRouteWorker: ApplicationVolumeRouteWorking,
         )
 
         for id in Array(sessions.keys) where desiredTargets[id] == nil {
-            retireSession(id: id)
+            guard retireSession(id: id) else { return .failed }
         }
 
         for (id, target) in desiredTargets {
             let gain = Float(max(0, min(1, target.gain)))
 
-            if let session = sessions[id],
-               session.processObjectIDs == target.processObjectIDs,
-               session.outputDeviceUID == outputDeviceUID {
-                session.setGain(gain)
+            if let entry = sessions[id],
+               entry.phase == .active,
+               entry.session.processObjectIDs == target.processObjectIDs,
+               entry.session.outputDeviceUID == outputDeviceUID {
+                entry.session.setGain(gain)
                 continue
             }
 
-            retireSession(id: id)
-            guard let session = AudioRouteGainSession(
-                processObjectIDs: target.processObjectIDs,
-                outputDeviceUID: outputDeviceUID,
-                initialGain: gain
+            guard retireSession(id: id) else { return .failed }
+            guard let session = makeSession(
+                target.processObjectIDs,
+                outputDeviceUID,
+                gain
             ) else {
                 logger.error("Unable to create an app audio route for \(id, privacy: .public)")
-                continue
+                return .failed
             }
 
-            sessions[id] = session
+            sessions[id] = SessionEntry(session: session, phase: .active)
         }
+        return .succeeded
     }
 
-    private func retireSession(id: String) {
-        guard let session = sessions.removeValue(forKey: id) else {
-            return
+    private func retryRetiringSessions() -> Bool {
+        for id in Array(sessions.keys) where sessions[id]?.phase == .retiring {
+            guard finishRetiringSession(id: id) else { return false }
         }
-
-        session.setGain(1)
-        Thread.sleep(forTimeInterval: 0.015)
-        stop(session: session)
+        return true
     }
 
-    private func stopAllSessions() {
-        let activeSessions = Array(sessions.values)
-        sessions.removeAll()
-
-        for session in activeSessions {
-            session.setGain(1)
+    private func retireSession(id: String) -> Bool {
+        guard var entry = sessions[id] else { return true }
+        if entry.phase == .active {
+            entry.phase = .retiring
+            sessions[id] = entry
+            entry.session.setGain(1)
+            if fadeDelay > 0 { sleep(fadeDelay) }
         }
-        if !activeSessions.isEmpty {
-            Thread.sleep(forTimeInterval: 0.015)
-        }
-        for session in activeSessions {
-            stop(session: session)
-        }
+        return finishRetiringSession(id: id)
     }
 
-    private func stop(session: AudioRouteGainSession) {
-        let deadline = Date().addingTimeInterval(0.6)
-        while !session.stop(), Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.02)
-        }
+    private func finishRetiringSession(id: String) -> Bool {
+        guard let entry = sessions[id] else { return true }
+        guard stop(session: entry.session) else { return false }
+        sessions.removeValue(forKey: id)
+        return true
+    }
 
-        if !session.isStopped {
-            logger.error("Timed out while removing an application audio route")
+    private func stopAllSessions() -> Bool {
+        var fadedAnySession = false
+        for id in Array(sessions.keys) {
+            guard var entry = sessions[id], entry.phase == .active else { continue }
+            entry.phase = .retiring
+            sessions[id] = entry
+            entry.session.setGain(1)
+            fadedAnySession = true
+        }
+        if fadedAnySession, fadeDelay > 0 {
+            sleep(fadeDelay)
+        }
+        var stoppedAll = true
+        for id in Array(sessions.keys) {
+            if !finishRetiringSession(id: id) {
+                stoppedAll = false
+            }
+        }
+        return stoppedAll
+    }
+
+    private func stop(session: any ApplicationVolumeRouteSession) -> Bool {
+        let deadline = uptime() + stopTimeout
+        while true {
+            if session.stop() || session.isStopped { return true }
+            guard uptime() < deadline else {
+                logger.error("Timed out while removing an application audio route")
+                return false
+            }
+            sleep(stopRetryInterval)
         }
     }
 
@@ -174,7 +292,7 @@ private final class ApplicationVolumeRouteWorker: ApplicationVolumeRouteWorking,
 }
 
 @available(macOS 15.0, *)
-private final class AudioRouteGainSession: @unchecked Sendable {
+private final class AudioRouteGainSession: ApplicationVolumeRouteSession, @unchecked Sendable {
     let processObjectIDs: [AudioObjectID]
     let outputDeviceUID: String
 

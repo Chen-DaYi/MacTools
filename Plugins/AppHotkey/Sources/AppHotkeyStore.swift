@@ -39,6 +39,17 @@ final class AppHotkeyStore: ObservableObject {
         persist()
     }
 
+    func clearAllShortcuts() {
+        var didChange = false
+        for index in entries.indices where entries[index].shortcut != nil {
+            entries[index].shortcut = nil
+            didChange = true
+        }
+        if didChange {
+            persist()
+        }
+    }
+
     /// Returns the existing entry that conflicts with the shortcut, excluding the current entry.
     func conflictEntry(for shortcut: ShortcutBinding, excludingID: UUID? = nil) -> AppShortcutEntry? {
         entries.first { $0.id != excludingID && $0.shortcut == shortcut }

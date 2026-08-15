@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 import SwiftUI
@@ -19,7 +20,16 @@ private struct EmptyTrashPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling {
+final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
+    PluginActionProviding
+{
+    private enum PermissionID {
+        static let finderAutomation = "finder-automation"
+    }
+    private enum ActionID {
+        static let empty = "empty"
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -29,7 +39,8 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let localization: PluginLocalization
-    private let countItems: @Sendable () async -> Int
+    private let countItems: @Sendable () async throws -> Int
+    private let emptyItems: () async throws -> Void
     private let countRefreshDelay: Duration
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EmptyTrashPlugin")
     private var itemCount: Int = 0
@@ -40,11 +51,19 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
 
     init(
         localization: PluginLocalization = PluginLocalization(bundle: .main),
-        countItems: @escaping @Sendable () async -> Int = EmptyTrashPlugin.fetchTrashItemCount,
+        countItems: @escaping @Sendable () async throws -> Int = EmptyTrashPlugin.fetchTrashItemCount,
+        emptyItems: (() async throws -> Void)? = nil,
         countRefreshDelay: Duration = .milliseconds(150)
     ) {
         self.localization = localization
         self.countItems = countItems
+        let errorMessage = localization.string(
+            "error.emptyFailed",
+            defaultValue: "清空废纸篓失败，请检查“自动操作”权限"
+        )
+        self.emptyItems = emptyItems ?? {
+            try await EmptyTrashPlugin.emptyTrashViaAppleScript(errorMessage: errorMessage)
+        }
         self.countRefreshDelay = countRefreshDelay
         self.metadata = PluginMetadata(
             id: "empty-trash",
@@ -76,8 +95,48 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         )
     }
 
-    var permissionRequirements: [PluginPermissionRequirement] { [] }
+    var permissionRequirements: [PluginPermissionRequirement] {
+        [
+            PluginPermissionRequirement(
+                id: PermissionID.finderAutomation,
+                kind: .automation,
+                title: localization.string("permission.automation.title", defaultValue: "Finder 自动化"),
+                description: localization.string(
+                    "permission.automation.description",
+                    defaultValue: "用于读取并清空废纸篓。"
+                )
+            )
+        ]
+    }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.empty),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "trash", "delete"],
+                systemImage: metadata.iconName,
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: metadata.title,
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: localization.string("panel.button.empty", defaultValue: "清空")
+                ),
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.automatic, .background, .foregroundInteractive],
+                executionTimeoutSeconds: 600
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key.actionID == ActionID.empty else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        return isEmptying ? .unavailable(subtitle) : .available
+    }
 
     func refresh() {
         scheduleCountRefreshIfVisible()
@@ -120,12 +179,34 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
-        PluginPermissionState(isGranted: true, footnote: nil)
+        guard permissionID == PermissionID.finderAutomation else {
+            return PluginPermissionState(isGranted: true, footnote: nil)
+        }
+        return PluginPermissionState(
+            isGranted: lastErrorMessage == nil,
+            footnote: lastErrorMessage
+        )
     }
 
-    func handlePermissionAction(id: String) {}
+    func handlePermissionAction(id: String) {
+        guard id == PermissionID.finderAutomation,
+              let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key.actionID == ActionID.empty else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        return ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return await self.performCanonicalEmpty()
+        }
+    }
 
     // MARK: - Private
 
@@ -143,13 +224,18 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
                 return
             }
 
-            let count = await self.countItems()
-            guard !Task.isCancelled else {
-                return
-            }
-
-            if self.itemCount != count {
-                self.itemCount = count
+            do {
+                let count = try await self.countItems()
+                guard !Task.isCancelled else { return }
+                self.lastErrorMessage = nil
+                if self.itemCount != count {
+                    self.itemCount = count
+                    self.onStateChange?()
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.itemCount = 0
+                self.lastErrorMessage = error.localizedDescription
                 self.onStateChange?()
             }
             self.countRefreshTask = nil
@@ -182,41 +268,28 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         onStateChange?()
 
         Task {
-            do {
-                try await self.emptyTrashViaAppleScript()
-                await MainActor.run {
-                    self.isEmptying = false
-                    self.itemCount = 0
-                    self.onStateChange?()
-                    self.scheduleCountRefreshIfVisible()
-                }
-            } catch {
-                await MainActor.run {
-                    self.isEmptying = false
-                    self.lastErrorMessage = error.localizedDescription
-                    self.onStateChange?()
-                    self.scheduleCountRefreshIfVisible()
-                    self.logger.error("Empty trash failed: \(error)")
-                }
-            }
+            _ = await self.finishEmptying()
         }
     }
 
     // MARK: - AppleScript helpers
 
-    private static func fetchTrashItemCount() async -> Int {
+    private static func fetchTrashItemCount() async throws -> Int {
         let script = "tell application \"Finder\" to count items of trash"
-        return await Task.detached(priority: .userInitiated) {
-            runOsascriptStandalone(script).flatMap { Int($0) } ?? 0
+        return try await Task.detached(priority: .userInitiated) {
+            guard let output = runOsascriptStandalone(script), let count = Int(output) else {
+                throw NSError(
+                    domain: "EmptyTrashPlugin",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "无法读取废纸篓，请检查“自动化”权限。"]
+                )
+            }
+            return count
         }.value
     }
 
-    private func emptyTrashViaAppleScript() async throws {
+    private static func emptyTrashViaAppleScript(errorMessage: String) async throws {
         let script = "tell application \"Finder\" to empty trash"
-        let errorMessage = localization.string(
-            "error.emptyFailed",
-            defaultValue: "清空废纸篓失败，请检查“自动操作”权限"
-        )
         try await Task.detached(priority: .userInitiated) {
              if runOsascriptStandalone(script) == nil {
                 throw NSError(
@@ -226,6 +299,59 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
                 )
             }
         }.value
+    }
+
+    private func performCanonicalEmpty() async -> ActionExecutionResult {
+        guard !isEmptying else {
+            return .failed(message: subtitle)
+        }
+
+        let count: Int
+        do {
+            count = try await countItems()
+            itemCount = count
+            lastErrorMessage = nil
+        } catch {
+            itemCount = 0
+            lastErrorMessage = error.localizedDescription
+            onStateChange?()
+            return .failed(message: error.localizedDescription)
+        }
+        guard count > 0 else {
+            onStateChange?()
+            return .succeeded(message: localization.string(
+                "panel.subtitle.empty",
+                defaultValue: "废纸篓为空"
+            ))
+        }
+
+        isEmptying = true
+        lastErrorMessage = nil
+        onStateChange?()
+        return await finishEmptying()
+    }
+
+    private func finishEmptying() async -> ActionExecutionResult {
+        do {
+            try await emptyItems()
+            guard !Task.isCancelled else {
+                isEmptying = false
+                onStateChange?()
+                return .cancelled
+            }
+            isEmptying = false
+            itemCount = 0
+            onStateChange?()
+            scheduleCountRefreshIfVisible()
+            return .succeeded()
+        } catch {
+            isEmptying = false
+            lastErrorMessage = error.localizedDescription
+            onStateChange?()
+            scheduleCountRefreshIfVisible()
+            logger.error("Empty trash failed: \(error)")
+            return .failed(message: error.localizedDescription)
+        }
     }
 }
 

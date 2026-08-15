@@ -1,0 +1,587 @@
+import MacToolsPluginKit
+import XCTest
+@testable import MacTools
+
+@MainActor
+final class AutomationRuntimeTests: XCTestCase {
+    private var suiteName = ""
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "AutomationRuntimeTests.\(UUID().uuidString)"
+    }
+
+    override func tearDown() {
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+        super.tearDown()
+    }
+
+    func testSkippedRunSummaryRelocalizesAfterLanguageSwitchAndRelaunch() async throws {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(originalPreference) }
+        PluginRuntimeLocalization.source.setPreference("zh-Hans")
+        let fixture = try makeFixture()
+        _ = try fixture.ruleStore.upsert(
+            AutomationRule(
+                name: "仅接电时",
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available)),
+                conditions: [.power(PowerAutomationCondition(source: .adapter))]
+            )
+        ).get()
+        fixture.snapshot.snapshotValue.powerSource = .battery
+        fixture.runtime.start()
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: fixture.date)
+        )
+        let initialRun = try XCTUnwrap(fixture.workflowStore.history().first)
+        XCTAssertNil(initialRun.summary)
+        XCTAssertEqual(initialRun.automationSkippedSummary?.reason, .powerSourceMismatch)
+        XCTAssertEqual(
+            initialRun.localizedSummary,
+            "规则“仅接电时”未运行：当前电源来源不匹配。"
+        )
+        await fixture.workflowStore.flushPendingHistoryPersistence()
+
+        PluginRuntimeLocalization.source.setPreference("en")
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let englishRun = try XCTUnwrap(
+            WorkflowStore(userDefaults: defaults).history().first
+        )
+        XCTAssertEqual(
+            englishRun.localizedSummary,
+            "Rule “仅接电时” did not run: The current power source does not match."
+        )
+
+        PluginRuntimeLocalization.source.setPreference("ar")
+        let arabicRun = try XCTUnwrap(
+            WorkflowStore(userDefaults: defaults).history().first
+        )
+        XCTAssertEqual(
+            withoutBidirectionalIsolation(try XCTUnwrap(arabicRun.localizedSummary)),
+            "القاعدة \"仅接电时\" ليست قيد التشغيل: مصدر الطاقة الحالي غير متطابق."
+        )
+    }
+
+    func testEachTriggerProviderStartsSameWorkflowThroughGenericRuntime() throws {
+        let fixture = try makeFixture(maximumConcurrentRuns: 6)
+        let date = fixture.date
+        let display = AutomationDisplaySnapshot(identifier: "42", name: "Studio Display")
+        let triggersAndEvents: [(AutomationTrigger, AutomationTriggerEvent)] = [
+            (.schedule(ScheduleAutomationTrigger(hour: 9, minute: 30, weekdays: [2])), .schedule(date)),
+            (.calendar(CalendarAutomationTrigger(phase: .starts, titleContains: "meeting")), .calendar(identifier: "event", title: "Team Meeting", calendarIdentifier: nil, phase: .starts, date: date)),
+            (.application(ApplicationAutomationTrigger(event: .activates, bundleIdentifier: "com.example.editor")), .application(bundleIdentifier: "com.example.editor", event: .activates, date: date)),
+            (.power(PowerAutomationTrigger(event: .adapterConnected)), .power(source: .adapter, batteryLevel: 80, event: .adapterConnected, date: date)),
+            (.display(DisplayAutomationTrigger(event: .connected, displayIdentifier: "42")), .display(display, event: .connected, date: date)),
+            (.network(NetworkAutomationTrigger(status: .available, interface: .wifi)), .network(status: .available, interface: .wifi, date: date)),
+        ]
+        for (index, pair) in triggersAndEvents.enumerated() {
+            _ = try fixture.ruleStore.upsert(
+                AutomationRule(
+                    name: "规则 \(index)",
+                    workflowID: fixture.workflow.id,
+                    trigger: pair.0
+                )
+            ).get()
+        }
+        fixture.runtime.start()
+
+        for (_, event) in triggersAndEvents {
+            fixture.providers[event.kind]?.emit(event)
+        }
+
+        XCTAssertEqual(fixture.starter.starts.count, 6)
+        XCTAssertTrue(fixture.starter.starts.allSatisfy { $0.workflowID == fixture.workflow.id })
+        XCTAssertTrue(fixture.starter.starts.allSatisfy { $0.mode == .background })
+        XCTAssertEqual(Set(fixture.starter.starts.compactMap(\.automaticTriggerKind)), Set(AutomationTriggerKind.allCases.map(\.rawValue)))
+    }
+
+    func testConditionFailureRecordsReasonWithoutBlockingManualStart() throws {
+        let fixture = try makeFixture()
+        let rule = try fixture.ruleStore.upsert(
+            AutomationRule(
+                name: "仅接电时",
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available)),
+                conditions: [.power(PowerAutomationCondition(source: .adapter))]
+            )
+        ).get()
+        fixture.snapshot.snapshotValue.powerSource = .battery
+        fixture.runtime.start()
+
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: fixture.date)
+        )
+
+        XCTAssertTrue(fixture.starter.starts.isEmpty)
+        let skipped = try XCTUnwrap(fixture.workflowStore.history().first)
+        XCTAssertEqual(skipped.status, .skipped)
+        XCTAssertEqual(skipped.source, .automatic(ruleID: rule.id, triggerKind: "network"))
+        XCTAssertTrue(
+            skipped.localizedSummary?.contains(
+                FeatureL10n.string("当前电源来源不匹配。").dropLast()
+            ) == true
+        )
+
+        _ = fixture.starter.makeExecutionHandle(
+            workflowID: fixture.workflow.id,
+            source: .manual,
+            mode: .foreground
+        )
+        XCTAssertEqual(fixture.starter.starts.last?.source, .manual)
+    }
+
+    func testDuplicateEventsAreSuppressedAndOverlappingRunsAreSkipped() throws {
+        let fixture = try makeFixture(completesImmediately: false)
+        _ = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available))
+            )
+        ).get()
+        fixture.runtime.start()
+        let event = AutomationTriggerEvent.network(
+            status: .available,
+            interface: .any,
+            date: fixture.date
+        )
+
+        fixture.providers[.network]?.emit(event)
+        fixture.providers[.network]?.emit(event)
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: fixture.date.addingTimeInterval(3))
+        )
+
+        XCTAssertEqual(fixture.starter.starts.count, 1)
+        XCTAssertTrue(
+            fixture.workflowStore.history().first?.localizedSummary?.contains(
+                FeatureL10n.string("该规则的上一次运行尚未结束。").dropLast()
+            ) == true
+        )
+    }
+
+    func testStoppedRunCompletionDoesNotClearNewerRunForTheSameRule() async throws {
+        let fixture = try makeFixture(completesImmediately: false)
+        let rule = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available))
+            )
+        ).get()
+        let firstDate = fixture.date
+        fixture.runtime.start()
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: firstDate)
+        )
+        for _ in 0 ..< 100 where fixture.starter.pendingCompletionCount < 1 {
+            await Task.yield()
+        }
+
+        fixture.runtime.stop()
+        fixture.runtime.start()
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: firstDate.addingTimeInterval(3))
+        )
+        for _ in 0 ..< 100 where fixture.starter.pendingCompletionCount < 2 {
+            await Task.yield()
+        }
+
+        fixture.starter.completePendingRun(at: 0)
+        await Task.yield()
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: firstDate.addingTimeInterval(6))
+        )
+
+        XCTAssertEqual(fixture.starter.starts.count, 2)
+        XCTAssertEqual(
+            fixture.workflowStore.history().first?.source,
+            .automatic(ruleID: rule.id, triggerKind: AutomationTriggerKind.network.rawValue)
+        )
+        fixture.starter.completePendingRun(at: 0)
+    }
+
+    func testCalendarEventRunsOnlyTheRuleForItsScheduledOffset() throws {
+        let fixture = try makeFixture()
+        let matchingRule = try fixture.ruleStore.upsert(
+            AutomationRule(
+                name: "Ten Minutes Before",
+                workflowID: fixture.workflow.id,
+                trigger: .calendar(CalendarAutomationTrigger(
+                    phase: .starts,
+                    calendarIdentifier: "work",
+                    titleContains: "planning",
+                    offsetMinutes: -10
+                ))
+            )
+        ).get()
+        _ = try fixture.ruleStore.upsert(
+            AutomationRule(
+                name: "Ten Minutes After",
+                workflowID: fixture.workflow.id,
+                trigger: .calendar(CalendarAutomationTrigger(
+                    phase: .starts,
+                    calendarIdentifier: "work",
+                    titleContains: "planning",
+                    offsetMinutes: 10
+                ))
+            )
+        ).get()
+        fixture.runtime.start()
+
+        fixture.providers[.calendar]?.emit(.calendar(
+            identifier: "planning-event",
+            title: "Planning",
+            calendarIdentifier: "work",
+            phase: .starts,
+            offsetMinutes: -10,
+            date: fixture.date
+        ))
+
+        XCTAssertEqual(fixture.starter.starts.count, 1)
+        XCTAssertEqual(
+            fixture.starter.starts.first?.source,
+            .automatic(ruleID: matchingRule.id, triggerKind: AutomationTriggerKind.calendar.rawValue)
+        )
+    }
+
+    private func withoutBidirectionalIsolation(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\u{2068}", with: "")
+            .replacingOccurrences(of: "\u{2069}", with: "")
+    }
+
+    func testProviderAvailabilityAndRefreshAreInspectable() throws {
+        let fixture = try makeFixture()
+        let schedule = try XCTUnwrap(fixture.providers[.schedule])
+        schedule.availability = .unavailable("系统日历不可用。")
+        _ = try fixture.ruleStore.upsert(
+            AutomationRule(workflowID: fixture.workflow.id, trigger: .schedule(ScheduleAutomationTrigger()))
+        ).get()
+
+        fixture.runtime.start()
+
+        XCTAssertEqual(fixture.runtime.availability(for: .schedule), .unavailable("系统日历不可用。"))
+        XCTAssertEqual(schedule.refreshedRules.count, 1)
+        XCTAssertEqual(fixture.runtime.availability(for: .calendar), .available)
+    }
+
+    func testTriggerProviderRunsOnlyWhileItHasEnabledRules() throws {
+        let fixture = try makeFixture()
+        let network = try XCTUnwrap(fixture.providers[.network])
+
+        fixture.runtime.start()
+        XCTAssertEqual(network.startCount, 0)
+        XCTAssertEqual(network.stopCount, 0)
+
+        let rule = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available))
+            )
+        ).get()
+        fixture.runtime.refreshProviders()
+        XCTAssertEqual(network.startCount, 1)
+        XCTAssertEqual(network.refreshedRules.map(\.id), [rule.id])
+
+        var disabled = rule
+        disabled.isEnabled = false
+        _ = try fixture.ruleStore.upsert(disabled).get()
+        fixture.runtime.refreshProviders()
+        XCTAssertEqual(network.stopCount, 1)
+
+        network.emit(.network(status: .available, interface: .any, date: fixture.date))
+        XCTAssertTrue(fixture.starter.starts.isEmpty)
+    }
+
+    func testNetworkProviderRunsForNetworkConditionWithoutBecomingRuleTrigger() throws {
+        let fixture = try makeFixture()
+        let schedule = try XCTUnwrap(fixture.providers[.schedule])
+        let network = try XCTUnwrap(fixture.providers[.network])
+        let power = try XCTUnwrap(fixture.providers[.power])
+        let rule = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .schedule(ScheduleAutomationTrigger()),
+                conditions: [
+                    .network(NetworkAutomationCondition(status: .available, interface: .wifi)),
+                    .power(PowerAutomationCondition(source: .adapter)),
+                ]
+            )
+        ).get()
+
+        fixture.runtime.start()
+
+        XCTAssertEqual(schedule.startCount, 1)
+        XCTAssertEqual(schedule.refreshedRules.map(\.id), [rule.id])
+        XCTAssertEqual(network.startCount, 1)
+        XCTAssertTrue(network.refreshedRules.isEmpty)
+        XCTAssertEqual(power.startCount, 0)
+
+        network.emit(.network(status: .available, interface: .wifi, date: fixture.date))
+        XCTAssertTrue(fixture.starter.starts.isEmpty)
+
+        var disabled = rule
+        disabled.isEnabled = false
+        _ = try fixture.ruleStore.upsert(disabled).get()
+        fixture.runtime.refreshProviders()
+
+        XCTAssertEqual(schedule.stopCount, 1)
+        XCTAssertEqual(network.stopCount, 1)
+    }
+
+    func testRefreshBeforeStartDoesNotActivateTriggerProviders() throws {
+        let fixture = try makeFixture()
+        let network = try XCTUnwrap(fixture.providers[.network])
+        _ = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available))
+            )
+        ).get()
+
+        fixture.runtime.refreshProviders()
+
+        XCTAssertEqual(network.startCount, 0)
+        XCTAssertTrue(network.refreshedRules.isEmpty)
+        fixture.runtime.start()
+        XCTAssertEqual(network.startCount, 1)
+        XCTAssertEqual(network.refreshedRules.count, 1)
+    }
+
+    func testAutomaticRunsRespectGlobalConcurrencyLimit() throws {
+        let fixture = try makeFixture(
+            completesImmediately: false,
+            maximumConcurrentRuns: 4
+        )
+        for index in 0 ..< 5 {
+            _ = try fixture.ruleStore.upsert(
+                AutomationRule(
+                    name: "Rule \(index)",
+                    workflowID: fixture.workflow.id,
+                    trigger: .network(NetworkAutomationTrigger(status: .available))
+                )
+            ).get()
+        }
+        fixture.runtime.start()
+
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: fixture.date)
+        )
+
+        XCTAssertEqual(fixture.starter.starts.count, 4)
+        XCTAssertEqual(
+            fixture.workflowStore.history().first?.automationSkippedSummary?.reason,
+            .automaticConcurrencyLimitReached
+        )
+    }
+
+    func testBackgroundUnsupportedWorkflowRecordsSpecificSkipReason() throws {
+        let fixture = try makeFixture(startError: .backgroundExecutionUnsupported)
+        let rule = try fixture.ruleStore.upsert(AutomationRule(
+            workflowID: fixture.workflow.id,
+            trigger: .network(NetworkAutomationTrigger(status: .available))
+        )).get()
+        fixture.runtime.start()
+
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: fixture.date)
+        )
+
+        let run = try XCTUnwrap(fixture.workflowStore.history().first)
+        XCTAssertEqual(run.source, .automatic(ruleID: rule.id, triggerKind: "network"))
+        XCTAssertEqual(
+            run.automationSkippedSummary?.reason,
+            .backgroundExecutionUnsupported
+        )
+    }
+
+    func testConfirmationRequiredWorkflowRecordsSpecificSkipReason() throws {
+        let fixture = try makeFixture(startError: .confirmationRequiredForAutomaticExecution)
+        let rule = try fixture.ruleStore.upsert(AutomationRule(
+            workflowID: fixture.workflow.id,
+            trigger: .network(NetworkAutomationTrigger(status: .available))
+        )).get()
+        fixture.runtime.start()
+
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: fixture.date)
+        )
+
+        let run = try XCTUnwrap(fixture.workflowStore.history().first)
+        XCTAssertEqual(run.source, .automatic(ruleID: rule.id, triggerKind: "network"))
+        XCTAssertEqual(
+            run.automationSkippedSummary?.reason,
+            .confirmationRequiredForAutomaticExecution
+        )
+    }
+
+    private func makeFixture(
+        completesImmediately: Bool = true,
+        startError: WorkflowStartError? = nil,
+        maximumConcurrentRuns: Int = 4
+    ) throws -> RuntimeFixture {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let workflowStore = WorkflowStore(userDefaults: defaults)
+        let workflow = try workflowStore.create(name: "演示").get()
+        let ruleStore = AutomationRuleStore(userDefaults: defaults)
+        let starter = FakeWorkflowStarter(
+            completesImmediately: completesImmediately,
+            startError: startError
+        )
+        let date = Date(timeIntervalSince1970: 1_775_000_200)
+        let snapshot = FakeAutomationSnapshotProvider(
+            AutomationEnvironmentSnapshot(
+                date: date,
+                frontmostApplicationBundleIdentifier: "com.example.editor",
+                batteryLevel: 80,
+                powerSource: .adapter,
+                connectedDisplays: [AutomationDisplaySnapshot(identifier: "42", name: "Studio Display")],
+                networkStatus: .available,
+                networkInterface: .wifi
+            )
+        )
+        let providers = Dictionary(
+            uniqueKeysWithValues: AutomationTriggerKind.allCases.map {
+                ($0, FakeAutomationTriggerProvider(kind: $0))
+            }
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let components = DateComponents(year: 2026, month: 8, day: 3, hour: 9, minute: 30)
+        let matchingDate = calendar.date(from: components)!
+        snapshot.snapshotValue.date = matchingDate
+        let runtime = AutomationRuntime(
+            ruleStore: ruleStore,
+            workflowStore: workflowStore,
+            workflowStarter: starter,
+            snapshotProvider: snapshot,
+            providers: Array(providers.values),
+            evaluator: AutomationRuleEvaluator(calendar: calendar),
+            now: { matchingDate },
+            maximumConcurrentRuns: maximumConcurrentRuns
+        )
+        return RuntimeFixture(
+            workflowStore: workflowStore,
+            ruleStore: ruleStore,
+            workflow: workflow,
+            starter: starter,
+            snapshot: snapshot,
+            providers: providers,
+            runtime: runtime,
+            date: matchingDate
+        )
+    }
+}
+
+@MainActor
+private struct RuntimeFixture {
+    let workflowStore: WorkflowStore
+    let ruleStore: AutomationRuleStore
+    let workflow: WorkflowDefinition
+    let starter: FakeWorkflowStarter
+    let snapshot: FakeAutomationSnapshotProvider
+    let providers: [AutomationTriggerKind: FakeAutomationTriggerProvider]
+    let runtime: AutomationRuntime
+    let date: Date
+}
+
+@MainActor
+private final class FakeAutomationTriggerProvider: AutomationTriggerProviding {
+    let kind: AutomationTriggerKind
+    var availability: AutomationTriggerAvailability = .available
+    var refreshedRules: [AutomationRule] = []
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+    private var handler: (@MainActor (AutomationTriggerEvent) -> Void)?
+
+    init(kind: AutomationTriggerKind) {
+        self.kind = kind
+    }
+
+    func start(handler: @escaping @MainActor (AutomationTriggerEvent) -> Void) {
+        startCount += 1
+        self.handler = handler
+    }
+
+    func stop() {
+        stopCount += 1
+        handler = nil
+    }
+
+    func refresh(rules: [AutomationRule]) {
+        refreshedRules = rules
+    }
+
+    func emit(_ event: AutomationTriggerEvent) {
+        handler?(event)
+    }
+}
+
+@MainActor
+private final class FakeAutomationSnapshotProvider: AutomationEnvironmentSnapshotProviding {
+    var snapshotValue: AutomationEnvironmentSnapshot
+
+    init(_ snapshot: AutomationEnvironmentSnapshot) {
+        snapshotValue = snapshot
+    }
+
+    func snapshot(at date: Date) -> AutomationEnvironmentSnapshot {
+        var value = snapshotValue
+        value.date = date
+        return value
+    }
+}
+
+@MainActor
+private final class FakeWorkflowStarter: WorkflowStarting {
+    struct Start {
+        let workflowID: UUID
+        let source: WorkflowRunSource
+        let mode: ActionExecutionMode
+
+        var automaticTriggerKind: String? {
+            guard case let .automatic(_, triggerKind) = source else { return nil }
+            return triggerKind
+        }
+    }
+
+    private let completesImmediately: Bool
+    private let startError: WorkflowStartError?
+    private(set) var starts: [Start] = []
+    private var completions: [CheckedContinuation<ActionExecutionResult, Never>] = []
+
+    var pendingCompletionCount: Int { completions.count }
+
+    init(completesImmediately: Bool, startError: WorkflowStartError? = nil) {
+        self.completesImmediately = completesImmediately
+        self.startError = startError
+    }
+
+    func makeExecutionHandle(
+        workflowID: UUID,
+        source: WorkflowRunSource,
+        mode: ActionExecutionMode
+    ) -> Result<WorkflowExecutionHandle, WorkflowStartError> {
+        if let startError {
+            return .failure(startError)
+        }
+        starts.append(Start(workflowID: workflowID, source: source, mode: mode))
+        let handle = ActionExecutionHandle(operation: { [weak self, completesImmediately] in
+            if !completesImmediately {
+                return await withCheckedContinuation { continuation in
+                    self?.completions.append(continuation)
+                }
+            }
+            return .succeeded()
+        })
+        return .success(WorkflowExecutionHandle(runID: UUID(), actionHandle: handle))
+    }
+
+    func completePendingRun(at index: Int, result: ActionExecutionResult = .succeeded()) {
+        guard completions.indices.contains(index) else { return }
+        completions.remove(at: index).resume(returning: result)
+    }
+}

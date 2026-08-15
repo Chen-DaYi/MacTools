@@ -34,7 +34,6 @@ final class ActivityBarController: ObservableObject {
     private let inputEventNotificationDelay: Duration
     private var hookInstallerPaths: ActivityBarHookInstallerPaths
     private var inputEventNotificationTask: Task<Void, Never>?
-    private var terminateObserver: NSObjectProtocol?
 
     init(
         context: PluginRuntimeContext,
@@ -80,23 +79,10 @@ final class ActivityBarController: ObservableObject {
             hookInstallState = .installed(timestamp: installedAt)
         }
 
-        terminateObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.inputStats.flushPendingChanges()
-                self?.codingStats.flushActiveDurations()
-            }
-        }
     }
 
     @MainActor deinit {
         inputEventNotificationTask?.cancel()
-        if let terminateObserver {
-            NotificationCenter.default.removeObserver(terminateObserver)
-        }
     }
 
     var hookStatusMessage: String? {
@@ -222,9 +208,36 @@ final class ActivityBarController: ObservableObject {
         notifyChange()
     }
 
-    func setTrackingEnabled(_ enabled: Bool) {
-        isTrackingEnabled = enabled
+    @discardableResult
+    func setTrackingEnabled(_ enabled: Bool) -> ActivityBarPersistenceMutationResult {
+        let previousRawValue = storage.object(forKey: StorageKey.isTrackingEnabled)
+        guard previousRawValue == nil || previousRawValue is Bool else {
+            return .recoveryRequired
+        }
+        if let previous = previousRawValue as? Bool, previous == enabled {
+            return .committed
+        }
+
         storage.set(enabled, forKey: StorageKey.isTrackingEnabled)
+        guard storage.object(forKey: StorageKey.isTrackingEnabled) as? Bool == enabled else {
+            let rollbackSucceeded = restoreActivityBarStorageValue(
+                previousRawValue,
+                forKey: StorageKey.isTrackingEnabled,
+                storage: storage
+            )
+            if !rollbackSucceeded {
+                reconcileTrackingWithStorage()
+            }
+            return .rejected(rollbackSucceeded: rollbackSucceeded)
+        }
+
+        applyTrackingState(enabled)
+        notifyChange()
+        return .committed
+    }
+
+    private func applyTrackingState(_ enabled: Bool) {
+        isTrackingEnabled = enabled
 
         if enabled {
             startInputTracking()
@@ -235,14 +248,44 @@ final class ActivityBarController: ObservableObject {
                 lastErrorMessage = nil
             }
         }
+    }
 
+    private func reconcileTrackingWithStorage() {
+        let durableState = storage.object(forKey: StorageKey.isTrackingEnabled) as? Bool ?? false
+        applyTrackingState(durableState)
         notifyChange()
     }
 
-    func resetToday() {
-        inputStats.resetToday()
-        codingStats.resetToday()
+    @discardableResult
+    func resetToday() -> ActivityBarPersistenceMutationResult {
+        guard
+            let inputReset = inputStats.prepareTodayReset(),
+            let codingReset = codingStats.prepareTodayReset()
+        else {
+            return .recoveryRequired
+        }
+
+        let inputResult = inputStats.commitTodayReset(inputReset)
+        guard inputResult == .committed else { return inputResult }
+
+        let codingResult = codingStats.commitTodayReset(codingReset)
+        guard codingResult == .committed else {
+            let inputRollbackSucceeded = inputStats.rollbackTodayReset(inputReset)
+            switch codingResult {
+            case let .rejected(codingRollbackSucceeded):
+                return .rejected(
+                    rollbackSucceeded: codingRollbackSucceeded && inputRollbackSucceeded
+                )
+            case .recoveryRequired:
+                return inputRollbackSucceeded ? .recoveryRequired : .rejected(rollbackSucceeded: false)
+            case .committed:
+                break
+            }
+            return .rejected(rollbackSucceeded: inputRollbackSucceeded)
+        }
+
         notifyChange()
+        return .committed
     }
 
     func installHooks() {

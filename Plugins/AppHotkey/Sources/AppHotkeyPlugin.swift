@@ -3,6 +3,51 @@ import Foundation
 import SwiftUI
 import MacToolsPluginKit
 
+@MainActor
+protocol AppHotkeyApplicationLaunching: AnyObject {
+    func launch(_ bundleURL: URL) async throws
+}
+
+@MainActor
+final class SystemAppHotkeyApplicationLauncher: AppHotkeyApplicationLaunching {
+    private let bundleIdentifier: (URL) -> String?
+    private let frontmostBundleIdentifier: () -> String?
+    private let hideFrontmost: () -> Bool
+    private let openApplication: (URL) async throws -> Void
+
+    init(
+        bundleIdentifier: @escaping (URL) -> String? = { Bundle(url: $0)?.bundleIdentifier },
+        frontmostBundleIdentifier: @escaping () -> String? = {
+            NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        },
+        hideFrontmost: @escaping () -> Bool = {
+            NSWorkspace.shared.frontmostApplication?.hide() ?? false
+        },
+        openApplication: ((URL) async throws -> Void)? = nil
+    ) {
+        self.bundleIdentifier = bundleIdentifier
+        self.frontmostBundleIdentifier = frontmostBundleIdentifier
+        self.hideFrontmost = hideFrontmost
+        self.openApplication = openApplication ?? { url in
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        }
+    }
+
+    func launch(_ bundleURL: URL) async throws {
+        if let target = bundleIdentifier(bundleURL),
+           target == frontmostBundleIdentifier() {
+            guard hideFrontmost() else {
+                throw NSError(domain: "AppHotkeyPlugin", code: 2)
+            }
+            return
+        }
+
+        try await openApplication(bundleURL)
+    }
+}
+
 // MARK: - Bundle Factory
 
 public final class AppHotkeyPluginFactory: NSObject, MacToolsPluginBundleFactory {
@@ -22,7 +67,12 @@ private struct AppHotkeyPluginProvider: PluginProvider {
 // MARK: - Plugin
 
 @MainActor
-final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class AppHotkeyPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginActionProviding,
+    PluginLegacyActionShortcutProviding
+{
 
     // MARK: Metadata
 
@@ -42,18 +92,21 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: Private
 
     private let store: AppHotkeyStore
-    private let hotkeyManager: AppHotkeyManager
     private let storage: PluginStorage
     private let localization: PluginLocalization
+    private let applicationLauncher: any AppHotkeyApplicationLaunching
     private var isEnabled: Bool
 
     // MARK: Init
 
-    init(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "app-hotkey")) {
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "app-hotkey"),
+        applicationLauncher: (any AppHotkeyApplicationLaunching)? = nil
+    ) {
         self.localization = PluginLocalization(bundle: context.resourceBundle)
         self.storage = context.storage
         self.store = AppHotkeyStore(storage: context.storage)
-        self.hotkeyManager = AppHotkeyManager()
+        self.applicationLauncher = applicationLauncher ?? SystemAppHotkeyApplicationLauncher()
         self.metadata = PluginMetadata(
             id: "app-hotkey",
             title: localization.string("metadata.title", defaultValue: "应用快捷键"),
@@ -66,28 +119,19 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.isEnabled = context.storage.object(forKey: "isEnabled") == nil
             ? true
             : context.storage.bool(forKey: "isEnabled")
-
-        hotkeyManager.onTrigger = { [weak self] id in
-            self?.launch(entryID: id)
-        }
     }
 
     // MARK: MacToolsPlugin
 
-    func activate(context: PluginRuntimeContext) {
-        syncHotkeys()
-    }
+    func activate(context: PluginRuntimeContext) {}
 
-    func deactivate(reason: PluginDeactivationReason) {
-        if reason.requiresStateCleanup {
-            hotkeyManager.unregisterAll()
-        }
-    }
+    func deactivate(reason: PluginDeactivationReason) {}
 
     func refresh() {}
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    // Hotkeys are managed by this plugin instead of the host shortcut system.
+    // App-launch actions use the host action shortcut service. Specialized plugin shortcuts
+    // remain available through `shortcutDefinitions` in other plugins.
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var settingsPage: PluginSettingsPage? {
@@ -102,14 +146,7 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
                     store: self.store,
                     localization: self.localization,
                     onUpdate: { [weak self] in
-                        self?.syncHotkeys()
                         self?.onStateChange?()
-                    },
-                    onBeginRecording: { [weak self] id in
-                        self?.hotkeyManager.temporarilyDisable(id: id)
-                    },
-                    onEndRecording: { [weak self] _ in
-                        self?.syncHotkeys()
                     }
                 )
             }
@@ -119,7 +156,6 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
                         store: self.store,
                         localization: self.localization,
                         onUpdate: { [weak self] in
-                            self?.syncHotkeys()
                             self?.onStateChange?()
                         }
                     )
@@ -154,7 +190,6 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case let .setSwitch(value):
             isEnabled = value
             storage.set(value, forKey: "isEnabled")
-            syncHotkeys()
             onStateChange?()
         default:
             break
@@ -164,35 +199,128 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: Private
 
     private var panelSubtitle: String {
-        let count = store.entries.filter { $0.shortcut != nil }.count
+        let count = store.entries.count
         guard count > 0 else {
             return localization.string("panel.subtitle.empty", defaultValue: "暂无绑定，前往设置配置")
         }
         return isEnabled
-            ? localization.format("panel.subtitle.enabledCountFormat", defaultValue: "%d 个快捷键已启用", count)
+            ? localization.format("panel.subtitle.enabledCountFormat", defaultValue: "已配置 %d 个应用", count)
             : localization.string("panel.subtitle.paused", defaultValue: "快捷键已暂停")
     }
 
-    private func syncHotkeys() {
-        hotkeyManager.sync(entries: isEnabled ? store.entries : [])
+    // MARK: Actions
+
+    private var launchDefinition: ActionDefinition {
+        ActionDefinition(
+            key: ActionKey(providerID: metadata.id, actionID: "launch"),
+            title: localization.string("action.launch.title", defaultValue: "打开应用"),
+            description: localization.string(
+                "action.launch.description",
+                defaultValue: "打开应用；若应用位于最前方则隐藏。"
+            ),
+            keywords: [
+                localization.string("metadata.title", defaultValue: "应用快捷键"),
+                localization.string("action.launch.title", defaultValue: "打开应用"),
+            ],
+            systemImage: "app.dashed",
+            parameters: [
+                ActionParameterDefinition(
+                    id: "entryID",
+                    title: localization.string("action.launch.app", defaultValue: "应用"),
+                    kind: .string,
+                    portability: .localOnly
+                ),
+            ],
+            externalInvocationPolicy: .allowed,
+            capabilities: [.automatic, .background, .foregroundInteractive]
+        )
     }
 
-    /// Hides the target app when it is frontmost; otherwise opens or activates it.
-    private func launch(entryID: UUID) {
-        guard let entry = store.entries.first(where: { $0.id == entryID }),
-              let bundleURL = entry.bundleURL
-        else { return }
+    var actionDefinitions: [ActionDefinition] {
+        [launchDefinition]
+    }
 
-        let bundleIdentifier = Bundle(url: bundleURL)?.bundleIdentifier
-
-        if let bundleIdentifier,
-           let frontmost = NSWorkspace.shared.frontmostApplication,
-           frontmost.bundleIdentifier == bundleIdentifier {
-            frontmost.hide()
-        } else {
-            let config = NSWorkspace.OpenConfiguration()
-            config.activates = true
-            NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, _ in }
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        store.entries.compactMap { entry in
+            guard let parameters = try? ActionParameterSet([
+                "entryID": .string(entry.id.uuidString.lowercased()),
+            ]) else {
+                return nil
+            }
+            return ActionCatalogEntry(
+                reference: ActionReference(
+                    key: launchDefinition.key,
+                    parameters: parameters
+                ),
+                title: entry.displayName,
+                subtitle: localization.string("metadata.title", defaultValue: "应用快捷键")
+            )
         }
     }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard isEnabled else {
+            return .unavailable(
+                localization.string("action.unavailable.paused", defaultValue: "应用快捷键已暂停。")
+            )
+        }
+        guard let entry = entry(for: reference), entry.bundleURL != nil else {
+            return .unavailable(
+                localization.string("action.unavailable.missing", defaultValue: "应用不可用。")
+            )
+        }
+        return .available
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard actionAvailability(for: invocation.reference).isAvailable,
+              let entry = entry(for: invocation.reference),
+              let bundleURL = entry.bundleURL else {
+            let failureMessage = localization.string(
+                "action.unavailable.missing",
+                defaultValue: "应用不可用。"
+            )
+            return ActionExecutionHandle(operation: {
+                .failed(message: failureMessage)
+            })
+        }
+        return ActionExecutionHandle { [applicationLauncher] in
+            do {
+                try await applicationLauncher.launch(bundleURL)
+                return .succeeded()
+            } catch is CancellationError {
+                return .cancelled
+            } catch {
+                return .failed(message: error.localizedDescription)
+            }
+        }
+    }
+
+    var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] {
+        actionCatalogEntries.compactMap { entry in
+            guard let appEntry = self.entry(for: entry.reference),
+                  let binding = appEntry.shortcut else {
+                return nil
+            }
+            return LegacyActionShortcutAssignment(
+                reference: entry.reference,
+                binding: binding
+            )
+        }
+    }
+
+    func legacyActionShortcutsDidMigrate() {
+        store.clearAllShortcuts()
+        onStateChange?()
+    }
+
+    private func entry(for reference: ActionReference) -> AppShortcutEntry? {
+        guard reference.key == launchDefinition.key,
+              case let .string(rawID)? = reference.parameters["entryID"],
+              let id = UUID(uuidString: rawID) else {
+            return nil
+        }
+        return store.entries.first { $0.id == id }
+    }
+
 }

@@ -89,6 +89,10 @@ if [[ -z "$SOURCE_DIR" || ! -d "$SOURCE_DIR" ]]; then
     echo "Plugin source directory not found: $SOURCE_DIR" >&2
     exit 1
 fi
+SOURCE_IS_SINGLE_PLUGIN=0
+if [[ -f "$SOURCE_DIR/plugin.json" ]]; then
+    SOURCE_IS_SINGLE_PLUGIN=1
+fi
 
 PRODUCTS_DIR="$(cd "$PRODUCTS_DIR" 2>/dev/null && pwd -P || true)"
 if [[ -z "$PRODUCTS_DIR" || ! -d "$PRODUCTS_DIR" ]]; then
@@ -348,10 +352,51 @@ package_is_complete() {
     [[ -f "$package_path/plugin.json" && -d "$package_path/$bundle_relative_path" ]]
 }
 
+installed_package_matches() {
+    local package_path="$1"
+    local install_path="$2"
+
+    [[ -d "$install_path" ]] || return 1
+    /usr/bin/diff -rq "$package_path" "$install_path" >/dev/null 2>&1
+}
+
+quarantine_stale_installed_packages() {
+    local quarantine_dir
+    local installed_package
+    local is_expected
+    local package_path
+    local package_name
+    local quarantine_path
+
+    quarantine_dir="$(dirname "$INSTALL_DIR")/Quarantined"
+    for installed_package in "$INSTALL_DIR"/*.mactoolsplugin(N/); do
+        package_name="${installed_package:t}"
+        is_expected=0
+        for package_path in "${packages[@]}"; do
+            if [[ "${package_path:t}" == "$package_name" ]]; then
+                is_expected=1
+                break
+            fi
+        done
+        [[ "$is_expected" == "0" ]] || continue
+
+        mkdir -p "$quarantine_dir"
+        quarantine_path="$quarantine_dir/$package_name"
+        if [[ -e "$quarantine_path" ]]; then
+            quarantine_path="$quarantine_dir/${package_name%.mactoolsplugin}.$$.mactoolsplugin"
+        fi
+        mv "$installed_package" "$quarantine_path"
+        quarantined_count=$((quarantined_count + 1))
+    done
+}
+
 packages=()
+state_paths=()
 synced_count=0
 installed_count=0
 skipped_count=0
+quarantined_count=0
+removed_count=0
 
 echo "Discovering Debug plugin bundles..."
 if plugin_records="$(discover_plugin_records)"; then
@@ -454,13 +499,15 @@ while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bund
     if [[ "$SKIP_INSTALL" != "1" ]]; then
         install_path="$INSTALL_DIR/$plugin_id.mactoolsplugin"
         assert_path_within_root "$install_path" "$INSTALL_DIR"
-        if [[ "$package_synced" == "1" || ! -d "$install_path" ]]; then
+        if [[ "$package_synced" == "1" ]] \
+            || ! installed_package_matches "$package_path" "$install_path"; then
             copy_package_to_installed_store "$package_path" "$plugin_id"
             installed_count=$((installed_count + 1))
         fi
     fi
 
     packages+=("$package_path")
+    state_paths+=("$state_path")
 done <<< "$plugin_records"
 
 plugin_filter_count=0
@@ -477,12 +524,38 @@ if [[ ${#packages[@]} -eq 0 ]]; then
     exit 1
 fi
 
+if [[ "$plugin_filter_count" -eq 0 && "$SOURCE_IS_SINGLE_PLUGIN" -eq 0 ]]; then
+    for existing_package in "$PACKAGES_DIR"/*.mactoolsplugin(N/); do
+        is_expected=0
+        for package_path in "${packages[@]}"; do
+            if [[ "$existing_package" == "$package_path" ]]; then
+                is_expected=1
+                break
+            fi
+        done
+        [[ "$is_expected" == 0 ]] || continue
+        rm -rf -- "$existing_package"
+        removed_count=$((removed_count + 1))
+    done
+    for existing_state in "$STATE_DIR"/*.sha256(N); do
+        is_expected=0
+        for state_path in "${state_paths[@]}"; do
+            if [[ "$existing_state" == "$state_path" ]]; then
+                is_expected=1
+                break
+            fi
+        done
+        [[ "$is_expected" == 0 ]] || continue
+        rm -f -- "$existing_state"
+    done
+fi
+
 catalog_args=()
 for package in "${packages[@]}"; do
     catalog_args+=(--package "$package")
 done
 
-if [[ "$synced_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
+if [[ "$synced_count" -gt 0 || "$removed_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
     assert_path_within_root "$CATALOG_PATH" "$OUTPUT_DIR"
     echo "Generating local plugin catalog..."
     "$REPO_ROOT/scripts/plugins/generate-plugin-catalog.sh" \
@@ -491,9 +564,19 @@ if [[ "$synced_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
         "${catalog_args[@]}"
 fi
 
+if [[ "$SKIP_INSTALL" != "1"
+    && "$plugin_filter_count" -eq 0
+    && "$SOURCE_IS_SINGLE_PLUGIN" -eq 0 ]]; then
+    quarantine_stale_installed_packages
+fi
+
 echo "Synced $synced_count changed debug plugin package(s); skipped $skipped_count unchanged."
+if [[ "$removed_count" -gt 0 ]]; then
+    echo "Removed $removed_count stale debug output package(s)."
+fi
 echo "Catalog: $CATALOG_PATH"
 if [[ "$SKIP_INSTALL" != "1" ]]; then
     echo "Installed $installed_count debug plugin package(s)."
+    echo "Quarantined $quarantined_count stale debug plugin package(s)."
     echo "Installed store: $INSTALL_DIR"
 fi

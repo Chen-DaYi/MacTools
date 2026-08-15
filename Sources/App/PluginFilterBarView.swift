@@ -93,7 +93,7 @@ private struct PluginFilterChip: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: filter.iconName)
+                Image(systemName: PluginSystemImage.resolvedName(filter.iconName))
                     .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
                     .foregroundStyle(iconColor)
 

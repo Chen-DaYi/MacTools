@@ -1254,7 +1254,7 @@ struct FeatureRowView: View {
                         RoundedRectangle(cornerRadius: FeatureRowLayout.iconCornerRadius, style: .continuous)
                             .fill(theme.surfaces.control)
 
-                        Image(systemName: item.iconName)
+                        Image(systemName: PluginSystemImage.resolvedName(item.iconName))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
                     }
@@ -1358,7 +1358,7 @@ struct FeatureRowView: View {
                 RoundedRectangle(cornerRadius: FeatureRowLayout.iconCornerRadius, style: .continuous)
                     .fill(theme.surfaces.control)
 
-                Image(systemName: item.iconName)
+                Image(systemName: PluginSystemImage.resolvedName(item.iconName))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
             }
@@ -1453,7 +1453,15 @@ struct FeatureRowView: View {
     }
 
     private func primaryPanelIndicator(_ indicator: PluginPrimaryPanelIndicator) -> some View {
-        Label(indicator.text, systemImage: indicator.systemImage)
+        HStack(spacing: 3) {
+            if indicator.systemImage == "progress.indicator" {
+                ProgressView()
+                    .controlSize(.mini)
+            } else {
+                Image(systemName: PluginSystemImage.resolvedName(indicator.systemImage))
+            }
+            Text(indicator.text)
+        }
             .font(.system(size: 8.5, weight: .semibold))
             .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
             .lineLimit(1)
@@ -1470,7 +1478,7 @@ struct FeatureRowView: View {
             ForEach(indicator.icons.indices, id: \.self) { index in
                 let icon = indicator.icons[index]
                 HStack(spacing: 3) {
-                    Image(systemName: icon.systemImage)
+                    Image(systemName: PluginSystemImage.resolvedName(icon.systemImage))
                     Text(icon.label)
                 }
                 .lineLimit(1)
@@ -1996,7 +2004,7 @@ private struct SwitchRowControl: View {
     var body: some View {
         HStack(spacing: 8) {
             if let iconName = control.actionIconSystemName {
-                Image(systemName: iconName)
+                Image(systemName: PluginSystemImage.resolvedName(iconName))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(control.isEnabled ? theme.text.secondary : theme.text.disabled)
                     .frame(width: 14, height: 14)
@@ -2646,6 +2654,7 @@ private final class SecondaryPanelController: ObservableObject {
             // Align the panel level to `hostWindow.level + 1` at runtime so it stays above the popover.
             // The MenuBarExtra popover level is a private SwiftUI implementation detail.
             panelWindow.level = NSWindow.Level(rawValue: hostWindow.level.rawValue + 1)
+            PluginPresentationSafety.prepareForWindowOrdering(panelWindow)
             panelWindow.orderFrontRegardless()
         case .inline:
             isPresentingInline = true

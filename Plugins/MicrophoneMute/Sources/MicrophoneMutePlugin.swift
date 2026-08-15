@@ -84,7 +84,17 @@ struct CoreAudioMicrophoneController: MicrophoneControlling {
 }
 
 @MainActor
-final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
+    }
+
+    private enum ErrorState {
+        case muteFailed
+        case unmuteFailed
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -103,7 +113,18 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let localization: PluginLocalization
     private let controller: any MicrophoneControlling
     private var isMuted: Bool = false
-    private var lastErrorMessage: String?
+    private var lastErrorState: ErrorState?
+
+    private var lastErrorMessage: String? {
+        switch lastErrorState {
+        case .muteFailed:
+            localization.string("error.muteFailed", defaultValue: "静音操作失败")
+        case .unmuteFailed:
+            localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
+        case nil:
+            nil
+        }
+    }
 
     init(
         controller: any MicrophoneControlling = CoreAudioMicrophoneController(),
@@ -142,6 +163,76 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("metadata.title", defaultValue: "麦克风静音"),
+                description: localization.string("metadata.description", defaultValue: "快速静音或恢复默认麦克风输入"),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "麦克风静音"),
+                    localization.string("metadata.description", defaultValue: "快速静音或恢复默认麦克风输入"),
+                ],
+                systemImage: metadata.iconName,
+                confirmation: toggleConfirmation,
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: localization.string(
+                    "action.setMute.title",
+                    defaultValue: "设置麦克风静音"
+                ),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "快速静音或恢复默认麦克风输入"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "麦克风静音"),
+                    localization.string("metadata.description", defaultValue: "快速静音或恢复默认麦克风输入"),
+                ],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string(
+                            "action.setMute.title",
+                            defaultValue: "设置麦克风静音"
+                        ),
+                        kind: .boolean
+                    ),
+                ],
+                confirmation: toggleConfirmation,
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isMuted
+                    ? localization.string("action.unmute.title", defaultValue: "恢复麦克风")
+                    : localization.string("action.mute.title", defaultValue: "麦克风静音"),
+                subtitle: isMuted
+                    ? localization.string("panel.subtitle.muted", defaultValue: "已静音")
+                    : localization.string("panel.subtitle.unmuted", defaultValue: "未静音"),
+                presentationState: isMuted ? .active : .inactive
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.mute.title", defaultValue: "麦克风静音")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.unmute.title", defaultValue: "恢复麦克风")
+            ),
+        ]
+    }
+
     func refresh() {
         let current = controller.readMuteState()
         if current != isMuted {
@@ -163,19 +254,71 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !controller.readMuteState()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        let succeeded = applyMute(enabled)
+        let message = lastErrorMessage
+        let failureMessage = message
+            ?? localization.string("error.muteFailed", defaultValue: "静音操作失败")
+        return ActionExecutionHandle {
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
+        }
+    }
+
     // MARK: - Private
 
-    private func applyMute(_ muted: Bool) {
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    private var toggleConfirmation: ActionConfirmation {
+        ActionConfirmation(
+            title: localization.string(
+                "action.confirmation.title",
+                defaultValue: "确认更改麦克风状态"
+            ),
+            message: localization.string(
+                "action.confirmation.message",
+                defaultValue: "外部运行链接将更改默认麦克风的静音状态。"
+            ),
+            confirmButtonTitle: localization.string(
+                "action.confirmation.confirm",
+                defaultValue: "继续"
+            )
+        )
+    }
+
+    @discardableResult
+    private func applyMute(_ muted: Bool) -> Bool {
         let success = controller.setMuteState(muted)
         if success {
             isMuted = muted
-            lastErrorMessage = nil
+            lastErrorState = nil
         } else {
             logger.error("Failed to set mute to \(muted, privacy: .public)")
-            lastErrorMessage = muted
-                ? localization.string("error.muteFailed", defaultValue: "静音操作失败")
-                : localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
+            lastErrorState = muted ? .muteFailed : .unmuteFailed
         }
         onStateChange?()
+        return success
     }
 }

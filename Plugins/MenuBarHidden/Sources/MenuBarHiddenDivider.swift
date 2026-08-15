@@ -118,6 +118,7 @@ final class MenuBarHiddenDivider {
         guard !isInstalled else { return }
 
         kind.prepare(preferredPosition: preferredPosition)
+        PluginPresentationSafety.prepareForWindowOrdering()
         let item = NSStatusBar.system.statusItem(withLength: 0)
         item.autosaveName = kind.autosaveName
 
@@ -147,6 +148,7 @@ final class MenuBarHiddenDivider {
         windowObserver?.cancel()
         windowObserver = nil
         removeSpacerItems()
+        PluginPresentationSafety.prepareForWindowOrdering()
         NSStatusBar.system.removeStatusItem(item)
         statusItem = nil
         widthConstraint = nil
@@ -325,6 +327,7 @@ final class MenuBarHiddenDivider {
         if spacerItems.count != needed {
             removeSpacerItems()
             spacerItems = (0..<needed).map { index in
+                PluginPresentationSafety.prepareForWindowOrdering()
                 let item = NSStatusBar.system.statusItem(withLength: 0)
                 item.autosaveName = "\(kind.autosaveName).Spacer.\(index)"
 
@@ -341,6 +344,7 @@ final class MenuBarHiddenDivider {
 
     private func removeSpacerItems() {
         for item in spacerItems {
+            PluginPresentationSafety.prepareForWindowOrdering()
             NSStatusBar.system.removeStatusItem(item)
         }
         spacerItems.removeAll()

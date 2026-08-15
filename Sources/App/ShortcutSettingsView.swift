@@ -78,6 +78,430 @@ struct ShortcutSettingsView: View {
     }
 }
 
+enum ActionShortcutFilter: String, CaseIterable, Identifiable {
+    case all
+    case assigned
+    case unassigned
+    case conflicted
+    case unavailable
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .all: FeatureL10n.string("全部")
+        case .assigned: FeatureL10n.string("已分配")
+        case .unassigned: FeatureL10n.string("未分配")
+        case .conflicted: FeatureL10n.string("冲突")
+        case .unavailable: FeatureL10n.string("不可用")
+        }
+    }
+
+    func includes(_ status: ActionShortcutCatalogStatus) -> Bool {
+        switch (self, status) {
+        case (.all, _), (.assigned, .assigned), (.unassigned, .unassigned),
+             (.conflicted, .conflicted), (.unavailable, .unavailable):
+            true
+        default:
+            false
+        }
+    }
+}
+
+private struct PendingActionShortcutReplacement: Identifiable {
+    let reference: ActionReference
+    let assignmentID: UUID?
+    let binding: ShortcutBinding
+    let ownerDescription: String
+
+    var id: String { assignmentID?.uuidString ?? reference.key.id }
+}
+
+struct ActionShortcutSettingsView: View {
+    @ObservedObject var pluginHost: PluginHost
+    @State private var query = ""
+    @State private var filter: ActionShortcutFilter = .all
+    @State private var groups: [ActionShortcutGroup] = []
+    @State private var pendingReplacement: PendingActionShortcutReplacement?
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+                header
+                controls
+
+                if let error = pluginHost.actionShortcutLoadError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.red)
+                        .padding(PluginSettingsTheme.Spacing.cardContent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .pluginSettingsCardBackground(.standard)
+                }
+
+                if groups.isEmpty {
+                    ContentUnavailableView(
+                        FeatureL10n.string("没有匹配的操作"),
+                        systemImage: "command",
+                        description: Text(FeatureL10n.string("调整搜索词或筛选条件后重试。"))
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 220)
+                } else {
+                    ForEach(groups, id: \.providerID) { group in
+                        actionGroup(group)
+                    }
+                }
+            }
+            .padding(PluginSettingsTheme.Spacing.pagePadding)
+        }
+        .background(SettingsStyle.contentBackground)
+        .onAppear(perform: refreshGroups)
+        .onChange(of: pluginHost.actionShortcutCatalogItems) { _, _ in refreshGroups() }
+        .onChange(of: query) { _, _ in refreshGroups() }
+        .onChange(of: filter) { _, _ in refreshGroups() }
+        .alert(item: $pendingReplacement) { replacement in
+            Alert(
+                title: Text(FeatureL10n.string("替换快捷键？")),
+                message: Text(FeatureL10n.format(
+                    "此快捷键已分配给“%@”。替换后，原操作将不再使用它。",
+                    replacement.ownerDescription
+                )),
+                primaryButton: .destructive(Text(FeatureL10n.string("替换"))) {
+                    _ = pluginHost.setActionShortcutBinding(
+                        replacement.binding,
+                        to: replacement.reference,
+                        assignmentID: replacement.assignmentID,
+                        replacingConflictingActionAssignments: true
+                    )
+                },
+                secondaryButton: .cancel()
+            )
+        }
+        .accessibilityIdentifier("mactools.actions-and-shortcuts")
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(FeatureL10n.string("操作与快捷键"), systemImage: "command")
+                .font(PluginSettingsTheme.Typography.pageTitle)
+
+            Text(FeatureL10n.string("查找 MacTools 与插件操作，并在同一个冲突空间中管理全局快捷键。"))
+                .font(PluginSettingsTheme.Typography.pageDescription)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .pluginSettingsCardBackground(.standard)
+    }
+
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            searchField
+
+            ActionShortcutFilterControl(selection: $filter)
+        }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .pluginSettingsCardBackground(.standard)
+    }
+
+    private var searchField: some View {
+        TextField(FeatureL10n.string("搜索操作、插件或快捷键"), text: $query)
+            .textFieldStyle(.roundedBorder)
+            .frame(minWidth: 220, maxWidth: .infinity)
+            .accessibilityIdentifier("mactools.actions.search")
+    }
+
+    private func refreshGroups() {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matching = pluginHost.actionShortcutCatalogItems.filter { item in
+            guard filter.includes(item.status) else {
+                return false
+            }
+            guard !normalizedQuery.isEmpty else {
+                return true
+            }
+            return [item.title, item.ownerTitle, item.description, item.bindingText]
+                .contains { $0.localizedCaseInsensitiveContains(normalizedQuery) }
+        }
+
+        var order: [String] = []
+        var groupedItems: [String: [ActionShortcutCatalogItem]] = [:]
+        for item in matching {
+            let providerID = item.reference.key.providerID
+            if groupedItems[providerID] == nil {
+                order.append(providerID)
+            }
+            groupedItems[providerID, default: []].append(item)
+        }
+        groups = order.compactMap { providerID in
+            guard let items = groupedItems[providerID], let first = items.first else {
+                return nil
+            }
+            return ActionShortcutGroup(
+                providerID: providerID,
+                title: first.ownerTitle,
+                items: items
+            )
+        }
+    }
+
+    private func actionGroup(_ group: ActionShortcutGroup) -> some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack {
+                Label(group.title, systemImage: group.providerID == "mactools" ? "hammer" : "puzzlepiece.extension")
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if group.providerID != "mactools",
+                   let reference = group.items.first?.reference,
+                   pluginHost.canPresentActionOwner(for: reference) {
+                    Button {
+                        pluginHost.presentActionOwner(for: reference)
+                    } label: {
+                        Label(FeatureL10n.string("打开所属功能的设置"), systemImage: "gearshape")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                    ActionShortcutCatalogRow(
+                        pluginHost: pluginHost,
+                        item: item,
+                        displaysOwnerSettings: group.providerID == "mactools",
+                        onRecord: { binding in record(binding, for: item) },
+                        onClear: {
+                            pluginHost.clearActionShortcut(
+                                for: item.reference,
+                                assignmentID: item.assignmentID
+                            )
+                        }
+                    )
+                    if index < group.items.count - 1 {
+                        PluginSettingsListDivider()
+                    }
+                }
+            }
+            .pluginSettingsCardBackground(.standard)
+        }
+    }
+
+    private func record(
+        _ binding: ShortcutBinding,
+        for item: ActionShortcutCatalogItem
+    ) -> PluginShortcutRecordingResult {
+        switch pluginHost.setActionShortcutBinding(
+            binding,
+            to: item.reference,
+            assignmentID: item.assignmentID
+        ) {
+        case .success:
+            return .accepted
+        case let .failure(.conflict(ownerDescription)):
+            pendingReplacement = PendingActionShortcutReplacement(
+                reference: item.reference,
+                assignmentID: item.assignmentID,
+                binding: binding,
+                ownerDescription: ownerDescription
+            )
+            return .accepted
+        case let .failure(error):
+            return .rejected(error.localizedDescription)
+        }
+    }
+}
+
+private struct ActionShortcutFilterControl: View {
+    @Binding var selection: ActionShortcutFilter
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            equalWidthTabs
+                .frame(width: 520)
+
+            Picker(FeatureL10n.string("筛选"), selection: $selection) {
+                ForEach(ActionShortcutFilter.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 220, alignment: .leading)
+        }
+    }
+
+    private var equalWidthTabs: some View {
+        HStack(spacing: 2) {
+            ForEach(ActionShortcutFilter.allCases) { option in
+                Button {
+                    selection = option
+                } label: {
+                    Text(option.title)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 5)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selection == option ? Color.white : Color.primary)
+                .background {
+                    RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field)
+                        .fill(selection == option ? Color.accentColor : Color.clear)
+                }
+                .accessibilityAddTraits(selection == option ? .isSelected : [])
+                .accessibilityIdentifier("mactools.actions.filter.\(option.rawValue)")
+            }
+        }
+        .padding(2)
+        .background {
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field + 2)
+                .fill(PluginSettingsTheme.Palette.fieldBackground)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field + 2)
+                .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(FeatureL10n.string("筛选"))
+    }
+}
+
+private struct ActionShortcutGroup {
+    let providerID: String
+    let title: String
+    let items: [ActionShortcutCatalogItem]
+}
+
+private struct ActionShortcutCatalogRow: View {
+    private enum Layout {
+        static let recorderWidth: CGFloat = 126
+        static let actionButtonSize: CGFloat = 22
+    }
+
+    @ObservedObject var pluginHost: PluginHost
+    let item: ActionShortcutCatalogItem
+    let displaysOwnerSettings: Bool
+    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
+    let onClear: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Image(systemName: PluginSystemImage.resolvedName(item.systemImage))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 24)
+
+                VStack(
+                    alignment: .leading,
+                    spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+                ) {
+                    HStack(spacing: 8) {
+                        Text(item.title)
+                            .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                            .lineLimit(1)
+                        statusBadge
+                    }
+
+                    Text(supportingText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(statusColor)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                PluginShortcutRecorder(
+                    title: item.title,
+                    displayText: item.bindingText,
+                    minWidth: Layout.recorderWidth,
+                    onRecord: onRecord
+                )
+                .frame(width: Layout.recorderWidth)
+                .disabled(!item.canAssign || pluginHost.actionShortcutLoadError != nil)
+
+                Button(action: onClear) {
+                    Image(systemName: "xmark.circle.fill")
+                        .frame(width: Layout.actionButtonSize, height: Layout.actionButtonSize)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(FeatureL10n.string("清除快捷键"))
+                .opacity(item.bindingText.isEmpty ? 0 : 1)
+                .disabled(
+                    item.bindingText.isEmpty
+                        || pluginHost.actionShortcutLoadError != nil
+                )
+            }
+
+            ActionRunLinkControl(
+                pluginHost: pluginHost,
+                reference: item.reference,
+                displaysUnavailableReason: false
+            )
+            .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
+
+            if displaysOwnerSettings,
+               pluginHost.canPresentActionOwner(for: item.reference) {
+                Button {
+                    pluginHost.presentActionOwner(for: item.reference)
+                } label: {
+                    Label(FeatureL10n.string("打开所属功能的设置"), systemImage: "gearshape")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
+            }
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        Text(statusTitle)
+            .font(PluginSettingsTheme.Typography.statusBadge)
+            .foregroundStyle(statusColor)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(statusColor.opacity(0.12)))
+    }
+
+    private var statusTitle: String {
+        switch item.status {
+        case .assigned: FeatureL10n.string("已分配")
+        case .unassigned: FeatureL10n.string("未分配")
+        case .conflicted: FeatureL10n.string("冲突")
+        case .unavailable: FeatureL10n.string("不可用")
+        }
+    }
+
+    private var statusColor: Color {
+        switch item.status {
+        case .assigned: .green
+        case .unassigned: .secondary
+        case .conflicted: .orange
+        case .unavailable: .red
+        }
+    }
+
+    private var supportingText: String {
+        switch item.status {
+        case .assigned, .unassigned:
+            [item.description, item.permissionSummary]
+                .compactMap { $0 }
+                .joined(separator: " · ")
+        case let .conflicted(owner):
+            FeatureL10n.format("与“%@”冲突。", owner)
+        case let .unavailable(reason):
+            reason ?? FeatureL10n.string("此操作当前不可用。")
+        }
+    }
+}
+
 struct ShortcutSettingsRowsView: View {
     @ObservedObject var pluginHost: PluginHost
     let items: [ShortcutSettingsItem]
@@ -449,7 +873,7 @@ private struct ShortcutBindingControl: View {
     private var controlLabel: some View {
         HStack(spacing: 6) {
             if let systemImage {
-                Image(systemName: systemImage)
+                Image(systemName: PluginSystemImage.resolvedName(systemImage))
                     .pluginSettingsRowIconStyle(.secondary)
             }
 

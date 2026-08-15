@@ -467,6 +467,7 @@ private struct MenuBarPanelThemePickerSheet: View {
             defaultValue: "选择 .itermcolors（或包含该内容的 .txt）、Base16/Base24 YAML/JSON 主题文件。"
         )
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK, let url = panel.url else {
             return
         }

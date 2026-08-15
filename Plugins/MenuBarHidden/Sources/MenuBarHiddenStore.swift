@@ -1,6 +1,12 @@
 import Foundation
 import MacToolsPluginKit
 
+enum MenuBarHiddenPersistenceMutationResult: Equatable {
+    case committed
+    case rejected(rollbackSucceeded: Bool)
+    case recoveryRequired
+}
+
 @MainActor
 final class MenuBarHiddenStore {
     private enum Key {
@@ -20,7 +26,25 @@ final class MenuBarHiddenStore {
 
     var isEnabled: Bool {
         get { storage.object(forKey: Key.isEnabled) as? Bool ?? false }
-        set { storage.set(newValue, forKey: Key.isEnabled) }
+        set { _ = setEnabled(newValue) }
+    }
+
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> MenuBarHiddenPersistenceMutationResult {
+        let previousRawValue = storage.object(forKey: Key.isEnabled)
+        guard previousRawValue == nil || previousRawValue is Bool else {
+            return .recoveryRequired
+        }
+        if let previous = previousRawValue as? Bool, previous == enabled {
+            return .committed
+        }
+
+        storage.set(enabled, forKey: Key.isEnabled)
+        guard storage.object(forKey: Key.isEnabled) as? Bool == enabled else {
+            let rollbackSucceeded = restore(previousRawValue, forKey: Key.isEnabled)
+            return .rejected(rollbackSucceeded: rollbackSucceeded)
+        }
+        return .committed
     }
 
     var isAlwaysHiddenEnabled: Bool {
@@ -97,5 +121,25 @@ final class MenuBarHiddenStore {
             result.append(key)
         }
         return result
+    }
+
+    private func restore(_ value: Any?, forKey key: String) -> Bool {
+        if let value {
+            storage.set(value, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
+        return valuesMatch(storage.object(forKey: key), value)
+    }
+
+    private func valuesMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case let (lhs as NSObject, rhs as NSObject):
+            return lhs.isEqual(rhs)
+        default:
+            return false
+        }
     }
 }

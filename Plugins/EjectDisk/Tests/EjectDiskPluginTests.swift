@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import EjectDiskPlugin
 
 @MainActor
@@ -83,6 +84,31 @@ final class EjectDiskPluginTests: XCTestCase {
         await waitUntil { plugin.primaryPanelState.subtitle == "1 个可推出的磁盘" }
         XCTAssertTrue(plugin.primaryPanelState.isEnabled)
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+        let ejectedIdentifiers = await ejectProbe.ejectedIdentifiers()
+        XCTAssertEqual(ejectedIdentifiers, ["/Volumes/Disk4", "/Volumes/Disk5"])
+    }
+
+    func testCanonicalActionDiscoversAndEjectsWithoutOpeningThePanel() async throws {
+        let volumes = [makeVolume("Disk4"), makeVolume("Disk5")]
+        let discoveryProbe = VolumeDiscoveryProbe(volumes: volumes)
+        let ejectProbe = VolumeEjectProbe()
+        let plugin = EjectDiskPlugin(
+            discoverVolumes: { try await discoveryProbe.discover() },
+            ejectVolume: { try await ejectProbe.eject($0) }
+        )
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        XCTAssertEqual(definition.risk, .confirmationRequired)
+        XCTAssertEqual(definition.externalInvocationPolicy, .confirmAlways)
+        XCTAssertFalse(definition.capabilities.contains(.cancellable))
+        XCTAssertEqual(definition.executionTimeoutSeconds, 120)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
         let ejectedIdentifiers = await ejectProbe.ejectedIdentifiers()
         XCTAssertEqual(ejectedIdentifiers, ["/Volumes/Disk4", "/Volumes/Disk5"])
     }

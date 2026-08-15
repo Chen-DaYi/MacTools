@@ -64,6 +64,96 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         XCTAssertEqual(MenuBarPanelTab.components.accessibilityTitle, "Components Panel")
     }
 
+    func testFeatureSurfacesSwitchLanguageAndFormattingAtRuntime() {
+        let expectations: [(language: String, actions: String, automation: String)] = [
+            ("en", "Actions & Shortcuts", "Automation"),
+            ("de", "Aktionen und Tastenkürzel", "Automatisierung"),
+            ("ar", "الإجراءات والاختصارات", "الأتمتة"),
+            ("zh-Hans", "操作与快捷键", "自动化"),
+        ]
+
+        for expectation in expectations {
+            setRuntimePreference(expectation.language)
+            XCTAssertEqual(FeatureL10n.string("操作与快捷键"), expectation.actions)
+            XCTAssertEqual(FeatureL10n.string("自动化"), expectation.automation)
+        }
+
+        setRuntimePreference("en")
+        XCTAssertEqual(
+            FeatureL10n.format("%d 个步骤 · %d 条规则 · %@%@", 3, 2, "Enabled", ""),
+            "3 steps · 2 rules · Enabled"
+        )
+
+        setRuntimePreference("ar")
+        XCTAssertEqual(
+            PluginRuntimeLocalization.locale.language.characterDirection,
+            .rightToLeft
+        )
+    }
+
+    func testWorkflowStepTimingCopyExplainsSequentialWaits() {
+        let expectations: [(language: String, label: String, explanation: String)] = [
+            (
+                "en",
+                "Wait before step",
+                "A step waits before it runs. The wait starts after the previous step finishes; the first starts when the workflow begins."
+            ),
+            (
+                "de",
+                "Vor Schritt warten",
+                "Ein Schritt wartet vor der Ausführung. Die Wartezeit beginnt nach Abschluss des vorherigen Schritts; beim ersten Schritt beginnt sie mit dem Workflow."
+            ),
+            (
+                "zh-Hans",
+                "步骤前等待",
+                "步骤会在运行前等待。等待时间从上一步完成后开始；第一步从工作流开始时计算。"
+            ),
+            (
+                "zh-Hant",
+                "步驟前等待",
+                "步驟會在執行前等待。等待時間從上一步完成後開始；第一步從工作流程開始時計算。"
+            ),
+        ]
+
+        for expectation in expectations {
+            setRuntimePreference(expectation.language)
+            XCTAssertEqual(FeatureL10n.string("步骤前等待"), expectation.label)
+            XCTAssertEqual(
+                FeatureL10n.string("步骤会在运行前等待。等待时间从上一步完成后开始；第一步从工作流开始时计算。"),
+                expectation.explanation
+            )
+        }
+    }
+
+    private func makeLocalizedTestBundle() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let bundleURL = directory.appendingPathComponent("Test.bundle", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+
+        for (language, value) in [("en", "Menu Bar Icon"), ("zh-Hans", "菜单栏图标")] {
+            let lprojURL = bundleURL.appendingPathComponent("\(language).lproj", isDirectory: true)
+            try FileManager.default.createDirectory(at: lprojURL, withIntermediateDirectories: true)
+            try "\"menu.title\" = \"\(value)\";\n".write(
+                to: lprojURL.appendingPathComponent("Settings.strings"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+
+        let englishStrings = bundleURL
+            .appendingPathComponent("en.lproj", isDirectory: true)
+            .appendingPathComponent("Settings.strings")
+        let existingStrings = try String(contentsOf: englishStrings, encoding: .utf8)
+        try (existingStrings + "\"fallback.title\" = \"Base Language\";\n").write(
+            to: englishStrings,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        return bundleURL
+    }
+
     private func setRuntimePreference(_ preference: String?) {
         if let preference {
             UserDefaults.standard.set(preference, forKey: preferenceKey)

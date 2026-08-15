@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import AutoHideMenuBarPlugin
 
 @MainActor
@@ -53,6 +54,21 @@ final class AutoHideMenuBarPluginTests: XCTestCase {
             globalValue: nil,
             dockValue: true
         ))
+    }
+
+    func testActionExecutesThroughSameMenuBarMutation() async throws {
+        let runner = MockMenuBarCommandRunner()
+        let plugin = makePlugin(runner: runner)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(runner.calls, [true])
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
     }
 
     private func makePlugin(

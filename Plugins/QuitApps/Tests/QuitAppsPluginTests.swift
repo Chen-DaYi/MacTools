@@ -1,5 +1,6 @@
 import AppKit
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 @testable import QuitAppsPlugin
 
@@ -155,6 +156,35 @@ final class QuitAppsPluginTests: XCTestCase {
             ),
             2
         )
+    }
+
+    func testCanonicalActionOpensTheInteractiveAppChooser() async throws {
+        var presentationCount = 0
+        let plugin = QuitAppsPlugin(
+            runningAppCountProvider: { 2 },
+            selectionPresenter: { presentationCount += 1 }
+        )
+        plugin.refresh()
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        XCTAssertEqual(definition.capabilities, [.foregroundInteractive])
+        XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .foreground)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(presentationCount, 1)
+    }
+
+    func testCanonicalActionIsUnavailableWithoutRunningApps() throws {
+        let plugin = QuitAppsPlugin(runningAppCountProvider: { 0 })
+        plugin.refresh()
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
     }
 
     func testSelectionWindowDismissalNotifiesOwnerOnlyOnce() {

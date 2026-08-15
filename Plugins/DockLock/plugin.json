@@ -17,7 +17,7 @@
     }
   },
   "version": "1.0.0",
-  "minHostVersion": "1.1.6",
+  "minHostVersion": "1.2.0",
   "pluginKitVersion": 4,
   "bundleRelativePath": "DockLock.bundle",
   "factoryClass": "DockLockPlugin.DockLockPluginFactory",

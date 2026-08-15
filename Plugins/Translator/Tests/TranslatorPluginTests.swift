@@ -92,10 +92,38 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertFalse(plugin.primaryPanelState.isOn)
     }
 
+    func testActionsReuseTranslationStartersAndMigrateLegacyBindings() async throws {
+        var selectStartCount = 0
+        let plugin = makePlugin(selectTranslationStarter: { selectStartCount += 1 })
+        plugin.shortcutBindingResolver = { shortcutID in
+            shortcutID == "translator.select-translation"
+                ? ShortcutBinding(keyCode: UInt16(kVK_ANSI_D), modifiers: [.option])
+                : nil
+        }
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .foreground)
+        ).result()
+
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), [
+            "select-translation",
+            "screenshot-translation",
+        ])
+        XCTAssertEqual(plugin.legacyActionShortcutAssignments.count, 1)
+        XCTAssertEqual(
+            plugin.legacyActionShortcutAssignments.first?.legacyShortcutDefinitionID,
+            "translator.select-translation"
+        )
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(selectStartCount, 1)
+    }
+
     private func makePlugin(
         storage: TranslatorInMemoryPluginStorage? = nil,
         accessibilityTrustProvider: @escaping () -> Bool = { true },
-        secretStore: (any TranslatorSecretStoring)? = nil
+        secretStore: (any TranslatorSecretStoring)? = nil,
+        selectTranslationStarter: (() -> Void)? = nil
     ) -> TranslatorPlugin {
         let storage = storage ?? TranslatorInMemoryPluginStorage()
         return TranslatorPlugin(
@@ -103,6 +131,7 @@ final class TranslatorPluginTests: XCTestCase {
             accessibilityTrustProvider: accessibilityTrustProvider,
             accessibilityTrustRequester: { _ in true },
             screenRecordingPermissionProvider: { true },
+            selectTranslationStarter: selectTranslationStarter,
             secretStore: secretStore ?? CountingTranslatorSecretStore(apiKey: "sk-test"),
             panelController: RecordingTranslatorPanelController(),
             selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: [])

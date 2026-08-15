@@ -46,7 +46,10 @@ private struct MenuBarIconActionLabel: View {
     var body: some View {
         ZStack {
             ForEach(MenuBarIconAction.allCases, id: \.self) { candidate in
-                Label(candidate.title, systemImage: candidate.systemImage)
+                Label(
+                    candidate.title,
+                    systemImage: PluginSystemImage.resolvedName(candidate.systemImage)
+                )
                     .lineLimit(1)
                     .opacity(candidate == action ? 1 : 0)
             }
@@ -231,6 +234,7 @@ private struct MenuBarIconEditorControls: View {
             defaultValue: "选择图片、GIF 或 MP4 作为 MacTools 状态栏图标"
         )
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK, let url = panel.url else {
             return
         }

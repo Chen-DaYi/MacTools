@@ -15,9 +15,25 @@ final class MacToolsAppRuntime {
     private let appearanceUserDefaults = UserDefaults.standard
     private let menuBarPanelThemeStore = MenuBarPanelThemeStore()
     private let pluginAutomaticUpdateVersionStore = PluginAutomaticUpdateVersionStore()
-    private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
+    private var actionGridOverlayController: ActionGridOverlayController?
+    private lazy var automationStartupCoordinator = AutomationStartupCoordinator { [weak self] in
+        self?.pluginHost.automationController.startAutomaticRules()
+    }
+    private lazy var runLinkFeedbackPresenter = SystemRunLinkFeedbackPresenter()
+    private lazy var runLinkExecutionCoordinator = RunLinkExecutionCoordinator(
+        registry: pluginHost.actionRegistry,
+        executor: pluginHost.actionExecutor,
+        runLinkService: pluginHost.actionRunLinkService,
+        confirmationService: pluginHost.actionConfirmationService,
+        feedbackPresenter: runLinkFeedbackPresenter
+    )
+    private lazy var appURLRouter = AppURLRouter(
+        actionRejectionHandler: { [weak self] _, error in
+            self?.runLinkExecutionCoordinator.presentRoutingRejection(error)
+        }
+    )
 
     func start(notificationDelegate: UNUserNotificationCenterDelegate) {
         AppAppearancePreference.applyStoredPreference(userDefaults: appearanceUserDefaults)
@@ -34,6 +50,17 @@ final class MacToolsAppRuntime {
             appearanceUserDefaults: appearanceUserDefaults
         )
         self.windowRouter = windowRouter
+        let actionConfirmationService = AppActionConfirmationService { [weak self] in
+            self?.windowRouter?.windowForActionConfirmation()
+        }
+        pluginHost.actionConfirmationService.setHandler { request in
+            await actionConfirmationService.confirm(request)
+        }
+        let actionGridOverlayController = ActionGridOverlayController(pluginHost: pluginHost)
+        self.actionGridOverlayController = actionGridOverlayController
+        pluginHost.installActionGridPresenter { [weak actionGridOverlayController] entries, source in
+            actionGridOverlayController?.present(entries: entries, source: source) ?? false
+        }
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,
             windowRouter: windowRouter,
@@ -56,6 +83,8 @@ final class MacToolsAppRuntime {
     }
 
     func terminate() {
+        pluginHost.automationController.stopAutomaticRules()
+        actionGridOverlayController?.close(restoringFocus: false)
         statusItemController?.dismissPanels()
         pluginHost.deactivateAllPlugins()
     }
@@ -68,7 +97,7 @@ final class MacToolsAppRuntime {
             pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
                 currentAppVersion: currentAppVersion
             )
-            activateAppURLRouter()
+            completeBootstrap()
             return
         }
 
@@ -79,19 +108,27 @@ final class MacToolsAppRuntime {
             || pluginHost.hasPendingDynamicPluginExtractionMigration
         else {
             pluginHost.loadDynamicPluginsIfNeeded()
-            activateAppURLRouter()
+            completeBootstrap()
             return
         }
 
         Task { @MainActor in
-            let updateSucceeded = await pluginHost.automaticUpdateInstalledPluginsBeforeLoading()
-            if updateSucceeded {
-                pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
-                    currentAppVersion: currentAppVersion
-                )
+            await automationStartupCoordinator.startAfterActionRegistryPreparation {
+                let updateSucceeded = await pluginHost
+                    .automaticUpdateInstalledPluginsBeforeLoading()
+                if updateSucceeded {
+                    pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
+                        currentAppVersion: currentAppVersion
+                    )
+                }
             }
             activateAppURLRouter()
         }
+    }
+
+    private func completeBootstrap() {
+        automationStartupCoordinator.actionRegistryDidBecomeReady()
+        activateAppURLRouter()
     }
 
     private func activateAppURLRouter() {
@@ -101,6 +138,16 @@ final class MacToolsAppRuntime {
             },
             isPluginConfigurationAvailable: { [weak self] pluginID in
                 self?.pluginHost.hasPluginSettings(pluginID: pluginID) == true
+            },
+            actionIdentityResolver: { [weak self] request in
+                self?.pluginHost.actionRunLinkService.resolve(request)
+            },
+            actionHandler: { [weak self] request, resolution in
+                guard let self else { return .completed }
+                if let resolution {
+                    return await self.runLinkExecutionCoordinator.execute(resolution)
+                }
+                return await self.runLinkExecutionCoordinator.execute(request)
             }
         )
     }

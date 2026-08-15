@@ -102,6 +102,7 @@ final class MenuBarStatusItemController: NSObject {
         self.windowRouter = windowRouter
         self.iconSettings = iconSettings
         MenuBarControlItemDefaults.prepareVisibleControlItem()
+        PluginPresentationSafety.prepareForWindowOrdering()
         self.statusItem = NSStatusBar.system.statusItem(withLength: 0)
         self.statusItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
         super.init()
@@ -176,27 +177,25 @@ final class MenuBarStatusItemController: NSObject {
         return window.convertToScreen(frameInWindow)
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            animationTimer?.cancel()
-            if let appearanceObserver {
-                DistributedNotificationCenter.default().removeObserver(appearanceObserver)
-            }
-            if let appTerminationObserver {
-                NotificationCenter.default.removeObserver(appTerminationObserver)
-            }
-            if let statusItemWindowMoveObserver {
-                NotificationCenter.default.removeObserver(statusItemWindowMoveObserver)
-            }
-            if let localEventMonitor {
-                NSEvent.removeMonitor(localEventMonitor)
-            }
-            if let globalEventMonitor {
-                NSEvent.removeMonitor(globalEventMonitor)
-            }
-            if let appActivationObserver {
-                NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
-            }
+    isolated deinit {
+        animationTimer?.cancel()
+        if let appearanceObserver {
+            DistributedNotificationCenter.default().removeObserver(appearanceObserver)
+        }
+        if let appTerminationObserver {
+            NotificationCenter.default.removeObserver(appTerminationObserver)
+        }
+        if let statusItemWindowMoveObserver {
+            NotificationCenter.default.removeObserver(statusItemWindowMoveObserver)
+        }
+        if let localEventMonitor {
+            NSEvent.removeMonitor(localEventMonitor)
+        }
+        if let globalEventMonitor {
+            NSEvent.removeMonitor(globalEventMonitor)
+        }
+        if let appActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
         }
     }
 
@@ -271,6 +270,14 @@ final class MenuBarStatusItemController: NSObject {
             }
             .store(in: &cancellables)
 
+        pluginHost.automationController.$activeRunIDs
+            .map(\.count)
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.updateStatusIcon()
+            }
+            .store(in: &cancellables)
+
     }
 
     private func observeIconSettings() {
@@ -286,7 +293,7 @@ final class MenuBarStatusItemController: NSObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            DispatchQueue.main.async {
                 self?.updateStatusIcon()
             }
         }
@@ -297,9 +304,40 @@ final class MenuBarStatusItemController: NSObject {
         payload.image.isTemplate = payload.isTemplate
 
         statusItem.length = NSStatusItem.variableLength
-        statusItem.button?.image = payload.image
+        statusItem.button?.image = statusImage(payload.image, isTemplate: payload.isTemplate)
         statusItem.button?.imagePosition = .imageOnly
+        statusItem.button?.toolTip = automationActivityTooltip
         configureAnimationIfNeeded(payload)
+    }
+
+    private var automationActivityTooltip: String {
+        guard !pluginHost.automationController.activeRunIDs.isEmpty else {
+            return AppMetadata.appName
+        }
+        return "\(AppMetadata.appName) · \(FeatureL10n.string("运行中"))"
+    }
+
+    private func statusImage(_ source: NSImage, isTemplate: Bool? = nil) -> NSImage {
+        guard !pluginHost.automationController.activeRunIDs.isEmpty else {
+            return source
+        }
+
+        let size = source.size
+        let image = NSImage(size: size, flipped: false) { bounds in
+            source.draw(in: bounds)
+            let diameter = max(4, min(7, min(bounds.width, bounds.height) * 0.34))
+            let badgeRect = NSRect(
+                x: bounds.maxX - diameter,
+                y: bounds.minY,
+                width: diameter,
+                height: diameter
+            )
+            NSColor.controlAccentColor.setFill()
+            NSBezierPath(ovalIn: badgeRect).fill()
+            return true
+        }
+        image.isTemplate = isTemplate ?? source.isTemplate
+        return image
     }
 
     private func observeStatusItemPositionPersistence() {
@@ -317,7 +355,7 @@ final class MenuBarStatusItemController: NSObject {
             queue: .main
         ) { [weak self] notification in
             let movedWindowIdentifier = (notification.object as? NSWindow).map { ObjectIdentifier($0) }
-            MainActor.assumeIsolated {
+            DispatchQueue.main.async {
                 self?.snapshotVisibleControlItemPreferredPositionIfNeeded(
                     forMovedWindowIdentifier: movedWindowIdentifier
                 )
@@ -344,10 +382,12 @@ final class MenuBarStatusItemController: NSObject {
         requestPanelClose()
 
         let oldItem = statusItem
+        PluginPresentationSafety.prepareForWindowOrdering()
         NSStatusBar.system.removeStatusItem(oldItem)
         MenuBarControlItemDefaults.resetVisibleControlItemPosition()
         MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition()
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         let newItem = NSStatusBar.system.statusItem(withLength: 0)
         newItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
         statusItem = newItem
@@ -397,7 +437,8 @@ final class MenuBarStatusItemController: NSObject {
         }
 
         animationFrameIndex = (animationFrameIndex + 1) % animationFrames.count
-        button.image = animationFrames[animationFrameIndex]
+        let frame = animationFrames[animationFrameIndex]
+        button.image = statusImage(frame, isTemplate: frame.isTemplate)
         button.needsDisplay = true
     }
 
@@ -457,7 +498,7 @@ final class MenuBarStatusItemController: NSObject {
                     return
                 }
 
-                Task { @MainActor in
+                DispatchQueue.main.async {
                     self?.requestPanelClose()
                 }
             }
@@ -508,7 +549,7 @@ final class MenuBarStatusItemController: NSObject {
                 screenX: Double(location.x),
                 screenY: Double(location.y)
             )
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 self?.handleGlobalMouseEvent(snapshot)
             }
         }

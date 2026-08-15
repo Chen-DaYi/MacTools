@@ -40,7 +40,7 @@ final class FanControlPluginTests: XCTestCase {
     func testSliderEndedUpdatesCustomPresetRPM() {
         let writer = MockSMCWriter()
         let plugin = makePlugin(writer: writer)
-        let preset = plugin.presetStore.addCustomPreset()
+        let preset = plugin.presetStore.addCustomPreset()!
         plugin.presetStore.setActivePreset(id: preset.id)
 
         plugin.handleAction(.setSlider(controlID: "fan-custom-rpm", value: 4000, phase: .ended))
@@ -76,7 +76,7 @@ final class FanControlPluginTests: XCTestCase {
     func testDeletingActiveCustomPresetResetsToAuto() {
         let writer = MockSMCWriter()
         let plugin = makePlugin(writer: writer)
-        let preset = plugin.presetStore.addCustomPreset()
+        let preset = plugin.presetStore.addCustomPreset()!
         plugin.presetStore.setActivePreset(id: preset.id)
 
         plugin.handleAction(.invokeAction(controlID: "fan-delete-preset"))
@@ -134,6 +134,303 @@ final class FanControlPluginTests: XCTestCase {
         plugin.deactivate(reason: .hostShutdown)
 
         XCTAssertEqual(writer.appliedStrategies, [.fullSpeed, .auto])
+    }
+
+    func testCanonicalActionsPublishAndApplyEveryFanPreset() async throws {
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+        let custom = plugin.presetStore.addCustomPreset()!
+        plugin.presetStore.updateCustomPresetRPM(id: custom.id, rpm: 3800)
+
+        XCTAssertEqual(plugin.actionCatalogEntries.count, 3)
+        let customReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.title.contains(custom.name) })?.reference
+        )
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: customReference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(plugin.presetStore.activePresetID, custom.id)
+        XCTAssertEqual(writer.appliedStrategy, .fixed(rpm: 3800))
+        XCTAssertEqual(plugin.actionDefinitions.first?.externalInvocationPolicy, .confirmAlways)
+    }
+
+    func testCanonicalPresetDefersMutationUntilHandleStarts() async throws {
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+        let fullSpeed = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.parameters["preset"] == .string(FanPresetBuiltInID.fullSpeed)
+        })?.reference)
+
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: fullSpeed,
+            source: .test,
+            mode: .background
+        ))
+
+        XCTAssertEqual(plugin.presetStore.activePresetID, FanPresetBuiltInID.auto)
+        XCTAssertTrue(writer.appliedStrategies.isEmpty)
+        let result = await handle.result()
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(plugin.presetStore.activePresetID, FanPresetBuiltInID.fullSpeed)
+        XCTAssertEqual(writer.appliedStrategies, [.fullSpeed])
+    }
+
+    func testCanonicalPresetWriteFailureRestoresPreviousHardwareAndPreferences() async throws {
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+        plugin.handleAction(.setSelection(
+            controlID: "fan-preset-list",
+            optionID: FanPresetBuiltInID.fullSpeed
+        ))
+        writer.queuedWriteErrors = [.writeFailed("target failed"), nil]
+        let automatic = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.parameters["preset"] == .string(FanPresetBuiltInID.auto)
+        })?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: automatic,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected preset failure, got \(result)")
+        }
+        XCTAssertEqual(plugin.presetStore.activePresetID, FanPresetBuiltInID.fullSpeed)
+        XCTAssertEqual(writer.appliedStrategies.suffix(2), [.auto, .fullSpeed])
+    }
+
+    func testCanonicalPresetPersistenceFailureRestoresPreviousHardwareAndPreferences() async throws {
+        let storage = FanControlMemoryStorage()
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(storage: storage, writer: writer)
+        plugin.handleAction(.setSelection(
+            controlID: "fan-preset-list",
+            optionID: FanPresetBuiltInID.fullSpeed
+        ))
+        storage.blockedSetKeys = ["active-preset-id"]
+        let automatic = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.parameters["preset"] == .string(FanPresetBuiltInID.auto)
+        })?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: automatic,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected persistence failure, got \(result)")
+        }
+        XCTAssertEqual(plugin.presetStore.activePresetID, FanPresetBuiltInID.fullSpeed)
+        XCTAssertEqual(writer.appliedStrategies.suffix(2), [.auto, .fullSpeed])
+        storage.blockedSetKeys = []
+        XCTAssertEqual(
+            makePlugin(storage: storage).presetStore.activePresetID,
+            FanPresetBuiltInID.fullSpeed
+        )
+    }
+
+    func testDeletedCustomPresetActionBecomesUnavailable() throws {
+        let plugin = makePlugin()
+        let custom = plugin.presetStore.addCustomPreset()!
+        let reference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.title.contains(custom.name) })?.reference
+        )
+
+        plugin.presetStore.deleteCustomPreset(id: custom.id)
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+    }
+
+    func testPresetCatalogChangesNotifyTheHost() {
+        let plugin = makePlugin()
+        var notifications = 0
+        plugin.onStateChange = { notifications += 1 }
+
+        let preset = plugin.presetStore.addCustomPreset()!
+        plugin.presetStore.renameCustomPreset(id: preset.id, newName: "Quiet")
+        plugin.presetStore.deleteCustomPreset(id: preset.id)
+
+        XCTAssertEqual(notifications, 3)
+    }
+
+    func testPresetMutationsPublishOnlyAfterDurablePersistence() throws {
+        let storage = FanControlMemoryStorage()
+        let plugin = makePlugin(storage: storage)
+        let preset = try XCTUnwrap(plugin.presetStore.addCustomPreset())
+        XCTAssertTrue(plugin.presetStore.setActivePreset(id: preset.id))
+        var notifications = 0
+        plugin.onStateChange = { notifications += 1 }
+        storage.blockedSetKeys = ["custom-presets"]
+
+        XCTAssertFalse(plugin.presetStore.renameCustomPreset(id: preset.id, newName: "Quiet"))
+        XCTAssertFalse(plugin.presetStore.deleteCustomPreset(id: preset.id))
+
+        XCTAssertEqual(plugin.presetStore.customPresets.first?.name, preset.name)
+        XCTAssertEqual(plugin.presetStore.activePresetID, preset.id)
+        XCTAssertEqual(notifications, 0)
+        storage.blockedSetKeys = []
+        let reloaded = makePlugin(storage: storage)
+        XCTAssertEqual(reloaded.presetStore.customPresets.first?.name, preset.name)
+        XCTAssertEqual(reloaded.presetStore.activePresetID, preset.id)
+    }
+
+    func testActivePresetDeletionPersistenceFailureDoesNotApplyAutomaticPolicy() throws {
+        let storage = FanControlMemoryStorage()
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(storage: storage, writer: writer)
+        let preset = try XCTUnwrap(plugin.presetStore.addCustomPreset())
+        XCTAssertTrue(plugin.presetStore.setActivePreset(id: preset.id))
+        storage.blockedSetKeys = ["active-preset-id"]
+        let appliedCount = writer.appliedStrategies.count
+
+        plugin.handleAction(.invokeAction(controlID: "fan-delete-preset"))
+
+        XCTAssertEqual(plugin.presetStore.activePresetID, preset.id)
+        XCTAssertEqual(writer.appliedStrategies.count, appliedCount)
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+        storage.blockedSetKeys = []
+        let reloaded = makePlugin(storage: storage)
+        XCTAssertEqual(reloaded.presetStore.activePresetID, preset.id)
+        XCTAssertEqual(reloaded.presetStore.customPresets.map(\.id), [preset.id])
+    }
+
+    func testPortablePreferencesPreserveCustomPresetActionIdentifiers() throws {
+        let source = makePlugin()
+        let preset = source.presetStore.addCustomPreset()!
+        source.presetStore.renameCustomPreset(id: preset.id, newName: "Quiet")
+        source.presetStore.updateCustomPresetRPM(id: preset.id, rpm: 3_800)
+        source.presetStore.setActivePreset(id: preset.id)
+        let reference = try XCTUnwrap(
+            source.actionCatalogEntries.first(where: { $0.reference.parameters["preset"] == .string(preset.id) })?.reference
+        )
+        let backup = try XCTUnwrap(source.makePortablePreferencesBackup())
+
+        let restored = makePlugin()
+        restored.restorePortablePreferences(from: backup)
+
+        XCTAssertEqual(restored.presetStore.activePresetID, preset.id)
+        XCTAssertTrue(restored.actionCatalogEntries.contains(where: { $0.reference == reference }))
+        XCTAssertTrue(restored.actionAvailability(for: reference).isAvailable)
+    }
+
+    func testPortablePreferencesRoundTripAtUserInputLimits() throws {
+        let source = makePlugin()
+        for _ in 0..<100 {
+            XCTAssertNotNil(source.presetStore.addCustomPreset())
+        }
+        XCTAssertFalse(source.presetStore.canAddPreset)
+        XCTAssertNil(source.presetStore.addCustomPreset())
+        let first = try XCTUnwrap(source.presetStore.customPresets.first)
+        source.presetStore.renameCustomPreset(
+            id: first.id,
+            newName: String(repeating: "A", count: 150)
+        )
+        XCTAssertEqual(source.presetStore.customPresets.first?.name.count, 100)
+
+        let backup = try XCTUnwrap(source.makePortablePreferencesBackup())
+        let restored = makePlugin()
+        restored.restorePortablePreferences(from: backup)
+
+        XCTAssertEqual(restored.presetStore.customPresets.count, 100)
+        XCTAssertEqual(restored.presetStore.customPresets.first?.name.count, 100)
+    }
+
+    func testActiveRestoreAppliesManualAndAutomaticStrategiesToHardware() throws {
+        let manualSource = makePlugin()
+        manualSource.presetStore.setActivePreset(id: FanPresetBuiltInID.fullSpeed)
+        let manualBackup = try XCTUnwrap(manualSource.makePortablePreferencesBackup())
+        let autoBackup = try XCTUnwrap(makePlugin().makePortablePreferencesBackup())
+
+        let writer = MockSMCWriter()
+        let restored = makePlugin(writer: writer)
+        restored.activate(context: PluginRuntimeContext(pluginID: "fan-control"))
+
+        XCTAssertTrue(restored.restorePortablePreferencesReportingResult(from: manualBackup))
+        XCTAssertEqual(writer.appliedStrategies.last, .fullSpeed)
+        XCTAssertTrue(restored.restorePortablePreferencesReportingResult(from: autoBackup))
+        XCTAssertEqual(writer.appliedStrategies.last, .auto)
+
+        restored.deactivate(reason: .hostShutdown)
+    }
+
+    func testFailedActiveRestoreRollsBackPreferencesAndHardwareStrategy() throws {
+        let autoBackup = try XCTUnwrap(makePlugin().makePortablePreferencesBackup())
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "fan-control"))
+        plugin.handleAction(.setSelection(
+            controlID: "fan-preset-list",
+            optionID: FanPresetBuiltInID.fullSpeed
+        ))
+        writer.queuedWriteErrors = [.writeFailed("restore failed"), nil]
+
+        XCTAssertFalse(plugin.restorePortablePreferencesReportingResult(from: autoBackup))
+        XCTAssertEqual(plugin.presetStore.activePresetID, FanPresetBuiltInID.fullSpeed)
+        XCTAssertEqual(writer.appliedStrategies.suffix(2), [.auto, .fullSpeed])
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+
+        plugin.deactivate(reason: .hostShutdown)
+    }
+
+    func testPortableRestoreWriteFailureRollsBackEveryStoredValue() throws {
+        let source = makePlugin()
+        let preset = try XCTUnwrap(source.presetStore.addCustomPreset())
+        source.presetStore.setActivePreset(id: preset.id)
+        let backup = try XCTUnwrap(source.makePortablePreferencesBackup())
+        let storage = FanControlMemoryStorage()
+        let destination = makePlugin(storage: storage)
+        destination.presetStore.setActivePreset(id: FanPresetBuiltInID.fullSpeed)
+        storage.blockedSetKeys = ["active-preset-id"]
+
+        XCTAssertFalse(destination.restorePortablePreferencesReportingResult(from: backup))
+        storage.blockedSetKeys = []
+        let reloaded = makePlugin(storage: storage)
+        XCTAssertTrue(reloaded.presetStore.customPresets.isEmpty)
+        XCTAssertEqual(reloaded.presetStore.activePresetID, FanPresetBuiltInID.fullSpeed)
+    }
+
+    func testPortableRestoreRejectsWrongTypedRawPresetWithoutRemovingIt() throws {
+        let source = makePlugin()
+        _ = try XCTUnwrap(source.presetStore.addCustomPreset())
+        let backup = try XCTUnwrap(source.makePortablePreferencesBackup())
+        let storage = FanControlMemoryStorage()
+        storage.setRawValue("sentinel", forKey: "custom-presets")
+        let destination = makePlugin(storage: storage)
+
+        XCTAssertFalse(destination.restorePortablePreferencesReportingResult(from: backup))
+        XCTAssertEqual(storage.rawValue(forKey: "custom-presets") as? String, "sentinel")
+    }
+
+    func testCustomPresetActionsDependOnPortablePreferencesButBuiltInsDoNot() throws {
+        let plugin = makePlugin()
+        let custom = plugin.presetStore.addCustomPreset()!
+        let builtInReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.parameters["preset"] == .string(FanPresetBuiltInID.auto)
+            })?.reference
+        )
+        let customReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.parameters["preset"] == .string(custom.id)
+            })?.reference
+        )
+
+        XCTAssertEqual(plugin.backupDisposition(for: builtInReference), .selfContained)
+        XCTAssertEqual(
+            plugin.backupDisposition(for: customReference),
+            .requiresPluginPreferences
+        )
+        let backup = try XCTUnwrap(plugin.makePortablePreferencesBackup())
+        XCTAssertEqual(
+            plugin.actionReferences(inPortablePreferences: backup),
+            [customReference]
+        )
+        XCTAssertNil(plugin.actionReferences(inPortablePreferences: Data("invalid".utf8)))
     }
 
     func testMonitoringOnlyPublishesMeaningfulSnapshotChanges() async throws {
@@ -220,13 +517,17 @@ final class FanControlPluginTests: XCTestCase {
     }
 
     private func makePlugin(
+        storage: FanControlMemoryStorage? = nil,
         reader: MockSMCReader? = nil,
         writer: MockSMCWriter? = nil,
         monitoringActiveInterval: Duration = .seconds(2),
         monitoringIdleInterval: Duration = .seconds(10)
     ) -> FanControlPlugin {
         FanControlPlugin(
-            context: PluginRuntimeContext(pluginID: "fan-control", storage: FanControlMemoryStorage()),
+            context: PluginRuntimeContext(
+                pluginID: "fan-control",
+                storage: storage ?? FanControlMemoryStorage()
+            ),
             smcReader: reader ?? MockSMCReader(),
             smcWriter: writer ?? MockSMCWriter(),
             monitoringActiveInterval: monitoringActiveInterval,
@@ -262,10 +563,14 @@ private final class MockSMCWriter: FanControlSMCWriting {
     var appliedStrategy: FanControlStrategy?
     var appliedStrategies: [FanControlStrategy] = []
     var writeError: FanWriteError?
+    var queuedWriteErrors: [FanWriteError?] = []
 
     func apply(strategy: FanControlStrategy, snapshot _: FanSnapshot) -> FanWriteError? {
         appliedStrategy = strategy
         appliedStrategies.append(strategy)
+        if !queuedWriteErrors.isEmpty {
+            return queuedWriteErrors.removeFirst()
+        }
         return writeError
     }
 }
@@ -273,6 +578,7 @@ private final class MockSMCWriter: FanControlSMCWriting {
 @MainActor
 private final class FanControlMemoryStorage: PluginStorage {
     private var values: [String: Any] = [:]
+    var blockedSetKeys: Set<String> = []
 
     func object(forKey key: String) -> Any? { values[key] }
     func data(forKey key: String) -> Data? { values[key] as? Data }
@@ -280,11 +586,22 @@ private final class FanControlMemoryStorage: PluginStorage {
     func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
     func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
-    func set(_ value: Any?, forKey key: String) { values[key] = value }
+    func set(_ value: Any?, forKey key: String) {
+        guard !blockedSetKeys.contains(key) else { return }
+        values[key] = value
+    }
     func removeObject(forKey key: String) { values.removeValue(forKey: key) }
     func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
         guard values[key] == nil, let value = values[legacyKey] else { return }
         values[key] = value
         values.removeValue(forKey: legacyKey)
+    }
+
+    func setRawValue(_ value: Any, forKey key: String) {
+        values[key] = value
+    }
+
+    func rawValue(forKey key: String) -> Any? {
+        values[key]
     }
 }

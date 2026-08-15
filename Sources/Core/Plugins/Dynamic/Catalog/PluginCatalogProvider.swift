@@ -31,9 +31,22 @@ struct PluginCatalogProviderConfiguration {
     // app releases continue to receive the catalog format they understand.
     static let legacyProductionCatalogURL = URL(string: "https://mactools.ggbond.app/plugins/catalog.json")!
 
-    static func productionCatalogURL(for pluginKitVersion: Int) -> URL {
+    static func productionCatalogURL(
+        for pluginKitVersion: Int,
+        hostVersion: String = AppMetadata.shortVersion ?? "0"
+    ) -> URL {
         if pluginKitVersion == 2 {
             return legacyProductionCatalogURL
+        }
+
+        // MacTools 1.1.6 shipped a verifier that rejects an entire catalog when
+        // any entry requires a newer host. Keep that client on its immutable v4
+        // catalog and publish mixed 1.2+ entries at a host-compatible endpoint.
+        if pluginKitVersion == 4,
+           PluginVersionComparator.isVersion(hostVersion, atLeast: "1.2.0") {
+            return URL(
+                string: "https://mactools.ggbond.app/plugins/v4/host-1.2/catalog.json"
+            )!
         }
 
         return URL(string: "https://mactools.ggbond.app/plugins/v\(pluginKitVersion)/catalog.json")!

@@ -115,16 +115,19 @@ final class ApplicationActivityObserverTests: XCTestCase {
         XCTAssertEqual(observer.state, .displayAsleep)
     }
 
-    func testWillSleepTakesEffectBeforeNotificationReturns() {
+    func testWillSleepPublishesSystemSleepingState() async {
         let center = NotificationCenter()
         let observer = SystemApplicationActivityObserver(
             notificationCenter: center,
             initialSignals: .interactive
         )
 
-        center.post(name: NSWorkspace.willSleepNotification, object: nil)
-
-        XCTAssertEqual(observer.state, .systemSleeping)
+        await post(
+            NSWorkspace.willSleepNotification,
+            to: center,
+            observer: observer,
+            expecting: .systemSleeping
+        )
     }
 
     func testRuntimeScreenLockPausesAndUnlockResumesBackgroundWork() async {

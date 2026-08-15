@@ -4,6 +4,8 @@ import SwiftUI
 import MacToolsPluginKit
 
 enum FeatureSettingsPane: Hashable {
+    case actionsAndShortcuts
+    case automation
     case dashboardLayout
     case featurePanelLayout
     case marketplace
@@ -17,6 +19,8 @@ enum SettingsPresentationRequest: Equatable {
     case appUpdate
     case pluginMarketplace
     case pluginConfiguration(String)
+    case automationWorkflow(UUID)
+    case feature(FeatureSettingsPane)
 }
 
 enum AppPresentationRequest: Equatable {
@@ -48,6 +52,19 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
             return AppL10n.settings("shortcuts.toggleDashboard.title", defaultValue: "切换仪表盘")
         case .toggleFeaturePanel:
             return AppL10n.settings("shortcuts.toggleFeaturePanel.title", defaultValue: "切换功能面板")
+        }
+    }
+
+    var compactTitle: String {
+        switch self {
+        case .openSettings:
+            return AppL10n.settings("settings.window.title", defaultValue: "设置")
+        case .openCommandPalette:
+            return title
+        case .toggleDashboard:
+            return AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘")
+        case .toggleFeaturePanel:
+            return AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板")
         }
     }
 
@@ -99,6 +116,26 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         }
     }
 
+    var settingsPresentationRequest: SettingsPresentationRequest {
+        switch self {
+        case .openSettings, .openCommandPalette:
+            .general
+        case .toggleDashboard:
+            .feature(.dashboardLayout)
+        case .toggleFeaturePanel:
+            .feature(.featurePanelLayout)
+        }
+    }
+
+    var isCommandPaletteSearchEligible: Bool {
+        switch self {
+        case .openSettings, .openCommandPalette:
+            false
+        case .toggleDashboard, .toggleFeaturePanel:
+            true
+        }
+    }
+
 }
 
 private extension FeatureSettingsPane {
@@ -115,6 +152,8 @@ private extension FeatureSettingsPane {
 
     var landingPage: PluginSettingsLandingPage? {
         switch self {
+        case .actionsAndShortcuts, .automation:
+            nil
         case .dashboardLayout:
             .dashboard
         case .featurePanelLayout:
@@ -163,7 +202,9 @@ struct PluginSurfaceLayoutItem: Identifiable {
 }
 
 struct AppShortcutSettingsItem: Identifiable, Equatable {
+    let id: String
     let action: AppShortcutAction
+    let assignmentID: UUID?
     let title: String
     let description: String
     let systemImage: String
@@ -171,9 +212,11 @@ struct AppShortcutSettingsItem: Identifiable, Equatable {
     let canClear: Bool
     let errorMessage: String?
 
-    var id: String {
-        action.rawValue
-    }
+}
+
+private struct ShortcutMutationMetadata {
+    let shortcutID: String
+    let assignmentID: UUID?
 }
 
 struct PluginProvidedSettingsSearchItem: Identifiable, Hashable {
@@ -337,6 +380,14 @@ final class PluginHost: ObservableObject {
         let plugin: any MacToolsPlugin
     }
 
+    private struct PreferencesActionRestoreContext {
+        let selection: PreferencesBackupSelection
+        let payloadDefinedActionReferencesByPluginID: [String: Set<ActionReference>]
+        let importedWorkflowIDs: Set<UUID>
+        let restorableWorkflowIDs: Set<UUID>
+        let resolvableWorkflowIDs: Set<UUID>
+    }
+
     private let builtInPlugins: [any MacToolsPlugin]
     private let shortcutStore: ShortcutStore
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
@@ -349,6 +400,21 @@ final class PluginHost: ObservableObject {
     private let pluginStateChangeRebuildDelay: Duration
     let dynamicPluginManager: DynamicPluginManager?
     private let pluginCatalogManager: PluginCatalogManager?
+    let actionRegistry: ActionRegistry
+    let actionExecutor: ActionExecutor
+    let actionConfirmationService: ActionConfirmationRouter
+    private let actionShortcutStore: ActionShortcutAssignmentStore
+    let shortcutAssignmentService: ShortcutAssignmentService
+    private let actionPresetStore: ActionInvocationPresetStore
+    let actionRunLinkService: ActionRunLinkService
+    let automationController: AutomationController
+    private var actionGridPresentationHandler: ((
+        [ActionGridPresentationEntry],
+        ActionExecutionSource
+    ) -> Bool)?
+    private var activeActionShortcutReferences: Set<ActionReference> = []
+    private var preferencesBackupExportSelection: PreferencesBackupSelection?
+    private var preferencesBackupRestoreContext: PreferencesActionRestoreContext?
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
@@ -393,9 +459,19 @@ final class PluginHost: ObservableObject {
     @Published private(set) var pluginSettingsItems: [PluginSettingsPageItem] = []
     @Published private(set) var permissionCards: [PluginPermissionCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
+    private var shortcutMutationMetadataByRowID: [String: ShortcutMutationMetadata] = [:]
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
+    @Published private(set) var actionShortcutItems: [ActionShortcutSettingsItem] = []
+    @Published private(set) var actionShortcutCatalogItems: [ActionShortcutCatalogItem] = []
+
+    var actionShortcutLoadError: String? {
+        actionShortcutStore.loadError
+    }
     @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
     @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
+    @Published private(set) var actionCatalogEntries: [ActionCatalogEntry] = []
+    @Published private(set) var actionRegistryIssues: [ActionRegistryIssue] = []
+    @Published private(set) var shortcutBindingRevision: UInt64 = 0
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
@@ -452,7 +528,8 @@ final class PluginHost: ObservableObject {
         applicationActivityObserver: (any ApplicationActivityObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180),
         pluginStateChangeRebuildDelay: Duration = .milliseconds(80),
-        loadDynamicPluginsOnInit: Bool = true
+        loadDynamicPluginsOnInit: Bool = true,
+        actionURLScheme: String = RightClickURLRouter.bundleURLSchemes().sorted().first ?? "mactools"
     ) {
         self.builtInPlugins = plugins.sorted {
             if $0.metadata.order == $1.metadata.order {
@@ -473,6 +550,53 @@ final class PluginHost: ObservableObject {
         self.pluginStateChangeRebuildDelay = pluginStateChangeRebuildDelay
         self.dynamicPluginManager = dynamicPluginManager
         self.pluginCatalogManager = pluginCatalogManager
+        let actionRegistry = ActionRegistry()
+        let actionShortcutStore = ActionShortcutAssignmentStore(
+            userDefaults: shortcutStore.userDefaults
+        )
+        let actionPresetStore = ActionInvocationPresetStore(
+            userDefaults: shortcutStore.userDefaults
+        )
+        let actionConfirmationService = ActionConfirmationRouter()
+        let actionExecutor = ActionExecutor(
+            registry: actionRegistry,
+            confirmationService: actionConfirmationService
+        )
+        self.actionRegistry = actionRegistry
+        self.actionConfirmationService = actionConfirmationService
+        self.actionExecutor = actionExecutor
+        self.actionShortcutStore = actionShortcutStore
+        self.actionPresetStore = actionPresetStore
+        self.shortcutAssignmentService = ShortcutAssignmentService(
+            registry: actionRegistry,
+            store: actionShortcutStore,
+            shortcutManager: globalShortcutManager
+        )
+        self.actionRunLinkService = ActionRunLinkService(
+            registry: actionRegistry,
+            presetStore: actionPresetStore,
+            scheme: actionURLScheme
+        )
+        let workflowStore = WorkflowStore(userDefaults: shortcutStore.userDefaults)
+        self.automationController = AutomationController(
+            store: workflowStore,
+            ruleStore: AutomationRuleStore(userDefaults: shortcutStore.userDefaults),
+            registry: actionRegistry,
+            executor: actionExecutor,
+            systemServices: SystemAutomationServices.make()
+        )
+
+        self.automationController.onCatalogChange = { [weak self] in
+            self?.rebuildDerivedState()
+        }
+        self.automationController.actionReferencePortability = { [weak self] reference in
+            self?.leafActionReferenceBackupPortability(
+                reference,
+                // A standalone workflow file cannot carry plugin settings. Actions whose
+                // stable identity depends on those settings must use a full preferences backup.
+                selection: .all(pluginPreferenceIDs: [])
+            ) ?? .unknown
+        }
 
         configureCallbacks(for: self.builtInPlugins)
 
@@ -520,6 +644,7 @@ final class PluginHost: ObservableObject {
         }
 
         self.displayConfigurationObserver?.onConfigurationChange = { [weak self] in
+            PluginPresentationSafety.prepareForWindowOrdering()
             self?.scheduleDisplayTopologyRefresh()
         }
 
@@ -569,13 +694,77 @@ final class PluginHost: ObservableObject {
             }
         }
 
-        syncGlobalShortcuts()
+        actionRegistry.invalidateAvailability()
         rebuildDerivedState()
+        syncGlobalShortcuts()
     }
 
-    func makePreferencesBackup() -> PreferencesBackup {
-        let shortcutDescriptors = shortcutDescriptors()
+    /// Refreshes only providers whose live presentation is about to be shown.
+    /// Stateful action surfaces use this to avoid stale external system state
+    /// without turning Action Grid presentation into a full plugin refresh.
+    func refreshActionPresentations(providerIDs: Set<String>) {
+        guard !providerIDs.isEmpty else { return }
 
+        handlePluginAction(rebuildAfterAction: false) {
+            for plugin in activePlugins where providerIDs.contains(plugin.metadata.id) {
+                guardPluginCall(plugin, operation: "refresh action presentation") {
+                    plugin.refresh()
+                }
+            }
+        }
+
+        actionRegistry.invalidateAvailability()
+        rebuildDerivedState(dirtyPluginIDs: providerIDs)
+    }
+
+    func makePreferencesBackup(
+        selection requestedSelection: PreferencesBackupSelection? = nil
+    ) -> PreferencesBackup {
+        let shortcutDescriptors = shortcutDescriptors()
+        var shortcutCustomizations = shortcutStore.customizations(
+            for: shortcutDescriptors.map(\.itemID)
+        )
+        for action in AppShortcutAction.allCases {
+            if let binding = resolvedAppShortcutBinding(for: action) {
+                shortcutCustomizations[action.rawValue] = .custom(binding)
+            }
+        }
+
+        let proposedSelection = requestedSelection ?? allPortablePreferencesSelection
+        preferencesBackupExportSelection = proposedSelection
+        defer { preferencesBackupExportSelection = nil }
+        let proposedPortablePreferences = portablePluginPreferences()
+        let selection = requestedSelection
+            ?? .all(pluginPreferenceIDs: Set(proposedPortablePreferences.keys))
+        var dependencySelection = selection
+        dependencySelection.pluginPreferenceIDs.formIntersection(proposedPortablePreferences.keys)
+        preferencesBackupExportSelection = dependencySelection
+
+        let automationSnapshot = automationController.preferencesBackupSnapshot()
+        let portableWorkflowIDs = WorkflowPortabilityAnalysis.portableWorkflowIDs(
+            in: automationSnapshot.workflows,
+            referencePortability: { [weak self] reference in
+                self?.leafActionReferenceBackupPortability(
+                    reference,
+                    selection: dependencySelection
+                ) ?? .unknown
+            }
+        )
+        let portableWorkflows = automationSnapshot.workflows.filter {
+            portableWorkflowIDs.contains($0.id)
+        }
+        let portablePreferences = portablePluginPreferences()
+        let selectedPortablePreferences = portablePreferences.filter {
+            selection.pluginPreferenceIDs.contains($0.key)
+        }
+        let referenceIsPortable: (ActionReference) -> Bool = { [weak self] reference in
+            self?.actionReferenceBackupPortability(
+                reference,
+                workflows: automationSnapshot.workflows,
+                portableWorkflowIDs: portableWorkflowIDs,
+                selection: dependencySelection
+            ) == .portable
+        }
         return PreferencesBackup(
             application: preferencesBackupStore.applicationPreferences(),
             pluginDisplay: pluginDisplayPreferencesStore.backupSnapshot(
@@ -583,30 +772,94 @@ final class PluginHost: ObservableObject {
                 dashboardDefaultPluginIDs: defaultPluginIDs(for: .dashboard),
                 featurePanelDefaultPluginIDs: defaultPluginIDs(for: .featurePanel)
             ),
-            shortcutCustomizations: shortcutStore.customizations(
-                for: AppShortcutAction.allCases.map(\.rawValue) + shortcutDescriptors.map(\.itemID)
+            shortcutCustomizations: selection.includesShortcuts ? shortcutCustomizations : [:],
+            actionShortcutAssignments: selection.includesShortcuts
+                ? shortcutAssignmentService.assignments.filter {
+                    referenceIsPortable($0.reference)
+                }
+                : [],
+            pluginPreferences: selectedPortablePreferences,
+            pluginPreferenceActionReferences: portablePreferenceActionReferences(
+                in: selectedPortablePreferences
             ),
-            pluginPreferences: portablePluginPreferences()
+            actionInvocationPresets: selection.includesRunLinks
+                ? actionPresetStore.presets().compactMap { preset in
+                    let migratedReference = migratedActionReferenceForRestore(preset.reference)
+                    guard referenceIsPortable(migratedReference) else {
+                        return nil
+                    }
+                    return ActionInvocationPreset(
+                        id: preset.id,
+                        reference: migratedReference,
+                        createdAt: preset.createdAt,
+                        formatVersion: preset.formatVersion
+                    )
+                }
+                : [],
+            workflows: selection.includesAutomation ? portableWorkflows : [],
+            automationRules: selection.includesAutomation
+                ? automationSnapshot.rules.filter {
+                    portableWorkflowIDs.contains($0.workflowID)
+                        && AutomationRulePortabilityAnalysis.isPortable($0)
+                }
+                : [],
+            selection: selection
         )
     }
 
-    func preferencesImportPreview(for backup: PreferencesBackup) throws -> PreferencesImportPreview {
-        try PreferencesImportPreview.make(
+    var deviceLocalAutomationRuleCount: Int {
+        automationController.rules.filter {
+            AutomationRulePortabilityAnalysis.containsDeviceLocalReference($0)
+        }.count
+    }
+
+    func preferencesImportPreview(
+        for backup: PreferencesBackup,
+        selection: PreferencesBackupSelection? = nil
+    ) throws -> PreferencesImportPreview {
+        let availableSelection = backup.effectiveSelection
+        let effectiveSelection = (selection ?? availableSelection).intersecting(availableSelection)
+        let restoreContext = makePreferencesActionRestoreContext(
+            backup: backup,
+            selection: effectiveSelection
+        )
+        let embeddedActionReferences = portablePreferenceActionReferences(
+            in: backup,
+            selection: effectiveSelection
+        )
+        return try PreferencesImportPreview.make(
             backup: backup,
             availablePluginIDs: Set(defaultPluginIDs),
             availableShortcutIDs: Set(
                 AppShortcutAction.allCases.map(\.rawValue) + shortcutDescriptors().map(\.itemID)
             ),
+            availableActionReferences: Set(actionCatalogEntries.map(\.reference)),
+            additionalActionReferences: embeddedActionReferences,
+            actionReferenceCanResolve: { [weak self] reference in
+                self?.actionReferenceCanResolve(
+                    reference,
+                    context: restoreContext
+                ) ?? false
+            },
+            actionReferenceIsRestorable: { [weak self] reference in
+                guard let self else { return false }
+                return self.actionReferenceRestorePortability(
+                    reference,
+                    context: restoreContext
+                ) != .knownNonPortable
+            },
             pluginManagementItems: pluginManagementItems,
+            selection: effectiveSelection,
             applicationPreferencesAreValid: preferencesBackupStore.validates
         )
     }
 
     func importPreferences(
         _ backup: PreferencesBackup,
-        installingMissingPluginIDs requestedPluginIDs: Set<String>
+        installingMissingPluginIDs requestedPluginIDs: Set<String>,
+        selection: PreferencesBackupSelection? = nil
     ) async throws -> PreferencesImportResult {
-        let preview = try preferencesImportPreview(for: backup)
+        let preview = try preferencesImportPreview(for: backup, selection: selection)
         let installablePluginIDs = Set(preview.installablePlugins.map(\.id))
         var installedPluginIDs: [String] = []
         var pluginInstallationFailures: [String: String] = [:]
@@ -624,7 +877,7 @@ final class PluginHost: ObservableObject {
             loadDynamicPluginsIfNeeded()
         }
 
-        var result = try importPreferences(backup)
+        var result = try importPreferences(backup, selection: selection)
         result = PreferencesImportResult(
             installedPluginIDs: installedPluginIDs,
             pluginInstallationFailures: pluginInstallationFailures,
@@ -633,40 +886,226 @@ final class PluginHost: ObservableObject {
         return result
     }
 
-    func importPreferences(_ backup: PreferencesBackup) throws -> PreferencesImportResult {
-        _ = try preferencesImportPreview(for: backup)
-        preferencesBackupStore.apply(backup.application)
+    func importPreferences(
+        _ backup: PreferencesBackup,
+        selection requestedSelection: PreferencesBackupSelection? = nil
+    ) throws -> PreferencesImportResult {
+        let availableSelection = backup.effectiveSelection
+        let selection = (requestedSelection ?? availableSelection).intersecting(availableSelection)
+        _ = try preferencesImportPreview(for: backup, selection: selection)
+        var restoreContext = makePreferencesActionRestoreContext(
+            backup: backup,
+            selection: selection
+        )
+        let selectedPluginPreferences = backup.pluginPreferences.filter {
+            selection.pluginPreferenceIDs.contains($0.key)
+        }
+        preferencesBackupRestoreContext = restoreContext
+        defer {
+            preferencesBackupRestoreContext = nil
+        }
+        if selection.includesApplicationPreferences {
+            preferencesBackupStore.apply(backup.application)
+        }
 
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            backup.pluginDisplay.orderedPluginIDs,
-            defaultPluginIDs: defaultPluginIDs
-        )
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            backup.pluginDisplay.dashboardOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
-            for: .dashboard,
-            defaultPluginIDs: defaultPluginIDs(for: .dashboard)
-        )
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            backup.pluginDisplay.featurePanelOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
-            for: .featurePanel,
-            defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
-        )
-        // A legacy backup has one global checkbox. Map it to both supported
-        // surfaces; current backups restore the two independent values.
-        pluginDisplayPreferencesStore.setHiddenPluginIDs(
-            Set(backup.pluginDisplay.dashboardHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
-            for: .dashboard,
-            defaultPluginIDs: defaultPluginIDs(for: .dashboard)
-        )
-        pluginDisplayPreferencesStore.setHiddenPluginIDs(
-            Set(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
-            for: .featurePanel,
-            defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
-        )
+        if selection.includesPluginLayout {
+            pluginDisplayPreferencesStore.setOrderedPluginIDs(
+                backup.pluginDisplay.orderedPluginIDs,
+                defaultPluginIDs: defaultPluginIDs
+            )
+            pluginDisplayPreferencesStore.setOrderedPluginIDs(
+                backup.pluginDisplay.dashboardOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
+                for: .dashboard,
+                defaultPluginIDs: defaultPluginIDs(for: .dashboard)
+            )
+            pluginDisplayPreferencesStore.setOrderedPluginIDs(
+                backup.pluginDisplay.featurePanelOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
+                for: .featurePanel,
+                defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
+            )
+            // A legacy backup has one global checkbox. Map it to both supported
+            // surfaces; current backups restore the two independent values.
+            pluginDisplayPreferencesStore.setHiddenPluginIDs(
+                Set(backup.pluginDisplay.dashboardHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
+                for: .dashboard,
+                defaultPluginIDs: defaultPluginIDs(for: .dashboard)
+            )
+            pluginDisplayPreferencesStore.setHiddenPluginIDs(
+                Set(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
+                for: .featurePanel,
+                defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
+            )
+        }
 
-        restorePortablePluginPreferences(backup.pluginPreferences)
-        let shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)
-
+        let actionSurfacePluginIDs = Set(activePlugins.compactMap { plugin in
+            plugin is any ActionGridHostContextConsuming
+                || plugin is any TrackpadActionHostContextConsuming
+                ? plugin.metadata.id
+                : nil
+        })
+        var shortcutErrors: [String: String] = [:]
+        let providerPreferences = selectedPluginPreferences.filter {
+            !actionSurfacePluginIDs.contains($0.key)
+        }
+        let restoredProviderIDs = restorePortablePluginPreferences(providerPreferences)
+        for pluginID in providerPreferences.keys where !restoredProviderIDs.contains(pluginID) {
+            shortcutErrors["plugin-preferences.\(pluginID)"] = AppL10n.preferencesBackupFormat(
+                "preferencesBackup.import.pluginRestoreFailed",
+                defaultValue: "无法恢复“%@”的插件设置。",
+                corePlugin(for: pluginID)?.metadata.title ?? pluginID
+            )
+        }
+        // Only a successfully validated and persisted payload can authorize actions that depend
+        // on that payload. This closes the gap between preflight decoding and stateful restore.
+        restoreContext = makePreferencesActionRestoreContext(
+            backup: backup,
+            selection: selection,
+            restoredPluginPreferenceIDs: restoredProviderIDs
+        )
+        preferencesBackupRestoreContext = restoreContext
+        // Portable plugin settings can create action catalog identities (for example,
+        // restored Fan Control preset UUIDs). Rebuild before dependent references.
+        rebuildDerivedState()
+        // Workflows are providers for nested workflow actions, so restore them before surfaces,
+        // shortcuts, and Run Links that may depend on those identities.
+        if selection.includesAutomation,
+           let workflows = backup.workflows,
+           let rules = backup.automationRules {
+            let restorableIDs = restoreContext.restorableWorkflowIDs
+            let restored = automationController.restorePreferences(
+                workflows: workflows.compactMap { workflow in
+                    restorableIDs.contains(workflow.id)
+                        ? migratedWorkflowForRestore(workflow)
+                        : nil
+                },
+                rules: rules.filter {
+                    restorableIDs.contains($0.workflowID)
+                        && AutomationRulePortabilityAnalysis.isPortable($0)
+                }
+            )
+            if !restored {
+                shortcutErrors["automation"] = FeatureL10n.string("无法保存工作流。")
+                restoreContext = PreferencesActionRestoreContext(
+                    selection: restoreContext.selection,
+                    payloadDefinedActionReferencesByPluginID:
+                        restoreContext.payloadDefinedActionReferencesByPluginID,
+                    importedWorkflowIDs: restoreContext.importedWorkflowIDs,
+                    restorableWorkflowIDs: [],
+                    resolvableWorkflowIDs: []
+                )
+                preferencesBackupRestoreContext = restoreContext
+            }
+        }
+        // Action-surface layouts are restored only after their referenced providers and
+        // workflow dependency graph are known, so a selective import cannot retain a
+        // dangling Grid or Trackpad action.
+        let surfacePreferences = selectedPluginPreferences.filter {
+            actionSurfacePluginIDs.contains($0.key)
+        }
+        let restoredSurfaceIDs = restorePortablePluginPreferences(surfacePreferences)
+        for pluginID in surfacePreferences.keys where !restoredSurfaceIDs.contains(pluginID) {
+            shortcutErrors["plugin-preferences.\(pluginID)"] = AppL10n.preferencesBackupFormat(
+                "preferencesBackup.import.pluginRestoreFailed",
+                defaultValue: "无法恢复“%@”的插件设置。",
+                corePlugin(for: pluginID)?.metadata.title ?? pluginID
+            )
+        }
+        if selection.includesShortcuts {
+            if backup.actionShortcutAssignmentsWereEncoded {
+                let descriptors = shortcutDescriptors()
+                let appCustomizations = Dictionary(
+                    uniqueKeysWithValues: AppShortcutAction.allCases.map { action in
+                        (
+                            action,
+                            backup.shortcutCustomizations[action.rawValue]
+                                ?? .inheritDefault
+                        )
+                    }
+                )
+                let targetCustomizations = Dictionary(
+                    descriptors.map { descriptor in
+                        (
+                            descriptor.itemID,
+                            backup.shortcutCustomizations[descriptor.itemID]
+                                ?? .inheritDefault
+                        )
+                    },
+                    uniquingKeysWith: { first, _ in first }
+                )
+                let customizationErrors = validateImportedShortcutCustomizations(
+                    targetCustomizations,
+                    descriptors: descriptors,
+                    appCustomizations: appCustomizations
+                )
+                if !customizationErrors.isEmpty {
+                    shortcutErrors.merge(
+                        importShortcutErrorMessages(
+                            customizationErrors,
+                            descriptors: descriptors
+                        ),
+                        uniquingKeysWith: { existing, _ in existing }
+                    )
+                } else {
+                    let reservedState = importedReservedShortcutState(
+                        customizations: targetCustomizations,
+                        descriptors: descriptors
+                    )
+                    let importedAssignments = backup.actionShortcutAssignments.filter {
+                        actionReferenceRestorePortability($0.reference) != .knownNonPortable
+                    }
+                    switch shortcutAssignmentService.validateImport(
+                        importedAssignments,
+                        reservedRegistrations: reservedState.registrations,
+                        reservedOwnerDescriptions: reservedState.ownerDescriptions
+                    ) {
+                    case let .failure(error):
+                        shortcutErrors["action-shortcuts"] = error.localizedDescription
+                    case .success:
+                        switch shortcutAssignmentService.replaceAllForImport(
+                            importedAssignments,
+                            reservedRegistrations: reservedState.registrations,
+                            reservedOwnerDescriptions: reservedState.ownerDescriptions
+                        ) {
+                        case let .failure(error):
+                            shortcutErrors["action-shortcuts"] = error.localizedDescription
+                        case .success:
+                            shortcutErrors.merge(
+                                applyImportedShortcutCustomizations(
+                                    backup.shortcutCustomizations,
+                                    bridgesLegacyActionAssignments: false,
+                                    notifiesActionBackedDescriptors: false
+                                ),
+                                uniquingKeysWith: { existing, _ in existing }
+                            )
+                            notifyAllActionBackedShortcutBindings()
+                        }
+                    }
+                }
+            } else {
+                shortcutErrors.merge(
+                    applyImportedShortcutCustomizations(
+                        backup.shortcutCustomizations,
+                        bridgesLegacyActionAssignments: true
+                    ),
+                    uniquingKeysWith: { existing, _ in existing }
+                )
+            }
+        }
+        if selection.includesRunLinks,
+           let presets = backup.actionInvocationPresets,
+           !actionPresetStore.replaceAllForRecovery(presets.compactMap { preset in
+               guard actionReferenceRestorePortability(preset.reference) != .knownNonPortable else {
+                   return nil
+               }
+               return ActionInvocationPreset(
+                   id: preset.id,
+                   reference: migratedActionReferenceForRestore(preset.reference),
+                   createdAt: preset.createdAt,
+                   formatVersion: preset.formatVersion
+               )
+           }) {
+            shortcutErrors["run-links"] = FeatureL10n.string("无法保存运行链接预设。")
+        }
         rebuildDerivedState()
         syncGlobalShortcuts()
         return PreferencesImportResult(
@@ -695,6 +1134,7 @@ final class PluginHost: ObservableObject {
         syncPluginManagementState()
         localizationRevision &+= 1
         rebuildDerivedState()
+        syncGlobalShortcuts()
     }
 
     func refreshDisplayTopology() {
@@ -915,46 +1355,63 @@ final class PluginHost: ObservableObject {
     }
 
     func setShortcutBinding(_ binding: ShortcutBinding, for shortcutID: String) {
-        guard let descriptor = shortcutDescriptor(for: shortcutID) else {
+        guard let target = shortcutMutationTarget(for: shortcutID) else {
             return
         }
 
-        applyShortcutCustomization(.custom(binding), for: descriptor)
+        applyShortcutCustomization(
+            .custom(binding),
+            for: target.descriptor,
+            assignmentID: target.assignmentID
+        )
     }
 
     func setShortcutBindingAndReturnError(_ binding: ShortcutBinding, for shortcutID: String) -> String? {
-        guard let descriptor = shortcutDescriptor(for: shortcutID) else {
+        guard let target = shortcutMutationTarget(for: shortcutID) else {
             return AppL10n.plugins("plugin.shortcut.unavailable", defaultValue: "快捷键不可用。")
         }
 
-        return applyShortcutCustomization(.custom(binding), for: descriptor)
+        return applyShortcutCustomization(
+            .custom(binding),
+            for: target.descriptor,
+            assignmentID: target.assignmentID
+        )
     }
 
     func setAppShortcutBindingAndReturnError(
         _ binding: ShortcutBinding,
-        for action: AppShortcutAction
+        for action: AppShortcutAction,
+        assignmentID: UUID? = nil
     ) -> String? {
-        do {
-            try validateAppShortcut(binding, for: action)
-            shortcutStore.setCustomization(.custom(binding), for: action.rawValue)
+        let result = shortcutAssignmentService.assign(
+            binding,
+            to: actionReference(for: action),
+            assignmentID: assignmentID
+        )
+        switch result {
+        case .success:
             appShortcutErrors.removeValue(forKey: action)
             rebuildDerivedState()
             syncGlobalShortcuts()
             return nil
-        } catch let error as ShortcutValidationError {
-            appShortcutErrors[action] = error.localizedDescription
-            rebuildDerivedState()
-            return error.localizedDescription
-        } catch {
+        case let .failure(error):
             appShortcutErrors[action] = error.localizedDescription
             rebuildDerivedState()
             return error.localizedDescription
         }
     }
 
-    func clearAppShortcut(_ action: AppShortcutAction) {
-        shortcutStore.setCustomization(.cleared, for: action.rawValue)
-        appShortcutErrors.removeValue(forKey: action)
+    func clearAppShortcut(_ action: AppShortcutAction, assignmentID: UUID? = nil) {
+        let reference = actionReference(for: action)
+        let targetID = assignmentID
+            ?? shortcutAssignmentService.assignment(for: reference)?.id
+        let result = shortcutAssignmentService.clear(reference, assignmentID: targetID)
+        switch result {
+        case .success:
+            appShortcutErrors.removeValue(forKey: action)
+        case let .failure(error):
+            appShortcutErrors[action] = error.localizedDescription
+        }
         rebuildDerivedState()
         syncGlobalShortcuts()
     }
@@ -968,20 +1425,148 @@ final class PluginHost: ObservableObject {
         rebuildDerivedState()
     }
 
+    func setActionShortcutBindingAndReturnError(
+        _ binding: ShortcutBinding,
+        for reference: ActionReference,
+        assignmentID: UUID? = nil,
+        replacingConflictingActionAssignments: Bool = false
+    ) -> String? {
+        let result = setActionShortcutBinding(
+            binding,
+            to: reference,
+            assignmentID: assignmentID,
+            replacingConflictingActionAssignments: replacingConflictingActionAssignments
+        )
+        if case .success = result {
+            return nil
+        }
+        if case let .failure(error) = result {
+            return error.localizedDescription
+        }
+        return nil
+    }
+
+    func setActionShortcutBinding(
+        _ binding: ShortcutBinding,
+        to reference: ActionReference,
+        assignmentID: UUID? = nil,
+        replacingConflictingActionAssignments: Bool = false
+    ) -> ActionShortcutMutationResult {
+        let previousBindings = actionBackedShortcutBindings()
+        let result = shortcutAssignmentService.assign(
+            binding,
+            to: reference,
+            assignmentID: assignmentID,
+            replacingConflictingActionAssignments: replacingConflictingActionAssignments
+        )
+        switch result {
+        case .success:
+            rebuildDerivedState()
+            syncGlobalShortcuts()
+            notifyChangedActionBackedShortcutBindings(previous: previousBindings)
+        case .failure:
+            break
+        }
+        return result
+    }
+
+    func clearActionShortcut(for reference: ActionReference, assignmentID: UUID? = nil) {
+        let previousBindings = actionBackedShortcutBindings()
+        guard case .success = shortcutAssignmentService.clear(
+            reference,
+            assignmentID: assignmentID
+        ) else {
+            return
+        }
+        rebuildDerivedState()
+        syncGlobalShortcuts()
+        notifyChangedActionBackedShortcutBindings(previous: previousBindings)
+    }
+
+    func actionShortcutSettingsItem(
+        for reference: ActionReference
+    ) -> ActionShortcutSettingsItem? {
+        shortcutAssignmentService.settingsItem(for: reference)
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        actionRegistry.availability(for: reference)
+    }
+
+    func actionExposurePolicy(
+        for reference: ActionReference,
+        on surface: ActionExposureSurface
+    ) -> ActionExposurePolicy {
+        actionRegistry.exposurePolicy(for: reference, on: surface)
+    }
+
+    func actionPermissionTitles(for reference: ActionReference) -> [String] {
+        guard let plugin = corePlugin(for: reference.key.providerID),
+              let provider = plugin as? any PluginActionPermissionProviding,
+              let permissionIDs = guardedValue(
+                  for: plugin,
+                  operation: "read action permission requirements",
+                  provider.permissionRequirementIDs(for: reference.key)
+              ),
+              let requirements = guardedValue(
+                  for: plugin,
+                  operation: "read permission requirements",
+                  plugin.permissionRequirements
+              ) else {
+            return []
+        }
+        let requirementsByID = Dictionary(
+            requirements.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return permissionIDs.compactMap { requirementsByID[$0]?.title }
+    }
+
+    func actionRunLinkPresentation(
+        for reference: ActionReference
+    ) -> ActionRunLinkPresentation {
+        actionRunLinkService.presentation(for: reference)
+    }
+
+    func createActionRunLink(
+        for reference: ActionReference
+    ) -> Result<ActionRunLinkRepresentation, ActionInvocationPresetError> {
+        let result = actionRunLinkService.createPreset(for: reference)
+        if case .success = result {
+            objectWillChange.send()
+        }
+        return result
+    }
+
+    func deleteActionRunLinkPreset(for reference: ActionReference) {
+        guard actionRunLinkService.deletePreset(for: reference) else {
+            return
+        }
+        objectWillChange.send()
+    }
+
     func clearShortcut(for shortcutID: String) {
-        guard let descriptor = shortcutDescriptor(for: shortcutID) else {
+        guard let target = shortcutMutationTarget(for: shortcutID) else {
             return
         }
 
-        applyShortcutCustomization(.cleared, for: descriptor)
+        applyShortcutCustomization(
+            .cleared,
+            for: target.descriptor,
+            assignmentID: target.assignmentID
+        )
     }
 
     func resetShortcut(for shortcutID: String) {
-        guard let descriptor = shortcutDescriptor(for: shortcutID) else {
+        guard let target = shortcutMutationTarget(for: shortcutID) else {
             return
         }
 
-        applyShortcutCustomization(.inheritDefault, for: descriptor)
+        applyShortcutCustomization(
+            .inheritDefault,
+            for: target.descriptor,
+            assignmentID: target.assignmentID
+        )
     }
 
     func presentPluginSettings(pluginID: String) {
@@ -992,6 +1577,13 @@ final class PluginHost: ObservableObject {
         }
 
         appPresentationHandler?(.settings(.pluginConfiguration(pluginID)))
+    }
+
+    func installActionGridPresenter(
+        _ presenter: @escaping ([ActionGridPresentationEntry], ActionExecutionSource) -> Bool
+    ) {
+        actionGridPresentationHandler = presenter
+        actionRegistry.invalidateAvailability()
     }
 
     func presentPluginMarketplace() {
@@ -1027,7 +1619,7 @@ final class PluginHost: ObservableObject {
     @discardableResult
     func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) -> Bool {
         switch pane {
-        case .dashboardLayout, .featurePanelLayout, .marketplace:
+        case .actionsAndShortcuts, .automation, .dashboardLayout, .featurePanelLayout, .marketplace:
             if let landingPage = pane.landingPage {
                 pluginDisplayPreferencesStore.setLastPluginSettingsLandingPage(landingPage)
             }
@@ -1091,7 +1683,9 @@ final class PluginHost: ObservableObject {
     }
 
     func clearShortcutError(for shortcutID: String) {
-        guard shortcutErrors.removeValue(forKey: shortcutID) != nil else {
+        let errorID = shortcutMutationMetadataByRowID[shortcutID]?.shortcutID
+            ?? shortcutID
+        guard shortcutErrors.removeValue(forKey: errorID) != nil else {
             return
         }
 
@@ -1565,6 +2159,295 @@ final class PluginHost: ObservableObject {
         plugins.filter { isolatedPluginFailures[$0.metadata.id] == nil }
     }
 
+    private var portablePluginPreferenceIDs: Set<String> {
+        Set(activePlugins.compactMap { plugin in
+            plugin is any PluginPortablePreferencesProviding ? plugin.metadata.id : nil
+        })
+    }
+
+    private var allPortablePreferencesSelection: PreferencesBackupSelection {
+        .all(pluginPreferenceIDs: portablePluginPreferenceIDs)
+    }
+
+    private func leafActionReferenceBackupPortability(
+        _ reference: ActionReference,
+        selection: PreferencesBackupSelection
+    ) -> ActionReferencePortability {
+        let schemaPortability = actionRegistry.portability(of: reference)
+        guard schemaPortability == .portable else { return schemaPortability }
+        guard let plugin = activePlugins.first(where: {
+            $0.metadata.id == reference.key.providerID
+        }), let provider = plugin as? any PluginActionReferenceBackupProviding else {
+            return .portable
+        }
+
+        switch guardedValue(
+            for: plugin,
+            operation: "classify action backup",
+            provider.backupDisposition(for: reference)
+        ) ?? .excluded {
+        case .selfContained:
+            return .portable
+        case .requiresPluginPreferences:
+            return selection.pluginPreferenceIDs.contains(plugin.metadata.id)
+                ? .portable
+                : .knownNonPortable
+        case .excluded:
+            return .knownNonPortable
+        }
+    }
+
+    private func actionReferenceBackupPortability(
+        _ reference: ActionReference,
+        workflows: [WorkflowDefinition],
+        portableWorkflowIDs: Set<UUID>,
+        selection: PreferencesBackupSelection
+    ) -> ActionReferencePortability {
+        guard let workflowID = WorkflowExecutionAnalysis.nestedWorkflowID(
+            for: reference.key
+        ) else {
+            return leafActionReferenceBackupPortability(reference, selection: selection)
+        }
+        guard workflows.contains(where: { $0.id == workflowID }) else { return .unknown }
+        guard selection.includesAutomation else { return .knownNonPortable }
+        return portableWorkflowIDs.contains(workflowID) ? .portable : .knownNonPortable
+    }
+
+    private func currentActionReferenceBackupPortability(
+        _ reference: ActionReference
+    ) -> ActionReferencePortability {
+        let selection = preferencesBackupExportSelection ?? allPortablePreferencesSelection
+        let workflows = automationController.workflows
+        let portableWorkflowIDs = WorkflowPortabilityAnalysis.portableWorkflowIDs(
+            in: workflows,
+            referencePortability: { [weak self] reference in
+                self?.leafActionReferenceBackupPortability(
+                    reference,
+                    selection: selection
+                ) ?? .unknown
+            }
+        )
+        return actionReferenceBackupPortability(
+            reference,
+            workflows: workflows,
+            portableWorkflowIDs: portableWorkflowIDs,
+            selection: selection
+        )
+    }
+
+    private func actionReferenceRestorePortability(
+        _ reference: ActionReference
+    ) -> ActionReferencePortability {
+        actionReferenceRestorePortability(
+            reference,
+            context: preferencesBackupRestoreContext
+        )
+    }
+
+    private func actionReferenceRestorePortability(
+        _ reference: ActionReference,
+        context: PreferencesActionRestoreContext?
+    ) -> ActionReferencePortability {
+        if let workflowID = WorkflowExecutionAnalysis.nestedWorkflowID(for: reference.key),
+           let context {
+            guard context.importedWorkflowIDs.contains(workflowID),
+                  context.selection.includesAutomation else {
+                return .knownNonPortable
+            }
+            return context.restorableWorkflowIDs.contains(workflowID)
+                ? .portable
+                : .knownNonPortable
+        }
+
+        return leafActionReferenceRestorePortability(reference, context: context)
+    }
+
+    private func leafActionReferenceRestorePortability(
+        _ reference: ActionReference,
+        context: PreferencesActionRestoreContext?
+    ) -> ActionReferencePortability {
+        let migratedReference: ActionReference
+        switch actionRegistry.migrate(reference) {
+        case let .success(migrated):
+            migratedReference = migrated
+        case .failure(.unknownAction):
+            guard let plugin = activePlugins.first(where: {
+                $0.metadata.id == reference.key.providerID
+            }), let provider = plugin as? any PluginActionReferenceBackupProviding else {
+                return .unknown
+            }
+            let disposition = guardedValue(
+                for: plugin,
+                operation: "classify unknown restored action",
+                provider.backupDisposition(for: reference)
+            ) ?? .excluded
+            if portablePreferencesDefine(reference, context: context) {
+                return .portable
+            }
+            return switch disposition {
+            case .selfContained:
+                .unknown
+            case .requiresPluginPreferences:
+                context == nil ? .unknown : .knownNonPortable
+            case .excluded:
+                .knownNonPortable
+            }
+        case .failure:
+            return .knownNonPortable
+        }
+        let schemaPortability = actionRegistry.portability(of: migratedReference)
+        guard schemaPortability == .portable else { return schemaPortability }
+        guard let plugin = activePlugins.first(where: {
+            $0.metadata.id == migratedReference.key.providerID
+        }), let provider = plugin as? any PluginActionReferenceBackupProviding else {
+            return .portable
+        }
+        return switch guardedValue(
+            for: plugin,
+            operation: "classify restored action",
+            provider.backupDisposition(for: migratedReference)
+        ) ?? .excluded {
+        case .selfContained:
+            .portable
+        case .requiresPluginPreferences:
+            context == nil || portablePreferencesDefine(migratedReference, context: context)
+                ? .portable
+                : .knownNonPortable
+        case .excluded:
+            portablePreferencesDefine(migratedReference, context: context)
+                ? .portable
+                : .knownNonPortable
+        }
+    }
+
+    private func portablePreferencesDefine(
+        _ reference: ActionReference,
+        context: PreferencesActionRestoreContext?
+    ) -> Bool {
+        guard let context else { return false }
+        let references = context.payloadDefinedActionReferencesByPluginID[
+            reference.key.providerID
+        ] ?? []
+        if references.contains(reference) { return true }
+        guard case let .success(migrated) = actionRegistry.migrate(reference) else {
+            return false
+        }
+        return references.contains(migrated)
+    }
+
+    private func actionReferenceCanResolve(
+        _ reference: ActionReference,
+        context: PreferencesActionRestoreContext
+    ) -> Bool {
+        if let workflowID = WorkflowExecutionAnalysis.nestedWorkflowID(for: reference.key) {
+            return context.resolvableWorkflowIDs.contains(workflowID)
+        }
+        return leafActionReferenceCanResolve(reference, context: context)
+    }
+
+    private func leafActionReferenceCanResolve(
+        _ reference: ActionReference,
+        context: PreferencesActionRestoreContext
+    ) -> Bool {
+        switch actionRegistry.migrate(reference) {
+        case let .success(migrated):
+            guard leafActionReferenceRestorePortability(reference, context: context)
+                != .knownNonPortable else {
+                return false
+            }
+            if portablePreferencesDefine(reference, context: context)
+                || portablePreferencesDefine(migrated, context: context) {
+                return true
+            }
+            guard case let .success(action) = actionRegistry.registeredAction(for: migrated) else {
+                return false
+            }
+            return action.catalogEntry != nil
+        case .failure(.unknownAction):
+            guard activePlugins.contains(where: {
+                $0.metadata.id == reference.key.providerID
+                    && $0 is any PluginActionReferenceBackupProviding
+            }) else {
+                return false
+            }
+            return portablePreferencesDefine(reference, context: context)
+        case .failure:
+            return false
+        }
+    }
+
+    private func makePreferencesActionRestoreContext(
+        backup: PreferencesBackup,
+        selection: PreferencesBackupSelection,
+        restoredPluginPreferenceIDs: Set<String>? = nil
+    ) -> PreferencesActionRestoreContext {
+        var payloadDefinedActionReferencesByPluginID = decodedPortablePreferenceActionReferences(
+            in: backup,
+            selection: selection
+        )
+        if let restoredPluginPreferenceIDs {
+            payloadDefinedActionReferencesByPluginID = payloadDefinedActionReferencesByPluginID.filter {
+                restoredPluginPreferenceIDs.contains($0.key)
+            }
+        }
+        let importedWorkflows = selection.includesAutomation ? (backup.workflows ?? []) : []
+        let importedWorkflowIDs = Set(importedWorkflows.map(\.id))
+        let baseContext = PreferencesActionRestoreContext(
+            selection: selection,
+            payloadDefinedActionReferencesByPluginID: payloadDefinedActionReferencesByPluginID,
+            importedWorkflowIDs: importedWorkflowIDs,
+            restorableWorkflowIDs: [],
+            resolvableWorkflowIDs: []
+        )
+        let restorableWorkflowIDs = WorkflowPortabilityAnalysis.portableWorkflowIDs(
+            in: importedWorkflows,
+            referencePortability: { [weak self] reference in
+                guard let self else { return .knownNonPortable }
+                return self.leafActionReferenceRestorePortability(
+                    reference,
+                    context: baseContext
+                ) == .knownNonPortable ? .knownNonPortable : .portable
+            }
+        )
+        let resolvableWorkflowIDs = WorkflowPortabilityAnalysis.portableWorkflowIDs(
+            in: importedWorkflows,
+            referencePortability: { [weak self] reference in
+                guard let self else { return .knownNonPortable }
+                return self.leafActionReferenceCanResolve(reference, context: baseContext)
+                    ? .portable
+                    : .knownNonPortable
+            }
+        )
+        return PreferencesActionRestoreContext(
+            selection: selection,
+            payloadDefinedActionReferencesByPluginID: payloadDefinedActionReferencesByPluginID,
+            importedWorkflowIDs: importedWorkflowIDs,
+            restorableWorkflowIDs: restorableWorkflowIDs,
+            resolvableWorkflowIDs: resolvableWorkflowIDs
+        )
+    }
+
+    private func migratedActionReferenceForRestore(
+        _ reference: ActionReference
+    ) -> ActionReference {
+        guard case let .success(migrated) = actionRegistry.migrate(reference) else {
+            return reference
+        }
+        return migrated
+    }
+
+    private func migratedWorkflowForRestore(
+        _ workflow: WorkflowDefinition
+    ) -> WorkflowDefinition {
+        var migrated = workflow
+        migrated.steps = workflow.steps.map { step in
+            var migratedStep = step
+            migratedStep.reference = migratedActionReferenceForRestore(step.reference)
+            return migratedStep
+        }
+        return migrated
+    }
+
     private func portablePluginPreferences() -> [String: Data] {
         activePlugins.reduce(into: [String: Data]()) { result, plugin in
             guard let portablePreferences = plugin as? any PluginPortablePreferencesProviding,
@@ -1580,18 +2463,111 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func restorePortablePluginPreferences(_ pluginPreferences: [String: Data]) {
-        for (pluginID, data) in pluginPreferences {
+    private func portablePreferenceActionReferences(
+        in preferences: [String: Data]
+    ) -> [String: [ActionReference]] {
+        activePlugins.reduce(into: [String: [ActionReference]]()) { result, plugin in
+            guard let data = preferences[plugin.metadata.id],
+                  let provider = plugin
+                    as? any PluginPortablePreferencesActionReferencesProviding,
+                  let references = guardedOptionalValue(
+                    for: plugin,
+                    operation: "index portable preference actions",
+                    provider.actionReferences(inPortablePreferences: data)
+                  ) else {
+                return
+            }
+            result[plugin.metadata.id] = uniqueActionReferences(references)
+        }
+    }
+
+    private func portablePreferenceActionReferences(
+        in backup: PreferencesBackup,
+        selection: PreferencesBackupSelection
+    ) -> [ActionReference] {
+        var references: [ActionReference] = []
+        for pluginID in selection.pluginPreferenceIDs.sorted() {
+            guard let data = backup.pluginPreferences[pluginID] else { continue }
+            guard let plugin = corePlugin(for: pluginID),
+                  let provider = plugin
+                    as? any PluginPortablePreferencesActionReferencesProviding,
+                  let decoded = guardedOptionalValue(
+                    for: plugin,
+                    operation: "validate portable preference action index",
+                    provider.actionReferences(inPortablePreferences: data)
+                  ) else {
+                continue
+            }
+            // The serialized index is only a compatibility/cache field. Derive preview
+            // dependencies from the selected payload itself so a crafted backup cannot
+            // make the installer trust unrelated provider IDs.
+            references.append(contentsOf: decoded)
+        }
+        return uniqueActionReferences(references)
+    }
+
+    private func decodedPortablePreferenceActionReferences(
+        in backup: PreferencesBackup,
+        selection: PreferencesBackupSelection
+    ) -> [String: Set<ActionReference>] {
+        selection.pluginPreferenceIDs.reduce(into: [:]) { result, pluginID in
+            guard let data = backup.pluginPreferences[pluginID],
+                  let plugin = corePlugin(for: pluginID),
+                  let provider = plugin
+                    as? any PluginPortablePreferencesActionReferencesProviding,
+                  let decoded = guardedOptionalValue(
+                    for: plugin,
+                    operation: "validate portable preference actions",
+                    provider.actionReferences(inPortablePreferences: data)
+                  ) else {
+                return
+            }
+            result[pluginID] = Set(decoded.filter { $0.key.providerID == pluginID })
+        }
+    }
+
+    private func uniqueActionReferences(
+        _ references: [ActionReference]
+    ) -> [ActionReference] {
+        var seen = Set<ActionReference>()
+        return references.filter { seen.insert($0).inserted }
+    }
+
+    @discardableResult
+    private func restorePortablePluginPreferences(
+        _ pluginPreferences: [String: Data]
+    ) -> Set<String> {
+        var restoredPluginIDs = Set<String>()
+        for (pluginID, data) in pluginPreferences.sorted(by: { $0.key < $1.key }) {
             guard let plugin = corePlugin(for: pluginID),
                   let portablePreferences = plugin as? any PluginPortablePreferencesProviding
             else {
                 continue
             }
 
-            guardPluginCall(plugin, operation: "restore portable preferences") {
-                portablePreferences.restorePortablePreferences(from: data)
+            let restored: Bool
+            if let reporting = plugin as? any PluginPortablePreferencesRestorationReporting {
+                restored = guardedValue(
+                    for: plugin,
+                    operation: "restore portable preferences",
+                    reporting.restorePortablePreferencesReportingResult(from: data)
+                ) ?? false
+            } else {
+                let callCompleted = guardPluginCall(
+                    plugin,
+                    operation: "restore portable preferences"
+                ) {
+                    portablePreferences.restorePortablePreferences(from: data)
+                }
+                // Legacy payloads that do not define action identities remain compatible.
+                // Action-bearing payloads must opt into verifiable restoration before they can
+                // authorize dependent Grid, Trackpad, shortcut, workflow, or Run Link records.
+                restored = callCompleted
+                    && !(plugin is any PluginPortablePreferencesActionReferencesProviding)
             }
+            if restored { restoredPluginIDs.insert(pluginID) }
         }
+        return restoredPluginIDs
     }
 
     private func corePlugin(for pluginID: String) -> (any MacToolsPlugin)? {
@@ -1609,7 +2585,10 @@ final class PluginHost: ObservableObject {
                 self?.requestPermissionGuidance(forPluginID: pluginID, permissionID: permissionID)
             }
             plugin.shortcutBindingResolver = { [weak self] shortcutDefinitionID in
-                self?.resolvedBinding(forPluginID: pluginID, shortcutDefinitionID: shortcutDefinitionID)
+                self?.legacyResolvedBinding(
+                    forPluginID: pluginID,
+                    shortcutDefinitionID: shortcutDefinitionID
+                )
             }
             if let anchorable = plugin as? any DropZoneAnchorProviding {
                 anchorable.anchorRectProvider = { [weak self] in
@@ -1620,6 +2599,12 @@ final class PluginHost: ObservableObject {
                 settingsPresenting.requestSettingsPresentation = { [weak self] in
                     self?.presentPluginSettings(pluginID: pluginID)
                 }
+            }
+            if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
+                actionGridConsumer.actionGridHostContext = makeActionGridHostContext()
+            }
+            if let trackpadActionConsumer = plugin as? any TrackpadActionHostContextConsuming {
+                trackpadActionConsumer.trackpadActionHostContext = makeTrackpadActionHostContext()
             }
             if let activityStateHandling = plugin as? any PluginApplicationActivityStateHandling {
                 guardPluginCall(plugin, operation: "set application activity state") {
@@ -1701,6 +2686,8 @@ final class PluginHost: ObservableObject {
         if dirtyPluginIDs == nil {
             cancelScheduledPluginStateRebuild()
         }
+
+        synchronizeInputGestureClaims()
 
         let defaultDescriptors = defaultPluginDescriptors()
         pluginDisplayPreferencesStore.migrateLegacyHiddenPluginIDs(
@@ -2010,53 +2997,86 @@ final class PluginHost: ObservableObject {
             }
         }
 
+        synchronizeActionRegistry()
+
         let shortcutDescriptors = shortcutDescriptors()
-        shortcutItems = shortcutDescriptors.map { descriptor in
+        var shortcutMutationMetadataByRowID: [String: ShortcutMutationMetadata] = [:]
+        shortcutItems = shortcutDescriptors.flatMap { descriptor -> [ShortcutSettingsItem] in
+            // Ordinary global shortcuts backed by canonical Actions are managed only in
+            // Actions & Shortcuts. Active-only, required, and key-phase shortcuts remain
+            // plugin-specific settings because their behavior cannot be represented by a
+            // one-shot Action invocation.
+            if actionReference(for: descriptor) != nil {
+                return []
+            }
             let customization = shortcutStore.customization(for: descriptor.itemID)
-            let binding = resolvedBinding(for: descriptor)
-
-            return ShortcutSettingsItem(
-                id: descriptor.itemID,
-                pluginID: descriptor.pluginID,
-                pluginTitle: descriptor.pluginTitle,
-                title: descriptor.definition.title,
-                description: descriptor.definition.description,
-                bindingText: ShortcutFormatter.displayString(for: binding),
-                isRequired: descriptor.definition.isRequired,
-                canClear: !descriptor.definition.isRequired && binding != nil,
-                usesDefaultValue: customization == .inheritDefault,
-                errorMessage: shortcutErrors[descriptor.itemID]
-                    ?? binding.flatMap {
-                        MacToolsReservedShortcutBindings.validationError(for: $0)?
-                            .localizedDescription
-                    },
-                settingsGroupID: descriptor.definition.settingsGroupID,
-                settingsGroupTitle: descriptor.definition.settingsGroupTitle,
-                settingsGroupDescription: descriptor.definition.settingsGroupDescription,
-                settingsControlTitle: descriptor.definition.settingsControlTitle,
-                settingsControlSystemImage: descriptor.definition.settingsControlSystemImage
+            let binding = legacyResolvedBinding(for: descriptor)
+            shortcutMutationMetadataByRowID[descriptor.itemID] = ShortcutMutationMetadata(
+                shortcutID: descriptor.itemID,
+                assignmentID: nil
             )
+            return [
+                ShortcutSettingsItem(
+                    id: descriptor.itemID,
+                    pluginID: descriptor.pluginID,
+                    pluginTitle: descriptor.pluginTitle,
+                    title: descriptor.definition.title,
+                    description: descriptor.definition.description,
+                    bindingText: ShortcutFormatter.displayString(for: binding),
+                    isRequired: descriptor.definition.isRequired,
+                    canClear: !descriptor.definition.isRequired && binding != nil,
+                    usesDefaultValue: customization == .inheritDefault,
+                    errorMessage: shortcutErrors[descriptor.itemID]
+                        ?? binding.flatMap {
+                            MacToolsReservedShortcutBindings.validationError(for: $0)?
+                                .localizedDescription
+                        },
+                    settingsGroupID: descriptor.definition.settingsGroupID,
+                    settingsGroupTitle: descriptor.definition.settingsGroupTitle,
+                    settingsGroupDescription: descriptor.definition.settingsGroupDescription,
+                    settingsControlTitle: descriptor.definition.settingsControlTitle,
+                    settingsControlSystemImage: descriptor.definition.settingsControlSystemImage
+                )
+            ]
         }
+        self.shortcutMutationMetadataByRowID = shortcutMutationMetadataByRowID
 
-        appShortcutItems = AppShortcutAction.allCases.map { action in
-            let binding = resolvedAppShortcutBinding(for: action)
-            return AppShortcutSettingsItem(
-                action: action,
-                title: action.title,
-                description: action.description,
-                systemImage: action.systemImage,
-                bindingText: ShortcutFormatter.displayString(for: binding),
-                canClear: binding != nil,
-                errorMessage: appShortcutErrors[action]
-                    ?? binding.flatMap {
-                        MacToolsReservedShortcutBindings.validationError(for: $0)?
-                            .localizedDescription
-                    }
-                    ?? appShortcutConflictError(
-                        for: action,
-                        descriptors: shortcutDescriptors
-                    )
-            )
+        appShortcutItems = AppShortcutAction.allCases.flatMap { action -> [AppShortcutSettingsItem] in
+            let reference = actionReference(for: action)
+            let records = shortcutAssignmentService.assignments.filter {
+                $0.reference == reference
+            }
+            let assignments: [ActionShortcutAssignmentRecord?] = records.isEmpty
+                ? [nil]
+                : records.map(Optional.some)
+            return assignments.enumerated().map { index, assignment in
+                let binding = assignment?.binding
+                let rowID = index == 0
+                    ? action.rawValue
+                    : "\(action.rawValue).assignment.\(assignment?.id.uuidString.lowercased() ?? String(index))"
+                return AppShortcutSettingsItem(
+                    id: rowID,
+                    action: action,
+                    assignmentID: assignment?.id,
+                    title: action.title,
+                    description: action.description,
+                    systemImage: action.systemImage,
+                    bindingText: ShortcutFormatter.displayString(for: binding),
+                    canClear: binding != nil,
+                    errorMessage: appShortcutErrors[action]
+                        ?? binding.flatMap {
+                            MacToolsReservedShortcutBindings.validationError(for: $0)?
+                                .localizedDescription
+                        }
+                        ?? binding.flatMap {
+                            appShortcutConflictError(
+                                for: action,
+                                binding: $0,
+                                descriptors: shortcutDescriptors
+                            )
+                        }
+                )
+            }
         }
 
         pluginSettingsSearchItems = orderedCorePlugins().flatMap { plugin -> [PluginProvidedSettingsSearchItem] in
@@ -2118,6 +3138,36 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    private func synchronizeInputGestureClaims() {
+        let claims = activePlugins.flatMap { plugin -> [PluginInputGestureConflict] in
+            guard let provider = plugin as? any PluginInputGestureClaimProviding else {
+                return []
+            }
+            let provided = guardedValue(
+                for: plugin,
+                operation: "read input gesture claims",
+                provider.activeInputGestureClaims
+            ) ?? []
+            return provided.map {
+                PluginInputGestureConflict(
+                    claim: $0,
+                    ownerPluginID: plugin.metadata.id,
+                    ownerPluginTitle: plugin.metadata.title
+                )
+            }
+        }
+
+        for plugin in activePlugins {
+            guard let consumer = plugin as? any PluginInputGestureConflictConsuming else {
+                continue
+            }
+            let externalClaims = claims.filter { $0.ownerPluginID != plugin.metadata.id }
+            guardPluginCall(plugin, operation: "update input gesture conflicts") {
+                consumer.inputGestureConflictsDidChange(externalClaims)
+            }
+        }
+    }
+
     private func handlePluginAction(rebuildAfterAction: Bool = true, _ action: () -> Void) {
         guard !isHandlingPluginAction else {
             action()
@@ -2170,6 +3220,7 @@ final class PluginHost: ObservableObject {
                 return
             }
 
+            actionRegistry.invalidateAvailability()
             rebuildDerivedState(dirtyPluginIDs: pluginIDs)
         }
     }
@@ -2178,6 +3229,519 @@ final class PluginHost: ObservableObject {
         pluginStateChangeRebuildTask?.cancel()
         pluginStateChangeRebuildTask = nil
         dirtyPluginIDs.removeAll()
+    }
+
+    private func synchronizeActionRegistry() {
+        var registrations = [hostActionRegistration()]
+
+        for plugin in orderedCorePlugins() {
+            if let provider = plugin as? any PluginActionProviding {
+                let definitions = guardedValue(
+                    for: plugin,
+                    operation: "read action definitions",
+                    provider.actionDefinitions
+                ) ?? []
+                let catalogEntries = guardedValue(
+                    for: plugin,
+                    operation: "read action catalog entries",
+                    provider.actionCatalogEntries
+                ) ?? []
+                registrations.append(
+                    actionRegistration(
+                        for: plugin,
+                        definitions: definitions,
+                        catalogEntries: catalogEntries
+                    )
+                )
+            } else if let commandProvider = plugin as? any PluginCommandProviding {
+                let definitions = guardedValue(
+                    for: plugin,
+                    operation: "read legacy command definitions for actions",
+                    commandProvider.commandDefinitions
+                ) ?? []
+                registrations.append(
+                    legacyCommandActionRegistration(
+                        for: plugin,
+                        definitions: definitions
+                    )
+                )
+            }
+        }
+
+        let definitionByKey = Dictionary(
+            registrations.flatMap(\.definitions).map { ($0.key, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        registrations.insert(
+            automationController.actionRegistration(
+                definitionLookup: { definitionByKey[$0] }
+            ),
+            at: 1
+        )
+
+        let issues = actionRegistry.synchronize(registrations)
+        actionRegistryIssues = issues
+        if issues.isEmpty {
+            AppLog.pluginHost.info(
+                "Action registry synchronized providers=\(registrations.count, privacy: .public) catalog=\(self.actionRegistry.catalogEntries.count, privacy: .public) issues=0"
+            )
+        } else {
+            let summary = actionRegistryIssueSummary(issues)
+            AppLog.pluginHost.error(
+                "Action registry rejected \(issues.count, privacy: .public) item(s): \(summary, privacy: .public)"
+            )
+        }
+        automationController.migrateReferencesIfNeeded()
+        migrateLegacyAppActionShortcutsIfNeeded()
+        migrateLegacyPluginActionShortcutsIfNeeded()
+        actionCatalogEntries = actionRegistry.catalogEntries
+        actionShortcutCatalogItems = buildActionShortcutCatalogItems()
+        for plugin in activePlugins {
+            (plugin as? any ActionGridHostContextConsuming)?.actionSurfaceCatalogDidChange()
+            (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionCatalogDidChange()
+        }
+    }
+
+    private func actionRegistryIssueSummary(_ issues: [ActionRegistryIssue]) -> String {
+        var counts: [String: Int] = [:]
+        for issue in issues {
+            let category = switch issue {
+            case .invalidProviderID: "invalid-provider-id"
+            case .duplicateProviderID: "duplicate-provider-id"
+            case .invalidDefinition: "invalid-definition"
+            case .duplicateDefinition: "duplicate-definition"
+            case .invalidCatalogEntry: "invalid-catalog-entry"
+            case .duplicateCatalogEntry: "duplicate-catalog-entry"
+            }
+            counts[category, default: 0] += 1
+        }
+        return counts.keys.sorted().map { key in
+            "\(key)=\(counts[key, default: 0])"
+        }.joined(separator: ",")
+    }
+
+    private func makeTrackpadActionHostContext() -> TrackpadActionHostContext {
+        TrackpadActionHostContext(
+            catalog: { [weak self] in self?.actionSurfaceCatalogItems() ?? [] },
+            item: { [weak self] reference in self?.actionSurfaceItem(for: reference) },
+            migrate: { [weak self] reference in
+                guard let self,
+                      case let .success(migrated) = self.actionRegistry.migrate(reference) else {
+                    return nil
+                }
+                return migrated
+            },
+            canExport: { [weak self] reference in
+                self?.currentActionReferenceBackupPortability(reference) == .portable
+            },
+            canRestore: { [weak self] reference in
+                self?.actionReferenceRestorePortability(reference) != .knownNonPortable
+            },
+            execute: { [weak self] reference in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    _ = await self.actionExecutor.execute(
+                        ActionInvocation(
+                            reference: reference,
+                            source: .trackpadGesture,
+                            mode: .foreground
+                        )
+                    )
+                }
+            }
+        )
+    }
+
+    private func makeActionGridHostContext() -> ActionGridHostContext {
+        ActionGridHostContext(
+            catalog: { [weak self] in self?.actionSurfaceCatalogItems() ?? [] },
+            item: { [weak self] reference in self?.actionSurfaceItem(for: reference) },
+            migrate: { [weak self] reference in
+                guard let self,
+                      case let .success(migrated) = self.actionRegistry.migrate(reference) else {
+                    return nil
+                }
+                return migrated
+            },
+            openOwner: { [weak self] reference in
+                self?.presentActionOwner(for: reference) ?? false
+            },
+            canExport: { [weak self] reference in
+                self?.currentActionReferenceBackupPortability(reference) == .portable
+            },
+            canRestore: { [weak self] reference in
+                self?.actionReferenceRestorePortability(reference) != .knownNonPortable
+            },
+            canPresent: { [weak self] in self?.actionGridPresentationHandler != nil },
+            present: { [weak self] entries, source in
+                guard let self,
+                      (1 ... 9).contains(entries.count),
+                      Set(entries.map(\.id)).count == entries.count,
+                      Self.validateActionGridPresentationEntries(entries) else {
+                    return false
+                }
+                return self.actionGridPresentationHandler?(entries, source) ?? false
+            }
+        )
+    }
+
+    private static func validateActionGridPresentationEntries(
+        _ entries: [ActionGridPresentationEntry],
+        depth: Int = 0
+    ) -> Bool {
+        let resolvedSlots = entries.enumerated().map { offset, entry in
+            entry.slotIndex ?? offset
+        }
+        guard depth <= ActionGridPresentationLimits.maximumFolderDepth,
+              entries.count <= ActionGridPresentationLimits.maximumEntriesPerGrid,
+              Set(entries.map(\.id)).count == entries.count,
+              resolvedSlots.allSatisfy({
+                  (0 ..< ActionGridPresentationLimits.maximumEntriesPerGrid).contains($0)
+              }),
+              Set(resolvedSlots).count == resolvedSlots.count else {
+            return false
+        }
+        return entries.allSatisfy { entry in
+            if let children = entry.children {
+                return entry.customTitle?.isEmpty == false
+                    && validateActionGridPresentationEntries(children, depth: depth + 1)
+            }
+            return entry.reference.key != ActionKey(providerID: "action-grid", actionID: "show")
+        }
+    }
+
+    private func actionSurfaceCatalogItems() -> [ActionSurfaceCatalogItem] {
+        actionRegistry.catalogEntries.compactMap { entry in
+            actionSurfaceItem(for: entry.reference)
+        }
+    }
+
+    private func actionSurfaceItem(for reference: ActionReference) -> ActionSurfaceCatalogItem? {
+        guard case let .success(action) = actionRegistry.registeredAction(for: reference) else {
+            return nil
+        }
+        let ownerTitle = actionSurfaceOwnerTitle(providerID: reference.key.providerID)
+        return ActionSurfaceCatalogItem(
+            reference: reference,
+            title: action.catalogEntry?.title ?? action.definition.title,
+            subtitle: action.catalogEntry?.subtitle,
+            ownerTitle: ownerTitle,
+            systemImage: action.definition.systemImage,
+            availability: actionRegistry.availability(for: reference),
+            isSafe: action.definition.risk == .safe,
+            canOpenOwner: canPresentActionOwner(for: reference),
+            presentationState: action.catalogEntry?.presentationState
+        )
+    }
+
+    @discardableResult
+    func presentActionOwner(for reference: ActionReference) -> Bool {
+        guard let appPresentationHandler else { return false }
+        switch reference.key.providerID {
+        case "mactools":
+            guard let action = AppShortcutAction(rawValue: reference.key.actionID) else {
+                return false
+            }
+            appPresentationHandler(.settings(action.settingsPresentationRequest))
+        case AutomationController.providerID:
+            if reference.key.actionID.hasPrefix("workflow."),
+               let workflowID = UUID(
+                uuidString: String(reference.key.actionID.dropFirst("workflow.".count))
+               ),
+               automationController.workflows.contains(where: { $0.id == workflowID }) {
+                appPresentationHandler(.settings(.automationWorkflow(workflowID)))
+            } else {
+                appPresentationHandler(.settings(.feature(.automation)))
+            }
+        case let pluginID:
+            rebuildDerivedState()
+            guard pluginSettingsItems.contains(where: { $0.id == pluginID }) else {
+                return false
+            }
+            appPresentationHandler(.settings(.pluginConfiguration(pluginID)))
+        }
+        return true
+    }
+
+    func canPresentActionOwner(for reference: ActionReference) -> Bool {
+        guard appPresentationHandler != nil else { return false }
+        switch reference.key.providerID {
+        case "mactools":
+            return AppShortcutAction(rawValue: reference.key.actionID) != nil
+        case AutomationController.providerID:
+            return true
+        case let pluginID:
+            return pluginSettingsItems.contains(where: { $0.id == pluginID })
+        }
+    }
+
+    func actionSurfaceAssignmentSummaries(
+        for reference: ActionReference
+    ) -> [ActionSurfaceAssignmentSummary] {
+        activePlugins.compactMap { plugin in
+            guard let provider = plugin as? any ActionSurfaceAssignmentSummarizing else {
+                return nil
+            }
+            return guardedOptionalValue(
+                for: plugin,
+                operation: "read action surface assignment",
+                provider.actionSurfaceAssignmentSummary(for: reference)
+            )
+        }
+    }
+
+    func actionSurfaceOwnerTitle(providerID: String) -> String {
+        switch providerID {
+        case "mactools":
+            return "MacTools"
+        case AutomationController.providerID:
+            return FeatureL10n.string("自动化")
+        default:
+            guard let metadata = activePlugins.first(where: {
+                $0.metadata.id == providerID
+            })?.metadata else {
+                return providerID
+            }
+            return localizedMetadata(for: metadata).title
+        }
+    }
+
+    private func migrateLegacyAppActionShortcutsIfNeeded() {
+        let candidates = AppShortcutAction.allCases.compactMap { action
+            -> (reference: ActionReference, binding: ShortcutBinding)? in
+            guard let binding = shortcutStore.resolvedBinding(
+                for: action.rawValue,
+                default: nil
+            ) else {
+                return nil
+            }
+            return (actionReference(for: action), binding)
+        }
+        actionShortcutStore.migrateLegacyAppAssignments(candidates) { [shortcutStore] in
+            for action in AppShortcutAction.allCases {
+                shortcutStore.setCustomization(.inheritDefault, for: action.rawValue)
+            }
+        }
+    }
+
+    private func migrateLegacyPluginActionShortcutsIfNeeded() {
+        for plugin in orderedCorePlugins() {
+            guard let provider = plugin as? any PluginLegacyActionShortcutProviding else {
+                continue
+            }
+            let assignments = guardedValue(
+                for: plugin,
+                operation: "read legacy action shortcuts",
+                provider.legacyActionShortcutAssignments
+            ) ?? []
+            actionShortcutStore.migrateLegacyPluginAssignments(
+                pluginID: plugin.metadata.id,
+                assignments: assignments
+            ) { [weak self, weak plugin] in
+                guard let self, let plugin,
+                      let provider = plugin as? any PluginLegacyActionShortcutProviding else {
+                    return
+                }
+                for assignment in assignments {
+                    guard let shortcutDefinitionID = assignment.legacyShortcutDefinitionID else {
+                        continue
+                    }
+                    self.shortcutStore.setCustomization(
+                        .cleared,
+                        for: self.shortcutItemID(
+                            pluginID: plugin.metadata.id,
+                            shortcutDefinitionID: shortcutDefinitionID
+                        )
+                    )
+                }
+                self.guardPluginCall(plugin, operation: "finish legacy action shortcut migration") {
+                    provider.legacyActionShortcutsDidMigrate()
+                }
+            }
+        }
+    }
+
+    private func hostActionRegistration() -> ActionProviderRegistration {
+        let providerID = "mactools"
+        let definitions = AppShortcutAction.allCases.map { action in
+            ActionDefinition(
+                key: ActionKey(providerID: providerID, actionID: action.rawValue),
+                title: action.title,
+                description: action.description,
+                systemImage: action.systemImage,
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive]
+            )
+        }
+        return ActionProviderRegistration(
+            providerID: providerID,
+            identity: ObjectIdentifier(self),
+            definitions: definitions,
+            catalogEntries: definitions.map {
+                ActionCatalogEntry(
+                    reference: ActionReference(key: $0.key),
+                    title: $0.title,
+                    subtitle: "MacTools"
+                )
+            },
+            availability: { _ in .available },
+            begin: { [weak self] invocation in
+                guard let self,
+                      let action = AppShortcutAction(rawValue: invocation.reference.key.actionID),
+                      let appPresentationHandler = self.appPresentationHandler else {
+                    return .failure(.providerFailure(FeatureL10n.string("MacTools 尚未准备完成。")))
+                }
+                appPresentationHandler(action.presentationRequest)
+                return .success(ActionExecutionHandle(operation: { .succeeded() }))
+            }
+        )
+    }
+
+    private func actionRegistration(
+        for plugin: any MacToolsPlugin,
+        definitions: [ActionDefinition],
+        catalogEntries: [ActionCatalogEntry]
+    ) -> ActionProviderRegistration {
+        let providerID = plugin.metadata.id
+        return ActionProviderRegistration(
+            providerID: providerID,
+            identity: ObjectIdentifier(plugin),
+            definitions: definitions,
+            catalogEntries: catalogEntries,
+            executionRevision: { [weak self, weak plugin] in
+                guard let self, let plugin else { return .max }
+                guard let provider = plugin as? any PluginActionExecutionRevisionProviding else {
+                    return 0
+                }
+                return self.guardedValue(
+                    for: plugin,
+                    operation: "read action execution revision",
+                    provider.actionExecutionRevision
+                ) ?? .max
+            },
+            availability: { [weak self, weak plugin] reference in
+                guard let self,
+                      let plugin,
+                      let provider = plugin as? any PluginActionProviding else {
+                    return .unavailable(FeatureL10n.string("插件不可用。"))
+                }
+                return self.guardedValue(
+                    for: plugin,
+                    operation: "read action availability",
+                    provider.actionAvailability(for: reference)
+                ) ?? .unavailable(FeatureL10n.string("插件不可用。"))
+            },
+            exposurePolicy: { [weak self, weak plugin] reference, surface in
+                guard let self, let plugin else {
+                    return .excluded
+                }
+                guard let provider = plugin as? any PluginActionExposureProviding else {
+                    return .automatic
+                }
+                return self.guardedValue(
+                    for: plugin,
+                    operation: "read action exposure policy",
+                    provider.exposurePolicy(for: reference, on: surface)
+                ) ?? .excluded
+            },
+            migrate: { [weak self, weak plugin] reference, schemaVersion in
+                guard let self,
+                      let plugin,
+                      let provider = plugin as? any PluginActionProviding else {
+                    return nil
+                }
+                return self.guardedOptionalValue(
+                    for: plugin,
+                    operation: "migrate action reference",
+                    provider.migrateActionReference(
+                        reference,
+                        toSchemaVersion: schemaVersion
+                    )
+                )
+            },
+            begin: { [weak self, weak plugin] invocation in
+                guard let self,
+                      let plugin,
+                      let provider = plugin as? any PluginActionProviding,
+                      !self.isPluginIsolated(plugin) else {
+                    return .failure(.providerFailure(FeatureL10n.string("插件不可用。")))
+                }
+
+                let result = PluginInvocationGuard.value(operation: "begin action") {
+                    try provider.beginAction(invocation)
+                }
+                switch result {
+                case let .success(handle):
+                    return .success(handle)
+                case let .failure(failure):
+                    self.isolatePlugin(plugin, operation: "begin action", failure: failure)
+                    return .failure(.providerFailure(failure.localizedDescription))
+                }
+            }
+        )
+    }
+
+    private func legacyCommandActionRegistration(
+        for plugin: any MacToolsPlugin,
+        definitions commandDefinitions: [PluginCommandDefinition]
+    ) -> ActionProviderRegistration {
+        let providerID = plugin.metadata.id
+        let providerTitle = localizedMetadata(for: plugin.metadata).title
+        let definitions = commandDefinitions.map { command in
+            ActionDefinition(
+                key: ActionKey(providerID: providerID, actionID: command.id),
+                title: command.title,
+                description: command.description,
+                keywords: command.keywords,
+                systemImage: command.systemImage,
+                risk: command.confirmation == nil ? .safe : .confirmationRequired,
+                confirmation: command.confirmation.map {
+                    ActionConfirmation(
+                        title: $0.title,
+                        message: $0.message,
+                        confirmButtonTitle: $0.confirmButtonTitle
+                    )
+                },
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive]
+            )
+        }
+
+        return ActionProviderRegistration(
+            providerID: providerID,
+            identity: ObjectIdentifier(plugin),
+            definitions: definitions,
+            catalogEntries: definitions.map {
+                ActionCatalogEntry(
+                    reference: ActionReference(key: $0.key),
+                    title: $0.title,
+                    subtitle: providerTitle
+                )
+            },
+            availability: { _ in .available },
+            begin: { [weak self, weak plugin] invocation in
+                guard let self,
+                      let plugin,
+                      let provider = plugin as? any PluginCommandProviding,
+                      let expectedDefinition = commandDefinitions.first(where: {
+                          $0.id == invocation.reference.key.actionID
+                      }),
+                      (self.guardedValue(
+                          for: plugin,
+                          operation: "revalidate legacy command action",
+                          provider.commandDefinitions
+                      ) ?? []).contains(expectedDefinition) else {
+                    return .failure(.providerFailure(FeatureL10n.string("操作不可用。")))
+                }
+
+                guard self.guardPluginCall(plugin, operation: "perform legacy command action", {
+                    provider.handleCommand(id: expectedDefinition.id)
+                }) else {
+                    return .failure(.providerFailure(FeatureL10n.string("插件执行失败。")))
+                }
+                return .success(ActionExecutionHandle(operation: { .succeeded() }))
+            }
+        )
     }
 
     private func guardedValue<T>(
@@ -2312,6 +3876,8 @@ final class PluginHost: ObservableObject {
         plugin.requestPermissionGuidance = nil
         plugin.shortcutBindingResolver = nil
         (plugin as? any PluginSettingsPresenting)?.requestSettingsPresentation = nil
+        (plugin as? any ActionGridHostContextConsuming)?.actionGridHostContext = nil
+        (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionHostContext = nil
         syncGlobalShortcuts()
     }
 
@@ -2456,6 +4022,7 @@ final class PluginHost: ObservableObject {
 
     private func shortcutDescriptors() -> [ShortcutDescriptor] {
         orderedCorePlugins().flatMap { plugin in
+            let metadata = localizedMetadata(for: plugin.metadata)
             let definitions = guardedValue(
                 for: plugin,
                 operation: "read shortcut definitions",
@@ -2468,8 +4035,8 @@ final class PluginHost: ObservableObject {
                         pluginID: plugin.metadata.id,
                         shortcutDefinitionID: definition.id
                     ),
-                    pluginID: plugin.metadata.id,
-                    pluginTitle: plugin.metadata.title,
+                    pluginID: metadata.id,
+                    pluginTitle: metadata.title,
                     definition: definition,
                     plugin: plugin
                 )
@@ -2813,19 +4380,73 @@ final class PluginHost: ObservableObject {
         shortcutDescriptors().first(where: { $0.itemID == shortcutID })
     }
 
+    private func shortcutMutationTarget(
+        for rowID: String
+    ) -> (descriptor: ShortcutDescriptor, assignmentID: UUID?)? {
+        let metadata = shortcutMutationMetadataByRowID[rowID]
+        let shortcutID = metadata?.shortcutID ?? rowID
+        guard let descriptor = shortcutDescriptor(for: shortcutID) else {
+            return nil
+        }
+        return (descriptor, metadata?.assignmentID)
+    }
+
     private func shortcutItemID(pluginID: String, shortcutDefinitionID: String) -> String {
         "\(pluginID).shortcut.\(shortcutDefinitionID)"
     }
 
     private func resolvedBinding(for descriptor: ShortcutDescriptor) -> ShortcutBinding? {
+        if let reference = actionReference(for: descriptor) {
+            return shortcutAssignmentService.assignment(for: reference)?.binding
+        }
+        return legacyResolvedBinding(for: descriptor)
+    }
+
+    private func legacyResolvedBinding(for descriptor: ShortcutDescriptor) -> ShortcutBinding? {
         shortcutStore.resolvedBinding(
             for: descriptor.itemID,
             default: descriptor.definition.defaultBinding
         )
     }
 
+    /// Global, optional plugin shortcuts that point at a published parameterless action are
+    /// aliases of that action assignment. The old `ShortcutStore` remains readable only for
+    /// one-shot migration; all subsequent edits and registrations use the action store.
+    private func actionReference(for descriptor: ShortcutDescriptor) -> ActionReference? {
+        guard descriptor.definition.scope == .global,
+              !descriptor.definition.isRequired,
+              !(descriptor.plugin is any PluginShortcutEventHandling) else {
+            return nil
+        }
+        let key = ActionKey(
+            providerID: descriptor.pluginID,
+            actionID: descriptor.definition.actionID
+        )
+        guard let definition = actionRegistry.definition(for: key),
+              definition.parameters.isEmpty,
+              definition.capabilities.contains(.foregroundInteractive) else {
+            return nil
+        }
+        let reference = ActionReference(
+            key: key,
+            schemaVersion: definition.parameterSchemaVersion
+        )
+        guard actionRegistry.catalogEntries.contains(where: {
+            $0.reference == reference
+        }) else {
+            return nil
+        }
+        return reference
+    }
+
     private func resolvedAppShortcutBinding(for action: AppShortcutAction) -> ShortcutBinding? {
-        shortcutStore.resolvedBinding(for: action.rawValue, default: nil)
+        shortcutAssignmentService.assignment(for: actionReference(for: action))?.binding
+    }
+
+    private func actionReference(for action: AppShortcutAction) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: "mactools", actionID: action.rawValue)
+        )
     }
 
     private func pluginShortcutConflict(
@@ -2835,22 +4456,12 @@ final class PluginHost: ObservableObject {
         descriptors.first { resolvedBinding(for: $0) == binding }
     }
 
-    private func pluginShortcutConflict(
-        for action: AppShortcutAction,
-        descriptors: [ShortcutDescriptor]
-    ) -> ShortcutDescriptor? {
-        guard let binding = resolvedAppShortcutBinding(for: action) else {
-            return nil
-        }
-
-        return pluginShortcutConflict(for: binding, descriptors: descriptors)
-    }
-
     private func appShortcutConflictError(
         for action: AppShortcutAction,
+        binding: ShortcutBinding,
         descriptors: [ShortcutDescriptor]
     ) -> String? {
-        guard let conflict = pluginShortcutConflict(for: action, descriptors: descriptors) else {
+        guard let conflict = pluginShortcutConflict(for: binding, descriptors: descriptors) else {
             return nil
         }
 
@@ -2859,18 +4470,23 @@ final class PluginHost: ObservableObject {
         ).localizedDescription
     }
 
-    private func resolvedBinding(forPluginID pluginID: String, shortcutDefinitionID: String) -> ShortcutBinding? {
+    private func legacyResolvedBinding(
+        forPluginID pluginID: String,
+        shortcutDefinitionID: String
+    ) -> ShortcutBinding? {
         guard let descriptor = shortcutDescriptors().first(where: {
             $0.pluginID == pluginID && $0.definition.id == shortcutDefinitionID
         }) else {
             return nil
         }
 
-        return resolvedBinding(for: descriptor)
+        return legacyResolvedBinding(for: descriptor)
     }
 
     private func applyImportedShortcutCustomizations(
-        _ importedCustomizations: [String: ShortcutCustomization]
+        _ importedCustomizations: [String: ShortcutCustomization],
+        bridgesLegacyActionAssignments: Bool,
+        notifiesActionBackedDescriptors: Bool = true
     ) -> [String: String] {
         let descriptors = shortcutDescriptors()
         let appCustomizations = Dictionary(
@@ -2894,6 +4510,7 @@ final class PluginHost: ObservableObject {
             return importShortcutErrorMessages(errors, descriptors: descriptors)
         }
 
+        var mutationErrors: [String: String] = [:]
         for descriptor in descriptors {
             guard let customization = targetCustomizations[descriptor.itemID] else {
                 continue
@@ -2901,23 +4518,59 @@ final class PluginHost: ObservableObject {
 
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
             shortcutErrors.removeValue(forKey: descriptor.itemID)
-            notifyShortcutBindingChange(
-                for: descriptor,
-                binding: ShortcutStore.resolve(
-                    customization: customization,
-                    defaultBinding: descriptor.definition.defaultBinding
+            let binding = ShortcutStore.resolve(
+                customization: customization,
+                defaultBinding: descriptor.definition.defaultBinding
+            )
+            if bridgesLegacyActionAssignments,
+               importedCustomizations[descriptor.itemID] != nil,
+               let reference = actionReference(for: descriptor) {
+                if let binding {
+                    if case let .failure(error) = shortcutAssignmentService.assign(
+                        binding,
+                        to: reference
+                    ) {
+                        mutationErrors[descriptor.itemID] = error.localizedDescription
+                    }
+                } else {
+                    if case let .failure(error) = shortcutAssignmentService.clear(reference) {
+                        mutationErrors[descriptor.itemID] = error.localizedDescription
+                    }
+                }
+            }
+            if notifiesActionBackedDescriptors || actionReference(for: descriptor) == nil {
+                notifyShortcutBindingChange(
+                    for: descriptor,
+                    binding: binding
                 )
-            )
+            }
         }
-        for action in AppShortcutAction.allCases {
-            shortcutStore.setCustomization(
-                appCustomizations[action] ?? .inheritDefault,
-                for: action.rawValue
+        for action in AppShortcutAction.allCases where bridgesLegacyActionAssignments {
+            guard let customization = importedCustomizations[action.rawValue] else {
+                continue
+            }
+            let binding = ShortcutStore.resolve(
+                customization: customization,
+                defaultBinding: nil
             )
+            if let binding {
+                if case let .failure(error) = shortcutAssignmentService.assign(
+                    binding,
+                    to: actionReference(for: action)
+                ) {
+                    mutationErrors[action.rawValue] = error.localizedDescription
+                }
+            } else {
+                if case let .failure(error) = shortcutAssignmentService.clear(
+                    actionReference(for: action)
+                ) {
+                    mutationErrors[action.rawValue] = error.localizedDescription
+                }
+            }
             appShortcutErrors.removeValue(forKey: action)
         }
 
-        return [:]
+        return importShortcutErrorMessages(mutationErrors, descriptors: descriptors)
     }
 
     private func importShortcutErrorMessages(
@@ -3067,8 +4720,46 @@ final class PluginHost: ObservableObject {
     @discardableResult
     private func applyShortcutCustomization(
         _ customization: ShortcutCustomization,
-        for descriptor: ShortcutDescriptor
+        for descriptor: ShortcutDescriptor,
+        assignmentID: UUID? = nil
     ) -> String? {
+        if let reference = actionReference(for: descriptor) {
+            let binding = ShortcutStore.resolve(
+                customization: customization,
+                defaultBinding: descriptor.definition.defaultBinding
+            )
+            let result: ActionShortcutMutationResult
+            if let binding {
+                result = shortcutAssignmentService.assign(
+                    binding,
+                    to: reference,
+                    assignmentID: assignmentID
+                )
+            } else {
+                result = shortcutAssignmentService.clear(
+                    reference,
+                    assignmentID: assignmentID
+                )
+            }
+
+            switch result {
+            case .success:
+                shortcutStore.setCustomization(.cleared, for: descriptor.itemID)
+                notifyShortcutBindingChange(
+                    for: descriptor,
+                    binding: shortcutAssignmentService.assignment(for: reference)?.binding
+                )
+                shortcutErrors.removeValue(forKey: descriptor.itemID)
+                rebuildDerivedState()
+                syncGlobalShortcuts()
+                return nil
+            case let .failure(error):
+                shortcutErrors[descriptor.itemID] = error.localizedDescription
+                rebuildDerivedState()
+                return error.localizedDescription
+            }
+        }
+
         do {
             try validateShortcutCustomization(customization, for: descriptor)
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
@@ -3197,10 +4888,84 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    private func actionBackedShortcutBindings() -> [String: ShortcutBinding] {
+        Dictionary(
+            uniqueKeysWithValues: shortcutDescriptors().compactMap { descriptor in
+                guard let reference = actionReference(for: descriptor),
+                      let binding = shortcutAssignmentService.assignment(
+                          for: reference
+                      )?.binding else {
+                    return nil
+                }
+                return (descriptor.itemID, binding)
+            }
+        )
+    }
+
+    private func notifyChangedActionBackedShortcutBindings(
+        previous: [String: ShortcutBinding]
+    ) {
+        let current = actionBackedShortcutBindings()
+        for descriptor in shortcutDescriptors() {
+            guard actionReference(for: descriptor) != nil,
+                  previous[descriptor.itemID] != current[descriptor.itemID] else {
+                continue
+            }
+            notifyShortcutBindingChange(
+                for: descriptor,
+                binding: current[descriptor.itemID]
+            )
+        }
+    }
+
+    private func notifyAllActionBackedShortcutBindings() {
+        let current = actionBackedShortcutBindings()
+        for descriptor in shortcutDescriptors() where actionReference(for: descriptor) != nil {
+            notifyShortcutBindingChange(
+                for: descriptor,
+                binding: current[descriptor.itemID]
+            )
+        }
+    }
+
+    private func importedReservedShortcutState(
+        customizations: [String: ShortcutCustomization],
+        descriptors: [ShortcutDescriptor]
+    ) -> (
+        registrations: [GlobalShortcutManager.Registration],
+        ownerDescriptions: [String: String]
+    ) {
+        let eligibleDescriptors = descriptors.filter {
+            $0.definition.scope == .global && actionReference(for: $0) == nil
+        }
+        let registrations = eligibleDescriptors.compactMap {
+            descriptor -> GlobalShortcutManager.Registration? in
+            let customization = customizations[descriptor.itemID] ?? .inheritDefault
+            guard let binding = ShortcutStore.resolve(
+                customization: customization,
+                defaultBinding: descriptor.definition.defaultBinding
+            ) else {
+                return nil
+            }
+            return GlobalShortcutManager.Registration(
+                shortcutID: descriptor.itemID,
+                binding: binding
+            )
+        }
+        let ownerDescriptions = Dictionary(
+            eligibleDescriptors.map {
+                ($0.itemID, "\($0.pluginTitle) · \($0.definition.title)")
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return (registrations, ownerDescriptions)
+    }
+
     private func syncGlobalShortcuts() {
         let descriptors = shortcutDescriptors()
-        var registrations = descriptors.compactMap { descriptor -> GlobalShortcutManager.Registration? in
-            guard descriptor.definition.scope == .global else {
+        let registrations = descriptors.compactMap { descriptor -> GlobalShortcutManager.Registration? in
+            guard descriptor.definition.scope == .global,
+                  actionReference(for: descriptor) == nil else {
                 return nil
             }
 
@@ -3218,26 +4983,143 @@ final class PluginHost: ObservableObject {
             )
         }
 
-        for action in AppShortcutAction.allCases {
-            guard let binding = resolvedAppShortcutBinding(for: action),
-                  pluginShortcutConflict(for: binding, descriptors: descriptors) == nil,
-                  MacToolsReservedShortcutBindings.validationError(for: binding) == nil
-            else {
-                continue
+        let ownerDescriptions = Dictionary(
+            descriptors.filter { actionReference(for: $0) == nil }.map {
+                ($0.itemID, "\($0.pluginTitle) · \($0.definition.title)")
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        shortcutAssignmentService.synchronize(
+            reservedRegistrations: registrations,
+            reservedOwnerDescriptions: ownerDescriptions
+        )
+        actionShortcutItems = shortcutAssignmentService.settingsItems
+        shortcutBindingRevision = shortcutAssignmentService.revision
+        actionShortcutCatalogItems = buildActionShortcutCatalogItems()
+    }
+
+    private func buildActionShortcutCatalogItems() -> [ActionShortcutCatalogItem] {
+        var items: [ActionShortcutCatalogItem] = actionCatalogEntries.flatMap {
+            entry -> [ActionShortcutCatalogItem] in
+            guard case let .success(action) = actionRegistry.registeredAction(
+                for: entry.reference
+            ) else {
+                return []
             }
 
-            registrations.append(
-                GlobalShortcutManager.Registration(
-                    shortcutID: action.rawValue,
-                    binding: binding
-                )
+            let availability = actionRegistry.availability(for: entry.reference)
+            let assignmentItems = shortcutAssignmentService.settingsItems(
+                for: entry.reference
             )
+            let rows: [ActionShortcutSettingsItem?] = assignmentItems.isEmpty
+                ? [nil]
+                : assignmentItems.map(Optional.some)
+            return rows.map { assignmentItem in
+                let status: ActionShortcutCatalogStatus
+                if let assignmentItem {
+                    status = actionShortcutCatalogStatus(for: assignmentItem.state)
+                } else if availability.isAvailable {
+                    status = .unassigned
+                } else {
+                    status = .unavailable(availability.reason)
+                }
+                return ActionShortcutCatalogItem(
+                    reference: entry.reference,
+                    assignmentID: assignmentItem?.assignment.id,
+                    title: entry.title,
+                    ownerTitle: actionOwnerTitle(providerID: entry.reference.key.providerID),
+                    description: action.definition.description,
+                    permissionSummary: {
+                        let titles = actionPermissionTitles(for: entry.reference)
+                        return titles.isEmpty
+                            ? nil
+                            : FeatureL10n.format(
+                                "所需权限：%@",
+                                FeatureL10n.joined(titles)
+                            )
+                    }(),
+                    systemImage: action.definition.systemImage,
+                    bindingText: assignmentItem?.bindingText ?? "",
+                    status: status,
+                    canAssign: availability.isAvailable
+                        && action.definition.capabilities.contains(.foregroundInteractive)
+                )
+            }
         }
 
-        globalShortcutManager.updateBindings(registrations)
+        let catalogReferences = Set(items.map(\.reference))
+        items.append(contentsOf: shortcutAssignmentService.settingsItems.compactMap { item in
+            guard !catalogReferences.contains(item.assignment.reference) else {
+                return nil
+            }
+            return ActionShortcutCatalogItem(
+                reference: item.assignment.reference,
+                assignmentID: item.assignment.id,
+                title: item.title,
+                ownerTitle: actionOwnerTitle(
+                    providerID: item.assignment.reference.key.providerID
+                ),
+                description: FeatureL10n.string("操作提供方暂时不可用；快捷键分配已保留。"),
+                permissionSummary: nil,
+                systemImage: "puzzlepiece.extension",
+                bindingText: item.bindingText,
+                status: actionShortcutCatalogStatus(for: item.state),
+                canAssign: false
+            )
+        })
+        return items
+    }
+
+    private func actionShortcutCatalogStatus(
+        for state: ActionShortcutRegistrationState
+    ) -> ActionShortcutCatalogStatus {
+        switch state {
+        case .registered:
+            .assigned
+        case let .unavailable(reason):
+            .unavailable(reason)
+        case let .conflict(ownerDescription):
+            .conflicted(ownerDescription)
+        case let .registrationFailed(code):
+            .conflicted(FeatureL10n.format("系统注册失败（%d）。", code))
+        case .invalidBinding:
+            .conflicted(FeatureL10n.string("快捷键无效。"))
+        }
+    }
+
+    private func actionOwnerTitle(providerID: String) -> String {
+        switch providerID {
+        case "mactools":
+            return "MacTools"
+        case AutomationController.providerID:
+            return FeatureL10n.string("自动化")
+        default:
+            guard let metadata = corePlugin(for: providerID)?.metadata else {
+                return providerID
+            }
+            return localizedMetadata(for: metadata).title
+        }
     }
 
     private func handleShortcutTrigger(shortcutID: String) {
+        if let reference = shortcutAssignmentService.reference(forShortcutID: shortcutID) {
+            guard activeActionShortcutReferences.insert(reference).inserted else {
+                return
+            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                defer { activeActionShortcutReferences.remove(reference) }
+                _ = await actionExecutor.execute(
+                    ActionInvocation(
+                        reference: reference,
+                        source: .globalShortcut,
+                        mode: .foreground
+                    )
+                )
+            }
+            return
+        }
+
         if let action = AppShortcutAction(rawValue: shortcutID) {
             appPresentationHandler?(action.presentationRequest)
             return

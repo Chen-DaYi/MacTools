@@ -17,7 +17,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
     /// must not be charged as continuous coding time.
     private static let maximumEventGap: TimeInterval = 6 * 60 * 60
 
-    private struct ActiveSession: Equatable {
+    fileprivate struct ActiveSession: Equatable {
         var project: String
         var tool: String
         var status: ActivityBarHookStatus
@@ -25,7 +25,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         var accountedThrough: Date
     }
 
-    private struct IntervalCoverage {
+    fileprivate struct IntervalCoverage {
         private struct Interval {
             var start: Date
             var end: Date
@@ -69,6 +69,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
 
     @Published private(set) var days: [String: ActivityBarCodingDailyStats]
     @Published private(set) var activeSessionCount = 0
+    private(set) var loadError: String?
 
     private var activeSessions: [String: ActiveSession] = [:]
     private let storage: PluginStorage
@@ -88,8 +89,12 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         self.storage = storage
         self.calendar = calendar
         self.dateProvider = dateProvider
-        self.days = Self.loadDays(storage: storage, decoder: decoder)
-        sanitizeStoredDurations()
+        let loaded = Self.loadDays(storage: storage, decoder: decoder)
+        self.days = loaded.days
+        self.loadError = loaded.error
+        if loaded.error == nil {
+            sanitizeStoredDurations()
+        }
     }
 
     var today: ActivityBarCodingDailyStats {
@@ -116,6 +121,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
     }
 
     func handleEvent(_ event: ActivityBarHookEvent) {
+        guard loadError == nil else { return }
         let now = dateProvider()
         let project = projectName(from: event.cwd)
         let sessionID = event.sessionID.isEmpty ? "unknown" : event.sessionID
@@ -150,6 +156,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
     }
 
     func flushActiveDurations() {
+        guard loadError == nil else { return }
         let now = dateProvider()
         for sessionID in Array(activeSessions.keys) {
             closeElapsedTime(for: sessionID, now: now, isConfirmed: false)
@@ -159,8 +166,110 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         persist()
     }
 
-    func resetToday() {
-        let now = dateProvider()
+    struct PreparedTodayReset {
+        fileprivate let previousDays: [String: ActivityBarCodingDailyStats]
+        fileprivate let previousRawValue: Any?
+        fileprivate let previousActiveSessions: [String: ActiveSession]
+        fileprivate let previousDailyIntervalCoverage: [String: IntervalCoverage]
+        fileprivate let previousProjectIntervalCoverage: [String: [String: IntervalCoverage]]
+        fileprivate let previousToolIntervalCoverage: [String: [String: IntervalCoverage]]
+        fileprivate let candidateDays: [String: ActivityBarCodingDailyStats]
+        fileprivate let candidateActiveSessions: [String: ActiveSession]
+        fileprivate let candidateDailyIntervalCoverage: [String: IntervalCoverage]
+        fileprivate let candidateProjectIntervalCoverage: [String: [String: IntervalCoverage]]
+        fileprivate let candidateToolIntervalCoverage: [String: [String: IntervalCoverage]]
+        fileprivate let candidateData: Data
+    }
+
+    func prepareTodayReset() -> PreparedTodayReset? {
+        guard loadError == nil else { return nil }
+        let previousDays = days
+        let previousActiveSessions = activeSessions
+        let previousDailyIntervalCoverage = dailyIntervalCoverage
+        let previousProjectIntervalCoverage = projectIntervalCoverage
+        let previousToolIntervalCoverage = toolIntervalCoverage
+
+        applyTodayResetInMemory(at: dateProvider())
+        let candidateDays = days
+        let candidateActiveSessions = activeSessions
+        let candidateDailyIntervalCoverage = dailyIntervalCoverage
+        let candidateProjectIntervalCoverage = projectIntervalCoverage
+        let candidateToolIntervalCoverage = toolIntervalCoverage
+
+        days = previousDays
+        activeSessions = previousActiveSessions
+        dailyIntervalCoverage = previousDailyIntervalCoverage
+        projectIntervalCoverage = previousProjectIntervalCoverage
+        toolIntervalCoverage = previousToolIntervalCoverage
+
+        guard let candidateData = try? encoder.encode(candidateDays) else { return nil }
+        return PreparedTodayReset(
+            previousDays: previousDays,
+            previousRawValue: storage.object(forKey: StorageKey.days),
+            previousActiveSessions: previousActiveSessions,
+            previousDailyIntervalCoverage: previousDailyIntervalCoverage,
+            previousProjectIntervalCoverage: previousProjectIntervalCoverage,
+            previousToolIntervalCoverage: previousToolIntervalCoverage,
+            candidateDays: candidateDays,
+            candidateActiveSessions: candidateActiveSessions,
+            candidateDailyIntervalCoverage: candidateDailyIntervalCoverage,
+            candidateProjectIntervalCoverage: candidateProjectIntervalCoverage,
+            candidateToolIntervalCoverage: candidateToolIntervalCoverage,
+            candidateData: candidateData
+        )
+    }
+
+    @discardableResult
+    func commitTodayReset(_ prepared: PreparedTodayReset) -> ActivityBarPersistenceMutationResult {
+        storage.set(prepared.candidateData, forKey: StorageKey.days)
+        guard activityBarStorageValuesMatch(storage.object(forKey: StorageKey.days), prepared.candidateData) else {
+            let rollbackSucceeded = restoreActivityBarStorageValue(
+                prepared.previousRawValue,
+                forKey: StorageKey.days,
+                storage: storage
+            )
+            if !rollbackSucceeded {
+                reloadFromStorage()
+            }
+            return .rejected(rollbackSucceeded: rollbackSucceeded)
+        }
+
+        days = prepared.candidateDays
+        activeSessions = prepared.candidateActiveSessions
+        dailyIntervalCoverage = prepared.candidateDailyIntervalCoverage
+        projectIntervalCoverage = prepared.candidateProjectIntervalCoverage
+        toolIntervalCoverage = prepared.candidateToolIntervalCoverage
+        loadError = nil
+        return .committed
+    }
+
+    @discardableResult
+    func rollbackTodayReset(_ prepared: PreparedTodayReset) -> Bool {
+        let succeeded = restoreActivityBarStorageValue(
+            prepared.previousRawValue,
+            forKey: StorageKey.days,
+            storage: storage
+        )
+        guard succeeded else {
+            reloadFromStorage()
+            return false
+        }
+        days = prepared.previousDays
+        activeSessions = prepared.previousActiveSessions
+        dailyIntervalCoverage = prepared.previousDailyIntervalCoverage
+        projectIntervalCoverage = prepared.previousProjectIntervalCoverage
+        toolIntervalCoverage = prepared.previousToolIntervalCoverage
+        loadError = nil
+        return true
+    }
+
+    @discardableResult
+    func resetToday() -> ActivityBarPersistenceMutationResult {
+        guard let prepared = prepareTodayReset() else { return .recoveryRequired }
+        return commitTodayReset(prepared)
+    }
+
+    private func applyTodayResetInMemory(at now: Date) {
         let key = dateKey(for: now)
 
         // Preserve any portion belonging to an earlier calendar day, then cut
@@ -179,7 +288,6 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         dailyIntervalCoverage.removeValue(forKey: key)
         projectIntervalCoverage.removeValue(forKey: key)
         toolIntervalCoverage.removeValue(forKey: key)
-        persist()
     }
 
     private func closeElapsedTime(for sessionID: String, now: Date, isConfirmed: Bool) {
@@ -337,6 +445,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         tool rawTool: String,
         update: (inout ActivityBarCodingDailyStats, inout ActivityBarProjectStats, inout ActivityBarProjectStats) -> Void
     ) {
+        guard loadError == nil else { return }
         let project = normalizedProject(rawProject)
         let tool = normalizedTool(rawTool)
         let key = dateKey(for: dateProvider())
@@ -450,6 +559,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
     }
 
     private func persist() {
+        guard loadError == nil else { return }
         do {
             let data = try encoder.encode(days)
             storage.set(data, forKey: StorageKey.days)
@@ -458,16 +568,30 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         }
     }
 
-    private static func loadDays(storage: PluginStorage, decoder: JSONDecoder) -> [String: ActivityBarCodingDailyStats] {
-        guard let data = storage.data(forKey: StorageKey.days) else {
-            return [:]
+    private func reloadFromStorage() {
+        let loaded = Self.loadDays(storage: storage, decoder: decoder)
+        days = loaded.days
+        loadError = loaded.error
+    }
+
+    private static func loadDays(
+        storage: PluginStorage,
+        decoder: JSONDecoder
+    ) -> (days: [String: ActivityBarCodingDailyStats], error: String?) {
+        guard let rawValue = storage.object(forKey: StorageKey.days) else {
+            return ([:], nil)
+        }
+        guard let data = rawValue as? Data else {
+            let message = "Stored coding statistics have an invalid format."
+            ActivityBarLog.hooks.error("\(message, privacy: .public)")
+            return ([:], message)
         }
 
         do {
-            return try decoder.decode([String: ActivityBarCodingDailyStats].self, from: data)
+            return (try decoder.decode([String: ActivityBarCodingDailyStats].self, from: data), nil)
         } catch {
             ActivityBarLog.hooks.error("Failed to load coding stats: \(error.localizedDescription, privacy: .public)")
-            return [:]
+            return ([:], error.localizedDescription)
         }
     }
 }

@@ -1,4 +1,5 @@
 import CoreGraphics
+import MacToolsPluginKit
 import XCTest
 @testable import TrackpadGesturesPlugin
 
@@ -9,6 +10,19 @@ private final class LockedMiddleClickTestClock: @unchecked Sendable {
     var value: TimeInterval {
         get { lock.withLock { storedValue } }
         set { lock.withLock { storedValue = newValue } }
+    }
+}
+
+private final class LockedPhysicalClickRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValues: [(TrackpadGesture, UInt64)] = []
+
+    var values: [(TrackpadGesture, UInt64)] {
+        lock.withLock { storedValues }
+    }
+
+    func append(_ gesture: TrackpadGesture, deviceID: UInt64) {
+        lock.withLock { storedValues.append((gesture, deviceID)) }
     }
 }
 
@@ -342,6 +356,82 @@ final class TrackpadMiddleClickArbiterTests: XCTestCase {
 
 @MainActor
 final class TrackpadMiddleClickCoordinatorTests: XCTestCase {
+    func testCoordinatorConsumesTwoFingerPhysicalClickAndRecognizesItOnce() throws {
+        let clock = LockedMiddleClickTestClock()
+        let recognized = LockedPhysicalClickRecorder()
+        let coordinator = TrackpadMiddleClickCoordinator(
+            clock: { clock.value },
+            synthesizeMiddleClick: {},
+            releaseMiddleButton: {},
+            postEvent: { _ in },
+            recognizePhysicalClick: { recognized.append($0, deviceID: $1) },
+            eventOrigin: { _ in .trackpad(deviceID: 1) }
+        )
+        coordinator.updateClickResolutions([.twoFingerClick: .consume])
+        coordinator.observe(frame: makeTwoContactFrame())
+
+        clock.value = 0.01
+        let down = try XCTUnwrap(makeMouseEvent(type: .rightMouseDown))
+        XCTAssertNil(coordinator.handleNativeEvent(type: .rightMouseDown, event: down))
+        clock.value = 0.02
+        let up = try XCTUnwrap(makeMouseEvent(type: .rightMouseUp))
+        XCTAssertNil(coordinator.handleNativeEvent(type: .rightMouseUp, event: up))
+
+        XCTAssertEqual(recognized.values.map(\.0), [.twoFingerClick])
+        XCTAssertEqual(recognized.values.map(\.1), [1])
+        coordinator.reset()
+    }
+
+    func testCoordinatorDoesNotClaimExternalClickDuringPhysicalClickCandidate() throws {
+        let clock = LockedMiddleClickTestClock()
+        let recognized = LockedPhysicalClickRecorder()
+        let coordinator = TrackpadMiddleClickCoordinator(
+            clock: { clock.value },
+            synthesizeMiddleClick: {},
+            releaseMiddleButton: {},
+            postEvent: { _ in },
+            recognizePhysicalClick: { recognized.append($0, deviceID: $1) },
+            eventOrigin: { _ in .external }
+        )
+        coordinator.updateClickResolutions([.threeFingerClick: .consume])
+        coordinator.observe(frame: makeThreeContactFrame())
+
+        clock.value = 0.01
+        let down = try XCTUnwrap(makeMouseEvent(type: .leftMouseDown))
+        XCTAssertNotNil(coordinator.handleNativeEvent(type: .leftMouseDown, event: down))
+
+        XCTAssertTrue(recognized.values.isEmpty)
+        coordinator.reset()
+    }
+
+    func testCoordinatorDoesNotRecognizePhysicalClickAfterContactsLift() throws {
+        let clock = LockedMiddleClickTestClock()
+        let recognized = LockedPhysicalClickRecorder()
+        let coordinator = TrackpadMiddleClickCoordinator(
+            clock: { clock.value },
+            synthesizeMiddleClick: {},
+            releaseMiddleButton: {},
+            postEvent: { _ in },
+            recognizePhysicalClick: { recognized.append($0, deviceID: $1) },
+            eventOrigin: { _ in .trackpad(deviceID: 1) }
+        )
+        coordinator.updateClickResolutions([.twoFingerClick: .consume])
+        coordinator.observe(frame: makeTwoContactFrame())
+        clock.value = 0.01
+        coordinator.observe(frame: TrackpadContactFrame(
+            deviceID: 1,
+            timestamp: 0.01,
+            contacts: []
+        ))
+
+        clock.value = 0.02
+        let down = try XCTUnwrap(makeMouseEvent(type: .leftMouseDown))
+        _ = coordinator.handleNativeEvent(type: .leftMouseDown, event: down)
+
+        XCTAssertTrue(recognized.values.isEmpty)
+        coordinator.reset()
+    }
+
     func testCoordinatorInfersSingleUnknownTipTapCandidateAndConsumesShortcutClick() throws {
         let clock = LockedMiddleClickTestClock()
         var postedTypes: [CGEventType] = []
@@ -641,6 +731,17 @@ final class TrackpadMiddleClickCoordinatorTests: XCTestCase {
                 .init(identifier: 1, x: 0.2, y: 0.5),
                 .init(identifier: 2, x: 0.5, y: 0.5),
                 .init(identifier: 3, x: 0.8, y: 0.5),
+            ]
+        )
+    }
+
+    private func makeTwoContactFrame() -> TrackpadContactFrame {
+        TrackpadContactFrame(
+            deviceID: 1,
+            timestamp: 0,
+            contacts: [
+                .init(identifier: 1, x: 0.3, y: 0.5),
+                .init(identifier: 2, x: 0.7, y: 0.5),
             ]
         )
     }

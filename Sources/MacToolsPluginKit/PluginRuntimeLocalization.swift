@@ -162,9 +162,14 @@ public enum PluginRuntimeLocalization {
     ) -> String {
         // The selected language falls back to English, then to the caller's
         // source-language default when neither resource contains the key.
+        let missingValue = "\u{F8FF}.mactools.localization.missing.\u{F8FF}"
         for localizedBundle in localizedBundles(in: bundle) {
-            let value = localizedBundle.localizedString(forKey: key, value: nil, table: table)
-            if value != key {
+            let value = localizedBundle.localizedString(
+                forKey: key,
+                value: missingValue,
+                table: table
+            )
+            if value != missingValue {
                 return value
             }
         }

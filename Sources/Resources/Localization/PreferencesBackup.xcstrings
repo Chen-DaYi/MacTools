@@ -149,67 +149,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يتضمن تفضيلات التطبيق وترتيب عرض الإضافات واختصارات لوحة المفاتيح وإعدادات الإضافات القابلة للتصدير؛ ولا يتضمن الأذونات أو ذاكرة التخزين المؤقت أو بيانات الاعتماد أو غيرها من البيانات الخاصة."
+            "value": "يتضمن تفضيلات التطبيق وتخطيط الإضافات والاختصارات وسير العمل وقواعد الأتمتة وروابط التشغيل المحفوظة وإعدادات الإضافات القابلة للتصدير؛ ويستثني الأذونات وذاكرات التخزين المؤقت وبيانات الاعتماد وسجل التشغيل."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enthält App-Einstellungen, Plugin-Anzeigereihenfolge, Tastaturkurzbefehle und exportierbare Plug-in-Einstellungen; Berechtigungen, Caches, Zugangsdaten und andere private Daten sind ausgeschlossen."
+            "value": "Enthält App-Einstellungen, Plugin-Layout, Tastaturkurzbefehle, Workflows, Automationsregeln, gespeicherte Run Links und exportierbare Plug-in-Einstellungen; Berechtigungen, Caches, Zugangsdaten und der Ausführungsverlauf sind ausgeschlossen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Includes app preferences, plugin display order, keyboard shortcuts, and supported exportable plugin settings; permissions, caches, credentials, and other private data are excluded."
+            "value": "Includes app preferences, plugin layout, keyboard shortcuts, workflows, automation rules, saved Run Links, and supported exportable plugin settings; permissions, caches, credentials, and run history are excluded."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Incluye preferencias de la app, orden de visualización de plugins, atajos de teclado y ajustes de plugins compatibles con la exportación; no incluye permisos, cachés, credenciales ni otros datos privados."
+            "value": "Incluye preferencias de la app, diseño de plugins, atajos de teclado, flujos de trabajo, reglas de automatización, enlaces de ejecución guardados y ajustes de plugins exportables; no incluye permisos, cachés, credenciales ni el historial de ejecuciones."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inclut les préférences de l’app, l’ordre d’affichage des extensions, les raccourcis clavier et les réglages d’extension exportables pris en charge ; les autorisations, caches, identifiants et autres données privées sont exclus."
+            "value": "Inclut les préférences de l’app, la disposition des extensions, les raccourcis clavier, les workflows, les règles d’automatisation, les liens d’exécution enregistrés et les réglages d’extension exportables ; les autorisations, caches, identifiants et l’historique d’exécution sont exclus."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "アプリの環境設定、プラグインの表示順、キーボードショートカット、対応するエクスポート可能なプラグイン設定を含みます。権限、キャッシュ、認証情報、その他の非公開データは含まれません。"
+            "value": "アプリの環境設定、プラグインの配置、キーボードショートカット、ワークフロー、自動化ルール、保存済みの実行リンク、対応するプラグイン設定を含みます。権限、キャッシュ、認証情報、実行履歴は含まれません。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "앱 환경설정, 플러그인 표시 순서, 키보드 단축키 및 내보내기를 지원하는 플러그인 설정을 포함합니다. 권한, 캐시, 자격 증명 및 기타 비공개 데이터는 제외됩니다."
+            "value": "앱 환경설정, 플러그인 배치, 키보드 단축키, 워크플로, 자동화 규칙, 저장된 실행 링크 및 내보내기를 지원하는 플러그인 설정을 포함합니다. 권한, 캐시, 자격 증명 및 실행 기록은 제외됩니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inclui preferências do app, ordem de exibição dos plugins, atalhos de teclado e definições de plugins compatíveis com exportação; permissões, caches, credenciais e outros dados privados são excluídos."
+            "value": "Inclui preferências do app, layout dos plugins, atalhos de teclado, fluxos de trabalho, regras de automação, links de execução salvos e definições de plugins exportáveis; permissões, caches, credenciais e o histórico de execuções são excluídos."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Включает настройки приложения, порядок отображения плагинов, сочетания клавиш и поддерживаемые экспортируемые настройки плагинов; разрешения, кэш, учётные данные и другие приватные данные исключены."
+            "value": "Включает настройки приложения, раскладку плагинов, сочетания клавиш, рабочие процессы, правила автоматизации, сохранённые ссылки запуска и экспортируемые настройки плагинов; разрешения, кэш, учётные данные и история запусков исключены."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "包含应用偏好、插件显示顺序、快捷键和支持导出的插件设置；不会包含权限、缓存、凭证或其他私有数据。"
+            "value": "包含应用偏好、插件布局、快捷键、工作流、自动化规则、已保存的运行链接和支持导出的插件设置；不包含权限、缓存、凭证或运行历史。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "包含應用程式偏好、插件顯示順序、快速鍵和支援匯出的插件設定；不會包含權限、快取、憑證或其他私有資料。"
+            "value": "包含應用程式偏好、插件佈局、快速鍵、工作流程、自動化規則、已儲存的執行連結和支援匯出的插件設定；不包含權限、快取、憑證或執行歷史。"
           }
         }
       }
@@ -1279,73 +1279,89 @@
         }
       }
     },
+    "preferencesBackup.preview.retainedUnavailableActions": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "سيتم الاحتفاظ بـ %d من الإجراءات غير المتاحة حاليًا؛ ويمكن استخدامها بعد استعادة الإضافات المقابلة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "%d derzeit nicht verfügbare Aktionen werden beibehalten und können nach Wiederherstellung der zugehörigen Plugins verwendet werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "%d currently unavailable actions will be retained and can be used after their plugins are restored." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Se conservarán %d acciones no disponibles actualmente y podrán usarse cuando se restauren sus plugins." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "%d actions actuellement indisponibles seront conservées et pourront être utilisées après la restauration de leurs extensions." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "現在利用できないアクション %d 件は保持され、対応するプラグインの復元後に使用できます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "현재 사용할 수 없는 동작 %d개를 유지하며 해당 플러그인을 복원한 후 사용할 수 있습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Serão mantidas %d ações atualmente indisponíveis, que poderão ser usadas depois de restaurar os respetivos plugins." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "%d временно недоступных действий будут сохранены и станут доступны после восстановления соответствующих плагинов." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "将保留 %d 个当前不可用的操作；对应插件恢复后可继续使用。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "將保留 %d 個目前無法使用的操作；還原對應插件後即可繼續使用。" } }
+      }
+    },
     "preferencesBackup.preview.skipped": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "سيتم تخطي إعدادات %d من الإضافات غير المتاحة و%d من الاختصارات غير المتاحة."
+            "value": "سيتم تخطي إعدادات %d من الإضافات غير المتاحة و%d من الاختصارات غير المتاحة و%d من الإجراءات غير المتاحة أو غير القابلة للنقل."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Einstellungen für %d nicht verfügbare Plugins und %d nicht verfügbare Kurzbefehle werden übersprungen."
+            "value": "Einstellungen für %d nicht verfügbare Plugins, %d nicht verfügbare Kurzbefehle und %d nicht verfügbare oder nicht übertragbare Aktionen werden übersprungen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Settings for %d unavailable plugins and %d unavailable shortcuts will be skipped."
+            "value": "Settings for %d unavailable plugins, %d unavailable shortcuts, and %d unavailable or non-portable actions will be skipped."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Se omitirán los ajustes de %d plugins no disponibles y %d atajos no disponibles."
+            "value": "Se omitirán los ajustes de %d plugins no disponibles, %d atajos no disponibles y %d acciones no disponibles o no portátiles."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les réglages de %d extensions indisponibles et de %d raccourcis indisponibles seront ignorés."
+            "value": "Les réglages de %d extensions indisponibles, %d raccourcis indisponibles et %d actions indisponibles ou non transférables seront ignorés."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "利用できないプラグイン %d 件の設定と利用できないショートカット %d 件はスキップされます。"
+            "value": "利用できないプラグイン %d 件の設定、利用できないショートカット %d 件、利用できないか移行できないアクション %d 件はスキップされます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용할 수 없는 플러그인 %d개의 설정과 사용할 수 없는 단축키 %d개는 건너뜁니다."
+            "value": "사용할 수 없는 플러그인 설정 %d개, 단축키 %d개 및 사용할 수 없거나 이식할 수 없는 동작 %d개는 건너뜁니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "As configurações de %d plugins indisponíveis e %d atalhos indisponíveis serão ignoradas."
+            "value": "As configurações de %d plugins indisponíveis, %d atalhos indisponíveis e %d ações indisponíveis ou não portáteis serão ignoradas."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Настройки для %d недоступных плагинов и %d недоступных сочетаний клавиш будут пропущены."
+            "value": "Настройки для %d недоступных плагинов, %d недоступных сочетаний клавиш и %d недоступных или непереносимых действий будут пропущены."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将跳过 %d 个本机不可用的插件设置和 %d 项不可用快捷键。"
+            "value": "将跳过 %d 个本机不可用的插件设置、%d 项快捷键和 %d 个不可用或不可移植的操作。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "將略過 %d 個本機不可用的插件設定和 %d 項不可用快速鍵。"
+            "value": "將略過 %d 個本機不可用的插件設定、%d 項快速鍵和 %d 個不可用或不可移植的操作。"
           }
         }
       }
@@ -1847,6 +1863,45 @@
         }
       }
     },
+    "preferencesBackup.exportSelection.confirm": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "متابعة التصدير…" } }, "de": { "stringUnit": { "state": "translated", "value": "Export fortsetzen …" } }, "en": { "stringUnit": { "state": "translated", "value": "Continue Export…" } }, "es": { "stringUnit": { "state": "translated", "value": "Continuar exportación…" } }, "fr": { "stringUnit": { "state": "translated", "value": "Continuer l’exportation…" } }, "ja": { "stringUnit": { "state": "translated", "value": "書き出しを続ける…" } }, "ko": { "stringUnit": { "state": "translated", "value": "내보내기 계속…" } }, "pt": { "stringUnit": { "state": "translated", "value": "Continuar exportação…" } }, "ru": { "stringUnit": { "state": "translated", "value": "Продолжить экспорт…" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "继续导出…" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "繼續輸出…" } }
+    } },
+    "preferencesBackup.exportSelection.deviceLocalRulesOmitted": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "لن يتم تصدير %d من قواعد الأتمتة المرتبطة بشاشة على هذا الـ Mac." } }, "de": { "stringUnit": { "state": "translated", "value": "%d Automationsregeln, die an ein Display dieses Macs gebunden sind, werden nicht exportiert." } }, "en": { "stringUnit": { "state": "translated", "value": "%d automation rules tied to a display on this Mac will not be exported." } }, "es": { "stringUnit": { "state": "translated", "value": "No se exportarán %d reglas de automatización vinculadas a una pantalla de este Mac." } }, "fr": { "stringUnit": { "state": "translated", "value": "%d règles d’automatisation liées à un écran de ce Mac ne seront pas exportées." } }, "ja": { "stringUnit": { "state": "translated", "value": "このMacのディスプレイに関連付けられた%d件の自動化ルールは書き出されません。" } }, "ko": { "stringUnit": { "state": "translated", "value": "이 Mac의 디스플레이에 연결된 자동화 규칙 %d개는 내보내지 않습니다." } }, "pt": { "stringUnit": { "state": "translated", "value": "%d regras de automação vinculadas a uma tela deste Mac não serão exportadas." } }, "ru": { "stringUnit": { "state": "translated", "value": "%d правил автоматизации, привязанных к дисплею этого Mac, не будут экспортированы." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "%d 条绑定到此 Mac 显示器的自动化规则不会导出。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "%d 條綁定到此 Mac 顯示器的自動化規則不會輸出。" } }
+    } },
+    "preferencesBackup.exportSelection.title": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "اختيار التفضيلات المراد تصديرها" } }, "de": { "stringUnit": { "state": "translated", "value": "Zu exportierende Einstellungen auswählen" } }, "en": { "stringUnit": { "state": "translated", "value": "Choose Preferences to Export" } }, "es": { "stringUnit": { "state": "translated", "value": "Elegir preferencias para exportar" } }, "fr": { "stringUnit": { "state": "translated", "value": "Choisir les préférences à exporter" } }, "ja": { "stringUnit": { "state": "translated", "value": "書き出す設定を選択" } }, "ko": { "stringUnit": { "state": "translated", "value": "내보낼 환경설정 선택" } }, "pt": { "stringUnit": { "state": "translated", "value": "Escolher preferências para exportar" } }, "ru": { "stringUnit": { "state": "translated", "value": "Выбор настроек для экспорта" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择要导出的偏好设置" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇要輸出的偏好設定" } }
+    } },
+    "preferencesBackup.selection.automation": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "سير العمل وقواعد الأتمتة" } }, "de": { "stringUnit": { "state": "translated", "value": "Workflows und Automationsregeln" } }, "en": { "stringUnit": { "state": "translated", "value": "Workflows and Automation Rules" } }, "es": { "stringUnit": { "state": "translated", "value": "Flujos de trabajo y reglas de automatización" } }, "fr": { "stringUnit": { "state": "translated", "value": "Processus et règles d’automatisation" } }, "ja": { "stringUnit": { "state": "translated", "value": "ワークフローと自動化ルール" } }, "ko": { "stringUnit": { "state": "translated", "value": "워크플로 및 자동화 규칙" } }, "pt": { "stringUnit": { "state": "translated", "value": "Fluxos de trabalho e regras de automação" } }, "ru": { "stringUnit": { "state": "translated", "value": "Процессы и правила автоматизации" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "工作流与自动化规则" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "工作流程與自動化規則" } }
+    } },
+    "preferencesBackup.selection.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "يتم تصدير الفئات المحددة فقط. يمكنك اختيار ما تريد استعادته مرة أخرى عند الاستيراد." } }, "de": { "stringUnit": { "state": "translated", "value": "Nur ausgewählte Kategorien werden exportiert. Beim Import kannst du erneut auswählen, was wiederhergestellt wird." } }, "en": { "stringUnit": { "state": "translated", "value": "Only selected categories are exported. You can choose what to restore again when importing." } }, "es": { "stringUnit": { "state": "translated", "value": "Solo se exportan las categorías seleccionadas. Al importar podrás volver a elegir qué restaurar." } }, "fr": { "stringUnit": { "state": "translated", "value": "Seules les catégories sélectionnées sont exportées. Vous pourrez à nouveau choisir quoi restaurer lors de l’importation." } }, "ja": { "stringUnit": { "state": "translated", "value": "選択したカテゴリのみを書き出します。読み込み時に復元する内容を再度選べます。" } }, "ko": { "stringUnit": { "state": "translated", "value": "선택한 범주만 내보냅니다. 가져올 때 복원할 항목을 다시 선택할 수 있습니다." } }, "pt": { "stringUnit": { "state": "translated", "value": "Somente as categorias selecionadas são exportadas. Ao importar, você poderá escolher novamente o que restaurar." } }, "ru": { "stringUnit": { "state": "translated", "value": "Экспортируются только выбранные категории. При импорте можно снова выбрать, что восстановить." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅导出所选类别。导入时还可以再次选择要恢复的内容。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "只會輸出所選類別。輸入時還可以再次選擇要回復的內容。" } }
+    } },
+    "preferencesBackup.selection.pluginLayout": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "تخطيط الإضافات وإمكانية ظهورها" } }, "de": { "stringUnit": { "state": "translated", "value": "Plugin-Anordnung und Sichtbarkeit" } }, "en": { "stringUnit": { "state": "translated", "value": "Plugin Layout and Visibility" } }, "es": { "stringUnit": { "state": "translated", "value": "Disposición y visibilidad de plugins" } }, "fr": { "stringUnit": { "state": "translated", "value": "Disposition et visibilité des modules" } }, "ja": { "stringUnit": { "state": "translated", "value": "プラグインの配置と表示" } }, "ko": { "stringUnit": { "state": "translated", "value": "플러그인 배치 및 표시 여부" } }, "pt": { "stringUnit": { "state": "translated", "value": "Layout e visibilidade dos plugins" } }, "ru": { "stringUnit": { "state": "translated", "value": "Расположение и видимость плагинов" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件布局与可见性" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛佈局與可見性" } }
+    } },
+    "preferencesBackup.selection.runLinks": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "روابط التشغيل المحفوظة" } }, "de": { "stringUnit": { "state": "translated", "value": "Gespeicherte Run Links" } }, "en": { "stringUnit": { "state": "translated", "value": "Saved Run Links" } }, "es": { "stringUnit": { "state": "translated", "value": "Run Links guardados" } }, "fr": { "stringUnit": { "state": "translated", "value": "Run Links enregistrés" } }, "ja": { "stringUnit": { "state": "translated", "value": "保存済み Run Link" } }, "ko": { "stringUnit": { "state": "translated", "value": "저장된 Run Link" } }, "pt": { "stringUnit": { "state": "translated", "value": "Run Links salvos" } }, "ru": { "stringUnit": { "state": "translated", "value": "Сохранённые Run Link" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "已保存的 Run Link" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "已儲存的 Run Link" } }
+    } },
+    "preferencesBackup.selection.application.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "المظهر واللغة وسلوك النقر على شريط القوائم؛ لا يشمل الأذونات أو عناصر تسجيل الدخول أو بيانات الاعتماد." } }, "de": { "stringUnit": { "state": "translated", "value": "Erscheinungsbild, Sprache und Klickverhalten der Menüleiste; ohne Berechtigungen, Anmeldeobjekte oder Zugangsdaten." } }, "en": { "stringUnit": { "state": "translated", "value": "Appearance, language, and menu bar click behavior; excludes permissions, login items, and credentials." } }, "es": { "stringUnit": { "state": "translated", "value": "Apariencia, idioma y comportamiento de clic de la barra de menús; no incluye permisos, ítems de inicio ni credenciales." } }, "fr": { "stringUnit": { "state": "translated", "value": "Apparence, langue et comportement de clic de la barre des menus ; sans autorisations, éléments d’ouverture ni identifiants." } }, "ja": { "stringUnit": { "state": "translated", "value": "外観、言語、メニューバーのクリック動作。権限、ログイン項目、認証情報は含みません。" } }, "ko": { "stringUnit": { "state": "translated", "value": "모양, 언어 및 메뉴 막대 클릭 동작입니다. 권한, 로그인 항목 및 자격 증명은 제외됩니다." } }, "pt": { "stringUnit": { "state": "translated", "value": "Aparência, idioma e comportamento de clique da barra de menus; não inclui permissões, itens de início ou credenciais." } }, "ru": { "stringUnit": { "state": "translated", "value": "Оформление, язык и поведение щелчка по строке меню; без разрешений, объектов входа и учётных данных." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "外观、语言和菜单栏点击方式；不包含权限、登录项或凭证。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "外觀、語言和選單列點按方式；不包含權限、登入項目或憑證。" } }
+    } },
+    "preferencesBackup.selection.pluginLayout.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "يستعيد ترتيب الإضافات وظهورها في لوحة المعلومات ولوحة الميزات؛ يجب تثبيت الإضافات المفقودة بشكل منفصل." } }, "de": { "stringUnit": { "state": "translated", "value": "Stellt Reihenfolge und Sichtbarkeit in Dashboard und Funktionsbereich wieder her; fehlende Plugins müssen separat installiert werden." } }, "en": { "stringUnit": { "state": "translated", "value": "Restores plugin order and visibility in Dashboard and Feature Panel; missing plugins must be installed separately." } }, "es": { "stringUnit": { "state": "translated", "value": "Restaura el orden y la visibilidad en el Dashboard y el Panel de funciones; los plugins ausentes deben instalarse aparte." } }, "fr": { "stringUnit": { "state": "translated", "value": "Restaure l’ordre et la visibilité dans le tableau de bord et le panneau de fonctions ; les modules absents doivent être installés séparément." } }, "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードと機能パネルのプラグインの順序と表示を復元します。不足するプラグインは別途インストールが必要です。" } }, "ko": { "stringUnit": { "state": "translated", "value": "대시보드와 기능 패널의 플러그인 순서 및 표시 여부를 복원합니다. 누락된 플러그인은 별도로 설치해야 합니다." } }, "pt": { "stringUnit": { "state": "translated", "value": "Restaura a ordem e a visibilidade no Painel e no Painel de recursos; plugins ausentes precisam ser instalados separadamente." } }, "ru": { "stringUnit": { "state": "translated", "value": "Восстанавливает порядок и видимость в панели и панели функций; отсутствующие плагины устанавливаются отдельно." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复仪表盘和功能面板中的插件顺序与可见性；缺失插件需要另外安装。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "回復儀表板和功能面板中的外掛順序與可見性；缺少的外掛需要另外安裝。" } }
+    } },
+    "preferencesBackup.selection.shortcuts.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "يستعيد اختصارات التطبيق والإجراءات؛ تتطلب إجراءات الإضافات الإضافة وإعداداتها المقابلة." } }, "de": { "stringUnit": { "state": "translated", "value": "Stellt App- und Aktionskurzbefehle wieder her; Plugin-Aktionen benötigen das jeweilige Plugin und seine Einstellungen." } }, "en": { "stringUnit": { "state": "translated", "value": "Restores app and action shortcuts; plugin actions also require their plugin and corresponding settings." } }, "es": { "stringUnit": { "state": "translated", "value": "Restaura atajos de la app y de acciones; las acciones de plugins también requieren su plugin y ajustes." } }, "fr": { "stringUnit": { "state": "translated", "value": "Restaure les raccourcis de l’app et des actions ; les actions de modules exigent aussi leur module et ses réglages." } }, "ja": { "stringUnit": { "state": "translated", "value": "アプリとアクションのショートカットを復元します。プラグインのアクションには対応するプラグインと設定も必要です。" } }, "ko": { "stringUnit": { "state": "translated", "value": "앱 및 동작 단축키를 복원합니다. 플러그인 동작에는 해당 플러그인과 설정도 필요합니다." } }, "pt": { "stringUnit": { "state": "translated", "value": "Restaura atalhos do app e de ações; ações de plugins também exigem o plugin e as configurações correspondentes." } }, "ru": { "stringUnit": { "state": "translated", "value": "Восстанавливает сочетания клавиш приложения и действий; действиям плагинов также нужны соответствующие плагины и настройки." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复应用和操作快捷键；插件操作还需要对应插件及其设置。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "回復應用程式和動作快速鍵；外掛動作還需要對應外掛及其設定。" } }
+    } },
+    "preferencesBackup.selection.automation.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "يحافظ على معرّفات سير العمل وروابط التشغيل المباشرة؛ ما زالت الخطوات تتطلب الإضافات وإعداداتها." } }, "de": { "stringUnit": { "state": "translated", "value": "Behält Workflow-IDs und direkte Run Links bei; Schritte benötigen weiterhin ihre Plugins und Einstellungen." } }, "en": { "stringUnit": { "state": "translated", "value": "Preserves workflow IDs and direct Run Links; workflow steps still require their plugins and settings." } }, "es": { "stringUnit": { "state": "translated", "value": "Conserva los ID de flujo y sus Run Links directos; los pasos siguen necesitando sus plugins y ajustes." } }, "fr": { "stringUnit": { "state": "translated", "value": "Conserve les identifiants de workflow et les Run Links directs ; les étapes nécessitent toujours leurs modules et réglages." } }, "ja": { "stringUnit": { "state": "translated", "value": "ワークフローIDと直接のRun Linkを保持します。各ステップには対応するプラグインと設定が必要です。" } }, "ko": { "stringUnit": { "state": "translated", "value": "워크플로 ID와 직접 Run Link를 유지합니다. 단계에는 해당 플러그인과 설정이 계속 필요합니다." } }, "pt": { "stringUnit": { "state": "translated", "value": "Preserva IDs de fluxos e Run Links diretos; as etapas ainda exigem seus plugins e configurações." } }, "ru": { "stringUnit": { "state": "translated", "value": "Сохраняет идентификаторы процессов и прямые Run Link; шагам по-прежнему нужны плагины и их настройки." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "保留工作流标识和直接 Run Link；工作流步骤仍需要对应插件及其设置。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "保留工作流程識別碼和直接 Run Link；工作流程步驟仍需要對應外掛及其設定。" } }
+    } },
+    "preferencesBackup.selection.runLinks.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "روابط محفوظة للإجراءات ذات المعلمات؛ تُستعاد روابط سير العمل مع «مهام سير العمل وقواعد الأتمتة»." } }, "de": { "stringUnit": { "state": "translated", "value": "Gespeicherte Links für parametrisierte Aktionen; Workflow-Links werden mit „Workflows und Automationsregeln“ wiederhergestellt." } }, "en": { "stringUnit": { "state": "translated", "value": "Saved links for parameterized actions; workflow links are restored with Workflows and Automation Rules." } }, "es": { "stringUnit": { "state": "translated", "value": "Enlaces guardados para acciones con parámetros; los enlaces de flujos se restauran con Flujos y reglas de automatización." } }, "fr": { "stringUnit": { "state": "translated", "value": "Liens enregistrés pour les actions paramétrées ; les liens de workflow sont restaurés avec les workflows et règles d’automatisation." } }, "ja": { "stringUnit": { "state": "translated", "value": "パラメータ付きアクションの保存済みリンクです。ワークフローのリンクは「ワークフローと自動化ルール」で復元されます。" } }, "ko": { "stringUnit": { "state": "translated", "value": "매개변수가 있는 동작의 저장된 링크입니다. 워크플로 링크는 워크플로 및 자동화 규칙과 함께 복원됩니다." } }, "pt": { "stringUnit": { "state": "translated", "value": "Links salvos para ações parametrizadas; links de fluxos são restaurados com Fluxos e regras de automação." } }, "ru": { "stringUnit": { "state": "translated", "value": "Сохранённые ссылки параметризованных действий; ссылки процессов восстанавливаются вместе с процессами и правилами автоматизации." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "参数化操作的已保存链接；工作流链接随“工作流与自动化规则”一起恢复。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "參數化動作的已儲存連結；工作流程連結會隨「工作流程與自動化規則」一起回復。" } }
+    } },
+    "preferencesBackup.selection.plugins.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "يتضمن فقط الإعدادات التي تعلن الإضافة أنها قابلة للنقل. تتطلب المحتويات الحساسة مثل نصوص البرامج النصية إذنًا منفصلًا داخل الإضافة." } }, "de": { "stringUnit": { "state": "translated", "value": "Enthält nur vom Plugin als portabel deklarierte Einstellungen. Sensible Inhalte wie Skripttext müssen im Plugin separat freigegeben werden." } }, "en": { "stringUnit": { "state": "translated", "value": "Includes only settings the plugin declares portable. Sensitive content such as script source still requires separate opt-in inside that plugin." } }, "es": { "stringUnit": { "state": "translated", "value": "Solo incluye ajustes que el plugin declara portátiles. El contenido sensible, como el código de scripts, requiere permiso aparte en el plugin." } }, "fr": { "stringUnit": { "state": "translated", "value": "Inclut seulement les réglages déclarés portables par le module. Le contenu sensible, comme le texte des scripts, exige une autorisation dans le module." } }, "ja": { "stringUnit": { "state": "translated", "value": "プラグインが移行可能とする設定のみを含みます。スクリプト本文などの機密内容はプラグイン内で個別に許可する必要があります。" } }, "ko": { "stringUnit": { "state": "translated", "value": "플러그인이 이동 가능하다고 선언한 설정만 포함합니다. 스크립트 원문 같은 민감한 내용은 플러그인에서 별도로 허용해야 합니다." } }, "pt": { "stringUnit": { "state": "translated", "value": "Inclui apenas configurações declaradas portáteis pelo plugin. Conteúdo sensível, como o código de scripts, exige permissão separada no plugin." } }, "ru": { "stringUnit": { "state": "translated", "value": "Включает только настройки, объявленные плагином переносимыми. Для чувствительных данных, например текста скриптов, нужно отдельное разрешение в плагине." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅包含插件声明为可移植的设置。脚本文本等敏感内容仍需在对应插件中单独允许备份。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "僅包含外掛宣告為可攜式的設定。指令碼文字等敏感內容仍需在對應外掛中另外允許備份。" } }
+    } },
     "preferencesBackup.preview.replaceNotice": {
       "extractionState": "manual",
       "localizations": {
@@ -1917,7 +1972,20 @@
           }
         }
       }
-    }
+    },
+    "preferencesBackup.import.pluginRestoreFailed": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "تعذر استعادة إعدادات \"%@\"." } },
+      "de": { "stringUnit": { "state": "translated", "value": "Die Einstellungen für „%@“ konnten nicht wiederhergestellt werden." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Couldn’t restore settings for “%@”." } },
+      "es": { "stringUnit": { "state": "translated", "value": "No se pudieron restaurar los ajustes de «%@»." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Impossible de restaurer les réglages de « %@ »." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "「%@」の設定を復元できませんでした。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "‘%@’ 설정을 복원할 수 없습니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível restaurar os ajustes de “%@”." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Не удалось восстановить настройки «%@»." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法恢复“%@”的插件设置。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法回復「%@」的外掛設定。" } }
+    } }
   },
   "version": "1.0"
 }

@@ -164,6 +164,7 @@ final class MenuBarHiddenStripPaddingNSView: NSView {
 
         guard container.canAccept(draggingSource) else {
             if container.section != .visible, draggingSource.item.isHostApplicationIcon {
+                PluginPresentationSafety.prepareForWindowOrdering()
                 provideAlertForVisibleOnlyAppIcon().runModal()
             }
             container.updateItemViewsForDrag(with: sender, phase: .exited)
@@ -617,6 +618,7 @@ final class MenuBarHiddenItemNSView: NSView, NSDraggingSource {
     override func mouseDragged(with event: NSEvent) {
         guard stripView?.controller?.permissions.canManageItems ?? false else { return }
         guard isEnabled else {
+            PluginPresentationSafety.prepareForWindowOrdering()
             provideAlertForDisabledItem().runModal()
             return
         }

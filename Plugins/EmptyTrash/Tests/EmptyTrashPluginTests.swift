@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import EmptyTrashPlugin
 
 @MainActor
@@ -54,6 +55,55 @@ final class EmptyTrashPluginTests: XCTestCase {
         XCTAssertEqual(requestCount, 1)
     }
 
+    func testCanonicalActionCountsAndEmptiesWithoutOpeningThePanel() async throws {
+        let counter = TrashCountProbe(itemCount: 3)
+        let emptyProbe = TrashEmptyProbe()
+        let plugin = EmptyTrashPlugin(
+            countItems: { await counter.countItems() },
+            emptyItems: { await emptyProbe.empty() },
+            countRefreshDelay: .zero
+        )
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        XCTAssertEqual(definition.risk, .confirmationRequired)
+        XCTAssertEqual(definition.externalInvocationPolicy, .confirmAlways)
+        XCTAssertFalse(definition.capabilities.contains(.cancellable))
+        XCTAssertEqual(definition.executionTimeoutSeconds, 600)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        let emptyCount = await emptyProbe.emptyCount()
+        XCTAssertEqual(emptyCount, 1)
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "废纸篓为空")
+    }
+
+    func testCanonicalActionFailsWhenTrashCannotBeCounted() async throws {
+        struct CountFailure: Error {}
+        let emptyProbe = TrashEmptyProbe()
+        let plugin = EmptyTrashPlugin(
+            countItems: { throw CountFailure() },
+            emptyItems: { await emptyProbe.empty() },
+            countRefreshDelay: .zero
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected count failure, got \(result)")
+        }
+        let emptyCount = await emptyProbe.emptyCount()
+        XCTAssertEqual(emptyCount, 0)
+    }
+
     private func waitForRequestCount(
         _ expectedRequestCount: Int,
         counter: TrashCountProbe,
@@ -93,5 +143,17 @@ private actor TrashCountProbe {
 
     func requestCountValue() -> Int {
         requestCount
+    }
+}
+
+private actor TrashEmptyProbe {
+    private var count = 0
+
+    func empty() {
+        count += 1
+    }
+
+    func emptyCount() -> Int {
+        count
     }
 }

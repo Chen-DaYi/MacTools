@@ -1,16 +1,58 @@
 import Foundation
 import MacToolsPluginKit
 
+extension TrackpadGesture {
+    var settingsOrder: Int {
+        Self.configurableCases.firstIndex(of: self) ?? Self.configurableCases.count
+    }
+
+    /// The contact count that can also satisfy the standalone Middle Click plugin's
+    /// short-tap recognizer. Long touches are intentionally excluded because their
+    /// minimum duration is longer than Middle Click's maximum tap duration.
+    var middleClickOverlapFingerCount: Int? {
+        let count = fingerTapCount
+            ?? doubleFingerTapCount
+            ?? physicalClickFingerCount
+            ?? tipTapConfiguration.map { $0.fixedFingerCount + 1 }
+        guard let count, (3...5).contains(count) else { return nil }
+        return count
+    }
+
+}
+
+enum TrackpadGestureMappingSort: String, CaseIterable, Sendable {
+    case gesture
+    case enabledFirst
+    case actionName
+    case addedOrder
+}
+
+enum TrackpadGestureMappingStatusFilter: String, CaseIterable, Sendable {
+    case all
+    case enabled
+    case disabled
+}
+
+enum TrackpadGestureMappingActionFilter: String, CaseIterable, Sendable {
+    case all
+    case macToolsAction
+    case keyboardShortcut
+    case middleClick
+}
+
 enum TrackpadGestureAction: Codable, Equatable, Sendable {
+    case action(ActionReference)
     case keyboardShortcut(ShortcutBinding)
     case middleClick
 
     private enum CodingKeys: String, CodingKey {
         case kind
+        case reference
         case shortcut
     }
 
     private enum Kind: String, Codable {
+        case action
         case keyboardShortcut
         case middleClick
     }
@@ -18,6 +60,8 @@ enum TrackpadGestureAction: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         switch try container.decode(Kind.self, forKey: .kind) {
+        case .action:
+            self = .action(try container.decode(ActionReference.self, forKey: .reference))
         case .keyboardShortcut:
             self = .keyboardShortcut(try container.decode(ShortcutBinding.self, forKey: .shortcut))
         case .middleClick:
@@ -28,6 +72,9 @@ enum TrackpadGestureAction: Codable, Equatable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
+        case let .action(reference):
+            try container.encode(Kind.action, forKey: .kind)
+            try container.encode(reference, forKey: .reference)
         case let .keyboardShortcut(shortcut):
             try container.encode(Kind.keyboardShortcut, forKey: .kind)
             try container.encode(shortcut, forKey: .shortcut)
@@ -82,6 +129,21 @@ struct LegacyMiddleClickPreferences: Codable, Equatable, Sendable {
 
 @MainActor
 final class TrackpadGestureStore: ObservableObject {
+    private struct PortableBackup: Codable {
+        let formatVersion: Int
+        let mappings: [TrackpadGestureMapping]
+        let ignoresGesturesWhileTyping: Bool
+        let typingGracePeriod: TimeInterval
+    }
+
+    private struct PortableRestoreTransaction: Codable {
+        let mappings: Data?
+        let ignoresGesturesWhileTyping: Bool?
+        let typingGracePeriod: TimeInterval?
+    }
+
+    private static let portableBackupFormatVersion = 1
+    private static let maximumPortableBackupByteCount = 256 * 1_024
     private struct LegacyMiddleClickMigrationRecord: Codable {
         let preferences: LegacyMiddleClickPreferences
         let mappingID: UUID?
@@ -92,6 +154,10 @@ final class TrackpadGestureStore: ObservableObject {
         static let middleClickMigrationRecord = "migration.mouse-enhancer-middle-click.v2"
         static let ignoreWhileTyping = "ignore-while-typing"
         static let typingGracePeriod = "typing-grace-period"
+        static let mappingSort = "settings.mapping-sort"
+        static let mappingStatusFilter = "settings.mapping-status-filter"
+        static let mappingActionFilter = "settings.mapping-action-filter"
+        static let portableRestoreTransaction = "portable-restore-transaction.v1"
     }
 
     @Published private(set) var mappings: [TrackpadGestureMapping]
@@ -99,6 +165,9 @@ final class TrackpadGestureStore: ObservableObject {
     @Published private(set) var lastTestGesture: TrackpadGesture?
     @Published private(set) var ignoresGesturesWhileTyping: Bool
     @Published private(set) var typingGracePeriod: TimeInterval
+    @Published private(set) var mappingSort: TrackpadGestureMappingSort
+    @Published private(set) var mappingStatusFilter: TrackpadGestureMappingStatusFilter
+    @Published private(set) var mappingActionFilter: TrackpadGestureMappingActionFilter
 
     private let storage: any PluginStorage
     private let encoder = JSONEncoder()
@@ -108,6 +177,7 @@ final class TrackpadGestureStore: ObservableObject {
         legacyMiddleClick: LegacyMiddleClickPreferences? = LegacyMiddleClickPreferences.load()
     ) {
         self.storage = storage
+        _ = Self.recoverInterruptedPortableRestore(storage: storage)
         let decoded = storage.data(forKey: Key.mappings)
             .flatMap { try? JSONDecoder().decode([TrackpadGestureMapping].self, from: $0) }
             ?? []
@@ -118,6 +188,15 @@ final class TrackpadGestureStore: ObservableObject {
         let storedGracePeriod = (storage.object(forKey: Key.typingGracePeriod) as? NSNumber)?.doubleValue
             ?? TrackpadTypingSuppressionGate.defaultGracePeriod
         self.typingGracePeriod = TrackpadTypingSuppressionGate.clamped(storedGracePeriod)
+        self.mappingSort = storage.string(forKey: Key.mappingSort)
+            .flatMap(TrackpadGestureMappingSort.init(rawValue:))
+            ?? .gesture
+        self.mappingStatusFilter = storage.string(forKey: Key.mappingStatusFilter)
+            .flatMap(TrackpadGestureMappingStatusFilter.init(rawValue:))
+            ?? .all
+        self.mappingActionFilter = storage.string(forKey: Key.mappingActionFilter)
+            .flatMap(TrackpadGestureMappingActionFilter.init(rawValue:))
+            ?? .all
         migrateLegacyMiddleClickIfNeeded(legacyMiddleClick)
     }
 
@@ -165,31 +244,38 @@ final class TrackpadGestureStore: ObservableObject {
             return false
         }
 
-        if let index = mappings.firstIndex(where: { $0.id == mapping.id }) {
-            mappings[index] = mapping
+        var candidate = mappings
+        if let index = candidate.firstIndex(where: { $0.id == mapping.id }) {
+            candidate[index] = mapping
         } else {
-            mappings.append(mapping)
+            candidate.append(mapping)
         }
-        persist()
+        guard persist(candidate) else { return false }
+        mappings = candidate
         return true
     }
 
-    func setEnabled(_ isEnabled: Bool, id: UUID) {
+    @discardableResult
+    func setEnabled(_ isEnabled: Bool, id: UUID) -> Bool {
         guard let index = mappings.firstIndex(where: { $0.id == id }),
               mappings[index].isEnabled != isEnabled
         else {
-            return
+            return false
         }
-        mappings[index].isEnabled = isEnabled
-        persist()
+        var candidate = mappings
+        candidate[index].isEnabled = isEnabled
+        guard persist(candidate) else { return false }
+        mappings = candidate
+        return true
     }
 
-    func delete(id: UUID) {
-        let originalCount = mappings.count
-        mappings.removeAll { $0.id == id }
-        if mappings.count != originalCount {
-            persist()
-        }
+    @discardableResult
+    func delete(id: UUID) -> Bool {
+        let candidate = mappings.filter { $0.id != id }
+        guard candidate.count != mappings.count,
+              persist(candidate) else { return false }
+        mappings = candidate
+        return true
     }
 
     func setTesting(_ isTesting: Bool) {
@@ -214,6 +300,239 @@ final class TrackpadGestureStore: ObservableObject {
         guard typingGracePeriod != clamped else { return }
         typingGracePeriod = clamped
         storage.set(clamped, forKey: Key.typingGracePeriod)
+    }
+
+    func setMappingSort(_ sort: TrackpadGestureMappingSort) {
+        guard mappingSort != sort else { return }
+        mappingSort = sort
+        storage.set(sort.rawValue, forKey: Key.mappingSort)
+    }
+
+    func setMappingStatusFilter(_ filter: TrackpadGestureMappingStatusFilter) {
+        guard mappingStatusFilter != filter else { return }
+        mappingStatusFilter = filter
+        storage.set(filter.rawValue, forKey: Key.mappingStatusFilter)
+    }
+
+    func setMappingActionFilter(_ filter: TrackpadGestureMappingActionFilter) {
+        guard mappingActionFilter != filter else { return }
+        mappingActionFilter = filter
+        storage.set(filter.rawValue, forKey: Key.mappingActionFilter)
+    }
+
+    func resetMappingViewPreferences() {
+        setMappingSort(.gesture)
+        setMappingStatusFilter(.all)
+        setMappingActionFilter(.all)
+    }
+
+    @discardableResult
+    func migrateActions(using context: TrackpadActionHostContext) -> Bool {
+        var updated = mappings
+        var changed = false
+        for index in updated.indices {
+            guard case let .action(reference) = updated[index].action,
+                  let migrated = context.migrate(reference),
+                  migrated != reference else {
+                continue
+            }
+            updated[index].action = .action(migrated)
+            changed = true
+        }
+        guard changed else { return false }
+        let candidate = Self.normalized(updated)
+        guard persist(candidate) else { return false }
+        mappings = candidate
+        return true
+    }
+
+    func portableBackup(using context: TrackpadActionHostContext? = nil) -> Data? {
+        let backup = PortableBackup(
+            formatVersion: Self.portableBackupFormatVersion,
+            mappings: mappings.filter { mapping in
+                guard case let .action(reference) = mapping.action else { return true }
+                return context?.canExport(reference) ?? true
+            },
+            ignoresGesturesWhileTyping: ignoresGesturesWhileTyping,
+            typingGracePeriod: typingGracePeriod
+        )
+        guard let data = try? encoder.encode(backup),
+              data.count <= Self.maximumPortableBackupByteCount else {
+            return nil
+        }
+        return data
+    }
+
+    func actionReferences(inPortableBackup data: Data) -> [ActionReference]? {
+        guard data.count <= Self.maximumPortableBackupByteCount,
+              let backup = try? JSONDecoder().decode(PortableBackup.self, from: data),
+              backup.formatVersion == Self.portableBackupFormatVersion,
+              backup.mappings == Self.normalized(backup.mappings) else {
+            return nil
+        }
+        return backup.mappings.compactMap { mapping in
+            guard case let .action(reference) = mapping.action else { return nil }
+            return reference
+        }
+    }
+
+    @discardableResult
+    func restorePortableBackup(
+        _ data: Data,
+        using context: TrackpadActionHostContext? = nil
+    ) -> Bool {
+        guard data.count <= Self.maximumPortableBackupByteCount,
+              let backup = try? JSONDecoder().decode(PortableBackup.self, from: data),
+              backup.formatVersion == Self.portableBackupFormatVersion,
+              backup.mappings == Self.normalized(backup.mappings),
+              backup.mappings.allSatisfy({ mapping in
+                  guard case let .action(reference) = mapping.action else { return true }
+                  return context?.canRestore(reference) ?? true
+              }) else {
+            return false
+        }
+        guard let mappingData = try? encoder.encode(backup.mappings) else { return false }
+        let gracePeriod = TrackpadTypingSuppressionGate.clamped(backup.typingGracePeriod)
+        guard recoverInterruptedPortableRestore(),
+              beginPortableRestoreTransaction(),
+              writePortableValues(
+                  mappings: mappingData,
+                  ignoresGesturesWhileTyping: backup.ignoresGesturesWhileTyping,
+                  typingGracePeriod: gracePeriod
+              ),
+              finishPortableRestoreTransaction() else {
+            rollbackPortableRestoreTransaction()
+            return false
+        }
+        mappings = backup.mappings
+        ignoresGesturesWhileTyping = backup.ignoresGesturesWhileTyping
+        typingGracePeriod = gracePeriod
+        return true
+    }
+
+    private func beginPortableRestoreTransaction() -> Bool {
+        guard Self.hasExpectedData(forKey: Key.mappings, storage: storage),
+              Self.hasExpectedBool(forKey: Key.ignoreWhileTyping, storage: storage),
+              Self.hasExpectedDouble(forKey: Key.typingGracePeriod, storage: storage) else {
+            return false
+        }
+        let transaction = PortableRestoreTransaction(
+            mappings: storage.data(forKey: Key.mappings),
+            ignoresGesturesWhileTyping: Self.storedBool(
+                forKey: Key.ignoreWhileTyping,
+                storage: storage
+            ),
+            typingGracePeriod: Self.storedDouble(
+                forKey: Key.typingGracePeriod,
+                storage: storage
+            )
+        )
+        guard let data = try? encoder.encode(transaction) else { return false }
+        storage.set(data, forKey: Key.portableRestoreTransaction)
+        return storage.data(forKey: Key.portableRestoreTransaction) == data
+    }
+
+    private func recoverInterruptedPortableRestore() -> Bool {
+        Self.recoverInterruptedPortableRestore(storage: storage)
+    }
+
+    private static func recoverInterruptedPortableRestore(storage: any PluginStorage) -> Bool {
+        guard let rawTransaction = storage.object(forKey: Key.portableRestoreTransaction) else {
+            return true
+        }
+        guard let transactionData = rawTransaction as? Data else { return false }
+        guard let transaction = try? JSONDecoder().decode(
+            PortableRestoreTransaction.self,
+            from: transactionData
+        ), writePortableValues(transaction, storage: storage) else {
+            return false
+        }
+        storage.removeObject(forKey: Key.portableRestoreTransaction)
+        return storage.object(forKey: Key.portableRestoreTransaction) == nil
+    }
+
+    @discardableResult
+    private func rollbackPortableRestoreTransaction() -> Bool {
+        recoverInterruptedPortableRestore()
+    }
+
+    private func finishPortableRestoreTransaction() -> Bool {
+        storage.removeObject(forKey: Key.portableRestoreTransaction)
+        return storage.object(forKey: Key.portableRestoreTransaction) == nil
+    }
+
+    private func writePortableValues(
+        mappings: Data?,
+        ignoresGesturesWhileTyping: Bool?,
+        typingGracePeriod: TimeInterval?
+    ) -> Bool {
+        Self.writePortableValues(
+            PortableRestoreTransaction(
+                mappings: mappings,
+                ignoresGesturesWhileTyping: ignoresGesturesWhileTyping,
+                typingGracePeriod: typingGracePeriod
+            ),
+            storage: storage
+        )
+    }
+
+    private static func writePortableValues(
+        _ values: PortableRestoreTransaction,
+        storage: any PluginStorage
+    ) -> Bool {
+        setOptional(values.mappings, forKey: Key.mappings, storage: storage)
+        setOptional(
+            values.ignoresGesturesWhileTyping,
+            forKey: Key.ignoreWhileTyping,
+            storage: storage
+        )
+        setOptional(
+            values.typingGracePeriod,
+            forKey: Key.typingGracePeriod,
+            storage: storage
+        )
+        return storage.data(forKey: Key.mappings) == values.mappings
+            && storedBool(forKey: Key.ignoreWhileTyping, storage: storage)
+                == values.ignoresGesturesWhileTyping
+            && storedDouble(forKey: Key.typingGracePeriod, storage: storage)
+                == values.typingGracePeriod
+    }
+
+    private static func setOptional(_ value: Any?, forKey key: String, storage: any PluginStorage) {
+        if let value {
+            storage.set(value, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
+    }
+
+    private static func storedBool(forKey key: String, storage: any PluginStorage) -> Bool? {
+        if let value = storage.object(forKey: key) as? Bool {
+            return value
+        }
+        return (storage.object(forKey: key) as? NSNumber)?.boolValue
+    }
+
+    private static func storedDouble(forKey key: String, storage: any PluginStorage) -> Double? {
+        if let value = storage.object(forKey: key) as? Double {
+            return value
+        }
+        return (storage.object(forKey: key) as? NSNumber)?.doubleValue
+    }
+
+    private static func hasExpectedData(forKey key: String, storage: any PluginStorage) -> Bool {
+        guard let rawValue = storage.object(forKey: key) else { return true }
+        return rawValue is Data
+    }
+
+    private static func hasExpectedBool(forKey key: String, storage: any PluginStorage) -> Bool {
+        guard storage.object(forKey: key) != nil else { return true }
+        return storedBool(forKey: key, storage: storage) != nil
+    }
+
+    private static func hasExpectedDouble(forKey key: String, storage: any PluginStorage) -> Bool {
+        guard storage.object(forKey: key) != nil else { return true }
+        return storedDouble(forKey: key, storage: storage) != nil
     }
 
     private func migrateLegacyMiddleClickIfNeeded(_ legacy: LegacyMiddleClickPreferences?) {
@@ -253,18 +572,22 @@ final class TrackpadGestureStore: ObservableObject {
                gesture: .fingerTap(count: previousRecord.preferences.fingerCount),
                action: .middleClick,
                isEnabled: previousRecord.preferences.isEnabled
-           ) {
+            ) {
             if conflictingMapping(for: desiredGesture, excludingID: mappingID) == nil {
-                mappings[index].gesture = desiredGesture
-                mappings[index].isEnabled = legacy.isEnabled
-                persist()
+                var candidate = mappings
+                candidate[index].gesture = desiredGesture
+                candidate[index].isEnabled = legacy.isEnabled
+                guard persist(candidate) else { return nil }
+                mappings = candidate
                 return mappingID
             }
 
             // A newer explicit mapping wins the desired gesture. Remove only the unchanged
             // migration-owned mapping so the superseded legacy gesture does not remain active.
-            mappings.remove(at: index)
-            persist()
+            var candidate = mappings
+            candidate.remove(at: index)
+            guard persist(candidate) else { return nil }
+            mappings = candidate
             return nil
         }
 
@@ -279,16 +602,21 @@ final class TrackpadGestureStore: ObservableObject {
             action: .middleClick,
             isEnabled: legacy.isEnabled
         )
-        mappings.append(mapping)
-        persist()
+        let candidate = mappings + [mapping]
+        guard persist(candidate) else { return nil }
+        mappings = candidate
         return mapping.id
     }
 
-    private func persist() {
-        guard let data = try? encoder.encode(mappings) else {
-            return
-        }
+    private func persist(_ candidate: [TrackpadGestureMapping]) -> Bool {
+        guard let data = try? encoder.encode(candidate) else { return false }
+        let previousRawValue = storage.object(forKey: Key.mappings)
         storage.set(data, forKey: Key.mappings)
+        guard storage.data(forKey: Key.mappings) == data else {
+            Self.setOptional(previousRawValue, forKey: Key.mappings, storage: storage)
+            return false
+        }
+        return true
     }
 
     private static func normalized(_ candidates: [TrackpadGestureMapping]) -> [TrackpadGestureMapping] {
@@ -307,6 +635,8 @@ final class TrackpadGestureStore: ObservableObject {
 
     private static func isValid(_ mapping: TrackpadGestureMapping) -> Bool {
         return switch mapping.action {
+        case .action:
+            true
         case let .keyboardShortcut(binding):
             binding.isValid
         case .middleClick:

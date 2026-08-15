@@ -14,7 +14,12 @@ protocol AutoInputApplicationMonitoring: AnyObject {
 final class WorkspaceAutoInputApplicationMonitor: AutoInputApplicationMonitoring {
     var onApplicationActivated: ((AutoInputApplication) -> Void)?
 
+    private let notificationCenter: NotificationCenter
     private var observer: NSObjectProtocol?
+
+    init(notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+        self.notificationCenter = notificationCenter
+    }
 
     var frontmostApplication: AutoInputApplication? {
         NSWorkspace.shared.frontmostApplication.flatMap(Self.snapshot)
@@ -22,7 +27,7 @@ final class WorkspaceAutoInputApplicationMonitor: AutoInputApplicationMonitoring
 
     func start() {
         guard observer == nil else { return }
-        observer = NSWorkspace.shared.notificationCenter.addObserver(
+        observer = notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
@@ -31,7 +36,10 @@ final class WorkspaceAutoInputApplicationMonitor: AutoInputApplicationMonitoring
                   let snapshot = Self.snapshot(application)
             else { return }
 
-            MainActor.assumeIsolated {
+            // NSWorkspace can invoke a `.main` observer on the main thread without installing
+            // Swift's MainActor executor metadata. Hop explicitly instead of using
+            // MainActor.assumeIsolated, which traps on macOS 27 when an overlay activates MacTools.
+            DispatchQueue.main.async { [weak self] in
                 self?.onApplicationActivated?(snapshot)
             }
         }
@@ -39,7 +47,7 @@ final class WorkspaceAutoInputApplicationMonitor: AutoInputApplicationMonitoring
 
     func stop() {
         guard let observer else { return }
-        NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        notificationCenter.removeObserver(observer)
         self.observer = nil
     }
 

@@ -20,7 +20,19 @@ private struct LaunchControlPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class LaunchControlPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginSettingsPresenting,
+    PluginActionProviding
+{
+    private enum ActionID {
+        static let start = "start-favorite"
+        static let stop = "stop-favorite"
+        static let restart = "restart-favorite"
+        static let itemIDParameter = "item-id"
+    }
+
     enum ControlID {
         static let refresh = "launch-control-refresh"
         static let openManager = "launch-control-open-manager"
@@ -36,6 +48,7 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requestSettingsPresentation: (() -> Void)?
 
     private let controller: LaunchControlController
     private let localization: PluginLocalization
@@ -80,6 +93,66 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+    var actionDefinitions: [ActionDefinition] {
+        [
+            favoriteActionDefinition(action: .start, actionID: ActionID.start, risk: .safe),
+            favoriteActionDefinition(action: .stop, actionID: ActionID.stop, risk: .confirmationRequired),
+            favoriteActionDefinition(action: .restart, actionID: ActionID.restart, risk: .confirmationRequired),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        controller.snapshot.items
+            .filter { $0.isFavorite && $0.canManage }
+            .flatMap { item in
+                [
+                    catalogEntry(action: .start, actionID: ActionID.start, item: item),
+                    catalogEntry(action: .stop, actionID: ActionID.stop, item: item),
+                    catalogEntry(action: .restart, actionID: ActionID.restart, item: item),
+                ]
+            }
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard managedAction(for: reference.key.actionID) != nil,
+              case let .string(itemID)? = reference.parameters[ActionID.itemIDParameter],
+              let item = controller.snapshot.items.first(where: { $0.id == itemID })
+        else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        guard item.isFavorite else {
+            return .unavailable(localization.string("originFilter.favorite.title", defaultValue: "已关注"))
+        }
+        guard item.canManage else {
+            return .unavailable(localization.string(
+                "controller.operation.readOnly",
+                defaultValue: "系统或全局启动项默认只读，避免误操作。"
+            ))
+        }
+        return controller.snapshot.isRefreshing
+            ? .unavailable(localization.string("panel.action.refreshing", defaultValue: "正在刷新"))
+            : .available
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard let action = managedAction(for: invocation.reference.key.actionID),
+              case let .string(itemID)? = invocation.reference.parameters[ActionID.itemIDParameter],
+              let item = controller.snapshot.items.first(where: { $0.id == itemID }),
+              item.isFavorite,
+              item.canManage,
+              !controller.snapshot.isRefreshing
+        else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionUnavailable) }
+        }
+        let controller = controller
+        return ActionExecutionHandle {
+            let success = await controller.performManagedActionAndWait(action, item: item)
+            return success
+                ? .succeeded()
+                : .failed(message: controller.snapshot.errorMessage ?? PluginKitLocalization.actionUnavailable)
+        }
+    }
+
     var settingsPage: PluginSettingsPage? {
         let localization = localization
         return .workspace(description: metadata.defaultDescription, scrolling: .selfManaged) { _ in
@@ -105,6 +178,8 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case let .invokeAction(controlID):
             if controlID == ControlID.refresh {
                 controller.refresh()
+            } else if controlID == ControlID.openManager {
+                requestSettingsPresentation?()
             }
         case .setSwitch,
              .setSelection,
@@ -186,5 +261,75 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
             runningCount,
             userCreatedCount
         )
+    }
+
+    private func favoriteActionDefinition(
+        action: LaunchControlManagedAction,
+        actionID: String,
+        risk: ActionRisk
+    ) -> ActionDefinition {
+        let title = action.title(localization: localization)
+        return ActionDefinition(
+            key: ActionKey(providerID: metadata.id, actionID: actionID),
+            title: title,
+            description: metadata.defaultDescription,
+            keywords: [metadata.title, title, "launchctl"],
+            systemImage: actionSystemImage(action),
+            parameters: [
+                ActionParameterDefinition(
+                    id: ActionID.itemIDParameter,
+                    title: metadata.title,
+                    kind: .string,
+                    portability: .localOnly
+                ),
+            ],
+            risk: risk,
+            confirmation: risk == .confirmationRequired
+                ? ActionConfirmation(
+                    title: title,
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: title
+                )
+                : nil,
+            externalInvocationPolicy: .unavailable,
+            capabilities: [.automatic, .background, .foregroundInteractive],
+            executionTimeoutSeconds: 15
+        )
+    }
+
+    private func catalogEntry(
+        action: LaunchControlManagedAction,
+        actionID: String,
+        item: LaunchControlItem
+    ) -> ActionCatalogEntry {
+        let parameters = try! ActionParameterSet([
+            ActionID.itemIDParameter: .string(item.id),
+        ])
+        return ActionCatalogEntry(
+            reference: ActionReference(
+                key: ActionKey(providerID: metadata.id, actionID: actionID),
+                parameters: parameters
+            ),
+            title: "\(action.title(localization: localization)) · \(item.label)",
+            subtitle: item.note.isEmpty ? item.statusText(localization: localization) : item.note
+        )
+    }
+
+    private func managedAction(for actionID: String) -> LaunchControlManagedAction? {
+        switch actionID {
+        case ActionID.start: .start
+        case ActionID.stop: .stop
+        case ActionID.restart: .restart
+        default: nil
+        }
+    }
+
+    private func actionSystemImage(_ action: LaunchControlManagedAction) -> String {
+        switch action {
+        case .start: "play.fill"
+        case .stop: "stop.fill"
+        case .restart: "arrow.clockwise"
+        default: "powerplug"
+        }
     }
 }

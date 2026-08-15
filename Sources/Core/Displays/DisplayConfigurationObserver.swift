@@ -39,25 +39,24 @@ final class SystemDisplayConfigurationObserver: DisplayConfigurationObserving {
         }
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            if isRegisteredForCGDisplayChanges {
-                CGDisplayRemoveReconfigurationCallback(
-                    Self.displayReconfigurationCallback,
-                    Unmanaged.passUnretained(self).toOpaque()
-                )
-            }
+    isolated deinit {
+        if isRegisteredForCGDisplayChanges {
+            CGDisplayRemoveReconfigurationCallback(
+                Self.displayReconfigurationCallback,
+                Unmanaged.passUnretained(self).toOpaque()
+            )
+        }
 
-            if let screenParametersObserver {
-                notificationCenter.removeObserver(screenParametersObserver)
-            }
+        if let screenParametersObserver {
+            notificationCenter.removeObserver(screenParametersObserver)
         }
     }
 
     nonisolated private static let displayReconfigurationCallback: CGDisplayReconfigurationCallBack = {
         _, flags, userInfo in
         guard
-            flags.contains(.addFlag)
+            flags.contains(.beginConfigurationFlag)
+                || flags.contains(.addFlag)
                 || flags.contains(.removeFlag)
                 || flags.contains(.setModeFlag)
                 || flags.contains(.enabledFlag)
@@ -71,7 +70,7 @@ final class SystemDisplayConfigurationObserver: DisplayConfigurationObserving {
             .fromOpaque(userInfo)
             .takeUnretainedValue()
 
-        Task { @MainActor [weak observer] in
+        DispatchQueue.main.async { [weak observer] in
             observer?.onConfigurationChange?()
         }
     }

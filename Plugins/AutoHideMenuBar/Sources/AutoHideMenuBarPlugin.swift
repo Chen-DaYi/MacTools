@@ -62,7 +62,11 @@ private struct AutoHideMenuBarPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
+    }
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -121,6 +125,68 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+                description: localization.string("metadata.description", defaultValue: "自动隐藏菜单栏，提供更完整的屏幕显示空间"),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+                    localization.string("metadata.description", defaultValue: "自动隐藏菜单栏，提供更完整的屏幕显示空间"),
+                ],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "自动隐藏菜单栏，提供更完整的屏幕显示空间"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+                    localization.string("metadata.description", defaultValue: "自动隐藏菜单栏，提供更完整的屏幕显示空间"),
+                ],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+                        kind: .boolean
+                    ),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isMenuBarHidden
+                    ? localization.string("action.show.title", defaultValue: "显示菜单栏")
+                    : localization.string("action.hide.title", defaultValue: "隐藏菜单栏"),
+                subtitle: isMenuBarHidden
+                    ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                    : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
+                presentationState: isMenuBarHidden ? .active : .inactive
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.hide.title", defaultValue: "隐藏菜单栏")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.show.title", defaultValue: "显示菜单栏")
+            ),
+        ]
+    }
+
     func refresh() {
         let latestState = stateReader()
         if latestState != isMenuBarHidden {
@@ -145,17 +211,56 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
-    private func setMenuBarHidden(_ isEnabled: Bool) {
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !stateReader()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        let succeeded = setMenuBarHidden(enabled)
+        let failureMessage = localization.string(
+            "error.toggleFailed",
+            defaultValue: "切换菜单栏自动隐藏失败"
+        )
+        return ActionExecutionHandle {
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
+        }
+    }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    @discardableResult
+    private func setMenuBarHidden(_ isEnabled: Bool) -> Bool {
         do {
             try commandRunner.setMenuBarAutohide(isEnabled)
             isMenuBarHidden = isEnabled
             lastErrorMessage = nil
             onStateChange?()
+            return true
         } catch {
             logger.error("Failed to update menu bar auto-hide: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = error.localizedDescription
             refresh()
             onStateChange?()
+            return false
         }
     }
 

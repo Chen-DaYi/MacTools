@@ -86,6 +86,32 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertEqual(controller.scanCallCount, 1)
     }
 
+    func testCanonicalActionOpensReviewAndStartsScanWithoutCleaning() async throws {
+        let controller = FakeDiskCleanPluginController()
+        let plugin = DiskCleanPlugin(controller: controller)
+        var presentationRequests = 0
+        plugin.requestSettingsPresentation = { presentationRequests += 1 }
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first)
+
+        XCTAssertEqual(definition.key.actionID, "scan-and-review")
+        XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
+        XCTAssertEqual(definition.risk, .safe)
+
+        let handle = try plugin.beginAction(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .actionGrid,
+                mode: .foreground
+            )
+        )
+
+        let result = await handle.result()
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(presentationRequests, 1)
+        XCTAssertEqual(controller.scanCallCount, 1)
+        XCTAssertEqual(controller.cleanCallCount, 0)
+    }
+
     /// The panel no longer decides "what to clean": it only forwards commands to the Controller; selection is Controller-owned state.
     func testInvokingCleanForwardsToControllerWithoutComposingItsOwnSelection() {
         let controller = FakeDiskCleanPluginController()

@@ -34,6 +34,7 @@ enum MacToolsSearchAction: Hashable {
         destination: SettingsNavigationDestination,
         target: SettingsSearchRevealTarget?
     )
+    case executeAction(ActionReference)
     case pluginCommand(
         pluginID: String,
         expectedDefinition: PluginCommandDefinition
@@ -251,6 +252,24 @@ enum MacToolsSearchIndexBuilder {
     ) -> MacToolsSearchIndex {
         var items: [MacToolsSearchResult] = [
             navigationResult(
+                id: "navigation.actions-and-shortcuts",
+                title: FeatureL10n.string("操作与快捷键"),
+                subtitle: AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools"),
+                detail: FeatureL10n.string("查找 MacTools 与插件操作，并在同一个冲突空间中管理全局快捷键。"),
+                systemImage: "command",
+                destination: .plugins(.actionsAndShortcuts),
+                suggestionPriority: 2
+            ),
+            navigationResult(
+                id: "navigation.automation",
+                title: FeatureL10n.string("自动化"),
+                subtitle: AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools"),
+                detail: FeatureL10n.string("创建工作流后，可组合多个 MacTools 操作。"),
+                systemImage: "bolt.horizontal.circle",
+                destination: .plugins(.automation),
+                suggestionPriority: 3
+            ),
+            navigationResult(
                 id: "navigation.general",
                 title: AppL10n.settings("tab.general", defaultValue: "通用"),
                 subtitle: AppL10n.search("search.subtitle.appSettings", defaultValue: "应用设置"),
@@ -260,7 +279,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "gearshape",
                 destination: .general,
-                suggestionPriority: 3
+                suggestionPriority: 5
             ),
             navigationResult(
                 id: "navigation.dashboard",
@@ -296,7 +315,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "shippingbox",
                 destination: .plugins(.marketplace),
-                suggestionPriority: 2
+                suggestionPriority: 4
             ),
             navigationResult(
                 id: "navigation.about",
@@ -308,7 +327,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "info.circle",
                 destination: .about,
-                suggestionPriority: 4
+                suggestionPriority: 6
             )
         ]
 
@@ -324,7 +343,7 @@ enum MacToolsSearchIndexBuilder {
         items += pluginHost.pluginSettingsItems.map { item in
             let managementItem = managementItemsByID[item.pluginID]
             return MacToolsSearchResult(
-                id: "plugin.\(item.pluginID)",
+                id: "plugin.configuration.\(item.pluginID)",
                 kind: .navigation,
                 title: item.title,
                 subtitle: AppL10n.settings(
@@ -373,9 +392,13 @@ enum MacToolsSearchIndexBuilder {
             } else {
                 return nil
             }
+            let surfaceID = switch surface {
+            case .dashboard: "dashboard"
+            case .featurePanel: "feature-panel"
+            }
 
             return MacToolsSearchResult(
-                id: "plugin.\(item.id)",
+                id: "plugin.surface.\(surfaceID).\(item.id)",
                 kind: .navigation,
                 title: item.title,
                 subtitle: subtitle,
@@ -406,7 +429,7 @@ enum MacToolsSearchIndexBuilder {
             }
 
             return MacToolsSearchResult(
-                id: "plugin.\(item.id)",
+                id: "plugin.marketplace.\(item.id)",
                 kind: .navigation,
                 title: item.title,
                 subtitle: AppL10n.settings(
@@ -466,8 +489,71 @@ enum MacToolsSearchIndexBuilder {
             )
         }
 
-        items += pluginHost.pluginCommandItems.map { item in
-            MacToolsSearchResult(
+        let pluginTitlesByID = Dictionary(
+            pluginHost.pluginManagementItems.map { ($0.id, $0.title) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        items += pluginHost.actionCatalogEntries.enumerated().compactMap { index, entry in
+            if entry.reference.key.providerID == "mactools",
+               let appAction = AppShortcutAction(
+                   rawValue: entry.reference.key.actionID
+               ),
+               !appAction.isCommandPaletteSearchEligible {
+                return nil
+            }
+            guard case let .success(action) = pluginHost.actionRegistry.registeredAction(
+                    for: entry.reference
+            )
+            else {
+                return nil
+            }
+
+            let availability = pluginHost.actionAvailability(for: entry.reference)
+            let ownerTitle = entry.reference.key.providerID == "mactools"
+                ? AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools")
+                : pluginTitlesByID[entry.reference.key.providerID]
+                    ?? entry.reference.key.providerID
+            let subtitle = entry.subtitle.map { "\(ownerTitle) · \($0)" } ?? ownerTitle
+            let permissionTitles = pluginHost.actionPermissionTitles(for: entry.reference)
+            let permissionSummary = permissionTitles.isEmpty
+                ? nil
+                : FeatureL10n.format(
+                    "所需权限：%@",
+                    FeatureL10n.joined(permissionTitles)
+                )
+            let detail = [action.definition.description, permissionSummary, availability.reason]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " · ")
+            let shortcutText = pluginHost.actionShortcutSettingsItem(
+                for: entry.reference
+            )?.bindingText
+
+            return MacToolsSearchResult(
+                id: "action.\(entry.reference.key.providerID).\(entry.reference.key.actionID).\(index)",
+                kind: .command,
+                title: entry.title,
+                subtitle: subtitle,
+                detail: detail,
+                keywords: action.definition.keywords + [shortcutText].compactMap { $0 },
+                systemImage: action.definition.systemImage,
+                action: .executeAction(entry.reference),
+                confirmation: action.definition.risk == .confirmationRequired
+                    ? action.definition.confirmation.map(MacToolsCommandConfirmation.init)
+                    : nil,
+                suggestionPriority: nil
+            )
+        }
+
+        let actionKeys = Set(pluginHost.actionCatalogEntries.map(\.reference.key))
+        items += pluginHost.pluginCommandItems.compactMap { item in
+            guard !actionKeys.contains(
+                ActionKey(providerID: item.pluginID, actionID: item.definition.id)
+            ) else {
+                return nil
+            }
+
+            return MacToolsSearchResult(
                 id: item.id,
                 kind: .command,
                 title: item.definition.title,
@@ -484,8 +570,13 @@ enum MacToolsSearchIndexBuilder {
             )
         }
 
-        items += appHostCommandDefinitions.map { definition in
-            MacToolsSearchResult(
+        items += appHostCommandDefinitions.compactMap { definition in
+            if case let .appShortcut(action) = definition.action,
+               action.isCommandPaletteSearchEligible {
+                return nil
+            }
+
+            return MacToolsSearchResult(
                 id: definition.id,
                 kind: .command,
                 title: definition.title,
@@ -614,7 +705,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 detail: AppL10n.preferencesBackup(
                     "preferencesBackup.description",
-                    defaultValue: "包含应用偏好、插件显示顺序、快捷键和支持导出的插件设置；不会包含权限、缓存、凭证或其他私有数据。"
+                    defaultValue: "包含应用偏好、插件布局、快捷键、工作流、自动化规则、已保存的运行链接和支持导出的插件设置；不包含权限、缓存、凭证或运行历史。"
                 ),
                 keywords: [
                     AppL10n.preferencesBackup(

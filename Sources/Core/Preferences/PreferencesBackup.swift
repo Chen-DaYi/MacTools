@@ -2,8 +2,8 @@ import Foundation
 import MacToolsPluginKit
 
 struct PreferencesBackup: Codable, Equatable, Sendable {
-    static let currentFormatVersion = 2
-    static let maximumFileSize = 1 * 1024 * 1024
+    static let currentFormatVersion = 6
+    static let maximumFileSize = 4 * 1024 * 1024
 
     struct ApplicationPreferences: Codable, Equatable, Sendable {
         let appearancePreference: String
@@ -16,13 +16,26 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
     let application: ApplicationPreferences
     let pluginDisplay: PluginDisplayPreferencesBackup
     let shortcutCustomizations: [String: ShortcutCustomization]
+    let actionShortcutAssignments: [ActionShortcutAssignmentRecord]
+    private(set) var actionShortcutAssignmentsWereEncoded = true
     let pluginPreferences: [String: Data]
+    let pluginPreferenceActionReferences: [String: [ActionReference]]
+    let actionInvocationPresets: [ActionInvocationPreset]?
+    let workflows: [WorkflowDefinition]?
+    let automationRules: [AutomationRule]?
+    let selection: PreferencesBackupSelection?
 
     init(
         application: ApplicationPreferences,
         pluginDisplay: PluginDisplayPreferencesBackup,
         shortcutCustomizations: [String: ShortcutCustomization],
+        actionShortcutAssignments: [ActionShortcutAssignmentRecord] = [],
         pluginPreferences: [String: Data] = [:],
+        pluginPreferenceActionReferences: [String: [ActionReference]] = [:],
+        actionInvocationPresets: [ActionInvocationPreset]? = [],
+        workflows: [WorkflowDefinition]? = [],
+        automationRules: [AutomationRule]? = [],
+        selection: PreferencesBackupSelection? = nil,
         exportedAt: Date = .now
     ) {
         self.formatVersion = Self.currentFormatVersion
@@ -30,7 +43,13 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
         self.application = application
         self.pluginDisplay = pluginDisplay
         self.shortcutCustomizations = shortcutCustomizations
+        self.actionShortcutAssignments = actionShortcutAssignments
         self.pluginPreferences = pluginPreferences
+        self.pluginPreferenceActionReferences = pluginPreferenceActionReferences
+        self.actionInvocationPresets = actionInvocationPresets
+        self.workflows = workflows
+        self.automationRules = automationRules
+        self.selection = selection ?? .all(pluginPreferenceIDs: Set(pluginPreferences.keys))
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -39,7 +58,13 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
         case application
         case pluginDisplay
         case shortcutCustomizations
+        case actionShortcutAssignments
         case pluginPreferences
+        case pluginPreferenceActionReferences
+        case actionInvocationPresets
+        case workflows
+        case automationRules
+        case selection
     }
 
     init(from decoder: Decoder) throws {
@@ -52,10 +77,69 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
             [String: ShortcutCustomization].self,
             forKey: .shortcutCustomizations
         )
+        actionShortcutAssignmentsWereEncoded = container.contains(.actionShortcutAssignments)
+        actionShortcutAssignments = try container.decodeIfPresent(
+            [ActionShortcutAssignmentRecord].self,
+            forKey: .actionShortcutAssignments
+        ) ?? []
         pluginPreferences = try container.decodeIfPresent(
             [String: Data].self,
             forKey: .pluginPreferences
         ) ?? [:]
+        let decodedPluginPreferenceActionReferences = try container.decodeIfPresent(
+            [String: [ActionReference]].self,
+            forKey: .pluginPreferenceActionReferences
+        )
+        pluginPreferenceActionReferences = decodedPluginPreferenceActionReferences ?? [:]
+        actionInvocationPresets = try container.decodeIfPresent(
+            [ActionInvocationPreset].self,
+            forKey: .actionInvocationPresets
+        )
+        workflows = try container.decodeIfPresent(
+            [WorkflowDefinition].self,
+            forKey: .workflows
+        )
+        automationRules = try container.decodeIfPresent(
+            [AutomationRule].self,
+            forKey: .automationRules
+        )
+        selection = try container.decodeIfPresent(
+            PreferencesBackupSelection.self,
+            forKey: .selection
+        )
+        if formatVersion >= 4,
+           actionInvocationPresets == nil || workflows == nil || automationRules == nil {
+            throw DecodingError.dataCorrupted(
+                .init(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Format 4 backups must include Run Link presets, workflows, and automation rules."
+                )
+            )
+        }
+        if formatVersion >= 5, selection == nil {
+            throw DecodingError.dataCorrupted(
+                .init(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Format 5 backups must describe the selected preference categories."
+                )
+            )
+        }
+        if formatVersion >= 6, decodedPluginPreferenceActionReferences == nil {
+            throw DecodingError.dataCorrupted(
+                .init(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Format 6 backups must include plugin action dependencies."
+                )
+            )
+        }
+        if formatVersion >= 6, !actionShortcutAssignmentsWereEncoded {
+            throw DecodingError.dataCorrupted(
+                .init(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Format 6 backups must include action shortcut assignments."
+                )
+            )
+        }
     }
 
     func validate() throws {
@@ -67,16 +151,35 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
     func validateApplicationPreferences(
         using validator: (ApplicationPreferences) -> Bool
     ) throws {
-        guard validator(application) else {
+        guard !effectiveSelection.includesApplicationPreferences || validator(application) else {
             throw PreferencesBackupError.invalidApplicationPreferences
         }
+    }
+
+    var effectiveSelection: PreferencesBackupSelection {
+        if let selection { return selection }
+        if formatVersion <= 3 {
+            return PreferencesBackupSelection(
+                includesApplicationPreferences: true,
+                includesPluginLayout: true,
+                includesShortcuts: true,
+                includesAutomation: false,
+                includesRunLinks: false,
+                pluginPreferenceIDs: Set(pluginPreferences.keys)
+            )
+        }
+        return .all(pluginPreferenceIDs: Set(pluginPreferences.keys))
     }
 
     func encodedJSON() throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        return try encoder.encode(self)
+        let data = try encoder.encode(self)
+        guard data.count <= Self.maximumFileSize else {
+            throw PreferencesBackupError.fileTooLarge(maximumBytes: Self.maximumFileSize)
+        }
+        return data
     }
 
     static func decodeJSON(_ data: Data) throws -> PreferencesBackup {
@@ -125,6 +228,47 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
     }
 }
 
+struct PreferencesBackupSelection: Codable, Equatable, Sendable {
+    var includesApplicationPreferences: Bool
+    var includesPluginLayout: Bool
+    var includesShortcuts: Bool
+    var includesAutomation: Bool
+    var includesRunLinks: Bool
+    var pluginPreferenceIDs: Set<String>
+
+    static func all(pluginPreferenceIDs: Set<String>) -> Self {
+        Self(
+            includesApplicationPreferences: true,
+            includesPluginLayout: true,
+            includesShortcuts: true,
+            includesAutomation: true,
+            includesRunLinks: true,
+            pluginPreferenceIDs: pluginPreferenceIDs
+        )
+    }
+
+    var isEmpty: Bool {
+        !includesApplicationPreferences
+            && !includesPluginLayout
+            && !includesShortcuts
+            && !includesAutomation
+            && !includesRunLinks
+            && pluginPreferenceIDs.isEmpty
+    }
+
+    func intersecting(_ available: Self) -> Self {
+        Self(
+            includesApplicationPreferences: includesApplicationPreferences
+                && available.includesApplicationPreferences,
+            includesPluginLayout: includesPluginLayout && available.includesPluginLayout,
+            includesShortcuts: includesShortcuts && available.includesShortcuts,
+            includesAutomation: includesAutomation && available.includesAutomation,
+            includesRunLinks: includesRunLinks && available.includesRunLinks,
+            pluginPreferenceIDs: pluginPreferenceIDs.intersection(available.pluginPreferenceIDs)
+        )
+    }
+}
+
 struct PluginDisplayPreferencesBackup: Codable, Equatable, Sendable {
     let orderedPluginIDs: [String]
     /// Compatibility projection for app versions that only understood global
@@ -157,25 +301,60 @@ struct PreferencesImportPreview: Equatable {
     let unavailablePluginIDs: [String]
     let shortcutCount: Int
     let unavailableShortcutIDs: [String]
+    let unavailableActionReferences: [ActionReference]
+    let retainedUnavailableActionReferences: [ActionReference]
     let installablePlugins: [PreferencesImportInstallablePlugin]
+    let selection: PreferencesBackupSelection
 
     static func make(
         backup: PreferencesBackup,
         availablePluginIDs: Set<String>,
         availableShortcutIDs: Set<String>,
+        availableActionReferences: Set<ActionReference> = [],
+        additionalActionReferences: [ActionReference] = [],
+        actionReferenceCanResolve: ((ActionReference) -> Bool)? = nil,
+        actionReferenceIsRestorable: (ActionReference) -> Bool = { _ in true },
         pluginManagementItems: [PluginManagementItem],
+        selection requestedSelection: PreferencesBackupSelection? = nil,
         applicationPreferencesAreValid: (PreferencesBackup.ApplicationPreferences) -> Bool
     ) throws -> PreferencesImportPreview {
         try backup.validate()
-        try backup.validateApplicationPreferences(using: applicationPreferencesAreValid)
+        let availableSelection = backup.effectiveSelection
+        let selection = (requestedSelection ?? availableSelection).intersecting(availableSelection)
+        if selection.includesApplicationPreferences,
+           !applicationPreferencesAreValid(backup.application) {
+            throw PreferencesBackupError.invalidApplicationPreferences
+        }
 
-        let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs)
+        let displayPluginIDs: Set<String> = selection.includesPluginLayout
+            ? Set(backup.pluginDisplay.orderedPluginIDs)
             .union(backup.pluginDisplay.hiddenPluginIDs)
             .union(backup.pluginDisplay.dashboardOrderedPluginIDs ?? [])
             .union(backup.pluginDisplay.featurePanelOrderedPluginIDs ?? [])
             .union(backup.pluginDisplay.dashboardHiddenPluginIDs ?? [])
             .union(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? [])
-            .union(backup.pluginPreferences.keys)
+            : []
+        let selectedActionReferences = (selection.includesShortcuts
+            ? backup.actionShortcutAssignments.map(\.reference)
+            : [])
+            + (selection.includesRunLinks
+                ? (backup.actionInvocationPresets ?? []).map(\.reference)
+                : [])
+            + (selection.includesAutomation
+                ? (backup.workflows ?? []).flatMap { $0.steps.map(\.reference) }
+                : [])
+            + additionalActionReferences
+        let actionPluginIDs: Set<String> = Set(selectedActionReferences.compactMap { reference -> String? in
+            switch reference.key.providerID {
+            case "mactools", AutomationController.providerID:
+                return nil
+            default:
+                return reference.key.providerID
+            }
+        })
+        let backedUpPluginIDs = displayPluginIDs
+            .union(selection.pluginPreferenceIDs.intersection(backup.pluginPreferences.keys))
+            .union(actionPluginIDs)
         let missingPluginIDs = backedUpPluginIDs.subtracting(availablePluginIDs)
         let managementItemsByID = Dictionary(
             pluginManagementItems.map { ($0.id, $0) },
@@ -191,13 +370,50 @@ struct PreferencesImportPreview: Equatable {
             )
         }
         let installablePluginIDs = Set(installablePlugins.map(\.id))
-        let backedUpShortcutIDs = Set(backup.shortcutCustomizations.keys)
+        let compatibilityShortcutIDs: Set<String> = selection.includesShortcuts ? Set(
+            backup.actionShortcutAssignments.compactMap { assignment in
+                assignment.reference.key.providerID == "mactools"
+                    ? assignment.reference.key.actionID
+                    : nil
+            }
+        ) : []
+        let backedUpShortcutIDs: Set<String> = (selection.includesShortcuts
+            ? Set(backup.shortcutCustomizations.keys)
+            : [])
+            .subtracting(compatibilityShortcutIDs)
+        let canResolve = actionReferenceCanResolve
+            ?? { availableActionReferences.contains($0) }
+        let availableActionCount = (selection.includesShortcuts ? backup.actionShortcutAssignments : []).filter {
+            canResolve($0.reference)
+        }.count
+        let unavailableActionReferences = Array(Set(
+            selectedActionReferences.filter { !actionReferenceIsRestorable($0) }
+        )).sorted { lhs, rhs in
+            if lhs.key.providerID != rhs.key.providerID {
+                return lhs.key.providerID < rhs.key.providerID
+            }
+            return lhs.key.actionID < rhs.key.actionID
+        }
+        let retainedUnavailableActionReferences = Array(Set(
+            selectedActionReferences.filter {
+                actionReferenceIsRestorable($0) && !canResolve($0)
+            }
+        )).sorted { lhs, rhs in
+            if lhs.key.providerID != rhs.key.providerID {
+                return lhs.key.providerID < rhs.key.providerID
+            }
+            return lhs.key.actionID < rhs.key.actionID
+        }
         return PreferencesImportPreview(
             pluginCount: backedUpPluginIDs.intersection(availablePluginIDs).count,
             unavailablePluginIDs: missingPluginIDs.subtracting(installablePluginIDs).sorted(),
-            shortcutCount: backedUpShortcutIDs.intersection(availableShortcutIDs).count,
+            shortcutCount: backedUpShortcutIDs.intersection(availableShortcutIDs).count
+                + availableActionCount,
             unavailableShortcutIDs: backedUpShortcutIDs.subtracting(availableShortcutIDs).sorted(),
-            installablePlugins: installablePlugins.sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+            unavailableActionReferences: unavailableActionReferences,
+            retainedUnavailableActionReferences: retainedUnavailableActionReferences,
+            installablePlugins: installablePlugins.sorted { $0.title.localizedCompare($1.title) == .orderedAscending },
+            selection: selection
         )
     }
 }

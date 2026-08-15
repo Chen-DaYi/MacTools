@@ -179,7 +179,10 @@ final class SystemApplicationActivityObserver: ApplicationActivityObserving {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
+            // NotificationCenter's `.main` queue guarantees a thread, not a
+            // Swift concurrency executor. Hop explicitly so this remains safe
+            // on systems that validate actor executor metadata at runtime.
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 handler(self)
             }

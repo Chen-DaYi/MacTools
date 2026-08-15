@@ -23,7 +23,12 @@ private struct ActivityBarPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel {
+final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setTrackingEnabled = "set-tracking-enabled"
+        static let resetToday = "reset-today"
+    }
+
     private struct SettingsStatus {
         let text: String
         let systemImage: String
@@ -155,6 +160,62 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         )
     }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setTrackingEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string(
+                            "panel.action.trackingEnabled",
+                            defaultValue: "活动统计"
+                        ),
+                        kind: .boolean
+                    ),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.resetToday),
+                title: localization.string("panel.action.resetToday", defaultValue: "清空今日统计"),
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, localization.string("panel.action.resetToday", defaultValue: "清空今日统计")],
+                systemImage: "arrow.counterclockwise",
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: localization.string("panel.action.resetToday", defaultValue: "清空今日统计"),
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: localization.string("panel.action.resetToday", defaultValue: "清空今日统计")
+                ),
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: trackingActionReference(enabled: true),
+                title: "\(metadata.title) · \(localization.string("status.running", defaultValue: "运行中"))"
+            ),
+            ActionCatalogEntry(
+                reference: trackingActionReference(enabled: false),
+                title: "\(metadata.title) · \(localization.string("status.disabled", defaultValue: "未开启"))"
+            ),
+            ActionCatalogEntry(
+                reference: ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.resetToday)),
+                title: localization.string("panel.action.resetToday", defaultValue: "清空今日统计")
+            ),
+        ]
+    }
+
     func activate(context: PluginRuntimeContext) {
         controller.activate(context: context)
     }
@@ -204,6 +265,38 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     }
 
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        switch invocation.reference.key.actionID {
+        case ActionID.setTrackingEnabled:
+            guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            return ActionExecutionHandle { [weak self] in
+                guard let self else {
+                    return .failed(message: PluginKitLocalization.actionUnavailable)
+                }
+                return self.actionResult(for: self.controller.setTrackingEnabled(enabled))
+            }
+        case ActionID.resetToday:
+            return ActionExecutionHandle { [weak self] in
+                guard let self else {
+                    return .failed(message: PluginKitLocalization.actionUnavailable)
+                }
+                return self.actionResult(for: self.controller.resetToday())
+            }
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+    }
+
+    private func actionResult(
+        for mutation: ActivityBarPersistenceMutationResult
+    ) -> ActionExecutionResult {
+        mutation == .committed
+            ? .succeeded()
+            : .failed(message: PluginKitLocalization.actionFailed)
+    }
 
     private var panelDetail: PluginPanelDetail {
         let trackingControl = PluginPanelControl(
@@ -270,6 +363,13 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         return PluginPanelDetail(
             primaryControls: [trackingControl, openSettingsControl, hookActionControl, resetControl],
             secondaryPanel: nil
+        )
+    }
+
+    private func trackingActionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setTrackingEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
         )
     }
 

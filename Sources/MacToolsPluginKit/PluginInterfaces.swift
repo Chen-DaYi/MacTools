@@ -200,6 +200,83 @@ public protocol PluginPortablePreferencesProviding: AnyObject {
     func restorePortablePreferences(from data: Data)
 }
 
+/// Optional companion for portable-preference providers that can verify validation and
+/// persistence. The host uses this result before restoring actions that depend on the payload.
+/// Keeping this separate preserves compatibility with existing dynamic plugins.
+@MainActor
+public protocol PluginPortablePreferencesRestorationReporting: AnyObject {
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool
+}
+
+/// Optional dependency index for portable plugin preferences that embed or define canonical
+/// actions. The host persists these references beside the opaque payload so a fresh Mac can
+/// offer missing action providers before the surface plugin restores its own settings. Providers
+/// whose actions require plugin preferences must enumerate every exact action reference defined
+/// by the payload; restore validation fails closed for references that are not enumerated.
+@MainActor
+public protocol PluginPortablePreferencesActionReferencesProviding: AnyObject {
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]?
+}
+
+/// Describes whether a dynamic action can be restored independently or depends on the
+/// plugin's portable preferences payload. Providers only need this hook when the action's
+/// portability cannot be expressed by its parameter schema alone.
+public enum PluginActionReferenceBackupDisposition: Equatable, Sendable {
+    case selfContained
+    case requiresPluginPreferences
+    case excluded
+}
+
+@MainActor
+public protocol PluginActionReferenceBackupProviding: AnyObject {
+    func backupDisposition(
+        for reference: ActionReference
+    ) -> PluginActionReferenceBackupDisposition
+}
+
+/// A stable identity for a system-wide input gesture currently owned by a plugin.
+/// The host uses claims to prevent two independently packaged input plugins from
+/// responding to the same physical gesture.
+public struct PluginInputGestureClaim: Hashable, Sendable {
+    public let id: String
+    public let title: String
+
+    public init(id: String, title: String) {
+        self.id = id
+        self.title = title
+    }
+}
+
+/// Describes another plugin that currently owns a claimed input gesture.
+public struct PluginInputGestureConflict: Hashable, Sendable {
+    public let claim: PluginInputGestureClaim
+    public let ownerPluginID: String
+    public let ownerPluginTitle: String
+
+    public init(
+        claim: PluginInputGestureClaim,
+        ownerPluginID: String,
+        ownerPluginTitle: String
+    ) {
+        self.claim = claim
+        self.ownerPluginID = ownerPluginID
+        self.ownerPluginTitle = ownerPluginTitle
+    }
+}
+
+/// Optional companion contract for plugins that listen to system-wide gestures.
+@MainActor
+public protocol PluginInputGestureClaimProviding: AnyObject {
+    var activeInputGestureClaims: [PluginInputGestureClaim] { get }
+}
+
+/// Optional host callback for a plugin that must pause or reject a configuration
+/// when another plugin owns the same physical gesture.
+@MainActor
+public protocol PluginInputGestureConflictConsuming: AnyObject {
+    func inputGestureConflictsDidChange(_ conflicts: [PluginInputGestureConflict])
+}
+
 /// Optional bridge for the sole owner of the private multitouch listener.
 @MainActor
 public protocol TrackpadGestureEventProviding: AnyObject {

@@ -397,6 +397,9 @@ schemes = {
     "run" => { "config" => "Debug" },
     "test" => {
       "config" => "Debug",
+      "environmentVariables" => {
+        "MACTOOLS_DISABLE_TRACKPAD_LISTENER" => "1"
+      },
       "targets" => [
         {
           "name" => "MacToolsTests",

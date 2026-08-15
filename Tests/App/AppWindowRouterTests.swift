@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import SwiftUI
 import XCTest
 @testable import MacTools
 
@@ -31,6 +32,223 @@ final class AppWindowRouterTests: XCTestCase {
 
         XCTAssertEqual(dashboardCallCount, 0)
         XCTAssertEqual(featurePanelCallCount, 1)
+    }
+
+    func testSettingsWindowKeepsItsWidthAcrossDestinations() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        let hostingView = try XCTUnwrap(window.contentView as? NSHostingView<SettingsView>)
+        await settleWindowLayout(window)
+        let initialWidth = window.frame.width
+        let initialToolbarItemCount = window.toolbar?.items.count
+
+        XCTAssertNotNil(window.toolbar)
+        XCTAssertEqual(window.toolbarStyle, .unified)
+        XCTAssertFalse(
+            window.toolbar?.items.contains { $0.itemIdentifier == .toggleSidebar } ?? false
+        )
+        XCTAssertEqual(hostingView.sizingOptions, [])
+        XCTAssertEqual(
+            hostingView.frame.width,
+            SettingsWindowLayout.defaultContentSize.width,
+            accuracy: 0.5
+        )
+
+        window.setContentSize(NSSize(width: 940, height: 640))
+        await settleWindowLayout(window)
+        let resizedWidth = window.frame.width
+        XCTAssertLessThan(resizedWidth, initialWidth)
+
+        for destination in [
+            SettingsNavigationDestination.plugins(.marketplace),
+            .about,
+            .general
+        ] {
+            coordinator.navigate(to: destination)
+            await settleWindowLayout(window)
+            XCTAssertEqual(window.frame.width, resizedWidth, accuracy: 0.5)
+            XCTAssertEqual(window.toolbar?.items.count, initialToolbarItemCount)
+        }
+
+        window.close()
+    }
+
+    func testSettingsWindowOpensWithoutAutomaticInitialFocus() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.presentSettings(.pluginMarketplace)
+
+        let window = try XCTUnwrap(router.settingsWindow)
+        await settleWindowLayout(window)
+        for _ in 0..<5 {
+            guard window.firstResponder !== window else {
+                break
+            }
+            await Task.yield()
+        }
+
+        XCTAssertTrue(
+            window.firstResponder === window,
+            "Expected the window to own initial focus, got \(String(describing: window.firstResponder))"
+        )
+
+        window.close()
+    }
+
+    func testFeatureSettingsPresentationRoutesToRequestedPage() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.presentSettings(.feature(.actionsAndShortcuts))
+        XCTAssertEqual(
+            router.settingsNavigationCoordinator?.destination,
+            .plugins(.actionsAndShortcuts)
+        )
+
+        router.presentSettings(.feature(.automation))
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .plugins(.automation))
+        router.settingsWindow?.close()
+    }
+
+    func testWorkflowPresentationRoutesToTheExactAutomationEditor() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var createdWorkflow: WorkflowDefinition?
+        let router = makeRouter(defaults: defaults) { host in
+            createdWorkflow = host.automationController.createWorkflow()
+        }
+        let workflow = try XCTUnwrap(createdWorkflow)
+
+        router.presentSettings(.automationWorkflow(workflow.id))
+
+        XCTAssertEqual(
+            router.settingsNavigationCoordinator?.destination,
+            .plugins(.automation)
+        )
+        XCTAssertNil(
+            router.settingsNavigationCoordinator?.searchRevealRequest,
+            "The visible Automation editor should consume the exact workflow reveal request."
+        )
+        router.settingsWindow?.close()
+    }
+
+    private func settleWindowLayout(_ window: NSWindow) async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
+        }
+        window.layoutIfNeeded()
+    }
+
+    func testSettingsWindowConstrainsLiveResizeToMinimumContentSize() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow)
+        let minimumFrameSize = window.frameRect(
+            forContentRect: NSRect(
+                origin: .zero,
+                size: SettingsWindowLayout.minimumContentSize
+            )
+        ).size
+
+        XCTAssertEqual(
+            router.windowWillResize(window, to: NSSize(width: 400, height: 300)),
+            minimumFrameSize
+        )
+
+        let largerSize = NSSize(width: 1200, height: 800)
+        XCTAssertEqual(router.windowWillResize(window, to: largerSize), largerSize)
+
+        window.close()
+    }
+
+    func testClosingSettingsWindowDiscardsNavigationHistory() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let host = PluginHost(
+            plugins: [],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        let router = AppWindowRouter(
+            pluginHost: host,
+            appUpdater: AppUpdater(startingUpdater: false),
+            menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
+            menuBarIconGallery: MenuBarIconGalleryLibrary(),
+            launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
+            appearanceUserDefaults: defaults
+        )
+
+        router.presentSettings(.pluginMarketplace)
+        let firstCoordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        XCTAssertEqual(firstCoordinator.destination, .plugins(.marketplace))
+        firstCoordinator.navigate(to: .about)
+
+        try XCTUnwrap(router.settingsWindow).close()
+        XCTAssertNil(router.settingsNavigationCoordinator)
+
+        router.showSettings()
+        let reopenedCoordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        XCTAssertEqual(reopenedCoordinator.history, [.general])
+        XCTAssertFalse(reopenedCoordinator.canGoBack)
+
+        try XCTUnwrap(router.settingsWindow).close()
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    func testInitializationDoesNotReplaceExistingAppPresentationHandler() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let host = PluginHost(
+            plugins: [],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        var receivedRequests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { request in
+            receivedRequests.append(request)
+        }
+
+        let router = AppWindowRouter(
+            pluginHost: host,
+            appUpdater: AppUpdater(startingUpdater: false),
+            menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
+            menuBarIconGallery: MenuBarIconGalleryLibrary(),
+            launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
+            appearanceUserDefaults: defaults
+        )
+
+        host.presentPluginMarketplace()
+
+        XCTAssertEqual(receivedRequests, [.settings(.pluginMarketplace)])
+        XCTAssertNil(router.settingsWindow)
     }
 
     func testLocalCommandMatcherRecognizesSettingsAndSearchKeyEquivalents() {
@@ -157,6 +375,102 @@ final class AppWindowRouterTests: XCTestCase {
         )
     }
 
+    func testUnifiedPaletteViewportFitsCompleteNavigationRowsWhenSpaceAllows() {
+        XCTAssertEqual(
+            UnifiedSearchPaletteLayout.resultListHeight(for: 710),
+            UnifiedSearchPaletteLayout.maximumResultListHeight
+        )
+        XCTAssertEqual(
+            UnifiedSearchPaletteLayout.resultListHeight(for: 600),
+            398
+        )
+        XCTAssertGreaterThanOrEqual(
+            StandaloneCommandPaletteLayout.contentSize.height,
+            UnifiedSearchPaletteLayout.maximumResultListHeight
+                + UnifiedSearchPaletteLayout.verticalChromeHeight
+        )
+    }
+
+    func testStandalonePaletteUsesStoredAppearanceOnItsPanelAndContent() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(AppAppearancePreference.light.rawValue, forKey: AppAppearancePreference.userDefaultsKey)
+        let router = makeRouter(defaults: defaults)
+
+        router.toggleCommandPalette()
+        let panel = try XCTUnwrap(router.commandPalettePanel)
+
+        XCTAssertEqual(panel.appearance?.name, .aqua)
+        XCTAssertEqual(panel.contentView?.appearance?.name, .aqua)
+        router.dismissCommandPalette()
+    }
+
+    func testDismissingStandalonePaletteRestoresThePreviousApplication() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var restorationCount = 0
+        let focusRestoration = StandaloneCommandPaletteFocusRestoration(
+            captureRestoration: { { restorationCount += 1 } },
+            canRestore: { true }
+        )
+        let router = makeRouter(
+            defaults: defaults,
+            commandPaletteFocusRestoration: focusRestoration
+        )
+
+        router.toggleCommandPalette()
+        router.dismissCommandPalette()
+
+        XCTAssertEqual(restorationCount, 1)
+    }
+
+    func testSuccessfulStandalonePaletteActionRestoresOnlyWhilePaletteOwnsFocus() {
+        XCTAssertTrue(
+            StandaloneCommandPaletteSuccessfulExecutionFocusPolicy
+                .shouldRestorePreviousApplication(
+                    paletteIsKey: true,
+                    applicationIsActive: true
+                )
+        )
+        XCTAssertFalse(
+            StandaloneCommandPaletteSuccessfulExecutionFocusPolicy
+                .shouldRestorePreviousApplication(
+                    paletteIsKey: false,
+                    applicationIsActive: true
+                )
+        )
+        XCTAssertFalse(
+            StandaloneCommandPaletteSuccessfulExecutionFocusPolicy
+                .shouldRestorePreviousApplication(
+                    paletteIsKey: true,
+                    applicationIsActive: false
+                )
+        )
+    }
+
+    func testOpeningSettingsFromStandalonePaletteDoesNotRestoreThePreviousApplication() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var restorationCount = 0
+        let focusRestoration = StandaloneCommandPaletteFocusRestoration(
+            captureRestoration: { { restorationCount += 1 } },
+            canRestore: { true }
+        )
+        let router = makeRouter(
+            defaults: defaults,
+            commandPaletteFocusRestoration: focusRestoration
+        )
+
+        router.toggleCommandPalette()
+        router.presentSettings(.general)
+
+        XCTAssertEqual(restorationCount, 0)
+        router.settingsWindow?.close()
+    }
+
     func testStandalonePaletteUsesRightToLeftLayoutForArabicLocale() {
         XCTAssertEqual(
             StandaloneCommandPaletteRootView.layoutDirection(for: Locale(identifier: "ar")),
@@ -184,22 +498,168 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertEqual(state.shortcutHint, "⌃⌥P")
     }
 
+    func testStandalonePaletteDismissalExplicitlyCancelsOnlyPendingSurfaceWork() {
+        let state = StandaloneCommandPaletteState()
+        var cancellationCount = 0
+        state.setPendingExecutionCancellation { cancellationCount += 1 }
+
+        state.prepareForDismissal()
+        state.prepareForDismissal()
+
+        XCTAssertEqual(cancellationCount, 1)
+    }
+
+    func testAppDeactivationDismissesStandalonePalette() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.toggleCommandPalette()
+        let panel = try XCTUnwrap(router.commandPalettePanel)
+        XCTAssertTrue(panel.isVisible)
+
+        NotificationCenter.default.post(
+            name: NSApplication.didResignActiveNotification,
+            object: NSApplication.shared
+        )
+        await Task.yield()
+
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testPhysicalCommandNumberSelectsSettingsTabWhenSearchIsClosed() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_3),
+                    characters: "\"",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertEqual(coordinator.destination, .about)
+
+        window.close()
+    }
+
+    func testAppUpdateRequestNavigatesDirectlyToAbout() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let updater = AppUpdater(startingUpdater: false)
+        updater.setAvailableUpdateVersionForTests("1.2.3")
+        let router = makeRouter(defaults: defaults, appUpdater: updater)
+
+        router.presentSettings(.appUpdate)
+
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .about)
+        router.settingsWindow?.close()
+    }
+
+    func testExplicitGeneralAndAboutRequestsSelectTheirSettingsDestinations() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.presentSettings(.about)
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .about)
+
+        router.presentSettings(.general)
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .general)
+
+        router.settingsWindow?.close()
+    }
+
+    func testExplicitSettingsRequestsDismissUnifiedSearchInArrivalOrder() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showUnifiedSearch()
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+
+        router.presentSettings(.general)
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+
+        router.showUnifiedSearch()
+        router.presentSettings(.settings)
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+
+        router.settingsWindow?.close()
+    }
+
+    private func makeRouter(
+        defaults: UserDefaults,
+        appUpdater: AppUpdater? = nil,
+        commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration? = nil,
+        configureHost: (PluginHost) -> Void = { _ in }
+    ) -> AppWindowRouter {
+        let host = PluginHost(
+            plugins: [],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        configureHost(host)
+        return AppWindowRouter(
+            pluginHost: host,
+            appUpdater: appUpdater ?? AppUpdater(startingUpdater: false),
+            menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
+            menuBarIconGallery: MenuBarIconGalleryLibrary(),
+            launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
+            appearanceUserDefaults: defaults,
+            commandPaletteFocusRestoration: commandPaletteFocusRestoration ?? .init()
+        )
+    }
+
     private func keyEvent(
         keyCode: UInt16,
         characters: String,
-        modifiers: NSEvent.ModifierFlags = [.command]
+        modifiers: NSEvent.ModifierFlags = [.command],
+        windowNumber: Int = 0
     ) -> NSEvent {
         NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
             modifierFlags: modifiers,
             timestamp: 0,
-            windowNumber: 0,
+            windowNumber: windowNumber,
             context: nil,
             characters: characters,
             charactersIgnoringModifiers: characters,
             isARepeat: false,
             keyCode: keyCode
         )!
+    }
+}
+
+@MainActor
+private final class AppWindowRouterFakeLaunchAtLoginService: LaunchAtLoginServicing {
+    private var registered = false
+
+    var isRegistered: Bool { registered }
+
+    func register() throws {
+        registered = true
+    }
+
+    func unregister() throws {
+        registered = false
     }
 }

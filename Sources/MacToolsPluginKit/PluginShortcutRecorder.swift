@@ -122,6 +122,8 @@ public struct PluginShortcutRecorder: View {
     public let onEndRecording: (() -> Void)?
 
     @State private var isPresented = false
+    // PluginKit v4 ABI compatibility: this stored property must remain on the public
+    // wrapper, in this order, because released plugins construct this view directly.
     @State private var isHovered = false
 
     public init(
@@ -143,6 +145,32 @@ public struct PluginShortcutRecorder: View {
     }
 
     public var body: some View {
+        PluginShortcutRecorderButton(
+            title: title,
+            displayText: displayText,
+            placeholder: placeholder,
+            minWidth: minWidth,
+            isPresented: $isPresented,
+            isHovered: $isHovered,
+            onRecord: onRecord,
+            onBeginRecording: onBeginRecording,
+            onEndRecording: onEndRecording
+        )
+    }
+}
+
+private struct PluginShortcutRecorderButton: View {
+    let title: String
+    let displayText: String
+    let placeholder: String
+    let minWidth: CGFloat
+    @Binding var isPresented: Bool
+    @Binding var isHovered: Bool
+    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
+    let onBeginRecording: (() -> Void)?
+    let onEndRecording: (() -> Void)?
+
+    var body: some View {
         Button {
             isPresented = true
         } label: {
@@ -394,6 +422,7 @@ private struct PluginShortcutRecorderPopoverAnchor: NSViewRepresentable {
             }
 
             let anchorBounds = sourceView.bounds
+            PluginPresentationSafety.prepareForWindowOrdering()
             popover.show(relativeTo: anchorBounds, of: sourceView, preferredEdge: .maxY)
         }
 

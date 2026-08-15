@@ -17,10 +17,17 @@ protocol DisplayResolutionControlling {
 @MainActor
 final class DisplayResolutionController {
     private let displayProvider: DisplayProviding
+    private let presentationPreparation: @MainActor @Sendable () -> Void
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayResolutionController")
 
-    init(displayProvider: DisplayProviding = SystemDisplayService()) {
+    init(
+        displayProvider: DisplayProviding = SystemDisplayService(),
+        presentationPreparation: @escaping @MainActor @Sendable () -> Void = {
+            PluginPresentationSafety.prepareForWindowOrdering()
+        }
+    ) {
         self.displayProvider = displayProvider
+        self.presentationPreparation = presentationPreparation
     }
 
     func listConnectedDisplays() -> [DisplayInfo] {
@@ -106,6 +113,7 @@ final class DisplayResolutionController {
             return .failure(.modeNotFound(modeId: info.modeId))
         }
 
+        presentationPreparation()
         var config: CGDisplayConfigRef?
         let beginError = CGBeginDisplayConfiguration(&config)
         guard beginError == .success, let config else {

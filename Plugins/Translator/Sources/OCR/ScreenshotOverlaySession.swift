@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import SwiftUI
 
 @MainActor
@@ -148,10 +149,12 @@ private final class ScreenshotOverlayWindow: NSWindow, ScreenshotOverlayWindowMa
     }
 
     func showOverlayWindow() {
+        PluginPresentationSafety.prepareForWindowOrdering(self)
         orderFrontRegardless()
     }
 
     func makeOverlayKeyWindow() {
+        PluginPresentationSafety.prepareForWindowOrdering(self)
         makeKeyAndOrderFront(nil)
     }
 

@@ -62,6 +62,16 @@ final class DynamicPluginLoaderTests: XCTestCase {
         XCTAssertFalse(plugin.externalSessionIsActive)
     }
 
+    func testLoadFailureDescriptionIncludesUnderlyingBundleError() {
+        let error = DynamicPluginLoaderError.loadFailed(
+            URL(fileURLWithPath: "/tmp/Demo.bundle"),
+            reason: "Missing symbol"
+        )
+
+        XCTAssertTrue(error.localizedDescription.contains("/tmp/Demo.bundle"))
+        XCTAssertTrue(error.localizedDescription.contains("Missing symbol"))
+    }
+
     private func makeRecord(id: String) -> PluginPackageRecord {
         let packageURL = URL(fileURLWithPath: "/tmp/\(id).mactoolsplugin", isDirectory: true)
         return PluginPackageRecord(

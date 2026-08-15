@@ -45,6 +45,7 @@ final class MenuBarHiddenPopupPanel: NSPanel {
 
     func show(anchor: NSRect?) {
         position(anchor: anchor)
+        PluginPresentationSafety.prepareForWindowOrdering(self)
         orderFrontRegardless()
         makeKey()
     }

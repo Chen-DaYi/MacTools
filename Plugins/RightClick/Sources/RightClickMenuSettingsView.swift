@@ -148,6 +148,7 @@ struct RightClickMenuSettingsView: View {
         panel.canChooseDirectories = false
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
         panel.prompt = localization.string("settings.openPanel.prompt", defaultValue: "选择")
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // displayName is localized and usually extension-free; strip only a
         // trailing ".app" rather than a global replace.

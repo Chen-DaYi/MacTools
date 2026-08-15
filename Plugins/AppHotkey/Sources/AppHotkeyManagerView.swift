@@ -5,19 +5,10 @@ import MacToolsPluginKit
 
 // MARK: - Manager View
 
-private struct AppHotkeyShortcutConflictWarning: Identifiable {
-    let id = UUID()
-    let entryID: UUID
-    let binding: ShortcutBinding
-}
-
 struct AppHotkeyManagerView: View {
     @ObservedObject var store: AppHotkeyStore
     let localization: PluginLocalization
     let onUpdate: () -> Void
-    var onBeginRecording: ((UUID) -> Void)? = nil
-    var onEndRecording: ((UUID) -> Void)? = nil
-    @State private var pendingShortcutConflictWarning: AppHotkeyShortcutConflictWarning?
 
     var body: some View {
         Group {
@@ -26,34 +17,6 @@ struct AppHotkeyManagerView: View {
             } else {
                 entryList
             }
-        }
-        .alert(item: $pendingShortcutConflictWarning) { warning in
-            Alert(
-                title: Text(localization.format(
-                    "settings.shortcut.commonConflictWarning.title",
-                    defaultValue: "仍要使用“%@”？",
-                    ShortcutFormatter.displayString(for: warning.binding)
-                )),
-                message: Text(localization.string(
-                    "settings.shortcut.commonConflictWarning.message",
-                    defaultValue: "这是全局快捷键，可能覆盖其他应用的常用操作。"
-                )),
-                primaryButton: .default(
-                    Text(localization.string(
-                        "settings.shortcut.commonConflictWarning.confirm",
-                        defaultValue: "仍要使用"
-                    )),
-                    action: {
-                        applyShortcut(warning.binding, to: warning.entryID)
-                    }
-                ),
-                secondaryButton: .cancel(
-                    Text(localization.string(
-                        "settings.shortcut.commonConflictWarning.cancel",
-                        defaultValue: "取消"
-                    ))
-                )
-            )
         }
     }
 
@@ -79,35 +42,9 @@ struct AppHotkeyManagerView: View {
                 AppShortcutEntryRow(
                     entry: entry,
                     localization: localization,
-                    onClearShortcut: {
-                        store.updateShortcut(id: entry.id, shortcut: nil)
-                        onUpdate()
-                    },
                     onDelete: {
                         store.deleteEntry(id: entry.id)
                         onUpdate()
-                    },
-                    onBeginRecording: { onBeginRecording?(entry.id) },
-                    onEndRecording: { onEndRecording?(entry.id) },
-                    onRecord: { binding in
-                        if let conflict = store.conflictEntry(for: binding, excludingID: entry.id) {
-                            return .rejected(localization.format(
-                                "settings.shortcutConflictFormat",
-                                defaultValue: "与「%@」冲突",
-                                conflict.displayName
-                            ))
-                        }
-
-                        if CommonApplicationShortcutBindings.requiresConflictWarning(for: binding) {
-                            pendingShortcutConflictWarning = AppHotkeyShortcutConflictWarning(
-                                entryID: entry.id,
-                                binding: binding
-                            )
-                            return .accepted
-                        }
-
-                        applyShortcut(binding, to: entry.id)
-                        return .accepted
                     }
                 )
                 if entry.id != store.entries.last?.id {
@@ -115,11 +52,6 @@ struct AppHotkeyManagerView: View {
                 }
             }
         }
-    }
-
-    private func applyShortcut(_ binding: ShortcutBinding, to entryID: UUID) {
-        store.updateShortcut(id: entryID, shortcut: binding)
-        onUpdate()
     }
 
     // MARK: Actions
@@ -137,6 +69,7 @@ struct AppHotkeyManagerView: View {
         panel.canChooseDirectories = false
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard Bundle(url: url) != nil else { return }
 
@@ -151,31 +84,18 @@ struct AppHotkeyManagerView: View {
 
 private struct AppShortcutEntryRow: View {
     private enum Layout {
-        static let recorderWidth = PluginSettingsTheme.Size.shortcutRecorderWidth
         static let summaryMinWidth: CGFloat = 220
     }
 
     let entry: AppShortcutEntry
     let localization: PluginLocalization
-    let onClearShortcut: () -> Void
     let onDelete: () -> Void
-    let onBeginRecording: () -> Void
-    let onEndRecording: () -> Void
-    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
 
     private var appIcon: NSImage {
         guard let url = entry.bundleURL else {
             return NSWorkspace.shared.icon(forFile: "/Applications")
         }
         return NSWorkspace.shared.icon(forFile: url.path(percentEncoded: false))
-    }
-
-    private var shortcutText: String {
-        ShortcutFormatter.displayString(for: entry.shortcut)
-            .replacingOccurrences(
-                of: "None",
-                with: localization.string("settings.shortcutUnset", defaultValue: "未设置")
-            )
     }
 
     private var subtitle: String {
@@ -191,12 +111,12 @@ private struct AppShortcutEntryRow: View {
             HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 appSummary
                     .frame(minWidth: Layout.summaryMinWidth)
-                shortcutControl
+                rowActions
             }
 
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 appSummary
-                shortcutControl
+                rowActions
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
@@ -226,30 +146,11 @@ private struct AppShortcutEntryRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var shortcutControl: some View {
+    private var rowActions: some View {
         HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
-            PluginShortcutRecorder(
-                title: localization.format(
-                    "settings.shortcutRecorderTitleFormat",
-                    defaultValue: "%@ 快捷键",
-                    entry.displayName
-                ),
-                displayText: shortcutText,
-                minWidth: Layout.recorderWidth,
-                onRecord: onRecord,
-                onBeginRecording: onBeginRecording,
-                onEndRecording: onEndRecording
-            )
-            .frame(width: Layout.recorderWidth)
-
-            if entry.shortcut != nil {
-                Button(action: onClearShortcut) {
-                    Image(systemName: "xmark.circle.fill")
-                        .pluginSettingsRowIconStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help(localization.string("settings.clearShortcut", defaultValue: "清除快捷键"))
-            }
+            Text(localization.string("settings.configureInActions", defaultValue: "前往“操作与快捷键”设置"))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
 
             Button(action: onDelete) {
                 Image(systemName: "trash")

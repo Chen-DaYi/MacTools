@@ -10,6 +10,8 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
                 configurationIDs: ["calendar", "fan-control"]
             ),
             [
+                .actionsAndShortcuts,
+                .automation,
                 .dashboardLayout,
                 .featurePanelLayout,
                 .marketplace,

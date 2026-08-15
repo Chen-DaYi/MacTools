@@ -21,6 +21,12 @@ if (settingsWindow) {
     settingsWindow.querySelectorAll<HTMLOptionElement>("[data-option-zh]").forEach((item) => {
       item.textContent = language === "en" ? item.dataset.optionEn ?? "" : item.dataset.optionZh ?? "";
     });
+    settingsWindow.querySelectorAll<HTMLElement>("[data-aria-label-zh]").forEach((item) => {
+      item.setAttribute(
+        "aria-label",
+        language === "en" ? item.dataset.ariaLabelEn ?? "" : item.dataset.ariaLabelZh ?? "",
+      );
+    });
   };
 
   const showPanel = (id: string, updateHash = true) => {
@@ -159,11 +165,15 @@ if (settingsWindow) {
         const nextInstalled = !isInstalled;
         row.dataset.installed = String(nextInstalled);
         row.querySelector<HTMLElement>(".market-plugin-status")?.setAttribute(
-          "aria-label",
-          root.dataset.lang === "en"
-            ? nextInstalled ? "Installed" : "Not installed"
-            : nextInstalled ? "已安装" : "未安装",
+          "data-aria-label-zh",
+          nextInstalled ? "已安装" : "未安装",
         );
+        const status = row.querySelector<HTMLElement>(".market-plugin-status");
+        status?.setAttribute(
+          "data-aria-label-en",
+          nextInstalled ? "Installed" : "Not installed",
+        );
+        syncLocalizedFields();
         button.innerHTML = initialMarkup;
         button.disabled = false;
         button.classList.remove("is-busy");

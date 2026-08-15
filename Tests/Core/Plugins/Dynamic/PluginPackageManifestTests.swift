@@ -93,6 +93,102 @@ final class PluginPackageManifestTests: XCTestCase {
         }
     }
 
+    func testExtractionPackagesDeclareTheirRequiredHostCompatibility() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let expectations = [
+            (
+                path: "Plugins/MouseEnhancer/plugin.json",
+                minimum: "1.2.0",
+                compatibleHost: "1.2.0",
+                incompatibleHost: "1.1.6" as String?
+            ),
+            (
+                path: "Plugins/TrackpadGestures/plugin.json",
+                minimum: "1.2.0",
+                compatibleHost: "1.2.0",
+                incompatibleHost: "1.1.6"
+            ),
+        ]
+        for expectation in expectations {
+            let relativePath = expectation.path
+            let manifestURL = repositoryRoot.appendingPathComponent(relativePath)
+            let manifest = try JSONDecoder().decode(
+                PluginPackageManifest.self,
+                from: Data(contentsOf: manifestURL)
+            )
+
+            XCTAssertEqual(manifest.minHostVersion, expectation.minimum)
+            XCTAssertNoThrow(
+                try PluginPackageManifestLoader.validate(
+                    manifest,
+                    hostVersion: expectation.compatibleHost
+                )
+            )
+            if let incompatibleHost = expectation.incompatibleHost {
+                XCTAssertThrowsError(
+                    try PluginPackageManifestLoader.validate(
+                        manifest,
+                        hostVersion: incompatibleHost
+                    )
+                ) { error in
+                    XCTAssertEqual(
+                        error as? PluginPackageManifestError,
+                        .incompatibleHostVersion(
+                            required: expectation.minimum,
+                            current: incompatibleHost
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    func testCurrentHostVersionCanLoadEveryRepositoryPluginManifest() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let versionConfiguration = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Configs/AppVersion.xcconfig"),
+            encoding: .utf8
+        )
+        let hostVersion = try XCTUnwrap(
+            versionConfiguration
+                .split(separator: "\n")
+                .first { $0.trimmingCharacters(in: .whitespaces).hasPrefix("MARKETING_VERSION =") }?
+                .split(separator: "=", maxSplits: 1)
+                .last?
+                .trimmingCharacters(in: .whitespaces)
+        )
+        let pluginDirectory = repositoryRoot.appendingPathComponent("Plugins", isDirectory: true)
+        let pluginURLs = try FileManager.default.contentsOfDirectory(
+            at: pluginDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        for pluginURL in pluginURLs.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            let manifestURL = pluginURL.appendingPathComponent("plugin.json")
+            guard FileManager.default.fileExists(atPath: manifestURL.path) else { continue }
+            let manifest = try JSONDecoder().decode(
+                PluginPackageManifest.self,
+                from: Data(contentsOf: manifestURL)
+            )
+
+            XCTAssertNoThrow(
+                try PluginPackageManifestLoader.validate(manifest, hostVersion: hostVersion),
+                "\(pluginURL.lastPathComponent) requires host \(manifest.minHostVersion), current host is \(hostVersion)"
+            )
+        }
+    }
+
     func testManifestDecodesWithCategoryAndReleaseChannel() throws {
         let json = """
         {

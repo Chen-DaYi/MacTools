@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 @testable import DisplayBrightnessPlugin
 
@@ -123,6 +124,154 @@ final class DisplayBrightnessPluginTests: XCTestCase {
         XCTAssertEqual(definitions.map(\.scope), [.global, .global])
     }
 
+    func testDiscreteBrightnessActionUsesConfiguredTargetAndCommits() async throws {
+        let controller = MockDisplayBrightnessController()
+        controller.snapshotValue = DisplayBrightnessSnapshot(
+            displays: [makeBrightnessDisplay(id: 7, name: "Studio Display", brightness: 0.72)],
+            errorMessage: nil
+        )
+        let plugin = DisplayBrightnessPlugin(
+            controller: controller,
+            mouseDisplayIDProvider: { 7 }
+        )
+        let reference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first {
+                $0.reference.key.actionID == "display-brightness.increase"
+            }?.reference
+        )
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(controller.brightnessWrites.map(\.phase), [.ended])
+        XCTAssertEqual(controller.brightnessWrites.first?.value ?? 0, 0.73, accuracy: 0.0001)
+        let definition = try XCTUnwrap(
+            plugin.actionDefinitions.first { $0.key == reference.key }
+        )
+        XCTAssertTrue(definition.capabilities.contains(.cancellable))
+    }
+
+    func testDeactivationCancelsOutstandingControllerWrites() {
+        let controller = MockDisplayBrightnessController()
+        let plugin = DisplayBrightnessPlugin(controller: controller)
+
+        plugin.deactivate(reason: .updating)
+
+        XCTAssertEqual(controller.cancelOutstandingWritesCount, 1)
+    }
+
+    func testDiscreteBrightnessActionReportsBackendFailure() async throws {
+        let controller = MockDisplayBrightnessController()
+        controller.snapshotValue = DisplayBrightnessSnapshot(
+            displays: [makeBrightnessDisplay(id: 7, name: "Studio Display", brightness: 0.72)],
+            errorMessage: nil
+        )
+        controller.writeResults[7] = .failed(message: "DDC write failed")
+        let plugin = DisplayBrightnessPlugin(
+            controller: controller,
+            mouseDisplayIDProvider: { 7 }
+        )
+        let reference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first {
+                $0.reference.key.actionID == "display-brightness.increase"
+            }?.reference
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .failed(message: "DDC write failed"))
+        XCTAssertEqual(controller.brightnessWrites.map(\.phase), [.ended])
+    }
+
+    func testDiscreteBrightnessActionWaitsForEveryDisplayAndAggregatesFailures() async throws {
+        let controller = MockDisplayBrightnessController()
+        controller.snapshotValue = DisplayBrightnessSnapshot(
+            displays: [
+                makeBrightnessDisplay(id: 7, name: "Studio Display", brightness: 0.72),
+                makeBrightnessDisplay(id: 9, name: "LG UltraFine", brightness: 0.41),
+            ],
+            errorMessage: nil
+        )
+        controller.writeResults[7] = .failed(message: "first failed")
+        controller.writeResults[9] = .failed(message: "second failed")
+        let preferences = DisplayBrightnessShortcutPreferences(
+            storage: DisplayBrightnessMemoryStorage()
+        )
+        preferences.targetMode = .allDisplays
+        let plugin = DisplayBrightnessPlugin(
+            controller: controller,
+            shortcutPreferences: preferences
+        )
+        let reference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first {
+                $0.reference.key.actionID == "display-brightness.decrease"
+            }?.reference
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .failed(message: "first failed；second failed"))
+        XCTAssertEqual(controller.brightnessWrites.map(\.displayID), [7, 9])
+    }
+
+    func testBuiltInDisplayActionsPublishSafetyAndFollowCoordinatorAvailability() async throws {
+        let controller = MockDisplayBrightnessController()
+        controller.snapshotValue = DisplayBrightnessSnapshot(
+            displays: [makeBrightnessDisplay(id: 7, name: "Built-in", brightness: 0.72)],
+            errorMessage: nil
+        )
+        let coordinator = MockDisplayDisableCoordinator()
+        let plugin = DisplayBrightnessPlugin(
+            controller: controller,
+            displayDisableCoordinator: coordinator
+        )
+        let disable = try XCTUnwrap(
+            plugin.actionCatalogEntries.first {
+                $0.reference.key.actionID == "disable-built-in-display"
+            }
+        )
+        let disableDefinition = try XCTUnwrap(
+            plugin.actionDefinitions.first { $0.key == disable.reference.key }
+        )
+
+        XCTAssertEqual(disableDefinition.risk, .confirmationRequired)
+        XCTAssertEqual(disableDefinition.externalInvocationPolicy, .unavailable)
+        XCTAssertTrue(disableDefinition.capabilities.contains(.changesDisplayConfiguration))
+        XCTAssertTrue(plugin.actionAvailability(for: disable.reference).isAvailable)
+
+        let disableResult = try await plugin.beginAction(
+            ActionInvocation(reference: disable.reference, source: .test, mode: .background)
+        ).result()
+        XCTAssertEqual(disableResult, .succeeded())
+        XCTAssertEqual(coordinator.disableCount, 1)
+
+        let restore = try XCTUnwrap(
+            plugin.actionCatalogEntries.first {
+                $0.reference.key.actionID == "restore-built-in-display"
+            }
+        )
+        let restoreDefinition = try XCTUnwrap(
+            plugin.actionDefinitions.first { $0.key == restore.reference.key }
+        )
+        XCTAssertTrue(restoreDefinition.capabilities.contains(.changesDisplayConfiguration))
+        XCTAssertTrue(plugin.actionAvailability(for: restore.reference).isAvailable)
+        let restoreResult = try await plugin.beginAction(
+            ActionInvocation(reference: restore.reference, source: .test, mode: .background)
+        ).result()
+        XCTAssertEqual(restoreResult, .succeeded())
+        XCTAssertEqual(coordinator.restoreCount, 1)
+    }
+
     func testShortcutPreferencesDefaultToFollowingMouse() {
         let preferences = DisplayBrightnessShortcutPreferences(storage: DisplayBrightnessMemoryStorage())
 
@@ -215,4 +364,43 @@ final class DisplayBrightnessPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.primaryPanelState.errorMessage, "调节失败：DDC 写入失败")
     }
+}
+
+@MainActor
+private final class MockDisplayDisableCoordinator: DisplayDisableCoordinating {
+    var snapshot = DisplayDisableSnapshot(
+        status: .available,
+        isDisableAllowed: true,
+        isRestoreAllowed: false,
+        externalDisplayCount: 1,
+        message: nil
+    )
+    private(set) var disableCount = 0
+    private(set) var restoreCount = 0
+
+    func refreshSnapshot() {}
+
+    func disableBuiltInDisplay() async {
+        disableCount += 1
+        snapshot = DisplayDisableSnapshot(
+            status: .disabled,
+            isDisableAllowed: false,
+            isRestoreAllowed: true,
+            externalDisplayCount: 1,
+            message: nil
+        )
+    }
+
+    func restoreBuiltInDisplay() {
+        restoreCount += 1
+        snapshot = DisplayDisableSnapshot(
+            status: .available,
+            isDisableAllowed: true,
+            isRestoreAllowed: false,
+            externalDisplayCount: 1,
+            message: nil
+        )
+    }
+
+    func reconcileTopology() async {}
 }

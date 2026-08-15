@@ -29,6 +29,8 @@ enum DiskCleanReconcileOutcome: Equatable, Sendable {
     case absent(stagedName: String)
     /// Original path was recreated; never overwrite. Keep the staged object and leave the entry **unfinished** so the next launch can still surface it.
     case blocked(stagedName: String, originalPath: String)
+    /// Irreversible deletion began, so any remaining staged tree may be incomplete and must never be restored automatically.
+    case retainedIrreversible(stagedName: String)
     /// Cannot decide (parent directory unreadable, etc.). Leave unfinished for the next launch retry.
     case failed(stagedName: String, reason: String)
 }
@@ -39,10 +41,9 @@ protocol DiskCleanStagingReconciling: Sendable {
 
 /// Startup reconciliation (design §7.6).
 ///
-/// The crash matrix has only two outcomes: journal written but rename never happened
-/// (no staged object — close the entry), or rename happened but the completion record
-/// never landed (orphan staged object — rename back). The write-order invariant
-/// (begin + fsync → rename) rules out a third case of "staged object with no record".
+/// Recovery distinguishes rollback-eligible staged objects from transactions whose durable
+/// irreversible phase says deletion may already have mutated the tree. The latter are retained
+/// under their staged name and surfaced for manual recovery; they are never renamed back.
 struct DiskCleanStagingReconciler: DiskCleanStagingReconciling {
     private let now: @Sendable () -> Date
 
@@ -66,23 +67,34 @@ struct DiskCleanStagingReconciler: DiskCleanStagingReconciling {
     ) -> [DiskCleanReconcileOutcome] {
         // Skip entries owned by a live cleanup in this process so compact cannot erase
         // a begin that has not yet renamed.
-        let entries = journal.incompleteEntriesForReconciliation()
-        guard !entries.isEmpty else { return [] }
+        let pendingEntries = journal.pendingEntriesForReconciliation()
+        guard !pendingEntries.isEmpty else { return [] }
 
         var outcomes: [DiskCleanReconcileOutcome] = []
-        for entry in entries {
-            let outcome = reconcile(entry, journal: journal)
+        for pending in pendingEntries {
+            let entry = pending.entry
+            let outcome = reconcile(pending, journal: journal)
             outcomes.append(outcome)
             auditLog.append(record(for: outcome, entry: entry))
         }
-        journal.compact()
+        do {
+            try journal.compact()
+        } catch {
+            auditLog.append(DiskCleanAuditLog.Record(
+                timestamp: now(),
+                action: .scanEvent,
+                status: "journalCompactionFailed",
+                error: error.localizedDescription
+            ))
+        }
         return outcomes
     }
 
     private func reconcile(
-        _ entry: DiskCleanStagingJournal.Entry,
+        _ pending: DiskCleanStagingJournal.PendingEntry,
         journal: DiskCleanStagingJournal
     ) -> DiskCleanReconcileOutcome {
+        let entry = pending.entry
         let originalPath = DiskCleanRemovalPrimitive.join(entry.parentPath, entry.originalName)
 
         let parentDescriptor = Darwin.open(
@@ -108,6 +120,10 @@ struct DiskCleanStagingReconciler: DiskCleanStagingReconciling {
             }
             journal.complete(entryID: entry.id, status: "reconciledAbsent", at: now())
             return .absent(stagedName: entry.stagedName)
+        }
+
+        if pending.phase == .irreversible {
+            return .retainedIrreversible(stagedName: entry.stagedName)
         }
 
         // Same invariant as execution-time rollback: RENAME_EXCL; never overwrite a recreated original path.
@@ -159,6 +175,15 @@ struct DiskCleanStagingReconciler: DiskCleanStagingReconciling {
                 stagedName: entry.stagedName,
                 status: "rollbackBlocked",
                 error: "原路径已被重建，暂存对象保留"
+            )
+        case .retainedIrreversible:
+            return DiskCleanAuditLog.Record(
+                timestamp: now(),
+                action: .scanEvent,
+                path: originalPath,
+                stagedName: entry.stagedName,
+                status: "irreversibleStagedRetained",
+                error: "删除可能已部分完成，暂存对象未自动恢复"
             )
         case let .failed(_, reason):
             return DiskCleanAuditLog.Record(

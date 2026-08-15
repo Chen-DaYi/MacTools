@@ -135,6 +135,46 @@ final class ActivityBarCodingSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.today.topTools.first?.name, "Cursor")
     }
 
+    func testUnreadableCodingStatsRejectEventsAndDurationFlushWithoutReplacingRawValue() {
+        let storageKey = "activity-bar.coding.days.v1"
+        let unreadableValues: [Any] = [
+            "wrong-type",
+            Data("malformed".utf8),
+        ]
+
+        for unreadableValue in unreadableValues {
+            let storage = ActivityBarMemoryStorage()
+            storage.set(unreadableValue, forKey: storageKey)
+            let originalRawValue = storage.object(forKey: storageKey)
+            let originalWriteCount = storage.setCallCount(forKey: storageKey)
+            let store = ActivityBarCodingSessionStore(
+                storage: storage,
+                calendar: activityBarTestCalendar(),
+                dateProvider: { activityBarTestDate() }
+            )
+
+            store.handleEvent(ActivityBarHookEvent(
+                sessionID: "session-1",
+                cwd: "/tmp/MacTools",
+                event: .userPromptSubmit,
+                status: .processing,
+                userPrompt: "must not overwrite",
+                tool: nil,
+                interactive: true
+            ))
+            store.flushActiveDurations()
+
+            XCTAssertNotNil(store.loadError)
+            XCTAssertEqual(store.today.wordCount, 0)
+            XCTAssertEqual(store.activeSessionCount, 0)
+            XCTAssertEqual(storage.setCallCount(forKey: storageKey), originalWriteCount)
+            XCTAssertTrue(activityBarStorageValuesMatch(
+                storage.object(forKey: storageKey),
+                originalRawValue
+            ))
+        }
+    }
+
     func testParallelSessionsForSameToolCountOverlappingTimeOnce() {
         let storage = ActivityBarMemoryStorage()
         var now = activityBarTestDate(hour: 10)

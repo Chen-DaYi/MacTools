@@ -45,12 +45,10 @@ final class AppShortcutTests: XCTestCase {
         XCTAssertTrue(try item(.toggleDashboard, in: host).canClear)
         XCTAssertFalse(try item(.toggleFeaturePanel, in: host).canClear)
         XCTAssertTrue(
-            manager.debugRegistrationsForTests.contains(
-                .init(
-                    shortcutID: AppShortcutAction.toggleDashboard.rawValue,
-                    binding: dashboardBinding
-                )
-            )
+            manager.debugRegistrationsForTests.contains {
+                $0.binding == dashboardBinding
+                    && $0.shortcutID.hasPrefix("action-shortcut.")
+            }
         )
 
         host.clearAppShortcut(.toggleDashboard)
@@ -58,7 +56,7 @@ final class AppShortcutTests: XCTestCase {
         XCTAssertFalse(try item(.toggleDashboard, in: host).canClear)
         XCTAssertFalse(
             manager.debugRegistrationsForTests.contains {
-                $0.shortcutID == AppShortcutAction.toggleDashboard.rawValue
+                $0.binding == dashboardBinding
             }
         )
     }
@@ -97,12 +95,10 @@ final class AppShortcutTests: XCTestCase {
         )
 
         XCTAssertTrue(
-            manager.debugRegistrationsForTests.contains(
-                .init(
-                    shortcutID: AppShortcutAction.openCommandPalette.rawValue,
-                    binding: binding
-                )
-            )
+            manager.debugRegistrationsForTests.contains {
+                $0.binding == binding
+                    && $0.shortcutID.hasPrefix("action-shortcut.")
+            }
         )
     }
 
@@ -220,14 +216,10 @@ final class AppShortcutTests: XCTestCase {
             ),
         )
         XCTAssertTrue(
-            manager.debugRegistrationsForTests.contains(
-                .init(shortcutID: AppShortcutAction.toggleDashboard.rawValue, binding: appBinding)
-            )
+            manager.debugRegistrationsForTests.contains { $0.binding == appBinding }
         )
         XCTAssertTrue(
-            manager.debugRegistrationsForTests.contains(
-                .init(shortcutID: AppShortcutTestPlugin.shortcutItemID, binding: pluginBinding)
-            )
+            manager.debugRegistrationsForTests.contains { $0.binding == pluginBinding }
         )
     }
 
@@ -264,20 +256,33 @@ final class AppShortcutTests: XCTestCase {
             }?.errorMessage
         )
         XCTAssertTrue(
-            manager.debugRegistrationsForTests.contains(
-                .init(shortcutID: AppShortcutAction.toggleDashboard.rawValue, binding: appBinding)
-            )
+            manager.debugRegistrationsForTests.contains { $0.binding == appBinding }
         )
         XCTAssertTrue(
-            manager.debugRegistrationsForTests.contains(
-                .init(shortcutID: AppShortcutTestPlugin.shortcutItemID, binding: pluginBinding)
-            )
+            manager.debugRegistrationsForTests.contains { $0.binding == pluginBinding }
         )
     }
 
     func testImportAcceptsCommonApplicationShortcuts() throws {
         let plugin = AppShortcutTestPlugin(defaultBinding: nil)
         let host = makeHost(defaults: try makeDefaults(), plugins: [plugin])
+        let appBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_K),
+            modifiers: .command
+        )
+        let pluginBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_4),
+            modifiers: .command
+        )
+        let appAssignment = ActionShortcutAssignmentRecord(
+            reference: ActionReference(
+                key: ActionKey(
+                    providerID: "mactools",
+                    actionID: AppShortcutAction.openSettings.rawValue
+                )
+            ),
+            binding: appBinding
+        )
         let backup = PreferencesBackup(
             application: validApplicationPreferences,
             pluginDisplay: PluginDisplayPreferencesBackup(
@@ -285,28 +290,23 @@ final class AppShortcutTests: XCTestCase {
                 hiddenPluginIDs: []
             ),
             shortcutCustomizations: [
-                AppShortcutAction.openSettings.rawValue: .custom(
-                    ShortcutBinding(
-                        keyCode: UInt16(kVK_ANSI_K),
-                        modifiers: .command
-                    )
-                ),
-                AppShortcutTestPlugin.shortcutItemID: .custom(
-                    ShortcutBinding(
-                        keyCode: UInt16(kVK_ANSI_4),
-                        modifiers: .command
-                    )
-                )
-            ]
+                AppShortcutTestPlugin.shortcutItemID: .custom(pluginBinding)
+            ],
+            actionShortcutAssignments: [appAssignment]
         )
 
         let result = try host.importPreferences(backup)
 
         XCTAssertTrue(result.shortcutErrors.isEmpty)
+        let restoredBackup = host.makePreferencesBackup()
         XCTAssertEqual(
-            host.makePreferencesBackup().shortcutCustomizations,
-            backup.shortcutCustomizations
+            restoredBackup.shortcutCustomizations,
+            [
+                AppShortcutTestPlugin.shortcutItemID: .custom(pluginBinding),
+                AppShortcutAction.openSettings.rawValue: .custom(appBinding),
+            ]
         )
+        XCTAssertEqual(restoredBackup.actionShortcutAssignments, [appAssignment])
     }
 
     func testAppAndPluginShortcutsRejectConflictsInBothDirections() throws {
@@ -419,12 +419,10 @@ final class AppShortcutTests: XCTestCase {
             ShortcutFormatter.displayString(for: binding)
         )
         XCTAssertTrue(
-            restoredManager.debugRegistrationsForTests.contains(
-                .init(
-                    shortcutID: AppShortcutAction.toggleDashboard.rawValue,
-                    binding: binding
-                )
-            )
+            restoredManager.debugRegistrationsForTests.contains {
+                $0.binding == binding
+                    && $0.shortcutID.hasPrefix("action-shortcut.")
+            }
         )
     }
 

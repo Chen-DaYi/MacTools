@@ -404,12 +404,28 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
             )
         }
 
-        if let reason = deleteTree(parentDescriptor: parentDescriptor, name: staged.name, depth: 0) {
-            // **Design deviation**: §7.4 says "keep the journal entry on partiallyDeleted"; here
-            // we complete it explicitly. Keeping the entry would let next startup's reconciliation
-            // rename this **half-deleted broken tree** back to the original path—apps would treat
-            // it as a healthy cache. Leaving debris under the staged name, surfaced by audit and
-            // clean history, is more honest than auto-"restoring" a broken directory.
+        do {
+            try journal.markIrreversible(entryID: staged.entryID, at: now())
+        } catch {
+            let reason = "无法确认不可逆删除日志：\(error.localizedDescription)"
+            return rollback(
+                parentDescriptor: parentDescriptor,
+                staged: staged,
+                originalName: location.name,
+                reason: reason,
+                dispositionAfterRollback: .failed(reason: reason)
+            )
+        }
+
+        if let reason = deleteTree(
+            parentDescriptor: parentDescriptor,
+            nameBytes: Array(staged.name.utf8CString),
+            expectedDevice: item.rootIdentity.devid,
+            expectedFileID: item.rootIdentity.fileID,
+            depth: 0
+        ) {
+            // The durable irreversible phase prevents startup recovery from renaming this
+            // half-deleted tree back even if the terminal record cannot be persisted.
             journal.complete(entryID: staged.entryID, status: "partiallyDeleted", at: now())
             return .partiallyDeleted(stagedName: staged.name, reason: reason)
         }
@@ -432,14 +448,36 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         expectedDevice: UInt64,
         depth: Int
     ) -> TreeOutcome {
+        prewalk(
+            parentDescriptor: parentDescriptor,
+            nameBytes: Array(name.utf8CString),
+            expectedDevice: expectedDevice,
+            depth: depth
+        )
+    }
+
+    private func prewalk(
+        parentDescriptor: Int32,
+        nameBytes: [CChar],
+        expectedDevice: UInt64,
+        depth: Int
+    ) -> TreeOutcome {
         guard depth < Self.maximumTreeDepth else {
             return .failure(reason: "目录层级超过 \(Self.maximumTreeDepth) 层")
         }
-        guard let directory = OpenDirectory(parentDescriptor: parentDescriptor, name: name) else {
+        guard let directory = OpenDirectory(parentDescriptor: parentDescriptor, nameBytes: nameBytes) else {
             let code = errno
             return .failure(reason: Self.describe(code, doing: "打开暂存目录"))
         }
         defer { directory.close() }
+
+        var directoryStatus = stat()
+        guard fstat(directory.descriptor, &directoryStatus) == 0 else {
+            return .failure(reason: Self.describe(errno, doing: "复核暂存目录"))
+        }
+        guard deviceResolver.deviceID(ofEntry: nameBytes, statResult: directoryStatus) == expectedDevice else {
+            return .crossedMountPoint
+        }
 
         var childDirectories: [[CChar]] = []
         while let entry = directory.next() {
@@ -463,17 +501,12 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         }
 
         for childName in childDirectories {
-            let outcome = childName.withUnsafeBufferPointer { buffer -> TreeOutcome in
-                guard let base = buffer.baseAddress else {
-                    return .failure(reason: "条目名为空")
-                }
-                return prewalk(
-                    parentDescriptor: directory.descriptor,
-                    name: String(cString: base),
-                    expectedDevice: expectedDevice,
-                    depth: depth + 1
-                )
-            }
+            let outcome = prewalk(
+                parentDescriptor: directory.descriptor,
+                nameBytes: childName,
+                expectedDevice: expectedDevice,
+                depth: depth + 1
+            )
             guard case .ok = outcome else { return outcome }
         }
         return .ok
@@ -483,27 +516,39 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
     ///
     /// Entry names stay as raw `[CChar]` bytes with no `String` round-trip: illegal UTF-8 names
     /// converted to String and back lose bytes and would point at a different (or missing) object on delete.
-    private func deleteTree(parentDescriptor: Int32, name: String, depth: Int) -> String? {
+    private func deleteTree(
+        parentDescriptor: Int32,
+        nameBytes: [CChar],
+        expectedDevice: UInt64,
+        expectedFileID: UInt64,
+        depth: Int
+    ) -> String? {
         guard depth < Self.maximumTreeDepth else {
             return "目录层级超过 \(Self.maximumTreeDepth) 层"
         }
-        guard let directory = OpenDirectory(parentDescriptor: parentDescriptor, name: name) else {
+        guard let directory = OpenDirectory(parentDescriptor: parentDescriptor, nameBytes: nameBytes) else {
             return Self.describe(errno, doing: "打开暂存目录")
         }
 
+        var directoryStatus = stat()
+        guard fstat(directory.descriptor, &directoryStatus) == 0 else {
+            let reason = Self.describe(errno, doing: "复核暂存目录")
+            directory.close()
+            return reason
+        }
+        guard deviceResolver.deviceID(ofEntry: nameBytes, statResult: directoryStatus) == expectedDevice else {
+            directory.close()
+            return "暂存树内发现挂载点，已停止删除"
+        }
+        guard directoryStatus.st_ino == expectedFileID else {
+            directory.close()
+            return "暂存目录在打开前发生变化，已停止删除"
+        }
+
         // Read the whole directory before deleting: interleaving readdir and unlink makes stream position semantics implementation-dependent.
-        var entries: [(nameBytes: [CChar], isDirectory: Bool)] = []
+        var entries: [[CChar]] = []
         while let entry = directory.next() {
-            var status = stat()
-            let statResult = entry.nameBytes.withUnsafeBufferPointer { buffer -> Int32 in
-                guard let base = buffer.baseAddress else { return -1 }
-                return fstatat(directory.descriptor, base, &status, AT_SYMLINK_NOFOLLOW)
-            }
-            guard statResult == 0 else {
-                directory.close()
-                return Self.describe(errno, doing: "读取条目属性")
-            }
-            entries.append((entry.nameBytes, DiskCleanRootIdentity.FileType(mode: status.st_mode) == .directory))
+            entries.append(entry.nameBytes)
         }
         if let code = directory.readError {
             directory.close()
@@ -511,22 +556,32 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         }
 
         var failureReason: String?
-        for entry in entries where failureReason == nil {
-            if entry.isDirectory {
-                let childName = entry.nameBytes.withUnsafeBufferPointer { buffer -> String? in
-                    buffer.baseAddress.map { String(cString: $0) }
-                }
-                guard let childName else {
-                    failureReason = "条目名为空"
-                    continue
-                }
+        for entryNameBytes in entries where failureReason == nil {
+            var status = stat()
+            let statResult = entryNameBytes.withUnsafeBufferPointer { buffer -> Int32 in
+                guard let base = buffer.baseAddress else { return -1 }
+                return fstatat(directory.descriptor, base, &status, AT_SYMLINK_NOFOLLOW)
+            }
+            if statResult != 0 {
+                if errno == ENOENT { continue }
+                failureReason = Self.describe(errno, doing: "删除前复核条目")
+                continue
+            }
+            guard deviceResolver.deviceID(ofEntry: entryNameBytes, statResult: status) == expectedDevice else {
+                failureReason = "暂存树内发现挂载点，已停止删除"
+                continue
+            }
+
+            if DiskCleanRootIdentity.FileType(mode: status.st_mode) == .directory {
                 failureReason = deleteTree(
                     parentDescriptor: directory.descriptor,
-                    name: childName,
+                    nameBytes: entryNameBytes,
+                    expectedDevice: expectedDevice,
+                    expectedFileID: status.st_ino,
                     depth: depth + 1
                 )
             } else {
-                let result = entry.nameBytes.withUnsafeBufferPointer { buffer -> Int32 in
+                let result = entryNameBytes.withUnsafeBufferPointer { buffer -> Int32 in
                     guard let base = buffer.baseAddress else { return -1 }
                     return unlinkat(directory.descriptor, base, 0)
                 }
@@ -541,7 +596,25 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         if let failureReason {
             return failureReason
         }
-        if unlinkat(parentDescriptor, name, AT_REMOVEDIR) != 0, errno != ENOENT {
+
+        var finalStatus = stat()
+        let finalStatResult = nameBytes.withUnsafeBufferPointer { buffer -> Int32 in
+            guard let base = buffer.baseAddress else { return -1 }
+            return fstatat(parentDescriptor, base, &finalStatus, AT_SYMLINK_NOFOLLOW)
+        }
+        if finalStatResult != 0 {
+            return errno == ENOENT ? nil : Self.describe(errno, doing: "删除前复核目录")
+        }
+        guard deviceResolver.deviceID(ofEntry: nameBytes, statResult: finalStatus) == expectedDevice,
+              finalStatus.st_ino == directoryStatus.st_ino,
+              DiskCleanRootIdentity.FileType(mode: finalStatus.st_mode) == .directory else {
+            return "暂存目录在删除前发生变化，已停止删除"
+        }
+        let removeResult = nameBytes.withUnsafeBufferPointer { buffer -> Int32 in
+            guard let base = buffer.baseAddress else { return -1 }
+            return unlinkat(parentDescriptor, base, AT_REMOVEDIR)
+        }
+        if removeResult != 0, errno != ENOENT {
             return Self.describe(errno, doing: "删除目录")
         }
         return nil
@@ -581,9 +654,16 @@ private final class OpenDirectory {
     /// `readdir` error code. nil means enumeration finished normally.
     private(set) var readError: Int32?
 
-    init?(parentDescriptor: Int32, name: String) {
+    convenience init?(parentDescriptor: Int32, name: String) {
+        self.init(parentDescriptor: parentDescriptor, nameBytes: Array(name.utf8CString))
+    }
+
+    init?(parentDescriptor: Int32, nameBytes: [CChar]) {
         // Single component + parent already fd-anchored, so O_NOFOLLOW is enough; never follow symlinks.
-        let descriptor = openat(parentDescriptor, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK)
+        let descriptor = nameBytes.withUnsafeBufferPointer { buffer -> Int32 in
+            guard let base = buffer.baseAddress else { return -1 }
+            return openat(parentDescriptor, base, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK)
+        }
         guard descriptor >= 0 else { return nil }
         guard let stream = fdopendir(descriptor) else {
             let code = errno

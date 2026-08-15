@@ -23,8 +23,14 @@ final class IPOverviewPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
     PluginSettingsPresenting,
-    PluginPanelSurfaceLifecycleHandling
+    PluginPanelSurfaceLifecycleHandling,
+    PluginActionProviding
 {
+    private enum ActionID {
+        static let copyLocalIPv4 = "copy-local-ipv4"
+        static let copyPublicIPv4 = "copy-public-ipv4"
+    }
+
     enum ControlID {
         static let openSettings = "execute"
         static let copyIP = "ip-overview-copy-ip"
@@ -96,7 +102,7 @@ final class IPOverviewPlugin:
 
     private var addressControls: [PluginPanelControl] {
         let snapshot = viewModel.snapshot
-        let localKind = localization.string("landing.local", defaultValue: "内网")
+        let localKind = localization.string("landing.local", defaultValue: "本地")
         let localLabel = "\(localKind) IPv4"
         let publicLabel = localization.string("publicIP.title", defaultValue: "公网 IP")
         return [
@@ -132,6 +138,57 @@ final class IPOverviewPlugin:
             detail: PluginPanelDetail(controls: addressControls),
             errorMessage: viewModel.snapshot.errorMessage
         )
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        let localKind = localization.string("landing.local", defaultValue: "本地")
+        return [
+            copyActionDefinition(
+                id: ActionID.copyLocalIPv4,
+                title: localization.format("copy.ip.help", defaultValue: "复制 %@ IP", localKind)
+            ),
+            copyActionDefinition(
+                id: ActionID.copyPublicIPv4,
+                title: localization.string("panel.action.copyPublicIP", defaultValue: "复制公网 IP")
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        switch reference.key.actionID {
+        case ActionID.copyLocalIPv4, ActionID.copyPublicIPv4:
+            return .available
+        default:
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let actionID = invocation.reference.key.actionID
+        guard actionID == ActionID.copyLocalIPv4 || actionID == ActionID.copyPublicIPv4 else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+
+        return ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            await self.viewModel.refreshAddressesAndWait()
+            guard !Task.isCancelled else { return .cancelled }
+
+            let value = actionID == ActionID.copyLocalIPv4
+                ? self.viewModel.snapshot.preferredLocalIPv4?.address
+                : self.viewModel.snapshot.preferredPublicIPv4?.ip
+            guard let value, !value.isEmpty else {
+                let fallbackMessage = actionID == ActionID.copyLocalIPv4
+                    ? PluginKitLocalization.actionUnavailable
+                    : self.localization.string("service.error.noPublicIP", defaultValue: "未能从外部检测源获取公网 IP")
+                return .failed(
+                    message: self.viewModel.snapshot.errorMessage
+                        ?? fallbackMessage
+                )
+            }
+            self.viewModel.copy(value)
+            return .succeeded()
+        }
     }
 
     var settingsPage: PluginSettingsPage? {
@@ -219,6 +276,19 @@ final class IPOverviewPlugin:
             actionIconSystemName: "doc.on.doc",
             actionBehavior: .keepPresented,
             isEnabled: address != nil
+        )
+    }
+
+    private func copyActionDefinition(id: String, title: String) -> ActionDefinition {
+        ActionDefinition(
+            key: ActionKey(providerID: metadata.id, actionID: id),
+            title: title,
+            description: metadata.defaultDescription,
+            keywords: [metadata.title, title, "IP", "copy"],
+            systemImage: "doc.on.doc",
+            externalInvocationPolicy: .allowed,
+            capabilities: [.automatic, .background, .foregroundInteractive],
+            executionTimeoutSeconds: 30
         )
     }
 }

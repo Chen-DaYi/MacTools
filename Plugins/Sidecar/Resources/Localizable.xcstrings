@@ -1,6 +1,38 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "action.externalConfirmation.confirm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "متابعة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fortfahren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Continue" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Continuar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Continuer" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "続ける" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "계속" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Continuar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Продолжить" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "繼續" } }
+      }
+    },
+    "action.externalConfirmation.message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "سيغيّر رابط التشغيل هذا اتصال شاشة Sidecar." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Ausführungslink ändert die Verbindung eines Sidecar-Displays." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This Run Link will change a Sidecar display connection." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Este enlace de ejecución cambiará la conexión de una pantalla Sidecar." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ce lien d’exécution modifiera la connexion d’un écran Sidecar." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この実行リンクはSidecarディスプレイの接続を変更します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 실행 링크는 Sidecar 디스플레이 연결을 변경합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Esta hiperligação de execução irá alterar a ligação de um ecrã Sidecar." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эта ссылка запуска изменит подключение дисплея Sidecar." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此运行链接将更改 Sidecar 显示器连接。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此執行連結將更改 Sidecar 顯示器連線。" } }
+      }
+    },
     "device.unnamed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -145,6 +177,38 @@
       "extractionState" : "manual",
       "localizations" : {
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذر قطع اتصال %@، لذا لا يمكن التبديل إلى %@" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ konnte nicht getrennt werden; Wechsel zu %@ nicht möglich" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not disconnect %@, so %@ could not be selected" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo desconectar %@, por lo que no se puede cambiar a %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de déconnecter %@, donc le passage à %@ est impossible" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@との接続を解除できないため、%@に切り替えられません" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결을 해제할 수 없어 %@로 전환할 수 없습니다" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível desligar %@, pelo que não é possível mudar para %@" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось отключить %@, поэтому переключение на %@ невозможно" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法断开 %@，因此无法切换到 %@" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法中斷 %@，因此無法切換到 %@" } }
+      }
+    },
+    "panel.error.reconciling" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "انتهت مهلة العملية. جارٍ تأكيد حالة Sidecar…" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zeitüberschreitung. Sidecar-Status wird bestätigt…" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation timed out. Confirming Sidecar status…" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La operación agotó el tiempo. Confirmando el estado de Sidecar…" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’opération a expiré. Confirmation de l’état de Sidecar…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "操作がタイムアウトしました。Sidecarの状態を確認中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 시간이 초과되었습니다. Sidecar 상태 확인 중…" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A operação excedeu o tempo limite. A confirmar o estado do Sidecar…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время ожидания истекло. Проверяем состояние Sidecar…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作超时，正在确认 Sidecar 状态…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "操作逾時，正在確認 Sidecar 狀態…" } }
+      }
+    },
+    "panel.error.unconfirmed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "أُرسل طلب Sidecar، لكن تعذر تأكيد حالة الشاشة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Sidecar-Anfrage wurde gesendet, der Displaystatus konnte aber nicht bestätigt werden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Sidecar request was submitted, but the display state could not be confirmed" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La solicitud de Sidecar se envió, pero no se pudo confirmar el estado de la pantalla" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La demande Sidecar a été envoyée, mais l’état de l’écran n’a pas pu être confirmé" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecarの要求は送信されましたが、ディスプレイの状態を確認できませんでした" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 요청을 보냈지만 디스플레이 상태를 확인할 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "O pedido do Sidecar foi enviado, mas não foi possível confirmar o estado do ecrã" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запрос Sidecar отправлен, но состояние дисплея подтвердить не удалось" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 请求已提交，但未能确认显示器状态" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 要求已送出，但無法確認顯示器狀態" } }
       }
     },
     "panel.error.timeout" : {

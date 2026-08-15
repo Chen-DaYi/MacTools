@@ -85,12 +85,14 @@ enum DockLockDockPreferences {
 }
 
 final class DockLockMonitor: NSObject, DockLockMonitoring {
+    private typealias CallbackContext = PluginCallbackContext<DockLockMonitor>
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "DockLockPlugin"
     )
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var eventTapCallbackPointer: UnsafeMutableRawPointer?
     private var dockPositionTimer: Timer?
     private var shouldClampPointer = false
 
@@ -106,19 +108,25 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
             | (1 << CGEventType.rightMouseDragged.rawValue)
             | (1 << CGEventType.otherMouseDragged.rawValue)
 
+        let callbackContext = CallbackContext(owner: self)
+        let callbackPointer = Unmanaged.passRetained(callbackContext).toOpaque()
         guard let eventTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: events,
             callback: Self.eventTapCallback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
+            userInfo: callbackPointer
         ) else {
+            callbackContext.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             logger.error("Failed to create Dock Lock event tap")
             return false
         }
         guard let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0) else {
             CFMachPortInvalidate(eventTap)
+            callbackContext.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             logger.error("Failed to create Dock Lock run loop source")
             return false
         }
@@ -126,6 +134,7 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         self.eventTap = eventTap
         self.runLoopSource = runLoopSource
+        eventTapCallbackPointer = callbackPointer
         refreshDockPosition()
         CGEvent.tapEnable(tap: eventTap, enable: true)
         startDockPositionPolling()
@@ -137,6 +146,12 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
             return
         }
 
+        if let eventTapCallbackPointer {
+            let context = Unmanaged<CallbackContext>
+                .fromOpaque(eventTapCallbackPointer)
+                .takeUnretainedValue()
+            context.invalidate()
+        }
         CGEvent.tapEnable(tap: eventTap, enable: false)
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
@@ -144,6 +159,10 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
         CFMachPortInvalidate(eventTap)
         self.eventTap = nil
         runLoopSource = nil
+        if let eventTapCallbackPointer {
+            Unmanaged<CallbackContext>.fromOpaque(eventTapCallbackPointer).release()
+            self.eventTapCallbackPointer = nil
+        }
         dockPositionTimer?.invalidate()
         dockPositionTimer = nil
     }
@@ -152,8 +171,10 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
         guard let userInfo else {
             return Unmanaged.passUnretained(event)
         }
-        let monitor = Unmanaged<DockLockMonitor>.fromOpaque(userInfo).takeUnretainedValue()
-        return monitor.handle(event: event, type: type)
+        let context = Unmanaged<CallbackContext>.fromOpaque(userInfo).takeUnretainedValue()
+        return context.withOwner { monitor in
+            monitor.handle(event: event, type: type)
+        } ?? Unmanaged.passUnretained(event)
     }
 
     private func handle(event: CGEvent, type: CGEventType) -> Unmanaged<CGEvent>? {
@@ -224,7 +245,17 @@ private struct DockLockPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class DockLockPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing {
+final class DockLockPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    AccessibilityPermissionRefreshing,
+    PluginActionProviding
+{
+    private enum ActionID {
+        static let toggle = "toggle"
+        static let setEnabled = "set-enabled"
+    }
+
     private enum PermissionID {
         static let accessibility = "accessibility"
     }
@@ -319,14 +350,113 @@ final class DockLockPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPer
 
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "Dock"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "Dock"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: metadata.title,
+                        kind: .boolean
+                    ),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.automatic, .background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: localization.string("action.toggle.title", defaultValue: "切换程序坞锁定"),
+                subtitle: panelSubtitle,
+                presentationState: isEnabled && isAccessibilityGranted && lastErrorMessage == nil
+                    ? .active
+                    : .inactive
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.enable.title", defaultValue: "开启程序坞锁定")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.disable.title", defaultValue: "关闭程序坞锁定")
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key.providerID == metadata.id else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        let enablesLock: Bool
+        switch reference.key.actionID {
+        case ActionID.toggle:
+            enablesLock = !isEnabled
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = reference.parameters["enabled"] else {
+                return .unavailable(PluginKitLocalization.actionInvalidParameters)
+            }
+            enablesLock = value
+        default:
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        guard !enablesLock || isAccessibilityGranted else {
+            return .unavailable(localization.string(
+                "error.accessibilityRequired",
+                defaultValue: "Dock 锁定需要辅助功能权限。"
+            ))
+        }
+        return .available
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !isEnabled
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle {
+                    .failed(message: PluginKitLocalization.actionInvalidParameters)
+                }
+            }
+            enabled = value
+        default:
+            return ActionExecutionHandle {
+                .failed(message: PluginKitLocalization.actionInvalidParameters)
+            }
+        }
+
+        return ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return self.setEnabled(enabled, promptForPermission: false)
+                ? .succeeded()
+                : .failed(message: self.lastErrorMessage ?? PluginKitLocalization.actionFailed)
+        }
+    }
+
     func handleAction(_ action: PluginPanelAction) {
         guard case let .setSwitch(isEnabled) = action else {
             return
         }
-        self.isEnabled = isEnabled
-        storage.set(isEnabled, forKey: StorageKey.isEnabled)
-        applyLockState(promptForPermission: isEnabled)
-        onStateChange?()
+        _ = setEnabled(isEnabled, promptForPermission: isEnabled)
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
@@ -383,6 +513,26 @@ final class DockLockPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPer
         return isEnabled
             ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
             : localization.string("panel.subtitle.disabled", defaultValue: "已关闭")
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    @discardableResult
+    private func setEnabled(_ enabled: Bool, promptForPermission: Bool) -> Bool {
+        isEnabled = enabled
+        storage.set(enabled, forKey: StorageKey.isEnabled)
+        applyLockState(promptForPermission: promptForPermission)
+        onStateChange?()
+        return !enabled || (isAccessibilityGranted && lastErrorMessage == nil)
     }
 
     private func applyLockState(promptForPermission: Bool) {

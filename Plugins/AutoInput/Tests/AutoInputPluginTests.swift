@@ -31,6 +31,38 @@ final class AutoInputStoreTests: XCTestCase {
         XCTAssertEqual(store.rules.count, 1)
         XCTAssertEqual(store.rules[0].inputSourceID, "zh")
     }
+
+    func testRejectedWritesDoNotPublishBooleanOrRuleCandidates() {
+        let storage = AutoInputMemoryStorage()
+        storage.blockedSetKeys = ["isEnabled", "rules"]
+        let store = AutoInputStore(storage: storage)
+
+        XCTAssertEqual(store.setEnabled(false), .rejected(rollbackSucceeded: true))
+        XCTAssertTrue(store.isEnabled)
+        XCTAssertEqual(
+            store.upsertRule(makeRule(bundleID: "com.example.app", sourceID: "en")),
+            .rejected(rollbackSucceeded: true)
+        )
+        XCTAssertTrue(store.rules.isEmpty)
+
+        let reloaded = AutoInputStore(storage: storage)
+        XCTAssertTrue(reloaded.isEnabled)
+        XCTAssertTrue(reloaded.rules.isEmpty)
+    }
+
+    func testRejectedRuleWritePreservesWrongTypedRawValue() {
+        let storage = AutoInputMemoryStorage()
+        storage.setRawValue("sentinel", forKey: "rules")
+        storage.blockedSetKeys = ["rules"]
+        let store = AutoInputStore(storage: storage)
+
+        XCTAssertEqual(
+            store.upsertRule(makeRule(bundleID: "com.example.app", sourceID: "en")),
+            .rejected(rollbackSucceeded: true)
+        )
+        XCTAssertEqual(storage.rawValue(forKey: "rules") as? String, "sentinel")
+        XCTAssertTrue(store.rules.isEmpty)
+    }
 }
 
 @MainActor
@@ -155,6 +187,34 @@ final class AutoInputControllerTests: XCTestCase {
 }
 
 @MainActor
+final class AutoInputApplicationMonitorTests: XCTestCase {
+    func testWorkspaceActivationHopsSafelyToMainActor() async {
+        let notificationCenter = NotificationCenter()
+        let monitor = WorkspaceAutoInputApplicationMonitor(
+            notificationCenter: notificationCenter
+        )
+        let activated = expectation(description: "application activation delivered")
+        monitor.onApplicationActivated = { application in
+            XCTAssertTrue(Thread.isMainThread)
+            XCTAssertEqual(application.bundleIdentifier, NSRunningApplication.current.bundleIdentifier)
+            activated.fulfill()
+        }
+        monitor.start()
+        defer { monitor.stop() }
+
+        notificationCenter.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [
+                NSWorkspace.applicationUserInfoKey: NSRunningApplication.current,
+            ]
+        )
+
+        await fulfillment(of: [activated], timeout: 1)
+    }
+}
+
+@MainActor
 final class AutoInputPluginPanelTests: XCTestCase {
     func testPanelReflectsDefaultsRulesAndPause() {
         let storage = AutoInputMemoryStorage()
@@ -183,6 +243,97 @@ final class AutoInputPluginPanelTests: XCTestCase {
         pluginWithRule.handleAction(.setSwitch(false))
         XCTAssertFalse(pluginWithRule.primaryPanelState.isOn)
         XCTAssertEqual(pluginWithRule.primaryPanelState.subtitle, "已暂停")
+    }
+
+    func testCanonicalActionCanPauseAutoInput() async throws {
+        let storage = AutoInputMemoryStorage()
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
+            sourceController: FakeAutoInputSourceController(sources: [], currentSourceID: nil),
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.last?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+    }
+
+    func testCanonicalMutationIsDeferredAndRejectedPersistenceReturnsFailure() async throws {
+        let storage = AutoInputMemoryStorage()
+        storage.blockedSetKeys = ["isEnabled"]
+        let sources = FakeAutoInputSourceController(sources: [], currentSourceID: nil)
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
+            sourceController: sources,
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.last?.reference)
+
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        ))
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
+
+        let result = await handle.result()
+
+        guard case .failed = result else { return XCTFail("expected persistence failure") }
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertTrue(sources.selectedIDs.isEmpty)
+        XCTAssertTrue(AutoInputStore(storage: storage).isEnabled)
+    }
+
+    func testAdaptiveActionReflectsAndTogglesCurrentState() async throws {
+        let storage = AutoInputMemoryStorage()
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
+            sourceController: FakeAutoInputSourceController(sources: [], currentSourceID: nil),
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+    }
+
+    func testAdaptiveToggleResolvesStateWhenDeferredHandleExecutes() async throws {
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "auto-input",
+                storage: AutoInputMemoryStorage()
+            ),
+            sourceController: FakeAutoInputSourceController(sources: [], currentSourceID: nil),
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+        let invocation = ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )
+        let first = try plugin.beginAction(invocation)
+        let second = try plugin.beginAction(invocation)
+
+        let firstResult = await first.result()
+        XCTAssertEqual(firstResult, .succeeded())
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        let secondResult = await second.result()
+        XCTAssertEqual(secondResult, .succeeded())
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 }
 
@@ -255,6 +406,7 @@ private final class FakeAutoInputApplicationMonitor: AutoInputApplicationMonitor
 @MainActor
 private final class AutoInputMemoryStorage: PluginStorage {
     private var values: [String: Any] = [:]
+    var blockedSetKeys: Set<String> = []
 
     func object(forKey key: String) -> Any? { values[key] }
     func data(forKey key: String) -> Data? { values[key] as? Data }
@@ -262,11 +414,22 @@ private final class AutoInputMemoryStorage: PluginStorage {
     func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
     func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
-    func set(_ value: Any?, forKey key: String) { values[key] = value }
+    func set(_ value: Any?, forKey key: String) {
+        guard !blockedSetKeys.contains(key) else { return }
+        values[key] = value
+    }
     func removeObject(forKey key: String) { values.removeValue(forKey: key) }
     func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
         guard values[key] == nil, let value = values[legacyKey] else { return }
         values[key] = value
         values.removeValue(forKey: legacyKey)
+    }
+
+    func setRawValue(_ value: Any, forKey key: String) {
+        values[key] = value
+    }
+
+    func rawValue(forKey key: String) -> Any? {
+        values[key]
     }
 }
