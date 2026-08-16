@@ -1,0 +1,35 @@
+{
+  "id": "cloudflare-r2",
+  "displayName": "Cloudflare R2 上传",
+  "summary": "上传文件并复制链接",
+  "localizedMetadata": {
+    "en": {
+      "displayName": "R2 Upload",
+      "summary": "Upload files to Cloudflare R2 and copy their URLs."
+    },
+    "zh-Hans": {
+      "displayName": "Cloudflare R2 上传",
+      "summary": "上传文件并复制链接"
+    },
+    "zh-Hant": {
+      "displayName": "Cloudflare R2 上傳",
+      "summary": "將檔案上傳到 Cloudflare R2，並複製存取連結"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.2.0",
+  "pluginKitVersion": 4,
+  "bundleRelativePath": "CloudflareR2.bundle",
+  "factoryClass": "CloudflareR2Plugin.CloudflareR2PluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "CloudflareR2Plugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "settings": "workspace"
+  },
+  "permissions": [],
+  "category": "productivity"
+}
