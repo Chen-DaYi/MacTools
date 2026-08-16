@@ -2611,6 +2611,11 @@ final class PluginHost: ObservableObject {
                     activityStateHandling.applicationActivityStateDidChange(applicationActivityState)
                 }
             }
+            if let safetyChangeProvider = plugin as? any PluginActionSafetyStateChangeProviding {
+                safetyChangeProvider.onActionSafetyStateChange = { [weak self] in
+                    self?.rebuildDerivedStateAfterPluginChange(pluginID: pluginID)
+                  }
+              }
             configureHostStatusItemCallbacks(for: [plugin])
         }
         configureTrackpadGestureBridge()
@@ -3873,6 +3878,7 @@ final class PluginHost: ObservableObject {
         }
 
         plugin.onStateChange = nil
+        (plugin as? any PluginActionSafetyStateChangeProviding)?.onActionSafetyStateChange = nil
         plugin.requestPermissionGuidance = nil
         plugin.shortcutBindingResolver = nil
         (plugin as? any PluginSettingsPresenting)?.requestSettingsPresentation = nil
