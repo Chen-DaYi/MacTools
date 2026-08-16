@@ -1779,7 +1779,6 @@ verify_code_session() {
         -only-testing:MacToolsTests/LaunchControlCanonicalActionTests \
         -only-testing:MacToolsTests/LaunchpadPluginActionTests \
         -only-testing:MacToolsTests/LockScreenPluginTests \
-        -only-testing:MacToolsTests/MenuBarHiddenPluginTests \
         -only-testing:MacToolsTests/MicrophoneMutePluginTests \
         -only-testing:MacToolsTests/MiddleClickPluginTests \
         -only-testing:MacToolsTests/NightShiftPluginTests \

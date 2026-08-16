@@ -50,7 +50,6 @@ const iconByPlugin: Record<string, string> = {
   "keep-awake": "lamp.floor.png",
   "launch-control": "power.png",
   launchpad: "square.grid.3x3.fill.png",
-  "menu-bar-hidden": "menubar.arrow.up.rectangle.png",
   "middle-click": "cursorarrow.click.2.png",
   "mouse-enhancer": "computermouse.png",
   "right-click": "contextualmenu.and.cursorarrow.png",
@@ -401,38 +400,6 @@ const settingsModels: Record<string, SettingSection[]> = {
           description: t("当前 Mac 支持的 SMC 控制路径。", "The SMC control path supported by this Mac."),
           control: "status",
           value: "CH0B + CH0C",
-        },
-      ],
-    },
-  ],
-  "menu-bar-hidden": [
-    {
-      title: t("行为", "Behavior"),
-      icon: "switch.2.png",
-      rows: [
-        {
-          title: t("隐藏菜单栏图标", "Hide menu bar icons"),
-          description: t("隐藏扩展条左侧的所有状态栏图标。", "Hide every status item to the left of the divider."),
-          control: "toggle",
-          enabled: true,
-        },
-        {
-          title: t("面板中显示隐藏图标", "Show hidden icons in panel"),
-          description: t("在功能面板内集中查看被隐藏的菜单栏项目。", "Collect hidden menu bar items inside the feature panel."),
-          control: "toggle",
-          enabled: true,
-        },
-      ],
-    },
-    {
-      title: t("布局", "Layout"),
-      icon: "menubar.rectangle.png",
-      rows: [
-        {
-          title: t("扩展条位置", "Divider position"),
-          description: t("拖动软件中的扩展条可重新划分隐藏区域。", "Drag the divider in the app to change the hidden area."),
-          control: "status",
-          value: "菜单栏右侧",
         },
       ],
     },
@@ -803,7 +770,7 @@ const settingsModels: Record<string, SettingSection[]> = {
 };
 
 const catalog = await loadPluginCatalog();
-const plugins = [...catalog.plugins].sort((a, b) =>
+const plugins = catalog.plugins.filter((plugin) => plugin.id !== "menu-bar-hidden").sort((a, b) =>
   localizedPluginText(a).zh.displayName.localeCompare(localizedPluginText(b).zh.displayName, "zh-CN")
 );
 const settingsPlugins = plugins.filter((plugin) => plugin.capabilities.configuration);

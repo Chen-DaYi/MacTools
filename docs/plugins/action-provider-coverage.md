@@ -13,7 +13,7 @@ The following plugin source directories publish canonical actions:
 - Core action surfaces: `ActionGrid`, `SavedScripts`.
 - App and input control: `AppHotkey`, `AppVolume`, `AutoInput`, `MiddleClick`, `WindowSwitcher`.
 - Display and workspace control: `Appearance`, `DisplayBrightness`, `DisplayResolution`, `DisplaySleep`, `DisplayTrueColor`, `DockLock`, `HideNotch`, `NightShift`, `Sidecar`, `StageManager`.
-- Menu bar and Dock control: `AutoHideDock`, `AutoHideMenuBar`, `MenuBarHidden`.
+- Menu bar and Dock control: `AutoHideDock`, `AutoHideMenuBar`.
 - System and device control: `BatteryChargeLimit`, `FanControl`, `KeepAwake`, `LockScreen`, `MicrophoneMute`, `SystemMute`.
 - Productivity and maintenance: `ActivityBar`, `ClipboardClear`, `DiskClean`, `EjectDisk`, `EmptyTrash`, `FixDamagedApp`, `Homebrew`, `IPOverview`, `LaunchControl`, `Launchpad`, `PhysicalCleanMode`, `QuitApps`, `Translator`, `XcodeClean`.
 

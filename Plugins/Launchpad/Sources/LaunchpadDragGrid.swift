@@ -146,7 +146,7 @@ final class LaunchpadGridContainerView: NSView {
 
     /// While a drag session is live, defer rebuilding the cell views (so the dragged view
     /// isn't destroyed mid-flight) and remember the latest model to apply on drag end —
-    /// the `canSetItemViews` discipline from `MenuBarHiddenLayoutStripView`.
+    /// the grid's `canSetItemViews` discipline.
     private var isDragging = false
     private var pendingGrid: LaunchpadDragGrid?
 
