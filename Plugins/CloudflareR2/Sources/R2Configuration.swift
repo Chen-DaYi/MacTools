@@ -8,7 +8,6 @@ struct R2Configuration: Equatable, Sendable {
     var accessKeyID: String
     var publicBaseURL: String
     var objectPrefix: String
-    var preservesFileName: Bool
 
     var isComplete: Bool {
         !accountID.trimmed.isEmpty && !bucket.trimmed.isEmpty && !accessKeyID.trimmed.isEmpty
@@ -22,7 +21,6 @@ final class R2ConfigurationStore: ObservableObject {
     @Published var accessKeyID: String
     @Published var publicBaseURL: String
     @Published var objectPrefix: String
-    @Published var preservesFileName: Bool
     @Published var secretAccessKey = ""
     @Published private(set) var hasStoredSecret = false
     @Published var errorMessage: String?
@@ -33,7 +31,7 @@ final class R2ConfigurationStore: ObservableObject {
         static let accessKeyID = "access-key-id"
         static let publicBaseURL = "public-base-url"
         static let objectPrefix = "object-prefix"
-        static let preservesFileName = "preserves-file-name"
+        static let retiredPreservesFileName = "preserves-file-name"
     }
 
     private let storage: PluginStorage
@@ -47,7 +45,7 @@ final class R2ConfigurationStore: ObservableObject {
         accessKeyID = storage.string(forKey: Key.accessKeyID) ?? ""
         publicBaseURL = storage.string(forKey: Key.publicBaseURL) ?? ""
         objectPrefix = storage.string(forKey: Key.objectPrefix) ?? ""
-        preservesFileName = storage.bool(forKey: Key.preservesFileName)
+        storage.removeObject(forKey: Key.retiredPreservesFileName)
         do {
             hasStoredSecret = try secrets.containsSecret()
         } catch {
@@ -61,8 +59,7 @@ final class R2ConfigurationStore: ObservableObject {
             bucket: bucket.trimmed,
             accessKeyID: accessKeyID.trimmed,
             publicBaseURL: publicBaseURL.trimmed,
-            objectPrefix: objectPrefix.trimmed,
-            preservesFileName: preservesFileName
+            objectPrefix: objectPrefix.trimmed
         )
     }
 
@@ -86,7 +83,6 @@ final class R2ConfigurationStore: ObservableObject {
         storage.set(accessKeyID.trimmed, forKey: Key.accessKeyID)
         storage.set(publicBaseURL.trimmed, forKey: Key.publicBaseURL)
         storage.set(objectPrefix.trimmed, forKey: Key.objectPrefix)
-        storage.set(preservesFileName, forKey: Key.preservesFileName)
         do {
             if !secretAccessKey.trimmed.isEmpty {
                 try secrets.saveSecret(secretAccessKey)

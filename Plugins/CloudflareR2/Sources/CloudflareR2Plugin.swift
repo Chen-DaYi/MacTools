@@ -107,9 +107,11 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
     var requestSettingsPresentation: (() -> Void)?
 
     private let uploader: R2Uploading
+    private let objectChecker: R2ObjectChecking
     private let filePicker: @MainActor @Sendable () -> URL?
     private let clipboard: any R2ClipboardWriting
     private let completionNotifier: any R2UploadCompletionNotifying
+    private let progressPresenter: any R2UploadProgressPresenting
     private let logger: Logger
     private let terminalStatusDuration: Duration?
     private var uploadTask: Task<R2UploadResult, Error>?
@@ -119,19 +121,23 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "cloudflare-r2"),
         uploader: R2Uploading = R2UploadService(),
+        objectChecker: R2ObjectChecking = R2UploadService(),
         configurationStore: R2ConfigurationStore? = nil,
         filePicker: (@MainActor @Sendable () -> URL?)? = nil,
         clipboard: (any R2ClipboardWriting)? = nil,
         completionNotifier: (any R2UploadCompletionNotifying)? = nil,
+        progressPresenter: (any R2UploadProgressPresenting)? = nil,
         logger: Logger? = nil,
         terminalStatusDuration: Duration? = .seconds(5)
     ) {
         self.configurationStore = configurationStore
             ?? R2ConfigurationStore(storage: context.storage)
         self.uploader = uploader
+        self.objectChecker = objectChecker
         self.filePicker = filePicker ?? Self.chooseFile
         self.clipboard = clipboard ?? R2SystemClipboardWriter()
         self.completionNotifier = completionNotifier ?? R2SystemUploadCompletionNotifier()
+        self.progressPresenter = progressPresenter ?? R2UploadProgressPresenter()
         self.logger = logger ?? Logger(
             subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
             category: "CloudflareR2Plugin"
@@ -143,7 +149,7 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
             iconName: "icloud.and.arrow.up.fill",
             iconTint: Color(nsColor: .systemOrange),
             order: 75,
-            defaultDescription: "上传文件并复制链接"
+            defaultDescription: "上传文件到 Cloudflare R2"
         )
         primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
@@ -273,25 +279,16 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
         uploadGeneration &+= 1
         let generation = uploadGeneration
         let fileName = fileURL.lastPathComponent
-        status = .uploading(fileName, progress: 0)
+        status = .preparing(fileName)
         notifyStateChange()
-
-        let progressRelay = R2ProgressRelay { [weak self] progress in
-            Task { @MainActor in
-                self?.updateProgress(
-                    progress,
-                    fileName: fileName,
-                    generation: generation
-                )
-            }
-        }
         let task = Task { [weak self] () throws -> R2UploadResult in
             guard let self else { throw CancellationError() }
-            return try await self.performUpload(
-                fileURL,
-                generation: generation,
-                progressRelay: progressRelay
-            )
+            do {
+                return try await self.prepareAndUpload(fileURL, generation: generation)
+            } catch {
+                self.handlePreparationError(error, generation: generation)
+                throw error
+            }
         }
         uploadTask = task
         return task
@@ -306,18 +303,91 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
             && configurationStore.hasStoredSecret
     }
 
+    private func prepareAndUpload(
+        _ fileURL: URL,
+        generation: UInt64
+    ) async throws -> R2UploadResult {
+        var proposedName = fileURL.lastPathComponent
+        let configuration = configurationStore.configuration
+        let secret = try configurationStore.loadSecret()
+
+        while true {
+            guard let objectName = await progressPresenter.requestObjectName(
+                fileName: proposedName
+            ) else {
+                if generation == uploadGeneration {
+                    uploadTask = nil
+                    status = .idle
+                    notifyStateChange()
+                }
+                throw CancellationError()
+            }
+            try Task.checkCancellation()
+            guard generation == uploadGeneration else { throw CancellationError() }
+
+            let exists = try await objectChecker.objectExists(
+                objectName: objectName,
+                configuration: configuration,
+                secretAccessKey: secret
+            )
+            try Task.checkCancellation()
+            guard generation == uploadGeneration else { throw CancellationError() }
+            if exists {
+                let resolution = await progressPresenter.requestConflictResolution(
+                    fileName: objectName
+                )
+                try Task.checkCancellation()
+                guard generation == uploadGeneration else { throw CancellationError() }
+                if resolution == .rename {
+                    proposedName = R2UploadNameGenerator.randomFileName(
+                        preservingExtensionOf: objectName
+                    )
+                    continue
+                }
+                if resolution == .cancelled {
+                    throw CancellationError()
+                }
+            }
+
+            progressPresenter.beginProgress(fileName: objectName) { [weak self] in
+                self?.cancelUpload()
+            }
+            status = .uploading(objectName, progress: 0)
+            notifyStateChange()
+            let progressRelay = R2ProgressRelay { [weak self] progress in
+                Task { @MainActor in
+                    self?.updateProgress(
+                        progress,
+                        fileName: objectName,
+                        generation: generation
+                    )
+                }
+            }
+            return try await performUpload(
+                fileURL,
+                objectName: objectName,
+                configuration: configuration,
+                secretAccessKey: secret,
+                generation: generation,
+                progressRelay: progressRelay
+            )
+        }
+    }
+
     private func performUpload(
         _ fileURL: URL,
+        objectName: String,
+        configuration: R2Configuration,
+        secretAccessKey: String,
         generation: UInt64,
         progressRelay: R2ProgressRelay
     ) async throws -> R2UploadResult {
-        let configuration = configurationStore.configuration
         do {
-            let secret = try configurationStore.loadSecret()
             let result = try await uploader.upload(
                 fileURL: fileURL,
+                objectName: objectName,
                 configuration: configuration,
-                secretAccessKey: secret,
+                secretAccessKey: secretAccessKey,
                 progress: progressRelay.report
             )
             try Task.checkCancellation()
@@ -326,10 +396,11 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
             }
 
             uploadTask = nil
+            progressPresenter.dismiss()
             status = .succeeded(result)
             notifyStateChange()
             let shouldCopyLink = completionNotifier.notify(
-                fileName: fileURL.lastPathComponent,
+                fileName: objectName,
                 result: result
             )
             if shouldCopyLink, let url = result.url {
@@ -341,12 +412,20 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
             )
             return result
         } catch {
-            guard generation == uploadGeneration,
-                  !Task.isCancelled,
-                  !Self.isCancellation(error) else {
+            if generation != uploadGeneration
+                || Task.isCancelled
+                || Self.isCancellation(error)
+            {
+                if generation == uploadGeneration {
+                    uploadTask = nil
+                    progressPresenter.dismiss()
+                    status = .idle
+                    notifyStateChange()
+                }
                 throw CancellationError()
             }
             uploadTask = nil
+            progressPresenter.dismiss()
             status = .failed(error.localizedDescription)
             notifyStateChange()
             scheduleStatusReset(generation: generation)
@@ -357,10 +436,28 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
         }
     }
 
+    private func handlePreparationError(_ error: Error, generation: UInt64) {
+        guard generation == uploadGeneration,
+              case .preparing = status else { return }
+        uploadTask = nil
+        progressPresenter.dismiss()
+        if Task.isCancelled || Self.isCancellation(error) {
+            status = .idle
+        } else {
+            status = .failed(error.localizedDescription)
+            scheduleStatusReset(generation: generation)
+            logger.error(
+                "R2 object check failed: \(error.localizedDescription, privacy: .private)"
+            )
+        }
+        notifyStateChange()
+    }
+
     private func cancelActiveUpload(updateStatus: Bool) {
         uploadGeneration &+= 1
         uploadTask?.cancel()
         uploadTask = nil
+        progressPresenter.dismiss()
         statusResetTask?.cancel()
         statusResetTask = nil
         if updateStatus, status != .idle {
@@ -376,7 +473,9 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
         generation: UInt64
     ) {
         guard generation == uploadGeneration, status.isUploading else { return }
-        status = .uploading(fileName, progress: min(1, max(0, progress)))
+        let clamped = min(1, max(0, progress))
+        progressPresenter.update(progress: clamped)
+        status = .uploading(fileName, progress: clamped)
         notifyStateChange()
     }
 
@@ -421,12 +520,18 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
 
 enum R2UploadStatus: Equatable {
     case idle
+    case preparing(String)
     case uploading(String, progress: Double)
     case succeeded(R2UploadResult)
     case failed(String)
 
     var isUploading: Bool {
-        if case .uploading = self { true } else { false }
+        switch self {
+        case .preparing, .uploading:
+            true
+        case .idle, .succeeded, .failed:
+            false
+        }
     }
 
     var errorMessage: String? {
@@ -436,7 +541,9 @@ enum R2UploadStatus: Equatable {
     var subtitle: String {
         switch self {
         case .idle:
-            "上传文件并复制链接"
+            "上传文件到 Cloudflare R2"
+        case let .preparing(name):
+            "准备上传 \(name)…"
         case let .uploading(name, progress):
             "正在上传 \(name)… \(Int(progress * 100))%"
         case let .succeeded(result):

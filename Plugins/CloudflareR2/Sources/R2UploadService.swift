@@ -10,10 +10,23 @@ struct R2UploadResult: Equatable, Sendable {
 protocol R2Uploading: Sendable {
     func upload(
         fileURL: URL,
+        objectName: String?,
         configuration: R2Configuration,
         secretAccessKey: String,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> R2UploadResult
+}
+
+protocol R2ObjectChecking: Sendable {
+    func objectExists(
+        objectName: String,
+        configuration: R2Configuration,
+        secretAccessKey: String
+    ) async throws -> Bool
+}
+
+protocol R2HTTPObjectChecking: Sendable {
+    func data(for request: URLRequest) async throws -> (Data, URLResponse)
 }
 
 protocol R2HTTPUploading: Sendable {
@@ -24,25 +37,71 @@ protocol R2HTTPUploading: Sendable {
     ) async throws -> (Data, URLResponse)
 }
 
-struct R2UploadService: R2Uploading {
+struct R2UploadService: R2Uploading, R2ObjectChecking {
     private let httpClient: any R2HTTPUploading
+    private let objectCheckClient: any R2HTTPObjectChecking
     private let now: @Sendable () -> Date
-    private let uniqueSuffix: @Sendable () -> String
 
     init(
         httpClient: any R2HTTPUploading = R2URLSessionHTTPUploader(),
-        now: @escaping @Sendable () -> Date = { .now },
-        uniqueSuffix: @escaping @Sendable () -> String = {
-            String(UUID().uuidString.prefix(8)).lowercased()
-        }
+        objectCheckClient: any R2HTTPObjectChecking = R2URLSessionHTTPObjectChecker(),
+        now: @escaping @Sendable () -> Date = { .now }
     ) {
         self.httpClient = httpClient
+        self.objectCheckClient = objectCheckClient
         self.now = now
-        self.uniqueSuffix = uniqueSuffix
+    }
+
+    func objectExists(
+        objectName: String,
+        configuration: R2Configuration,
+        secretAccessKey: String
+    ) async throws -> Bool {
+        guard configuration.isComplete else {
+            throw R2UploadError.incompleteConfiguration
+        }
+        let objectKey = try makeObjectKey(
+            objectName: objectName,
+            configuration: configuration
+        )
+        let canonicalURI = R2S3URIEncoder.canonicalURI(
+            bucket: configuration.bucket,
+            objectKey: objectKey
+        )
+        guard let requestURL = R2S3URIEncoder.requestURL(
+            accountID: configuration.accountID,
+            canonicalURI: canonicalURI
+        ) else {
+            throw R2UploadError.invalidConfiguration
+        }
+        var request = URLRequest(url: requestURL)
+        request.httpMethod = "HEAD"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        try R2RequestSigner.sign(
+            request: &request,
+            canonicalURI: canonicalURI,
+            payloadHash: "UNSIGNED-PAYLOAD",
+            accessKeyID: configuration.accessKeyID,
+            secretAccessKey: secretAccessKey,
+            date: now()
+        )
+        let (_, response) = try await objectCheckClient.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw R2UploadError.invalidResponse
+        }
+        switch httpResponse.statusCode {
+        case 200..<300:
+            return true
+        case 404:
+            return false
+        default:
+            throw R2UploadError.httpStatus(httpResponse.statusCode)
+        }
     }
 
     func upload(
         fileURL: URL,
+        objectName: String? = nil,
         configuration: R2Configuration,
         secretAccessKey: String,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
@@ -59,6 +118,7 @@ struct R2UploadService: R2Uploading {
 
         let objectKey = try makeObjectKey(
             fileName: fileURL.lastPathComponent,
+            objectName: objectName,
             configuration: configuration
         )
         let canonicalURI = R2S3URIEncoder.canonicalURI(
@@ -107,30 +167,51 @@ struct R2UploadService: R2Uploading {
 
     private func makeObjectKey(
         fileName: String,
+        objectName: String?,
         configuration: R2Configuration
     ) throws -> String {
         let resolvedName: String
-        if configuration.preservesFileName {
-            resolvedName = fileName
+        if let objectName {
+            resolvedName = try R2ObjectNameValidator.normalized(objectName)
         } else {
-            let name = fileName as NSString
-            let pathExtension = name.pathExtension
-            let stem = name.deletingPathExtension
-            let suffix = uniqueSuffix()
-            resolvedName = pathExtension.isEmpty
-                ? "\(stem)-\(suffix)"
-                : "\(stem)-\(suffix).\(pathExtension)"
+            resolvedName = fileName
         }
 
+        return try makeObjectKey(objectName: resolvedName, configuration: configuration)
+    }
+
+    private func makeObjectKey(
+        objectName: String,
+        configuration: R2Configuration
+    ) throws -> String {
+        let normalizedName = try R2ObjectNameValidator.normalized(objectName)
         let prefix = try R2ObjectPrefixValidator.normalizedPrefix(
             from: configuration.objectPrefix
         )
-        return prefix.isEmpty ? resolvedName : "\(prefix)/\(resolvedName)"
+        return prefix.isEmpty ? normalizedName : "\(prefix)/\(normalizedName)"
     }
 
     private func contentType(for url: URL) -> String {
         UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
             ?? "application/octet-stream"
+    }
+}
+
+enum R2ObjectNameValidator {
+    static func normalized(_ value: String) throws -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty
+            && trimmed != "."
+            && trimmed != ".."
+            && !trimmed.contains("/")
+            && !trimmed.contains("\0") else {
+            throw R2UploadError.invalidObjectName
+        }
+        return trimmed
+    }
+
+    static func isValid(_ value: String) -> Bool {
+        (try? normalized(value)) != nil
     }
 }
 
@@ -272,6 +353,16 @@ struct R2URLSessionHTTPUploader: R2HTTPUploading {
     }
 }
 
+struct R2URLSessionHTTPObjectChecker: R2HTTPObjectChecking {
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.finishTasksAndInvalidate() }
+        var request = request
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        return try await session.data(for: request)
+    }
+}
+
 final class R2URLSessionUploadOperation: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private let progress: @Sendable (Double) -> Void
@@ -398,6 +489,7 @@ final class R2URLSessionUploadOperation: NSObject, URLSessionTaskDelegate, URLSe
 enum R2UploadError: LocalizedError, Equatable {
     case incompleteConfiguration
     case invalidConfiguration
+    case invalidObjectName
     case invalidObjectPrefix
     case missingSecret
     case invalidFile
@@ -410,6 +502,8 @@ enum R2UploadError: LocalizedError, Equatable {
             "请先完成 R2 配置。"
         case .invalidConfiguration:
             "R2 配置无效。"
+        case .invalidObjectName:
+            "文件名无效。"
         case .invalidObjectPrefix:
             "对象路径前缀不能包含 . 或 ..。"
         case .missingSecret:

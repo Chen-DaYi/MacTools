@@ -3,4 +3,4 @@ release: plugin
 type: added
 ---
 
-Add a Cloudflare R2 plugin with strict S3 signing, cancellable progress, an upload-completion dialog with optional link copying, safe object naming, validated public URLs, Keychain credentials, global shortcuts, and action surfaces.
+Add a Cloudflare R2 uploader with guided setup, pre-upload renaming, same-name conflict choices, cancellable progress, secure credential storage, shortcuts, and optional public-link copying.

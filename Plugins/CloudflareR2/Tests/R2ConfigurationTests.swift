@@ -2,18 +2,24 @@ import Foundation
 import MacToolsPluginKit
 import Security
 import XCTest
+
 @testable import CloudflareR2Plugin
 
 final class R2ConfigurationTests: XCTestCase {
     func testConfigurationRequiresEveryCoreFieldAndTrimsValues() async {
         await MainActor.run {
-            let store = R2ConfigurationStore(storage: R2MemoryStorage(), secrets: R2SecretStoreMock(secret: nil))
+            let store = R2ConfigurationStore(
+                storage: R2MemoryStorage(), secrets: R2SecretStoreMock(secret: nil))
             store.accountID = " account "
             store.bucket = " bucket "
             store.accessKeyID = " key "
             store.publicBaseURL = " https://files.example.com/ "
             store.objectPrefix = " uploads/2026 "
-            XCTAssertEqual(store.configuration, R2Configuration(accountID: "account", bucket: "bucket", accessKeyID: "key", publicBaseURL: "https://files.example.com/", objectPrefix: "uploads/2026", preservesFileName: false))
+            XCTAssertEqual(
+                store.configuration,
+                R2Configuration(
+                    accountID: "account", bucket: "bucket", accessKeyID: "key",
+                    publicBaseURL: "https://files.example.com/", objectPrefix: "uploads/2026"))
             XCTAssertTrue(store.configuration.isComplete)
             store.accountID = " "
             XCTAssertFalse(store.configuration.isComplete)
@@ -22,22 +28,28 @@ final class R2ConfigurationTests: XCTestCase {
 
     func testStoreLoadsPersistedConfigurationAndSecretPresence() async {
         await MainActor.run {
-            let storage = R2MemoryStorage(values: ["account-id": "account", "bucket": "bucket", "access-key-id": "access", "public-base-url": "https://files.example.com", "object-prefix": "images"])
-            let store = R2ConfigurationStore(storage: storage, secrets: R2SecretStoreMock(secret: "secret"))
+            let storage = R2MemoryStorage(values: [
+                "account-id": "account", "bucket": "bucket", "access-key-id": "access",
+                "public-base-url": "https://files.example.com", "object-prefix": "images",
+                "preserves-file-name": true,
+            ])
+            let store = R2ConfigurationStore(
+                storage: storage, secrets: R2SecretStoreMock(secret: "secret"))
             XCTAssertEqual(store.accountID, "account")
             XCTAssertEqual(store.bucket, "bucket")
             XCTAssertEqual(store.accessKeyID, "access")
             XCTAssertEqual(store.publicBaseURL, "https://files.example.com")
             XCTAssertEqual(store.objectPrefix, "images")
             XCTAssertTrue(store.hasStoredSecret)
-            XCTAssertFalse(store.preservesFileName)
             XCTAssertNil(store.errorMessage)
+            XCTAssertNil(storage.values["preserves-file-name"])
         }
     }
 
     func testPublicURLValidationRejectsRelativeAndAcceptsHTTPS() async {
         await MainActor.run {
-            let store = R2ConfigurationStore(storage: R2MemoryStorage(), secrets: R2SecretStoreMock(secret: nil))
+            let store = R2ConfigurationStore(
+                storage: R2MemoryStorage(), secrets: R2SecretStoreMock(secret: nil))
             store.publicBaseURL = "cdn.example.com"
             XCTAssertNotNil(store.publicBaseURLValidationMessage)
             store.publicBaseURL = "https://cdn.example.com"
@@ -65,8 +77,12 @@ final class R2ConfigurationTests: XCTestCase {
         let secrets = R2SecretStoreMock(secret: nil)
         let store = await MainActor.run { R2ConfigurationStore(storage: storage, secrets: secrets) }
         await MainActor.run {
-            store.accountID = " account "; store.bucket = " bucket "; store.accessKeyID = " access "
-            store.publicBaseURL = " https://files.example.com "; store.objectPrefix = " uploads "; store.secretAccessKey = " secret "
+            store.accountID = " account "
+            store.bucket = " bucket "
+            store.accessKeyID = " access "
+            store.publicBaseURL = " https://files.example.com "
+            store.objectPrefix = " uploads "
+            store.secretAccessKey = " secret "
             store.save()
         }
         let values = await MainActor.run { storage.values }
@@ -76,19 +92,29 @@ final class R2ConfigurationTests: XCTestCase {
         XCTAssertEqual(values["public-base-url"] as? String, "https://files.example.com")
         XCTAssertEqual(values["object-prefix"] as? String, "uploads")
         XCTAssertEqual(try secrets.loadSecret(), "secret")
-        await MainActor.run { XCTAssertEqual(store.secretAccessKey, ""); XCTAssertTrue(store.hasStoredSecret) }
+        await MainActor.run {
+            XCTAssertEqual(store.secretAccessKey, "")
+            XCTAssertTrue(store.hasStoredSecret)
+        }
     }
 
     func testBlankSecretDoesNotOverwriteStoredSecret() async throws {
         let secrets = R2SecretStoreMock(secret: "existing")
-        let store = await MainActor.run { R2ConfigurationStore(storage: R2MemoryStorage(), secrets: secrets) }
-        await MainActor.run { store.secretAccessKey = "  "; store.save() }
+        let store = await MainActor.run {
+            R2ConfigurationStore(storage: R2MemoryStorage(), secrets: secrets)
+        }
+        await MainActor.run {
+            store.secretAccessKey = "  "
+            store.save()
+        }
         XCTAssertEqual(try secrets.loadSecret(), "existing")
         XCTAssertEqual(secrets.saveCount, 0)
     }
 
     func testLoadSecretThrowsWhenMissing() async {
-        let store = await MainActor.run { R2ConfigurationStore(storage: R2MemoryStorage(), secrets: R2SecretStoreMock(secret: nil)) }
+        let store = await MainActor.run {
+            R2ConfigurationStore(storage: R2MemoryStorage(), secrets: R2SecretStoreMock(secret: nil))
+        }
         do {
             _ = try await MainActor.run { try store.loadSecret() }
             XCTFail("Expected missingSecret")
@@ -96,19 +122,29 @@ final class R2ConfigurationTests: XCTestCase {
     }
 
     func testSecretStoreErrorsAreExposed() async {
-        let secrets = R2SecretStoreMock(secret: nil); secrets.error = R2SecretStoreTestError.failed
-        let store = await MainActor.run { R2ConfigurationStore(storage: R2MemoryStorage(), secrets: secrets) }
-        await MainActor.run { XCTAssertEqual(store.errorMessage, "Secret store failed"); store.save(); XCTAssertEqual(store.errorMessage, "Secret store failed") }
+        let secrets = R2SecretStoreMock(secret: nil)
+        secrets.error = R2SecretStoreTestError.failed
+        let store = await MainActor.run {
+            R2ConfigurationStore(storage: R2MemoryStorage(), secrets: secrets)
+        }
+        await MainActor.run {
+            XCTAssertEqual(store.errorMessage, "Secret store failed")
+            store.save()
+            XCTAssertEqual(store.errorMessage, "Secret store failed")
+        }
     }
 
     func testKeychainStoreSaveOverwriteAndLoad() throws {
         let service = "cc.ggbond.mactools.cloudflare-r2.tests.\(UUID().uuidString)"
         let store = R2KeychainSecretStore(service: service, account: "secret")
         defer { deleteKeychainItem(service: service, account: "secret") }
-        XCTAssertFalse(try store.containsSecret()); XCTAssertNil(try store.loadSecret())
+        XCTAssertFalse(try store.containsSecret())
+        XCTAssertNil(try store.loadSecret())
         try store.saveSecret(" first ")
-        XCTAssertTrue(try store.containsSecret()); XCTAssertEqual(try store.loadSecret(), "first")
-        try store.saveSecret("second"); XCTAssertEqual(try store.loadSecret(), "second")
+        XCTAssertTrue(try store.containsSecret())
+        XCTAssertEqual(try store.loadSecret(), "first")
+        try store.saveSecret("second")
+        XCTAssertEqual(try store.loadSecret(), "second")
     }
 
     func testKeychainStoreIgnoresBlankSecret() throws {
@@ -120,19 +156,45 @@ final class R2ConfigurationTests: XCTestCase {
     }
 
     private func deleteKeychainItem(service: String, account: String) {
-        SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account] as CFDictionary)
+        SecItemDelete(
+            [
+                kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+            ] as CFDictionary)
     }
 }
 
-enum R2SecretStoreTestError: LocalizedError { case failed; var errorDescription: String? { "Secret store failed" } }
+enum R2SecretStoreTestError: LocalizedError {
+    case failed
+    var errorDescription: String? { "Secret store failed" }
+}
 
 final class R2SecretStoreMock: R2SecretStoring, @unchecked Sendable {
-    private let lock = NSLock(); private var storedSecret: String?; private var storedSaveCount = 0; var error: Error?
+    private let lock = NSLock()
+    private var storedSecret: String?
+    private var storedSaveCount = 0
+    var error: Error?
     init(secret: String?) { storedSecret = secret }
     var saveCount: Int { lock.withLock { storedSaveCount } }
-    func containsSecret() throws -> Bool { try lock.withLock { if let error { throw error }; return storedSecret != nil } }
-    func loadSecret() throws -> String? { try lock.withLock { if let error { throw error }; return storedSecret } }
-    func saveSecret(_ value: String) throws { try lock.withLock { if let error { throw error }; storedSecret = value.trimmingCharacters(in: .whitespacesAndNewlines); storedSaveCount += 1 } }
+    func containsSecret() throws -> Bool {
+        try lock.withLock {
+            if let error { throw error }
+            return storedSecret != nil
+        }
+    }
+    func loadSecret() throws -> String? {
+        try lock.withLock {
+            if let error { throw error }
+            return storedSecret
+        }
+    }
+    func saveSecret(_ value: String) throws {
+        try lock.withLock {
+            if let error { throw error }
+            storedSecret = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            storedSaveCount += 1
+        }
+    }
 }
 
 @MainActor
@@ -147,5 +209,8 @@ final class R2MemoryStorage: PluginStorage {
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
     func set(_ value: Any?, forKey key: String) { values[key] = value }
     func removeObject(forKey key: String) { values.removeValue(forKey: key) }
-    func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) { guard values[key] == nil, let value = values.removeValue(forKey: legacyKey) else { return }; values[key] = value }
+    func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
+        guard values[key] == nil, let value = values.removeValue(forKey: legacyKey) else { return }
+        values[key] = value
+    }
 }

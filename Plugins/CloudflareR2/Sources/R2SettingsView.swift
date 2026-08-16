@@ -12,6 +12,9 @@ struct R2SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            sectionHeader("配置指引", icon: "questionmark.circle.fill")
+            configurationGuide
+
             sectionHeader("R2 凭据", icon: "key.fill")
             VStack(spacing: 0) {
                 fieldRow("Account ID", text: $store.accountID, prompt: "Cloudflare Account ID")
@@ -45,18 +48,6 @@ struct R2SettingsView: View {
                         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
                         .padding(.bottom, PluginSettingsTheme.Spacing.rowVertical)
                 }
-                PluginSettingsListDivider()
-                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                        Text("保留原文件名").font(PluginSettingsTheme.Typography.rowTitle)
-                        Text("开启后，同名对象可能被覆盖；关闭时自动追加唯一后缀。")
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Toggle("", isOn: $store.preservesFileName).labelsHidden().toggleStyle(.switch).controlSize(.small)
-                }
-                .pluginSettingsListRowPadding(interactive: true)
             }
             .pluginSettingsCardBackground(.standard)
 
@@ -81,6 +72,64 @@ struct R2SettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                 }
+            }
+        }
+    }
+
+    private var configurationGuide: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            guideRow(
+                "1",
+                title: "创建或选择 Bucket",
+                detail: "Cloudflare 控制台 → R2 对象存储；Bucket 名称来自存储桶列表，Account ID 位于 R2 概览的账户信息中。"
+            )
+            guideRow(
+                "2",
+                title: "创建 S3 API 凭据",
+                detail: "R2 概览 → 管理 API Token，选择“对象读和写”。创建后复制 Access Key ID 和 Secret Access Key；Secret 仅显示一次。"
+            )
+            guideRow(
+                "3",
+                title: "配置公开访问地址（可选）",
+                detail: "Bucket → 设置 → 自定义域，或启用 r2.dev 开发地址；填写包含 https:// 的根地址。"
+            )
+
+            HStack(spacing: 12) {
+                Link(
+                    "打开 R2 控制台",
+                    destination: URL(string: "https://dash.cloudflare.com/?to=/:account/r2")!
+                )
+                Link(
+                    "查看凭据文档",
+                    destination: URL(string: "https://developers.cloudflare.com/r2/api/tokens/")!
+                )
+                Link(
+                    "查看公开访问文档",
+                    destination: URL(string: "https://developers.cloudflare.com/r2/buckets/public-buckets/")!
+                )
+            }
+            .font(PluginSettingsTheme.Typography.rowDescription)
+        }
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .pluginSettingsCardBackground(.standard)
+    }
+
+    private func guideRow(_ number: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(number)
+                .font(PluginSettingsTheme.Typography.statusBadge)
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(Color.accentColor))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+                Text(detail)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
