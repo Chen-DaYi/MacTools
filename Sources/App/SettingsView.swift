@@ -2654,6 +2654,10 @@ private struct PluginActionShortcutFormSection: View {
                     .frame(width: layoutWidths.sectionLayout, alignment: .leading)
             }
         }
+        .pluginSettingsSearchAnchor(
+            pluginID: pluginID,
+            entryID: PluginActionShortcutSettingsConfiguration.settingsSearchEntryID
+        )
     }
 }
 

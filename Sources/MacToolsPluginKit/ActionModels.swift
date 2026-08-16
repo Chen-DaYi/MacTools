@@ -546,6 +546,12 @@ public protocol PluginActionProviding: AnyObject {
 /// separate from `MacToolsPlugin` and `PluginActionProviding` so existing PluginKit v4 witness
 /// tables remain unchanged.
 public struct PluginActionShortcutSettingsConfiguration: Sendable {
+    /// Stable settings-search entry used by the host-rendered action shortcut section.
+    ///
+    /// This is a static contract rather than stored configuration so adding it does not change
+    /// the binary layout of the public PluginKit v4 value type.
+    public static let settingsSearchEntryID = "action-shortcuts"
+
     public let title: String
     public let description: String?
     public let systemImage: String

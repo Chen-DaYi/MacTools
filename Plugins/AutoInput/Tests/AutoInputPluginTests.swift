@@ -922,6 +922,57 @@ final class InputSourceHUDControllerTests: XCTestCase {
         XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
     }
 
+    func testInteractiveHUDRepeatedClicksReusePanelAndHostingView() throws {
+        var now: TimeInterval = 1
+        let controller = InputSourceHUDController(
+            dismissDelay: .seconds(60),
+            duplicateInterval: 0,
+            now: { now },
+            visibleFrames: { [CGRect(x: 0, y: 0, width: 1200, height: 800)] }
+        )
+        defer { controller.dismiss() }
+        let configuration = AutoInputHUDConfiguration(
+            size: .standard,
+            position: .automatic,
+            isInteractive: true
+        )
+        let focusedFrame = CGRect(x: 300, y: 400, width: 200, height: 24)
+        var activationCount = 0
+        var activationHandler: (() -> Void)?
+        activationHandler = {
+            activationCount += 1
+            now += 1
+            controller.show(
+                label: InputSourceHUDLabel(
+                    title: activationCount.isMultiple(of: 2) ? "U.S." : "Pinyin",
+                    modeIndicator: nil
+                ),
+                near: focusedFrame,
+                configuration: configuration,
+                onActivate: activationHandler
+            )
+        }
+
+        controller.show(
+            label: InputSourceHUDLabel(title: "U.S.", modeIndicator: nil),
+            near: focusedFrame,
+            configuration: configuration,
+            onActivate: activationHandler
+        )
+        let panel = try XCTUnwrap(controller.presentedPanelForTests)
+        let hostingViewIdentity = try XCTUnwrap(controller.hostingViewIdentityForTests)
+
+        XCTAssertTrue(controller.sendPointerHoverForTests(true))
+        XCTAssertTrue(controller.sendPointerClickForTests())
+        XCTAssertTrue(controller.sendPointerClickForTests())
+
+        XCTAssertEqual(activationCount, 2)
+        XCTAssertTrue(panel === controller.presentedPanelForTests)
+        XCTAssertEqual(controller.hostingViewIdentityForTests, hostingViewIdentity)
+        XCTAssertFalse(panel.ignoresMouseEvents)
+        XCTAssertTrue(controller.sendPointerHoverForTests(false))
+    }
+
     func testHUDAppearsAboveFocusedFieldNearBottomEdge() {
         let frame = InputSourceHUDController.panelFrame(
             focusedFrame: CGRect(x: 300, y: 20, width: 200, height: 24),
@@ -1055,11 +1106,12 @@ final class AutoInputPluginPanelTests: XCTestCase {
                 AutoInputSettingsSearchEntryID.behavior,
                 AutoInputSettingsSearchEntryID.rules,
                 AutoInputSettingsSearchEntryID.hud,
+                AutoInputSettingsSearchEntryID.shortcuts,
             ]
         )
         XCTAssertEqual(
             plugin.settingsSearchEntries.map(\.systemImage),
-            ["arrow.counterclockwise", "app.badge.checkmark", "text.cursor"]
+            ["arrow.counterclockwise", "app.badge.checkmark", "text.cursor", "command"]
         )
         XCTAssertTrue(plugin.settingsSearchEntries.allSatisfy { !$0.title.isEmpty })
         XCTAssertTrue(plugin.settingsSearchEntries.allSatisfy { !$0.description.isEmpty })

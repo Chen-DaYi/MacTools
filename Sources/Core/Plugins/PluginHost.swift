@@ -3231,8 +3231,15 @@ final class PluginHost: ObservableObject {
 
             actionRegistry.invalidateAvailability()
             rebuildDerivedState(dirtyPluginIDs: pluginIDs)
+            syncGlobalShortcuts()
         }
     }
+
+    #if DEBUG
+    func waitForScheduledPluginStateRebuildForTests() async {
+        await pluginStateChangeRebuildTask?.value
+    }
+    #endif
 
     private func cancelScheduledPluginStateRebuild() {
         pluginStateChangeRebuildTask?.cancel()

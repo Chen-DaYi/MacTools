@@ -7,6 +7,7 @@ enum AutoInputSettingsSearchEntryID {
     static let behavior = "behavior"
     static let rules = "rules"
     static let hud = "hud"
+    static let shortcuts = PluginActionShortcutSettingsConfiguration.settingsSearchEntryID
 }
 
 public final class AutoInputPluginFactory: NSObject, MacToolsPluginBundleFactory {
@@ -210,6 +211,24 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                     "HUD",
                 ],
                 systemImage: "text.cursor"
+            ),
+            PluginSettingsSearchEntry(
+                id: AutoInputSettingsSearchEntryID.shortcuts,
+                title: localization.string(
+                    "settings.shortcuts.title",
+                    defaultValue: "输入法快捷键"
+                ),
+                description: localization.string(
+                    "settings.shortcuts.description",
+                    defaultValue: "为常用输入法分配全局快捷键，按下即可直接切换。"
+                ),
+                keywords: [
+                    localization.string(
+                        "action.selectSource.parameterTitle",
+                        defaultValue: "输入法"
+                    ),
+                ],
+                systemImage: "command"
             ),
         ]
     }

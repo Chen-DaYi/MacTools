@@ -80,6 +80,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
     private let visibleFrames: () -> [CGRect]
 
     private var panel: InputSourceHUDPanel?
+    private var hostingView: InputSourceHUDHostingView?
     private var dismissTask: Task<Void, Never>?
     private var isPointerHovering = false
     private var presentationGate: InputSourceHUDPresentationGate
@@ -149,24 +150,37 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         panel.setAccessibilityLabel(
             [label.modeIndicator, normalizedName].compactMap { $0 }.joined(separator: ", ")
         )
-        let hostingView = NSHostingView(rootView: InputSourceHUDView(
-            label: InputSourceHUDLabel(
-                title: normalizedName,
-                modeIndicator: label.modeIndicator
-            ),
-            metrics: metrics,
-            isInteractive: configuration.isInteractive,
-            onActivate: configuration.isInteractive ? {
-                onActivate?()
-            } : nil,
-            onHoverChanged: configuration.isInteractive ? { [weak self] isHovering in
-                self?.setPointerHovering(isHovering)
-            } : nil
-        ))
-        hostingView.wantsLayer = true
-        hostingView.layer?.borderWidth = 0
-        hostingView.layer?.borderColor = NSColor.clear.cgColor
-        panel.contentView = hostingView
+        let normalizedLabel = InputSourceHUDLabel(
+            title: normalizedName,
+            modeIndicator: label.modeIndicator
+        )
+        if let hostingView {
+            hostingView.configure(
+                label: normalizedLabel,
+                metrics: metrics,
+                isInteractive: configuration.isInteractive,
+                onActivate: configuration.isInteractive ? onActivate : nil,
+                onHoverChanged: configuration.isInteractive ? { [weak self] isHovering in
+                    self?.setPointerHovering(isHovering)
+                } : nil
+            )
+        } else {
+            let hostingView = InputSourceHUDHostingView()
+            hostingView.configure(
+                label: normalizedLabel,
+                metrics: metrics,
+                isInteractive: configuration.isInteractive,
+                onActivate: configuration.isInteractive ? onActivate : nil,
+                onHoverChanged: configuration.isInteractive ? { [weak self] isHovering in
+                    self?.setPointerHovering(isHovering)
+                } : nil
+            )
+            hostingView.wantsLayer = true
+            hostingView.layer?.borderWidth = 0
+            hostingView.layer?.borderColor = NSColor.clear.cgColor
+            self.hostingView = hostingView
+            panel.contentView = hostingView
+        }
 
         PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.orderFrontRegardless()
@@ -177,10 +191,62 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         scheduleDismiss()
     }
 
+    #if DEBUG
+    var presentedPanelForTests: InputSourceHUDPanel? { panel }
+    var hostingViewIdentityForTests: ObjectIdentifier? {
+        hostingView.map(ObjectIdentifier.init)
+    }
+
+    @discardableResult
+    func sendPointerClickForTests() -> Bool {
+        guard let hostingView,
+              let event = NSEvent.mouseEvent(
+                  with: .leftMouseUp,
+                  location: .zero,
+                  modifierFlags: [],
+                  timestamp: 0,
+                  windowNumber: panel?.windowNumber ?? 0,
+                  context: nil,
+                  eventNumber: 0,
+                  clickCount: 1,
+                  pressure: 0
+              ) else {
+            return false
+        }
+        hostingView.mouseUp(with: event)
+        return true
+    }
+
+    @discardableResult
+    func sendPointerHoverForTests(_ isHovering: Bool) -> Bool {
+        guard let hostingView,
+              let event = NSEvent.mouseEvent(
+                  with: .mouseMoved,
+                  location: .zero,
+                  modifierFlags: [],
+                  timestamp: 0,
+                  windowNumber: panel?.windowNumber ?? 0,
+                  context: nil,
+                  eventNumber: 0,
+                  clickCount: 0,
+                  pressure: 0
+              ) else {
+            return false
+        }
+        if isHovering {
+            hostingView.mouseEntered(with: event)
+        } else {
+            hostingView.mouseExited(with: event)
+        }
+        return true
+    }
+    #endif
+
     func dismiss() {
         dismissTask?.cancel()
         dismissTask = nil
         isPointerHovering = false
+        hostingView?.resetHoverState()
         panel?.orderOut(nil)
         presentationGate.reset()
     }
@@ -406,14 +472,120 @@ final class InputSourceHUDPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+@MainActor
+private final class InputSourceHUDHostingView: NSHostingView<InputSourceHUDView> {
+    private var label = InputSourceHUDLabel(title: "", modeIndicator: nil)
+    private var metrics = InputSourceHUDController.metrics(for: .standard)
+    private var isInteractive = false
+    private var isHovering = false
+    private var onActivate: (() -> Void)?
+    private var onHoverChanged: ((Bool) -> Void)?
+    private var pointerTrackingArea: NSTrackingArea?
+
+    convenience init() {
+        let initialLabel = InputSourceHUDLabel(title: "", modeIndicator: nil)
+        let initialMetrics = InputSourceHUDController.metrics(for: .standard)
+        self.init(rootView: InputSourceHUDView(
+            label: initialLabel,
+            metrics: initialMetrics
+        ))
+    }
+
+    required init(rootView: InputSourceHUDView) {
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(
+        label: InputSourceHUDLabel,
+        metrics: InputSourceHUDMetrics,
+        isInteractive: Bool,
+        onActivate: (() -> Void)?,
+        onHoverChanged: ((Bool) -> Void)?
+    ) {
+        if !isInteractive {
+            setHovering(false)
+        }
+        self.label = label
+        self.metrics = metrics
+        self.isInteractive = isInteractive
+        self.onActivate = onActivate
+        self.onHoverChanged = onHoverChanged
+        refreshRootView()
+        updateTrackingAreas()
+    }
+
+    func resetHoverState() {
+        guard isHovering else { return }
+        isHovering = false
+        refreshRootView()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let pointerTrackingArea {
+            removeTrackingArea(pointerTrackingArea)
+        }
+        let pointerTrackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(pointerTrackingArea)
+        self.pointerTrackingArea = pointerTrackingArea
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        isInteractive
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isInteractive else {
+            super.mouseUp(with: event)
+            return
+        }
+        onActivate?()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard isInteractive else { return }
+        setHovering(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard isInteractive else { return }
+        setHovering(false)
+    }
+
+    private func setHovering(_ isHovering: Bool) {
+        guard self.isHovering != isHovering else { return }
+        self.isHovering = isHovering
+        refreshRootView()
+        onHoverChanged?(isHovering)
+    }
+
+    private func refreshRootView() {
+        rootView = InputSourceHUDView(
+            label: label,
+            metrics: metrics,
+            isInteractive: isInteractive,
+            isHovering: isHovering,
+            onActivate: onActivate
+        )
+    }
+}
+
 private struct InputSourceHUDView: View {
     let label: InputSourceHUDLabel
     let metrics: InputSourceHUDMetrics
     var isInteractive = false
+    var isHovering = false
     var onActivate: (() -> Void)?
-    var onHoverChanged: ((Bool) -> Void)?
-
-    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: metrics.spacing) {
@@ -445,17 +617,12 @@ private struct InputSourceHUDView: View {
                 .allowsHitTesting(false)
         }
         .contentShape(Rectangle())
-        .onTapGesture {
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .accessibilityAddTraits(isInteractive ? .isButton : [])
+        .accessibilityAction {
             guard isInteractive else { return }
             onActivate?()
         }
-        .onHover { isHovering in
-            guard isInteractive else { return }
-            self.isHovering = isHovering
-            onHoverChanged?(isHovering)
-        }
-        .animation(.easeOut(duration: 0.12), value: isHovering)
-        .accessibilityAddTraits(isInteractive ? .isButton : [])
     }
 }
 
@@ -475,9 +642,7 @@ struct InputSourceHUDPreview: View {
         InputSourceHUDView(
             label: InputSourceHUDLabel(title: title, modeIndicator: nil),
             metrics: metrics,
-            isInteractive: false,
-            onActivate: nil,
-            onHoverChanged: nil
+            isInteractive: false
         )
         .frame(width: panelSize.width, height: panelSize.height)
         .accessibilityElement(children: .ignore)
