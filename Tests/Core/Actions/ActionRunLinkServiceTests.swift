@@ -51,6 +51,10 @@ final class ActionRunLinkServiceTests: XCTestCase {
             "mactools://app/presets/\(preset.id.uuidString.lowercased())"
         )
         XCTAssertFalse(representation.url.contains("private-device-id"))
+        XCTAssertEqual(
+            setup.service.presentation(for: reference),
+            .available(representation, presetID: preset.id)
+        )
         XCTAssertEqual(setup.service.resolve(.preset(preset.id)), .success(reference))
         XCTAssertTrue(setup.service.deletePreset(for: reference))
         XCTAssertEqual(

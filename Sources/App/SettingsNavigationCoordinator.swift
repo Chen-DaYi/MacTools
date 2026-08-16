@@ -37,12 +37,30 @@ enum SettingsNavigationDestination: Hashable {
     }
 }
 
+extension SettingsNavigationDestination {
+    static func settingsSidebarOrder(
+        configurationIDs: some Sequence<String>
+    ) -> [SettingsNavigationDestination] {
+        let pluginPanes = FeatureSettingsPane.settingsSidebarOrder(
+            configurationIDs: configurationIDs
+        )
+
+        return [
+            .general,
+            .plugins(.automation),
+            .about
+        ] + pluginPanes
+            .filter { $0 != .automation }
+            .map(SettingsNavigationDestination.plugins)
+    }
+}
+
 enum SettingsSearchField: Equatable {
     case pluginMarketplace
 }
 
 enum UnifiedSearchPresentationOrigin: Equatable {
-    case pluginSidebar
+    case settingsSidebar
     case keyboard
     case globalShortcut(String)
 }

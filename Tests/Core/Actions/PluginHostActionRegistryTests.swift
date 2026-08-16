@@ -333,6 +333,28 @@ final class PluginHostActionRegistryTests: XCTestCase {
         )
     }
 
+    func testActionOwnerAppearanceUsesPluginMetadataAndHostFallbacks() {
+        let plugin = NativeActionTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+
+        XCTAssertEqual(
+            host.actionOwnerAppearance(providerID: plugin.metadata.id).systemImage,
+            plugin.metadata.iconName
+        )
+        XCTAssertEqual(
+            host.actionOwnerAppearance(providerID: "mactools").systemImage,
+            "hammer"
+        )
+        XCTAssertEqual(
+            host.actionOwnerAppearance(providerID: AutomationController.providerID).systemImage,
+            "bolt.horizontal.circle"
+        )
+        XCTAssertEqual(
+            host.actionOwnerAppearance(providerID: "missing-provider").systemImage,
+            "puzzlepiece.extension"
+        )
+    }
+
     func testWorkflowActionOwnerNavigationPreservesTheExactWorkflow() throws {
         let host = makePluginHostForTests(plugins: [])
         let workflow = try XCTUnwrap(host.automationController.createWorkflow())

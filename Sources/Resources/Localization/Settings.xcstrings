@@ -366,20 +366,20 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
       }
     },
-    "plugins.sidebar.accessibilityLabel": {
+    "settings.sidebar.accessibilityLabel": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "التنقل بين الإضافات" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Plugin-Navigation" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Plugin Navigation" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Navegación de complementos" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Navigation des modules" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "プラグインナビゲーション" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "플러그인 탐색" } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Navegação de plug-ins" } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Навигация по плагинам" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件导航" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛導覽" } }
+        "ar": { "stringUnit": { "state": "translated", "value": "التنقل بين الإعدادات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Einstellungsnavigation" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Settings Navigation" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Navegación de ajustes" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Navigation des réglages" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "設定ナビゲーション" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "설정 탐색" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Navegação de ajustes" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Навигация по настройкам" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设置导航" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "設定導覽" } }
       }
     },
     "plugins.sidebar.pluginsSection": {

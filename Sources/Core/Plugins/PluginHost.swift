@@ -201,6 +201,11 @@ struct PluginSurfaceLayoutItem: Identifiable {
     let releaseChannel: String?
 }
 
+struct ActionOwnerAppearance {
+    let systemImage: String
+    let iconTint: Color
+}
+
 struct AppShortcutSettingsItem: Identifiable, Equatable {
     let id: String
     let action: AppShortcutAction
@@ -5098,6 +5103,29 @@ final class PluginHost: ObservableObject {
                 return providerID
             }
             return localizedMetadata(for: metadata).title
+        }
+    }
+
+    func actionOwnerAppearance(providerID: String) -> ActionOwnerAppearance {
+        switch providerID {
+        case "mactools":
+            return ActionOwnerAppearance(systemImage: "hammer", iconTint: .orange)
+        case AutomationController.providerID:
+            return ActionOwnerAppearance(
+                systemImage: "bolt.horizontal.circle",
+                iconTint: .indigo
+            )
+        default:
+            guard let metadata = corePlugin(for: providerID)?.metadata else {
+                return ActionOwnerAppearance(
+                    systemImage: "puzzlepiece.extension",
+                    iconTint: .secondary
+                )
+            }
+            return ActionOwnerAppearance(
+                systemImage: metadata.iconName,
+                iconTint: metadata.iconTint
+            )
         }
     }
 

@@ -97,6 +97,26 @@ enum ActionShortcutFilter: String, CaseIterable, Identifiable {
         }
     }
 
+    var systemImage: String {
+        switch self {
+        case .all: "square.grid.3x3"
+        case .assigned: "checkmark.circle"
+        case .unassigned: "circle.dashed"
+        case .conflicted: "exclamationmark.triangle"
+        case .unavailable: "slash.circle"
+        }
+    }
+
+    var iconTint: Color {
+        switch self {
+        case .all: .accentColor
+        case .assigned: .green
+        case .unassigned: .blue
+        case .conflicted: .orange
+        case .unavailable: .secondary
+        }
+    }
+
     func includes(_ status: ActionShortcutCatalogStatus) -> Bool {
         switch (self, status) {
         case (.all, _), (.assigned, .assigned), (.unassigned, .unassigned),
@@ -123,11 +143,12 @@ struct ActionShortcutSettingsView: View {
     @State private var filter: ActionShortcutFilter = .all
     @State private var groups: [ActionShortcutGroup] = []
     @State private var pendingReplacement: PendingActionShortcutReplacement?
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-                header
+                introduction
                 controls
 
                 if let error = pluginHost.actionShortcutLoadError {
@@ -180,50 +201,65 @@ struct ActionShortcutSettingsView: View {
         .accessibilityIdentifier("mactools.actions-and-shortcuts")
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(FeatureL10n.string("操作与快捷键"), systemImage: "command")
-                .font(PluginSettingsTheme.Typography.pageTitle)
-
-            Text(FeatureL10n.string("查找 MacTools 与插件操作，并在同一个冲突空间中管理全局快捷键。"))
-                .font(PluginSettingsTheme.Typography.pageDescription)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(PluginSettingsTheme.Spacing.cardContent)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .pluginSettingsCardBackground(.standard)
+    private var introduction: some View {
+        SettingsPageIntroduction(
+            configuration: SettingsPageIntroductionConfiguration(
+                description: FeatureL10n.string(
+                    "查找 MacTools 与插件操作，并在同一个冲突空间中管理全局快捷键。"
+                )
+            )
+        )
     }
 
     private var controls: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            searchField
-
-            ActionShortcutFilterControl(selection: $filter)
+        SettingsSearchFilterBar(
+            searchText: $query,
+            isSearchFocused: $isSearchFocused,
+            searchPrompt: FeatureL10n.string("搜索操作、插件或快捷键"),
+            clearSearchHelp: AppL10n.search(
+                "search.clear",
+                defaultValue: "清除搜索"
+            ),
+            searchAccessibilityIdentifier: "mactools.actions.search"
+        ) {
+            SettingsFilterChipsRow(
+                accessibilityLabel: FeatureL10n.string("筛选")
+            ) {
+                ForEach(ActionShortcutFilter.allCases) { option in
+                    SettingsFilterChip(
+                        title: option.title,
+                        systemImage: option.systemImage,
+                        iconTint: option.iconTint,
+                        count: countsByFilter[option] ?? 0,
+                        isSelected: filter == option,
+                        accessibilityIdentifier: "mactools.actions.filter.\(option.rawValue)",
+                        action: { filter = option }
+                    )
+                }
+            }
         }
-        .padding(PluginSettingsTheme.Spacing.cardContent)
-        .pluginSettingsCardBackground(.standard)
     }
 
-    private var searchField: some View {
-        TextField(FeatureL10n.string("搜索操作、插件或快捷键"), text: $query)
-            .textFieldStyle(.roundedBorder)
-            .frame(minWidth: 220, maxWidth: .infinity)
-            .accessibilityIdentifier("mactools.actions.search")
+    private var countsByFilter: [ActionShortcutFilter: Int] {
+        Dictionary(uniqueKeysWithValues: ActionShortcutFilter.allCases.map { option in
+            (option, queryMatchingItems.filter { option.includes($0.status) }.count)
+        })
+    }
+
+    private var queryMatchingItems: [ActionShortcutCatalogItem] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedQuery.isEmpty else {
+            return pluginHost.actionShortcutCatalogItems
+        }
+
+        return pluginHost.actionShortcutCatalogItems.filter { item in
+            [item.title, item.ownerTitle, item.description, item.bindingText]
+                .contains { $0.localizedCaseInsensitiveContains(normalizedQuery) }
+        }
     }
 
     private func refreshGroups() {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matching = pluginHost.actionShortcutCatalogItems.filter { item in
-            guard filter.includes(item.status) else {
-                return false
-            }
-            guard !normalizedQuery.isEmpty else {
-                return true
-            }
-            return [item.title, item.ownerTitle, item.description, item.bindingText]
-                .contains { $0.localizedCaseInsensitiveContains(normalizedQuery) }
-        }
+        let matching = queryMatchingItems.filter { filter.includes($0.status) }
 
         var order: [String] = []
         var groupedItems: [String: [ActionShortcutCatalogItem]] = [:]
@@ -247,25 +283,36 @@ struct ActionShortcutSettingsView: View {
     }
 
     private func actionGroup(_ group: ActionShortcutGroup) -> some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack {
-                Label(group.title, systemImage: group.providerID == "mactools" ? "hammer" : "puzzlepiece.extension")
+        let appearance = pluginHost.actionOwnerAppearance(providerID: group.providerID)
+        let ownerReference = group.items.first(where: {
+            pluginHost.canPresentActionOwner(for: $0.reference)
+        })?.reference
+
+        return VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack(spacing: 8) {
+                Image(systemName: PluginSystemImage.resolvedName(appearance.systemImage))
+                    .foregroundStyle(appearance.iconTint)
+                    .frame(width: 18)
+
+                Text(group.title)
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.secondary)
 
-                Spacer()
-
-                if group.providerID != "mactools",
-                   let reference = group.items.first?.reference,
-                   pluginHost.canPresentActionOwner(for: reference) {
+                if let ownerReference {
                     Button {
-                        pluginHost.presentActionOwner(for: reference)
+                        pluginHost.presentActionOwner(for: ownerReference)
                     } label: {
-                        Label(FeatureL10n.string("打开所属功能的设置"), systemImage: "gearshape")
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 18, height: 18)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help(FeatureL10n.string("打开所属功能的设置"))
+                    .accessibilityLabel(FeatureL10n.string("打开所属功能的设置"))
                 }
+
+                Spacer(minLength: 0)
             }
 
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -273,7 +320,6 @@ struct ActionShortcutSettingsView: View {
                     ActionShortcutCatalogRow(
                         pluginHost: pluginHost,
                         item: item,
-                        displaysOwnerSettings: group.providerID == "mactools",
                         onRecord: { binding in record(binding, for: item) },
                         onClear: {
                             pluginHost.clearActionShortcut(
@@ -316,61 +362,6 @@ struct ActionShortcutSettingsView: View {
     }
 }
 
-private struct ActionShortcutFilterControl: View {
-    @Binding var selection: ActionShortcutFilter
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            equalWidthTabs
-                .frame(width: 520)
-
-            Picker(FeatureL10n.string("筛选"), selection: $selection) {
-                ForEach(ActionShortcutFilter.allCases) { option in
-                    Text(option.title).tag(option)
-                }
-            }
-            .pickerStyle(.menu)
-            .frame(width: 220, alignment: .leading)
-        }
-    }
-
-    private var equalWidthTabs: some View {
-        HStack(spacing: 2) {
-            ForEach(ActionShortcutFilter.allCases) { option in
-                Button {
-                    selection = option
-                } label: {
-                    Text(option.title)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 5)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(selection == option ? Color.white : Color.primary)
-                .background {
-                    RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field)
-                        .fill(selection == option ? Color.accentColor : Color.clear)
-                }
-                .accessibilityAddTraits(selection == option ? .isSelected : [])
-                .accessibilityIdentifier("mactools.actions.filter.\(option.rawValue)")
-            }
-        }
-        .padding(2)
-        .background {
-            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field + 2)
-                .fill(PluginSettingsTheme.Palette.fieldBackground)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field + 2)
-                .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(FeatureL10n.string("筛选"))
-    }
-}
-
 private struct ActionShortcutGroup {
     let providerID: String
     let title: String
@@ -385,7 +376,6 @@ private struct ActionShortcutCatalogRow: View {
 
     @ObservedObject var pluginHost: PluginHost
     let item: ActionShortcutCatalogItem
-    let displaysOwnerSettings: Bool
     let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
     let onClear: () -> Void
 
@@ -444,18 +434,6 @@ private struct ActionShortcutCatalogRow: View {
                 displaysUnavailableReason: false
             )
             .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
-
-            if displaysOwnerSettings,
-               pluginHost.canPresentActionOwner(for: item.reference) {
-                Button {
-                    pluginHost.presentActionOwner(for: item.reference)
-                } label: {
-                    Label(FeatureL10n.string("打开所属功能的设置"), systemImage: "gearshape")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
-            }
         }
         .pluginSettingsListRowPadding(interactive: true)
     }

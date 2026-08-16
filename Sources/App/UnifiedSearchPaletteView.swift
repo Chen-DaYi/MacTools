@@ -871,10 +871,10 @@ struct UnifiedSearchPaletteView: View {
 
     private var originText: String {
         switch presentationOrigin {
-        case .pluginSidebar:
+        case .settingsSidebar:
             return AppL10n.search(
-                "search.origin.pluginSidebar",
-                defaultValue: "来自插件导航"
+                "search.origin.settingsSidebar",
+                defaultValue: "来自设置导航"
             )
         case .keyboard:
             return AppL10n.search(

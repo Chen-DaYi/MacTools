@@ -21,39 +21,42 @@ struct PluginManagementSettingsView: View {
     @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
-        SettingsPageScaffold(
-            header: marketplaceHeaderConfiguration,
-            headerAccessory: { marketplaceHeaderActions }
-        ) {
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-                if uninstallConfirmationSession.isConfirmationPaused {
-                    PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
-                }
+        SettingsPageScaffold {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+                        SettingsPageIntroduction(
+                            configuration: marketplaceIntroductionConfiguration
+                        ) {
+                            marketplaceIntroductionActions
+                        }
 
-                if pluginHost.pluginManagementItems.isEmpty {
-                    ContentUnavailableView(
-                        AppL10n.plugins("plugin.marketplace.empty.title", defaultValue: "暂无插件"),
-                        systemImage: "shippingbox",
-                        description: Text(AppL10n.plugins(
-                            "plugin.marketplace.empty.description",
-                            defaultValue: "刷新插件列表后，可以在这里安装、更新和卸载。"
-                        ))
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    VStack(alignment: .leading, spacing: 10) {
-                        PluginFilterBarView(
-                            searchText: $searchText,
-                            selectedFilter: $selectedFilter,
-                            isSearchFocused: $isSearchFocused,
-                            countsByFilter: countsByFilter
-                        )
+                        if uninstallConfirmationSession.isConfirmationPaused {
+                            PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
+                        }
 
-                        marketplaceSortPicker
-                    }
+                        if pluginHost.pluginManagementItems.isEmpty {
+                            ContentUnavailableView(
+                                AppL10n.plugins("plugin.marketplace.empty.title", defaultValue: "暂无插件"),
+                                systemImage: "shippingbox",
+                                description: Text(AppL10n.plugins(
+                                    "plugin.marketplace.empty.description",
+                                    defaultValue: "刷新插件列表后，可以在这里安装、更新和卸载。"
+                                ))
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 260)
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                PluginFilterBarView(
+                                    searchText: $searchText,
+                                    selectedFilter: $selectedFilter,
+                                    isSearchFocused: $isSearchFocused,
+                                    countsByFilter: countsByFilter
+                                )
 
-                    ScrollViewReader { proxy in
-                        ScrollView {
+                                marketplaceSortPicker
+                            }
+
                             LazyVStack(alignment: .leading, spacing: 10) {
                                 if filteredItems.isEmpty {
                                     ContentUnavailableView(
@@ -86,22 +89,21 @@ struct PluginManagementSettingsView: View {
                                     }
                                 }
                             }
-                            .padding(.vertical, 2)
-                        }
-                        .onAppear {
-                            applySearchRevealRequest(
-                                navigationCoordinator.searchRevealRequest,
-                                proxy: proxy
-                            )
-                        }
-                        .onChange(of: navigationCoordinator.searchRevealRequest) {
-                            _, request in
-                            applySearchRevealRequest(request, proxy: proxy)
                         }
                     }
+                    .padding(.vertical, 2)
+                }
+                .onAppear {
+                    applySearchRevealRequest(
+                        navigationCoordinator.searchRevealRequest,
+                        proxy: proxy
+                    )
+                }
+                .onChange(of: navigationCoordinator.searchRevealRequest) {
+                    _, request in
+                    applySearchRevealRequest(request, proxy: proxy)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .task {
             guard !pluginHost.automaticPluginUpdateStatus.isActive else {
@@ -280,7 +282,7 @@ struct PluginManagementSettingsView: View {
         }
     }
 
-    private var marketplaceHeaderConfiguration: SettingsPageHeaderConfiguration {
+    private var marketplaceIntroductionConfiguration: SettingsPageIntroductionConfiguration {
         let status = pluginHost.pluginCatalogStatus
         let updatedText = status.lastUpdatedAt.map {
             $0.formatted(date: .omitted, time: .shortened)
@@ -289,17 +291,14 @@ struct PluginManagementSettingsView: View {
             .compactMap { $0 }
             .joined(separator: " · ")
 
-        return SettingsPageHeaderConfiguration(
-            title: AppL10n.plugins("plugin.marketplace.title", defaultValue: "市场"),
+        return SettingsPageIntroductionConfiguration(
             description: description,
-            systemImage: "shippingbox",
-            iconTint: .blue,
             descriptionColor: status.errorMessage == nil ? .secondary : .orange
         )
     }
 
     @ViewBuilder
-    private var marketplaceHeaderActions: some View {
+    private var marketplaceIntroductionActions: some View {
         if shouldShowBulkUpdateControls {
             bulkUpdateProgressLabel
 

@@ -150,6 +150,44 @@ enum AppDockVisibilityPolicy {
 }
 
 @MainActor
+enum SettingsToolbarPolicy {
+    static func removeSidebarToggle(from toolbar: NSToolbar?) {
+        guard let toolbar else { return }
+
+        while let index = toolbar.items.firstIndex(where: {
+            $0.itemIdentifier == .toggleSidebar
+                || $0.itemIdentifier.rawValue.localizedCaseInsensitiveContains("toggleSidebar")
+        }) {
+            toolbar.removeItem(at: index)
+        }
+    }
+}
+
+@MainActor
+enum AppDockVisibilityController {
+    static func update(hasVisibleSettingsWindow: Bool) {
+        update(
+            hasVisibleSettingsWindow: hasVisibleSettingsWindow,
+            isRunningTests: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+            setActivationPolicy: NSApplication.shared.setActivationPolicy
+        )
+    }
+
+    static func update(
+        hasVisibleSettingsWindow: Bool,
+        isRunningTests: Bool,
+        setActivationPolicy: (NSApplication.ActivationPolicy) -> Bool
+    ) {
+        guard !isRunningTests else { return }
+        _ = setActivationPolicy(
+            AppDockVisibilityPolicy.activationPolicy(
+                hasVisibleSettingsWindow: hasVisibleSettingsWindow
+            )
+        )
+    }
+}
+
+@MainActor
 final class StandaloneCommandPaletteState: ObservableObject {
     @Published private(set) var presentationOrigin: UnifiedSearchPresentationOrigin?
     @Published private(set) var shortcutHint: String?
@@ -353,6 +391,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private(set) var commandPalettePanel: NSPanel?
     private(set) var commandPaletteState: StandaloneCommandPaletteState?
     private var runtimeLocaleCancellable: AnyCancellable?
+    private var settingsNavigationCancellable: AnyCancellable?
     private var appDeactivationObserver: NSObjectProtocol?
     private var appearanceObserver: NSObjectProtocol?
     private var panelPresentationActions = SettingsPanelPresentationActions()
@@ -420,6 +459,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     isolated deinit {
         runtimeLocaleCancellable?.cancel()
+        settingsNavigationCancellable?.cancel()
         if let appDeactivationObserver {
             NotificationCenter.default.removeObserver(appDeactivationObserver)
         }
@@ -548,11 +588,20 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         let navigationCoordinator = SettingsNavigationCoordinator(pluginHost: pluginHost)
         let window = MacToolsCommandWindow(
             contentRect: NSRect(origin: .zero, size: SettingsWindowLayout.defaultContentSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [
+                .titled,
+                .closable,
+                .miniaturizable,
+                .resizable,
+                .fullSizeContentView
+            ],
             backing: .buffered,
             defer: false
         )
         window.title = Self.settingsWindowTitle
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
         AppAppearancePreference.stored(in: appearanceUserDefaults).apply(to: window)
         let hostingView = NSHostingView(
             rootView: SettingsView(
@@ -582,6 +631,22 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         }
         window.center()
         settingsNavigationCoordinator = navigationCoordinator
+        settingsNavigationCancellable = navigationCoordinator.$destination
+            .dropFirst()
+            .sink { [weak self, weak window] _ in
+                DispatchQueue.main.async { [weak self, weak window] in
+                    guard
+                        let self,
+                        let window,
+                        settingsWindow === window
+                    else {
+                        return
+                    }
+
+                    window.layoutIfNeeded()
+                    SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
+                }
+            }
         return window
     }
 
@@ -707,16 +772,20 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
         let contentSize = window.contentView?.bounds.size ?? SettingsWindowLayout.defaultContentSize
         settingsWindow = window
-        NSApplication.shared.setActivationPolicy(
-            AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: true)
-        )
+        AppDockVisibilityController.update(hasVisibleSettingsWindow: true)
         show(window)
         // SwiftUI installs its toolbar when the window becomes visible. Finish that
         // layout before restoring the content size.
         window.layoutIfNeeded()
+        SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
         window.setContentSize(contentSize)
         window.layoutIfNeeded()
         onProgrammaticSettingsPresentation()
+
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window, settingsWindow === window else { return }
+            SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
+        }
 
         if let pendingAppUpdateVersion {
             settingsNavigationCoordinator?.requestAboutUpdateAction(
@@ -803,10 +872,10 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
         window.delegate = nil
         window.contentView = nil
+        settingsNavigationCancellable?.cancel()
+        settingsNavigationCancellable = nil
         settingsWindow = nil
         settingsNavigationCoordinator = nil
-        NSApplication.shared.setActivationPolicy(
-            AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: false)
-        )
+        AppDockVisibilityController.update(hasVisibleSettingsWindow: false)
     }
 }

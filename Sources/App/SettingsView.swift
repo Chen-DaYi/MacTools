@@ -12,6 +12,38 @@ enum GeneralSettingsCardLayout {
     static let minRowHeight: CGFloat = 38
 }
 
+private enum SettingsSplitViewLayout {
+    static let sidebarMinWidth: CGFloat = 180
+    static let sidebarIdealWidth: CGFloat = 220
+    static let sidebarMaxWidth: CGFloat = 280
+    static let detailMinWidth: CGFloat = 560
+}
+
+private func settingsNavigationTitle(
+    for destination: SettingsNavigationDestination,
+    configurationItems: [PluginSettingsPageItem]
+) -> String {
+    switch destination {
+    case .general:
+        AppL10n.settings("tab.general", defaultValue: "通用")
+    case .about:
+        AppL10n.settings("tab.about", defaultValue: "关于")
+    case .plugins(.actionsAndShortcuts):
+        FeatureL10n.string("操作与快捷键")
+    case .plugins(.automation):
+        FeatureL10n.string("自动化")
+    case .plugins(.dashboardLayout):
+        AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘")
+    case .plugins(.featurePanelLayout):
+        AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板")
+    case .plugins(.marketplace):
+        AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场")
+    case let .plugins(.configuration(pluginID)):
+        configurationItems.first { $0.id == pluginID }?.title
+            ?? AppL10n.settings("tab.plugins", defaultValue: "插件")
+    }
+}
+
 struct SettingsView: View {
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @ObservedObject var pluginHost: PluginHost
@@ -24,54 +56,90 @@ struct SettingsView: View {
     @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
     let appearanceUserDefaults: UserDefaults
     @StateObject private var uninstallConfirmationSession = PluginUninstallConfirmationSession()
-    @State private var selectedSettingsDestination: SettingsDestination = .general
     var showDashboard: () -> Void = {}
     var showFeaturePanel: () -> Void = {}
 
     var body: some View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
-        let orderedPluginPanes = FeatureSettingsPane.settingsSidebarOrder(
+        let orderedSidebarDestinations = SettingsNavigationDestination.settingsSidebarOrder(
             configurationIDs: pluginHost.pluginSettingsItems.map(\.id)
+        )
+        let detailTitle = settingsNavigationTitle(
+            for: navigationCoordinator.destination,
+            configurationItems: pluginHost.pluginSettingsItems
         )
 
         return ZStack {
-            TabView(selection: $selectedSettingsDestination) {
-                GeneralSettingsView(
-                    pluginHost: pluginHost,
-                    navigationCoordinator: navigationCoordinator,
-                    menuBarIconSettings: menuBarIconSettings,
-                    menuBarIconGallery: menuBarIconGallery,
-                    launchAtLoginController: launchAtLoginController,
-                    menuBarPanelThemeStore: menuBarPanelThemeStore,
-                    appearanceUserDefaults: appearanceUserDefaults
-                )
-                    .tag(SettingsDestination.general)
-                    .tabItem {
-                        Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
+            NavigationSplitView {
+                SettingsSidebar(
+                    configurationItems: pluginHost.pluginSettingsItems,
+                    orderedDestinations: orderedSidebarDestinations,
+                    selection: settingsSelection,
+                    onSearch: {
+                        navigationCoordinator.presentUnifiedSearch(origin: .settingsSidebar)
                     }
+                )
+                .navigationSplitViewColumnWidth(
+                    min: SettingsSplitViewLayout.sidebarMinWidth,
+                    ideal: SettingsSplitViewLayout.sidebarIdealWidth,
+                    max: SettingsSplitViewLayout.sidebarMaxWidth
+                )
+            } detail: {
+                SettingsDetailColumn {
+                    SettingsDetailPane(
+                        pluginHost: pluginHost,
+                        navigationCoordinator: navigationCoordinator,
+                        destination: navigationCoordinator.destination,
+                        uninstallConfirmationSession: uninstallConfirmationSession,
+                        appUpdater: appUpdater,
+                        menuBarIconSettings: menuBarIconSettings,
+                        menuBarIconGallery: menuBarIconGallery,
+                        launchAtLoginController: launchAtLoginController,
+                        menuBarPanelThemeStore: menuBarPanelThemeStore,
+                        appearanceUserDefaults: appearanceUserDefaults,
+                        showDashboard: showDashboard,
+                        showFeaturePanel: showFeaturePanel
+                    )
+                }
+                .frame(
+                    minWidth: SettingsSplitViewLayout.detailMinWidth,
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
+            }
+            .navigationSplitViewStyle(.balanced)
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    SettingsHistoryNavigationControls(
+                        coordinator: navigationCoordinator
+                    )
+                    .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
+                    .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+                    .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+                    .accessibilityIdentifier("mactools.settings.history-navigation")
+                }
 
-                FeatureSettingsView(
-                    pluginHost: pluginHost,
-                    navigationCoordinator: navigationCoordinator,
-                    uninstallConfirmationSession: uninstallConfirmationSession,
-                    showDashboard: showDashboard,
-                    showFeaturePanel: showFeaturePanel,
-                    orderedPanes: orderedPluginPanes
-                )
-                    .tag(SettingsDestination.pluginConfiguration)
-                    .tabItem {
-                        Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
+                if #available(macOS 26.0, *) {
+                    ToolbarItem(placement: .navigation) {
+                        SettingsDetailToolbarTitle(
+                            title: detailTitle,
+                            isHidden: navigationCoordinator.isUnifiedSearchPresented
+                        )
                     }
-
-                AboutSettingsView(
-                    appUpdater: appUpdater,
-                    navigationCoordinator: navigationCoordinator
-                )
-                    .tag(SettingsDestination.about)
-                    .tabItem {
-                        Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .navigation) {
+                        SettingsDetailToolbarTitle(
+                            title: detailTitle,
+                            isHidden: navigationCoordinator.isUnifiedSearchPresented
+                        )
                     }
+                }
+            }
+            .toolbar(removing: .sidebarToggle)
+            .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
+                navigationCoordinator.reconcileCurrentDestinationAvailability()
             }
             .blur(
                 radius: navigationCoordinator.isUnifiedSearchPresented
@@ -96,38 +164,18 @@ struct SettingsView: View {
         .background {
             SettingsDestinationShortcutButtons(coordinator: navigationCoordinator)
         }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                SettingsHistoryNavigationControls(coordinator: navigationCoordinator)
-                    .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
-                    .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
-                .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
-            }
-        }
         .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
         .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
-        .onAppear {
-            selectedSettingsDestination = navigationCoordinator.destination.settingsDestination
-        }
-        .onChange(of: navigationCoordinator.destination.settingsDestination) { _, destination in
-            if selectedSettingsDestination != destination {
-                selectedSettingsDestination = destination
-            }
-        }
-        .onChange(of: selectedSettingsDestination) { _, destination in
-            // SwiftUI owns the TabView binding. Route the resulting selection
-            // change through an explicit actor hop instead of reading a
-            // MainActor object from a Binding getter during AppKit layout.
-            Task { @MainActor [navigationCoordinator] in
-                guard navigationCoordinator.destination.settingsDestination != destination else {
-                    return
-                }
-                await Task.yield()
-                navigationCoordinator.selectSettingsDestination(destination)
-            }
+    }
+
+    private var settingsSelection: Binding<SettingsNavigationDestination> {
+        Binding {
+            navigationCoordinator.destination
+        } set: { destination in
+            navigationCoordinator.navigate(to: destination)
         }
     }
 
@@ -1549,131 +1597,74 @@ private struct LaunchAtLoginSettingsRow: View {
     }
 }
 
-private struct FeatureSettingsView: View {
-    private enum Layout {
-        static let sidebarMinWidth: CGFloat = 180
-        static let sidebarIdealWidth: CGFloat = 220
-        static let sidebarMaxWidth: CGFloat = 280
-        static let detailMinWidth: CGFloat = 560
-    }
-
-    @ObservedObject var pluginHost: PluginHost
-    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
-    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
-    let showDashboard: () -> Void
-    let showFeaturePanel: () -> Void
-    let orderedPanes: [FeatureSettingsPane]
-
-    var body: some View {
-        HSplitView {
-            FeatureSettingsSidebar(
-                configurationItems: pluginHost.pluginSettingsItems,
-                orderedPanes: orderedPanes,
-                selection: selectionBinding,
-                onSearch: {
-                    navigationCoordinator.presentUnifiedSearch(origin: .pluginSidebar)
-                }
-            )
-            .frame(
-                minWidth: Layout.sidebarMinWidth,
-                idealWidth: Layout.sidebarIdealWidth,
-                maxWidth: Layout.sidebarMaxWidth
-            )
-
-            FeatureSettingsDetailPane(
-                pluginHost: pluginHost,
-                navigationCoordinator: navigationCoordinator,
-                selectedPane: selectedPane,
-                uninstallConfirmationSession: uninstallConfirmationSession,
-                showDashboard: showDashboard,
-                showFeaturePanel: showFeaturePanel
-            )
-            .frame(
-                minWidth: Layout.detailMinWidth,
-                maxWidth: .infinity,
-                maxHeight: .infinity
-            )
-        }
-        .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
-            navigationCoordinator.reconcileCurrentDestinationAvailability()
-        }
-    }
-
-    private var selectionBinding: Binding<FeatureSettingsPane> {
-        Binding {
-            selectedPane
-        } set: { selection in
-            navigationCoordinator.navigate(to: .plugins(selection))
-        }
-    }
-
-    private var selectedPane: FeatureSettingsPane {
-        navigationCoordinator.destination.featureSettingsPane
-            ?? pluginHost.pluginSettingsLandingPage()
-    }
-}
-
-private struct FeatureSettingsSidebar: View {
+private struct SettingsSidebar: View {
     let configurationItems: [PluginSettingsPageItem]
-    let orderedPanes: [FeatureSettingsPane]
-    @Binding var selection: FeatureSettingsPane
+    let orderedDestinations: [SettingsNavigationDestination]
+    @Binding var selection: SettingsNavigationDestination
     let onSearch: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            searchLauncher
-
-            ScrollViewReader { proxy in
-                List(selection: optionalSelectionBinding) {
-                    Section {
-                        ForEach(primaryPanes, id: \.self) { pane in
-                            sidebarRow(for: pane)
-                        }
-                    } header: {
-                        Text(AppL10n.settings(
-                            "plugins.sidebar.pluginsSection",
-                            defaultValue: "插件"
-                        ))
+        ScrollViewReader { proxy in
+            List(selection: optionalSelectionBinding) {
+                Section {
+                    ForEach(appDestinations, id: \.self) { destination in
+                        sidebarRow(for: destination)
+                    }
+                } header: {
+                    Text("MacTools")
                         .accessibilityHidden(true)
-                    }
+                }
 
-                    Section {
-                        if configurationPanes.isEmpty {
-                            Text(emptyConfigurationsText)
-                                .font(PluginSettingsTheme.Typography.secondaryLabel)
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                        } else {
-                            ForEach(configurationPanes, id: \.self) { pane in
-                                sidebarRow(for: pane)
-                            }
+                Section {
+                    ForEach(primaryPluginDestinations, id: \.self) { destination in
+                        sidebarRow(for: destination)
+                    }
+                } header: {
+                    Text(AppL10n.settings(
+                        "plugins.sidebar.pluginsSection",
+                        defaultValue: "插件"
+                    ))
+                    .accessibilityHidden(true)
+                }
+
+                Section {
+                    if configurationDestinations.isEmpty {
+                        Text(emptyConfigurationsText)
+                            .font(PluginSettingsTheme.Typography.secondaryLabel)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    } else {
+                        ForEach(configurationDestinations, id: \.self) { destination in
+                            sidebarRow(for: destination)
                         }
-                    } header: {
-                        Text(AppL10n.settings(
-                            "plugins.sidebar.configurationSection",
-                            defaultValue: "插件设置"
-                        ))
-                        .accessibilityHidden(true)
                     }
+                } header: {
+                    Text(AppL10n.settings(
+                        "plugins.sidebar.configurationSection",
+                        defaultValue: "插件设置"
+                    ))
+                    .accessibilityHidden(true)
                 }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-                .onChange(of: selection) {
-                    withAnimation {
-                        proxy.scrollTo(selection)
-                    }
-                }
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(AppL10n.settings(
-                    "plugins.sidebar.accessibilityLabel",
-                    defaultValue: "插件导航"
-                ))
-                .accessibilityHint(configurationPanes.isEmpty ? emptyConfigurationsText : "")
             }
+            .listStyle(.sidebar)
+            .onChange(of: selection) { _, destination in
+                withAnimation {
+                    proxy.scrollTo(destination)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(AppL10n.settings(
+                "settings.sidebar.accessibilityLabel",
+                defaultValue: "设置导航"
+            ))
+            .accessibilityHint(configurationDestinations.isEmpty ? emptyConfigurationsText : "")
         }
-        .background {
-            SettingsSidebarBackground()
-        }
+        .searchable(
+            text: nativeSearchText,
+            isPresented: nativeSearchPresentation,
+            placement: .sidebar,
+            prompt: Text(AppL10n.search("search.title", defaultValue: "搜索 MacTools"))
+        )
     }
 
     private var emptyConfigurationsText: String {
@@ -1683,18 +1674,38 @@ private struct FeatureSettingsSidebar: View {
         )
     }
 
-    private var primaryPanes: [FeatureSettingsPane] {
-        orderedPanes.filter {
-            guard case .configuration = $0 else {
-                return true
+    private var appDestinations: [SettingsNavigationDestination] {
+        orderedDestinations.filter {
+            switch $0 {
+            case .general, .plugins(.automation), .about:
+                true
+            case .plugins:
+                false
             }
-            return false
         }
     }
 
-    private var configurationPanes: [FeatureSettingsPane] {
-        orderedPanes.filter {
-            if case .configuration = $0 {
+    private var primaryPluginDestinations: [SettingsNavigationDestination] {
+        orderedDestinations.filter {
+            guard case let .plugins(pane) = $0 else {
+                return false
+            }
+            guard pane != .automation else {
+                return false
+            }
+            if case .configuration = pane {
+                return false
+            }
+            return true
+        }
+    }
+
+    private var configurationDestinations: [SettingsNavigationDestination] {
+        orderedDestinations.filter {
+            guard case let .plugins(pane) = $0 else {
+                return false
+            }
+            if case .configuration = pane {
                 return true
             }
             return false
@@ -1702,129 +1713,101 @@ private struct FeatureSettingsSidebar: View {
     }
 
     @ViewBuilder
-    private func sidebarRow(for pane: FeatureSettingsPane) -> some View {
-        switch pane {
-        case .actionsAndShortcuts:
-            FeatureSettingsSidebarRow(
-                title: FeatureL10n.string("操作与快捷键"),
+    private func sidebarRow(for destination: SettingsNavigationDestination) -> some View {
+        let title = settingsNavigationTitle(
+            for: destination,
+            configurationItems: configurationItems
+        )
+
+        switch destination {
+        case .general:
+            SettingsSidebarRow(
+                title: title,
+                systemImage: "gearshape",
+                iconTint: .gray
+            )
+            .tag(destination)
+            .id(destination)
+        case .about:
+            SettingsSidebarRow(
+                title: title,
+                systemImage: "info.circle",
+                iconTint: .blue
+            )
+            .tag(destination)
+            .id(destination)
+        case .plugins(.actionsAndShortcuts):
+            SettingsSidebarRow(
+                title: title,
                 systemImage: "command",
                 iconTint: .orange
             )
-            .tag(pane)
-            .id(pane)
-        case .automation:
-            FeatureSettingsSidebarRow(
-                title: FeatureL10n.string("自动化"),
+            .tag(destination)
+            .id(destination)
+        case .plugins(.automation):
+            SettingsSidebarRow(
+                title: title,
                 systemImage: "bolt.horizontal.circle",
                 iconTint: .indigo
             )
-            .tag(pane)
-            .id(pane)
-        case .dashboardLayout:
-            FeatureSettingsSidebarRow(
-                title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
+            .tag(destination)
+            .id(destination)
+        case .plugins(.dashboardLayout):
+            SettingsSidebarRow(
+                title: title,
                 systemImage: "square.grid.2x2",
                 iconTint: .blue
             )
-            .tag(pane)
-            .id(pane)
-        case .featurePanelLayout:
-            FeatureSettingsSidebarRow(
-                title: AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板"),
+            .tag(destination)
+            .id(destination)
+        case .plugins(.featurePanelLayout):
+            SettingsSidebarRow(
+                title: title,
                 systemImage: "switch.2",
                 iconTint: .purple
             )
-            .tag(pane)
-            .id(pane)
-        case .marketplace:
-            FeatureSettingsSidebarRow(
-                title: AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场"),
+            .tag(destination)
+            .id(destination)
+        case .plugins(.marketplace):
+            SettingsSidebarRow(
+                title: title,
                 systemImage: "shippingbox",
                 iconTint: .blue
             )
-            .tag(pane)
-            .id(pane)
-        case let .configuration(pluginID):
+            .tag(destination)
+            .id(destination)
+        case let .plugins(.configuration(pluginID)):
             if let item = configurationItems.first(where: { $0.id == pluginID }) {
-                FeatureSettingsSidebarRow(
-                    title: item.title,
+                SettingsSidebarRow(
+                    title: title,
                     systemImage: item.iconName,
                     iconTint: item.iconTint
                 )
-                .tag(pane)
-                .id(pane)
+                .tag(destination)
+                .id(destination)
             }
         }
     }
 
-    private var searchLauncher: some View {
-        Button(action: onSearch) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-
-                Text(
-                    AppL10n.search(
-                        "search.title",
-                        defaultValue: "搜索 MacTools"
-                    )
-                )
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-                Spacer(minLength: 4)
-
-                Text("⌘K")
-                    .font(PluginSettingsTheme.Typography.statusBadge)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.12))
-                    )
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 7)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
-                    .allowsHitTesting(false)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    private var nativeSearchText: Binding<String> {
+        Binding {
+            ""
+        } set: { newValue in
+            guard !newValue.isEmpty else { return }
+            onSearch()
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
-        .help(
-            AppL10n.search(
-                "search.prompt",
-                defaultValue: "搜索插件、设置和命令"
-            )
-        )
-        .accessibilityLabel(
-            AppL10n.search(
-                "search.title",
-                defaultValue: "搜索 MacTools"
-            )
-        )
-        .accessibilityHint(
-            AppL10n.search(
-                "search.prompt",
-                defaultValue: "搜索插件、设置和命令"
-            )
-        )
-        .accessibilityIdentifier("mactools.unified-search.launcher")
     }
 
-    private var optionalSelectionBinding: Binding<FeatureSettingsPane?> {
+    private var nativeSearchPresentation: Binding<Bool> {
+        Binding {
+            false
+        } set: { isPresented in
+            guard isPresented else { return }
+            onSearch()
+        }
+    }
+
+    private var optionalSelectionBinding: Binding<SettingsNavigationDestination?> {
         Binding(
             get: { selection },
             set: { newSelection in
@@ -1833,9 +1816,8 @@ private struct FeatureSettingsSidebar: View {
                 }
 
                 // AppKit-backed sidebar lists write their selection while
-                // SwiftUI is still updating the view hierarchy. Publishing a
-                // coordinator destination from that callback produces a
-                // runtime fault, so finish the list update before navigating.
+                // SwiftUI is still updating the view hierarchy. Publish the
+                // navigation change after the native list update completes.
                 Task { @MainActor in
                     await Task.yield()
                     selection = newSelection
@@ -1845,31 +1827,35 @@ private struct FeatureSettingsSidebar: View {
     }
 }
 
-private struct SettingsSidebarBackground: View {
-    private enum Layout {
-        /// Aqua's sidebar material is intentionally gray. Let some of the
-        /// semantic window surface show through while preserving its depth.
-        static let lightMaterialWashOpacity = 0.45
+private struct SettingsDetailColumn<Content: View>: View {
+    private let content: Content
+    @State private var headerHeight: CGFloat = 0
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
     }
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        ZStack {
-            SettingsStyle.contentBackground
-
-            SettingsSidebarMaterialBackground()
-
-            if colorScheme == .light {
-                SettingsStyle.contentBackground
-                    .opacity(Layout.lightMaterialWashOpacity)
+        content
+            .padding(.top, headerHeight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .top) {
+                if headerHeight > 0 {
+                    SettingsHeaderMaterialBackground()
+                        .frame(height: headerHeight)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
-        }
-        .allowsHitTesting(false)
+            .background {
+                SettingsWindowTopSafeAreaReader(topInset: $headerHeight)
+                    .frame(width: 0, height: 0)
+            }
+            .ignoresSafeArea(.container, edges: .top)
     }
 }
 
-private struct SettingsSidebarMaterialBackground: NSViewRepresentable {
+private struct SettingsHeaderMaterialBackground: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         configure(view)
@@ -1881,15 +1867,75 @@ private struct SettingsSidebarMaterialBackground: NSViewRepresentable {
     }
 
     private func configure(_ view: NSVisualEffectView) {
-        view.material = .sidebar
-        // Keep the semantic sidebar material, but sample the app-owned settings
-        // surface so a fixed App appearance cannot pick up the opposite Desktop tone.
-        view.blendingMode = .withinWindow
+        view.material = .headerView
+        view.blendingMode = .behindWindow
         view.state = .followsWindowActiveState
     }
 }
 
-private struct FeatureSettingsSidebarRow: View {
+private struct SettingsWindowTopSafeAreaReader: NSViewRepresentable {
+    @Binding var topInset: CGFloat
+
+    func makeNSView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        configure(view)
+        return view
+    }
+
+    func updateNSView(_ nsView: ObserverView, context: Context) {
+        configure(nsView)
+        nsView.publishCurrentInset()
+    }
+
+    private func configure(_ view: ObserverView) {
+        view.onTopInsetChange = { inset in
+            guard topInset != inset else { return }
+            topInset = inset
+        }
+    }
+
+    final class ObserverView: NSView {
+        var onTopInsetChange: ((CGFloat) -> Void)?
+        private var lastPublishedInset: CGFloat = -1
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            publishCurrentInset()
+        }
+
+        override func layout() {
+            super.layout()
+            publishCurrentInset()
+        }
+
+        func publishCurrentInset() {
+            let inset = window?.contentView?.safeAreaInsets.top ?? 0
+            guard inset != lastPublishedInset else { return }
+            lastPublishedInset = inset
+
+            DispatchQueue.main.async { [weak self] in
+                self?.onTopInsetChange?(inset)
+            }
+        }
+    }
+}
+
+private struct SettingsDetailToolbarTitle: View {
+    let title: String
+    let isHidden: Bool
+
+    var body: some View {
+        Text(title)
+            .font(.headline)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .opacity(isHidden ? 0 : 1)
+            .accessibilityHidden(isHidden)
+            .accessibilityIdentifier("mactools.settings.detail-title")
+    }
+}
+
+private struct SettingsSidebarRow: View {
     private enum Layout {
         static let iconWidth: CGFloat = 14
     }
@@ -1915,7 +1961,52 @@ private struct FeatureSettingsSidebarRow: View {
     }
 }
 
-private struct FeatureSettingsDetailPane: View {
+private struct SettingsDetailPane: View {
+    @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
+    let destination: SettingsNavigationDestination
+    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
+    @ObservedObject var appUpdater: AppUpdater
+    @ObservedObject var menuBarIconSettings: MenuBarIconSettings
+    @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
+    @ObservedObject var launchAtLoginController: LaunchAtLoginController
+    @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
+    let appearanceUserDefaults: UserDefaults
+    let showDashboard: () -> Void
+    let showFeaturePanel: () -> Void
+
+    @ViewBuilder
+    var body: some View {
+        switch destination {
+        case .general:
+            GeneralSettingsView(
+                pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
+                menuBarIconSettings: menuBarIconSettings,
+                menuBarIconGallery: menuBarIconGallery,
+                launchAtLoginController: launchAtLoginController,
+                menuBarPanelThemeStore: menuBarPanelThemeStore,
+                appearanceUserDefaults: appearanceUserDefaults
+            )
+        case .about:
+            AboutSettingsView(
+                appUpdater: appUpdater,
+                navigationCoordinator: navigationCoordinator
+            )
+        case let .plugins(pane):
+            PluginSettingsDestinationPane(
+                pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
+                selectedPane: pane,
+                uninstallConfirmationSession: uninstallConfirmationSession,
+                showDashboard: showDashboard,
+                showFeaturePanel: showFeaturePanel
+            )
+        }
+    }
+}
+
+private struct PluginSettingsDestinationPane: View {
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let selectedPane: FeatureSettingsPane
@@ -1941,13 +2032,11 @@ private struct FeatureSettingsDetailPane: View {
             SurfaceLayoutSettingsView(
                 navigationCoordinator: navigationCoordinator,
                 surface: .dashboard,
-                title: AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘"),
                 description: AppL10n.settings(
                     "plugins.dashboard.description",
                     defaultValue: "拖拽调整仪表盘组件的排列顺序。"
                 ),
                 systemImage: "square.grid.2x2",
-                iconTint: .blue,
                 items: pluginHost.dashboardLayoutItems,
                 hiddenItems: pluginHost.dashboardHiddenLayoutItems,
                 openButtonTitle: AppL10n.settings("plugins.dashboard.open", defaultValue: "打开仪表盘"),
@@ -1976,13 +2065,11 @@ private struct FeatureSettingsDetailPane: View {
             SurfaceLayoutSettingsView(
                 navigationCoordinator: navigationCoordinator,
                 surface: .featurePanel,
-                title: AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板"),
                 description: AppL10n.settings(
                     "plugins.featurePanel.description",
                     defaultValue: "拖拽调整功能面板操作的排列顺序。"
                 ),
                 systemImage: "switch.2",
-                iconTint: .purple,
                 items: pluginHost.featurePanelLayoutItems,
                 hiddenItems: pluginHost.featurePanelHiddenLayoutItems,
                 openButtonTitle: AppL10n.settings("plugins.featurePanel.open", defaultValue: "打开功能面板"),
@@ -2030,10 +2117,8 @@ private struct FeatureSettingsDetailPane: View {
 private struct SurfaceLayoutSettingsView: View {
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let surface: PluginDisplaySurface
-    let title: String
     let description: String
     let systemImage: String
-    let iconTint: Color
     let items: [PluginSurfaceLayoutItem]
     let hiddenItems: [PluginSurfaceLayoutItem]
     let openButtonTitle: String
@@ -2056,13 +2141,10 @@ private struct SurfaceLayoutSettingsView: View {
     var body: some View {
         ScrollViewReader { proxy in
             SettingsGroupedFormPageScaffold(
-                header: SettingsPageHeaderConfiguration(
-                    title: title,
-                    description: description,
-                    systemImage: systemImage,
-                    iconTint: iconTint
+                introduction: SettingsPageIntroductionConfiguration(
+                    description: description
                 ),
-                headerAccessory: {
+                introductionAccessory: {
                     Button(AppL10n.settings(
                         "plugins.layout.restoreDefaultOrder",
                         defaultValue: "恢复默认排列"
@@ -2451,7 +2533,7 @@ private struct PluginFormPage: View {
     let item: PluginSettingsPageItem
 
     var body: some View {
-        SettingsGroupedFormPageScaffold(header: item.headerConfiguration) { widths in
+        SettingsGroupedFormPageScaffold(introduction: item.introductionConfiguration) { widths in
             if !item.permissionCards.isEmpty {
                 Section {
                     ForEach(item.permissionCards) { card in
@@ -2516,12 +2598,9 @@ private struct PluginFormPage: View {
 }
 
 private extension PluginSettingsPageItem {
-    var headerConfiguration: SettingsPageHeaderConfiguration {
-        SettingsPageHeaderConfiguration(
-            title: title,
-            description: description,
-            systemImage: iconName,
-            iconTint: iconTint
+    var introductionConfiguration: SettingsPageIntroductionConfiguration {
+        SettingsPageIntroductionConfiguration(
+            description: description
         )
     }
 }
@@ -2616,21 +2695,40 @@ private struct PluginWorkspacePage: View {
     let item: PluginSettingsPageItem
 
     var body: some View {
-        SettingsPageScaffold(header: item.headerConfiguration) {
+        SettingsPageScaffold {
             switch item.workspaceScrolling {
             case .host:
                 ScrollView {
-                    workspaceContent
+                    VStack(
+                        alignment: .leading,
+                        spacing: SettingsPageLayout.introductionContentSpacing
+                    ) {
+                        introduction
+                        workspaceContent
+                    }
                 }
             case .selfManaged:
-                workspaceContent
+                VStack(
+                    alignment: .leading,
+                    spacing: SettingsPageLayout.introductionContentSpacing
+                ) {
+                    introduction
+                    workspaceContent
+                        .frame(maxHeight: .infinity, alignment: .topLeading)
+                }
             }
         }
     }
 
+    private var introduction: some View {
+        SettingsPageIntroduction(
+            configuration: item.introductionConfiguration
+        )
+    }
+
     private var workspaceContent: some View {
         pluginHost.pluginSettingsContentViewItem(for: item.pluginID).content
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 

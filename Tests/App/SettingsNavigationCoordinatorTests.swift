@@ -21,6 +21,25 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         )
     }
 
+    func testSettingsSidebarOrderGroupsAutomationWithAppPages() {
+        XCTAssertEqual(
+            SettingsNavigationDestination.settingsSidebarOrder(
+                configurationIDs: ["calendar", "fan-control"]
+            ),
+            [
+                .general,
+                .plugins(.automation),
+                .about,
+                .plugins(.actionsAndShortcuts),
+                .plugins(.dashboardLayout),
+                .plugins(.featurePanelLayout),
+                .plugins(.marketplace),
+                .plugins(.configuration("calendar")),
+                .plugins(.configuration("fan-control"))
+            ]
+        )
+    }
+
     func testMovesPluginSubpageInSuppliedVisibleOrder() {
         let orderedPanes: [FeatureSettingsPane] = [
             .configuration("fan-control"),
@@ -228,11 +247,11 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
     func testUnifiedSearchPresentationTracksOriginAndRepeatedFocusRequests() {
         let coordinator = SettingsNavigationCoordinator()
 
-        coordinator.presentUnifiedSearch(origin: .pluginSidebar)
+        coordinator.presentUnifiedSearch(origin: .settingsSidebar)
         let firstFocusRequestID = coordinator.unifiedSearchFocusRequestID
 
         XCTAssertTrue(coordinator.isUnifiedSearchPresented)
-        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .pluginSidebar)
+        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .settingsSidebar)
 
         coordinator.presentUnifiedSearch(origin: .keyboard)
 
