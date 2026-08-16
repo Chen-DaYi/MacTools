@@ -2573,6 +2573,29 @@ private struct PluginFormPage: View {
                     shortcutItems: item.shortcutItems,
                     layoutWidths: widths
                 )
+
+                if let configuration = item.actionShortcutSettingsConfiguration,
+                   configuration.placementAfterSectionID == section.id {
+                    PluginActionShortcutFormSection(
+                        pluginHost: pluginHost,
+                        pluginID: item.pluginID,
+                        configuration: configuration,
+                        layoutWidths: widths
+                    )
+                }
+            }
+
+            if let configuration = item.actionShortcutSettingsConfiguration,
+               configuration.placementAfterSectionID == nil
+                   || !item.sections.contains(where: {
+                       $0.isVisible && $0.id == configuration.placementAfterSectionID
+                   }) {
+                PluginActionShortcutFormSection(
+                    pluginHost: pluginHost,
+                    pluginID: item.pluginID,
+                    configuration: configuration,
+                    layoutWidths: widths
+                )
             }
 
             if !item.remainingShortcutItems.isEmpty {
@@ -2592,6 +2615,43 @@ private struct PluginFormPage: View {
                         layoutWidth: widths.readableContent
                     )
                 }
+            }
+        }
+    }
+}
+
+private struct PluginActionShortcutFormSection: View {
+    @ObservedObject var pluginHost: PluginHost
+    let pluginID: String
+    let configuration: PluginActionShortcutSettingsConfiguration
+    let layoutWidths: SettingsGroupedFormWidths
+
+    var body: some View {
+        Section {
+            PluginActionShortcutRowsContent(
+                pluginHost: pluginHost,
+                providerID: pluginID,
+                actionIDs: configuration.actionIDs
+            )
+            .settingsGroupedFormRowWidth(layoutWidths.sectionLayout)
+        } header: {
+            SettingsGroupedFormSectionHeader(
+                title: configuration.title,
+                systemImage: configuration.systemImage,
+                layoutWidth: layoutWidths.readableContent
+            ) {
+                Button {
+                    pluginHost.presentActionsAndShortcutsSettings()
+                } label: {
+                    Label(FeatureL10n.string("操作与快捷键"), systemImage: "arrow.up.right")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        } footer: {
+            if let description = configuration.description {
+                Text(description)
+                    .frame(width: layoutWidths.sectionLayout, alignment: .leading)
             }
         }
     }

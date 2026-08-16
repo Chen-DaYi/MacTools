@@ -8,7 +8,8 @@ protocol InputSourceHUDPresenting: AnyObject {
     func show(
         label: InputSourceHUDLabel,
         near focusedFrame: CGRect,
-        configuration: AutoInputHUDConfiguration
+        configuration: AutoInputHUDConfiguration,
+        onActivate: (() -> Void)?
     )
     func dismiss()
 }
@@ -80,6 +81,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
 
     private var panel: InputSourceHUDPanel?
     private var dismissTask: Task<Void, Never>?
+    private var isPointerHovering = false
     private var presentationGate: InputSourceHUDPresentationGate
 
     init(
@@ -99,7 +101,8 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
     func show(
         label: InputSourceHUDLabel,
         near focusedFrame: CGRect,
-        configuration: AutoInputHUDConfiguration
+        configuration: AutoInputHUDConfiguration,
+        onActivate: (() -> Void)? = nil
     ) {
         let normalizedName = label.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedName.isEmpty, !focusedFrame.isEmpty else {
@@ -127,7 +130,9 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         ).map { max($0.width - (Self.displayMargin * 2), 1) }
 
         let panel = panel ?? Self.makePanel()
+        let wasVisible = panel.isVisible
         self.panel = panel
+        panel.ignoresMouseEvents = !configuration.isInteractive
         let metrics = Self.metrics(for: configuration.size)
         let panelSize = Self.panelSize(
             for: normalizedName,
@@ -149,7 +154,14 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
                 title: normalizedName,
                 modeIndicator: label.modeIndicator
             ),
-            metrics: metrics
+            metrics: metrics,
+            isInteractive: configuration.isInteractive,
+            onActivate: configuration.isInteractive ? {
+                onActivate?()
+            } : nil,
+            onHoverChanged: configuration.isInteractive ? { [weak self] isHovering in
+                self?.setPointerHovering(isHovering)
+            } : nil
         ))
         hostingView.wantsLayer = true
         hostingView.layer?.borderWidth = 0
@@ -159,19 +171,38 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.orderFrontRegardless()
 
-        dismissTask?.cancel()
-        dismissTask = Task { @MainActor [weak self, dismissDelay] in
-            try? await Task.sleep(for: dismissDelay)
-            guard !Task.isCancelled else { return }
-            self?.dismiss()
+        if !wasVisible {
+            isPointerHovering = false
         }
+        scheduleDismiss()
     }
 
     func dismiss() {
         dismissTask?.cancel()
         dismissTask = nil
+        isPointerHovering = false
         panel?.orderOut(nil)
         presentationGate.reset()
+    }
+
+    private func setPointerHovering(_ isHovering: Bool) {
+        isPointerHovering = isHovering
+        if isHovering {
+            dismissTask?.cancel()
+            dismissTask = nil
+        } else {
+            scheduleDismiss()
+        }
+    }
+
+    private func scheduleDismiss() {
+        dismissTask?.cancel()
+        guard !isPointerHovering else { return }
+        dismissTask = Task { @MainActor [weak self, dismissDelay] in
+            try? await Task.sleep(for: dismissDelay)
+            guard !Task.isCancelled else { return }
+            self?.dismiss()
+        }
     }
 
     static func makePanel() -> InputSourceHUDPanel {
@@ -315,7 +346,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
                 modeBadgeSize: 26,
                 spacing: 7,
                 horizontalPadding: 13,
-                minimumWidth: 112,
+                minimumWidth: 136,
                 height: 44,
                 cornerRadius: 11
             )
@@ -326,7 +357,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
                 modeBadgeSize: 30,
                 spacing: 9,
                 horizontalPadding: 16,
-                minimumWidth: 132,
+                minimumWidth: 160,
                 height: 52,
                 cornerRadius: 13
             )
@@ -337,7 +368,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
                 modeBadgeSize: 36,
                 spacing: 11,
                 horizontalPadding: 20,
-                minimumWidth: 156,
+                minimumWidth: 188,
                 height: 64,
                 cornerRadius: 16
             )
@@ -378,6 +409,11 @@ final class InputSourceHUDPanel: NSPanel {
 private struct InputSourceHUDView: View {
     let label: InputSourceHUDLabel
     let metrics: InputSourceHUDMetrics
+    var isInteractive = false
+    var onActivate: (() -> Void)?
+    var onHoverChanged: ((Bool) -> Void)?
+
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: metrics.spacing) {
@@ -403,6 +439,23 @@ private struct InputSourceHUDView: View {
         .background(
             InputSourceHUDMaterial(cornerRadius: metrics.cornerRadius)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
+                .fill(Color.primary.opacity(isHovering ? 0.07 : 0))
+                .allowsHitTesting(false)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isInteractive else { return }
+            onActivate?()
+        }
+        .onHover { isHovering in
+            guard isInteractive else { return }
+            self.isHovering = isHovering
+            onHoverChanged?(isHovering)
+        }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .accessibilityAddTraits(isInteractive ? .isButton : [])
     }
 }
 
@@ -421,7 +474,10 @@ struct InputSourceHUDPreview: View {
 
         InputSourceHUDView(
             label: InputSourceHUDLabel(title: title, modeIndicator: nil),
-            metrics: metrics
+            metrics: metrics,
+            isInteractive: false,
+            onActivate: nil,
+            onHoverChanged: nil
         )
         .frame(width: panelSize.width, height: panelSize.height)
         .accessibilityElement(children: .ignore)

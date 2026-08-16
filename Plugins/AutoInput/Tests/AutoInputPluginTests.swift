@@ -11,12 +11,14 @@ final class AutoInputStoreTests: XCTestCase {
         let store = AutoInputStore(storage: storage)
         XCTAssertTrue(store.isAutoSwitchEnabled)
         XCTAssertFalse(store.isInputHUDEnabled)
+        XCTAssertFalse(store.isInteractiveHUDEnabled)
         XCTAssertEqual(store.inputHUDSize, .standard)
         XCTAssertEqual(store.inputHUDPosition, .automatic)
         XCTAssertTrue(store.remembersLastInputSource)
 
         store.setAutoSwitchEnabled(false)
         store.setInputHUDEnabled(true)
+        store.setInteractiveHUDEnabled(true)
         store.setInputHUDSize(.large)
         store.setInputHUDPosition(.above)
         store.setRemembersLastInputSource(false)
@@ -26,6 +28,7 @@ final class AutoInputStoreTests: XCTestCase {
         let reloaded = AutoInputStore(storage: storage)
         XCTAssertFalse(reloaded.isAutoSwitchEnabled)
         XCTAssertTrue(reloaded.isInputHUDEnabled)
+        XCTAssertTrue(reloaded.isInteractiveHUDEnabled)
         XCTAssertEqual(reloaded.inputHUDSize, .large)
         XCTAssertEqual(reloaded.inputHUDPosition, .above)
         XCTAssertFalse(reloaded.remembersLastInputSource)
@@ -69,6 +72,7 @@ final class AutoInputStoreTests: XCTestCase {
         storage.blockedSetKeys = [
             "isAutoSwitchEnabled",
             "isInputHUDEnabled",
+            "isInteractiveHUDEnabled",
             "inputHUDSize",
             "inputHUDPosition",
             "rules",
@@ -77,10 +81,12 @@ final class AutoInputStoreTests: XCTestCase {
 
         XCTAssertEqual(store.setAutoSwitchEnabled(false), .rejected(rollbackSucceeded: true))
         XCTAssertEqual(store.setInputHUDEnabled(true), .rejected(rollbackSucceeded: true))
+        XCTAssertEqual(store.setInteractiveHUDEnabled(true), .rejected(rollbackSucceeded: true))
         XCTAssertEqual(store.setInputHUDSize(.large), .rejected(rollbackSucceeded: true))
         XCTAssertEqual(store.setInputHUDPosition(.above), .rejected(rollbackSucceeded: true))
         XCTAssertTrue(store.isAutoSwitchEnabled)
         XCTAssertFalse(store.isInputHUDEnabled)
+        XCTAssertFalse(store.isInteractiveHUDEnabled)
         XCTAssertEqual(store.inputHUDSize, .standard)
         XCTAssertEqual(store.inputHUDPosition, .automatic)
         XCTAssertEqual(
@@ -92,6 +98,7 @@ final class AutoInputStoreTests: XCTestCase {
         let reloaded = AutoInputStore(storage: storage)
         XCTAssertTrue(reloaded.isAutoSwitchEnabled)
         XCTAssertFalse(reloaded.isInputHUDEnabled)
+        XCTAssertFalse(reloaded.isInteractiveHUDEnabled)
         XCTAssertEqual(reloaded.inputHUDSize, .standard)
         XCTAssertEqual(reloaded.inputHUDPosition, .automatic)
         XCTAssertTrue(reloaded.rules.isEmpty)
@@ -268,6 +275,30 @@ final class AutoInputControllerTests: XCTestCase {
         fixture.sources.emitChange()
 
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
+    }
+
+    func testInteractiveHUDCyclesThroughSourcesAndKeepsPresenting() throws {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setInteractiveHUDEnabled(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24)
+        ))
+
+        XCTAssertTrue(try XCTUnwrap(fixture.hud.presentations.last).configuration.isInteractive)
+
+        fixture.hud.activateLastPresentation()
+
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh"])
+        XCTAssertEqual(fixture.sources.currentSourceID, "zh")
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
+
+        fixture.hud.activateLastPresentation()
+
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh", "en"])
+        XCTAssertEqual(fixture.sources.currentSourceID, "en")
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文", "ABC"])
     }
 
     func testSameApplicationAutomaticSelectionPresentsHUDOnce() {
@@ -458,7 +489,7 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
     }
 
-    func testSettingsVisibilityRefreshesSourcesWhenRuntimeMonitoringIsOff() {
+    func testSettingsVisibilityRefreshesSources() {
         let fixture = makeFixture(currentSourceID: "en")
         fixture.store.setAutoSwitchEnabled(false)
         fixture.controller.start()
@@ -471,7 +502,7 @@ final class AutoInputControllerTests: XCTestCase {
         ]
         fixture.controller.settingsVisibilityDidChange(true)
 
-        XCTAssertEqual(fixture.sources.refreshCount, 1)
+        XCTAssertEqual(fixture.sources.refreshCount, 2)
         XCTAssertEqual(fixture.controller.sources.map(\.id), ["en", "zh", "jp"])
     }
 
@@ -533,7 +564,7 @@ final class AutoInputControllerTests: XCTestCase {
         fixture.focusObserver.invalidateAccessibility()
 
         XCTAssertFalse(fixture.controller.isAccessibilityGranted)
-        XCTAssertEqual(fixture.sources.stopCount, 1)
+        XCTAssertEqual(fixture.sources.stopCount, 0)
         XCTAssertEqual(fixture.focusObserver.stopCount, 1)
         XCTAssertEqual(fixture.applications.stopCount, 0)
     }
@@ -563,7 +594,7 @@ final class AutoInputControllerTests: XCTestCase {
         fixture.controller.start()
 
         XCTAssertEqual(fixture.applications.startCount, 1)
-        XCTAssertEqual(fixture.sources.startCount, 0)
+        XCTAssertEqual(fixture.sources.startCount, 1)
         XCTAssertEqual(fixture.focusObserver.startCount, 0)
 
         fixture.accessibility.isTrusted = true
@@ -594,7 +625,7 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.hud.presentations.last?.sourceName, "ABC")
     }
 
-    func testDisablingBothFeaturesStopsAllObservers() {
+    func testDisablingBothFeaturesKeepsOnlyCanonicalActionSourceMonitoring() {
         let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
         fixture.store.setInputHUDEnabled(true)
         fixture.controller.start()
@@ -603,7 +634,7 @@ final class AutoInputControllerTests: XCTestCase {
         fixture.store.setInputHUDEnabled(false)
         fixture.controller.configurationDidChange()
 
-        XCTAssertEqual(fixture.sources.stopCount, 1)
+        XCTAssertEqual(fixture.sources.stopCount, 0)
         XCTAssertEqual(fixture.applications.stopCount, 1)
         XCTAssertEqual(fixture.focusObserver.stopCount, 1)
     }
@@ -881,6 +912,16 @@ final class InputSourceHUDControllerTests: XCTestCase {
         XCTAssertFalse(panel.hasShadow)
     }
 
+    func testInteractiveHUDConfigurationStillUsesANonactivatingPanel() {
+        let panel = InputSourceHUDController.makePanel()
+        panel.ignoresMouseEvents = false
+
+        XCTAssertFalse(panel.canBecomeKey)
+        XCTAssertFalse(panel.canBecomeMain)
+        XCTAssertFalse(panel.ignoresMouseEvents)
+        XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
+    }
+
     func testHUDAppearsAboveFocusedFieldNearBottomEdge() {
         let frame = InputSourceHUDController.panelFrame(
             focusedFrame: CGRect(x: 300, y: 20, width: 200, height: 24),
@@ -975,6 +1016,59 @@ final class InputSourceHUDControllerTests: XCTestCase {
 
 @MainActor
 final class AutoInputPluginPanelTests: XCTestCase {
+    func testSettingsSeparateBehaviorHUDRulesAndDeclareInputSourceShortcuts() throws {
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "auto-input",
+                storage: AutoInputMemoryStorage()
+            ),
+            sourceController: FakeAutoInputSourceController(sources: [], currentSourceID: nil),
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+
+        let settingsPage = try XCTUnwrap(plugin.settingsPage)
+        guard case let .form(sections) = settingsPage.body else {
+            return XCTFail("expected form settings")
+        }
+        XCTAssertEqual(sections.map(\.id), ["behavior", "rules", "hud"])
+
+        let configuration = plugin.actionShortcutSettingsConfiguration
+        XCTAssertEqual(configuration.actionIDs, ["select-input-source"])
+        XCTAssertEqual(configuration.placementAfterSectionID, "hud")
+        XCTAssertFalse(configuration.title.isEmpty)
+        XCTAssertFalse(configuration.description?.isEmpty ?? true)
+    }
+
+    func testCustomSettingsSectionsAreSearchableWithoutPublishingConfigurationCommands() {
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "auto-input",
+                storage: AutoInputMemoryStorage()
+            ),
+            sourceController: FakeAutoInputSourceController(sources: [], currentSourceID: nil),
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+
+        XCTAssertEqual(
+            plugin.settingsSearchEntries.map(\.id),
+            [
+                AutoInputSettingsSearchEntryID.behavior,
+                AutoInputSettingsSearchEntryID.rules,
+                AutoInputSettingsSearchEntryID.hud,
+            ]
+        )
+        XCTAssertEqual(
+            plugin.settingsSearchEntries.map(\.systemImage),
+            ["arrow.counterclockwise", "app.badge.checkmark", "text.cursor"]
+        )
+        XCTAssertTrue(plugin.settingsSearchEntries.allSatisfy { !$0.title.isEmpty })
+        XCTAssertTrue(plugin.settingsSearchEntries.allSatisfy { !$0.description.isEmpty })
+        XCTAssertEqual(
+            plugin.actionDefinitions.map(\.key.actionID),
+            ["toggle", "set-enabled", "select-input-source"]
+        )
+    }
+
     func testSettingsVisibilityRefreshesTheInputSourceCatalog() throws {
         let storage = AutoInputMemoryStorage()
         AutoInputStore(storage: storage).setAutoSwitchEnabled(false)
@@ -1074,7 +1168,10 @@ final class AutoInputPluginPanelTests: XCTestCase {
             applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
         )
 
-        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(
+            plugin.actionDefinitions.map(\.key.actionID),
+            ["toggle", "set-enabled", "select-input-source"]
+        )
         XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
         let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
 
@@ -1113,7 +1210,195 @@ final class AutoInputPluginPanelTests: XCTestCase {
         XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 
-    func testAccessibilityPermissionIsScopedToOptionalHUD() {
+    func testInputSourcesPublishDistinctLocalOnlyCanonicalActions() throws {
+        let sources = FakeAutoInputSourceController(
+            sources: [
+                AutoInputSource(id: "com.apple.keylayout.ABC", name: "ABC"),
+                AutoInputSource(id: "com.apple.inputmethod.SCIM.ITABC", name: "拼音"),
+            ],
+            currentSourceID: "com.apple.keylayout.ABC"
+        )
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "auto-input",
+                storage: AutoInputMemoryStorage()
+            ),
+            sourceController: sources,
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+
+        let definition = try XCTUnwrap(
+            plugin.actionDefinitions.first { $0.key.actionID == "select-input-source" }
+        )
+        XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
+        XCTAssertEqual(definition.parameters.map(\.portability), [.localOnly])
+
+        let entries = plugin.actionCatalogEntries.filter {
+            $0.reference.key.actionID == "select-input-source"
+        }
+        XCTAssertEqual(entries.map(\.title), ["切换到 ABC", "切换到 拼音"])
+        XCTAssertEqual(Set(entries.map(\.reference)).count, 2)
+        XCTAssertEqual(entries.map(\.presentationState), [.active, .inactive])
+    }
+
+    func testCanonicalInputSourceSelectionWorksWhenAutomaticSwitchingAndHUDAreOff() async throws {
+        let storage = AutoInputMemoryStorage()
+        AutoInputStore(storage: storage).setAutoSwitchEnabled(false)
+        let sources = FakeAutoInputSourceController(
+            sources: [
+                AutoInputSource(id: "en", name: "ABC"),
+                AutoInputSource(id: "zh", name: "中文"),
+            ],
+            currentSourceID: "en"
+        )
+        let applications = FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
+            sourceController: sources,
+            applicationMonitor: applications
+        )
+        plugin.activate(context: PluginRuntimeContext(pluginID: "auto-input"))
+
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first {
+            $0.reference.parameters["inputSourceID"] == .string("zh")
+        }?.reference)
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(sources.selectedIDs, ["zh"])
+        XCTAssertEqual(sources.startCount, 1)
+        XCTAssertEqual(applications.startCount, 0)
+        XCTAssertEqual(plugin.permissionRequirements.map(\.id), ["accessibility"])
+        XCTAssertEqual(
+            plugin.actionCatalogEntries.first { $0.reference == reference }?.presentationState,
+            .active
+        )
+    }
+
+    func testSelectingCurrentInputSourceSucceedsWithoutSelectingAgain() async throws {
+        let sources = FakeAutoInputSourceController(
+            sources: [AutoInputSource(id: "en", name: "ABC")],
+            currentSourceID: "en"
+        )
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "auto-input",
+                storage: AutoInputMemoryStorage()
+            ),
+            sourceController: sources,
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first {
+            $0.reference.key.actionID == "select-input-source"
+        }?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(sources.selectionAttemptIDs.isEmpty)
+        XCTAssertEqual(sources.refreshCount, 0)
+    }
+
+    func testRemovedInputSourceMakesStoredActionUnavailableAndFailsClearly() async throws {
+        let sources = FakeAutoInputSourceController(
+            sources: [AutoInputSource(id: "en", name: "ABC")],
+            currentSourceID: nil
+        )
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "auto-input",
+                storage: AutoInputMemoryStorage()
+            ),
+            sourceController: sources,
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        plugin.activate(context: PluginRuntimeContext(pluginID: "auto-input"))
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first {
+            $0.reference.key.actionID == "select-input-source"
+        }?.reference)
+
+        sources.sources = []
+        sources.emitChange()
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+        guard case let .failed(message) = result else {
+            return XCTFail("expected unavailable input source failure")
+        }
+        XCTAssertEqual(message, "输入法已停用或不可用。")
+        XCTAssertTrue(sources.selectedIDs.isEmpty)
+    }
+
+    func testInputSourceSelectionFailureUsesSwitchFailureMessage() async throws {
+        let sources = FakeAutoInputSourceController(
+            sources: [AutoInputSource(id: "en", name: "ABC")],
+            currentSourceID: nil
+        )
+        sources.selectionError = AutoInputSourceError.selectionFailed(-1)
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "auto-input",
+                storage: AutoInputMemoryStorage()
+            ),
+            sourceController: sources,
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first {
+            $0.reference.key.actionID == "select-input-source"
+        }?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .failed(message: "无法切换输入法"))
+        XCTAssertEqual(sources.selectionAttemptIDs, ["en"])
+    }
+
+    func testInputSourceChangesRefreshCanonicalActionCatalogAndActiveState() {
+        let sources = FakeAutoInputSourceController(
+            sources: [AutoInputSource(id: "en", name: "ABC")],
+            currentSourceID: "en"
+        )
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "auto-input",
+                storage: AutoInputMemoryStorage()
+            ),
+            sourceController: sources,
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        var stateChangeCount = 0
+        plugin.onStateChange = { stateChangeCount += 1 }
+        plugin.activate(context: PluginRuntimeContext(pluginID: "auto-input"))
+
+        sources.sources.append(AutoInputSource(id: "zh", name: "中文"))
+        sources.currentSourceID = "zh"
+        sources.emitChange()
+
+        let entries = plugin.actionCatalogEntries.filter {
+            $0.reference.key.actionID == "select-input-source"
+        }
+        XCTAssertEqual(entries.map(\.title), ["切换到 ABC", "切换到 中文"])
+        XCTAssertEqual(entries.map(\.presentationState), [.inactive, .active])
+        XCTAssertEqual(stateChangeCount, 1)
+    }
+
+    func testAccessibilityPermissionRemainsVisibleWhenHUDIsOff() {
         let storage = AutoInputMemoryStorage()
         let accessibility = FakeAutoInputAccessibilityCheck(isTrusted: false)
         var plugin = AutoInputPlugin(
@@ -1125,7 +1410,8 @@ final class AutoInputPluginPanelTests: XCTestCase {
             accessibilityCheck: accessibility
         )
 
-        XCTAssertTrue(plugin.permissionRequirements.isEmpty)
+        XCTAssertEqual(plugin.permissionRequirements.map(\.id), ["accessibility"])
+        XCTAssertFalse(plugin.permissionState(for: "accessibility").isGranted)
 
         AutoInputStore(storage: storage).setInputHUDEnabled(true)
         plugin = AutoInputPlugin(
@@ -1263,12 +1549,14 @@ private final class FakeInputSourceHUDPresenter: InputSourceHUDPresenting {
     }
 
     var presentations: [Presentation] = []
+    var activationHandlers: [(() -> Void)?] = []
     var dismissCount = 0
 
     func show(
         label: InputSourceHUDLabel,
         near focusedFrame: CGRect,
-        configuration: AutoInputHUDConfiguration
+        configuration: AutoInputHUDConfiguration,
+        onActivate: (() -> Void)?
     ) {
         presentations.append(Presentation(
             sourceName: label.title,
@@ -1276,6 +1564,11 @@ private final class FakeInputSourceHUDPresenter: InputSourceHUDPresenting {
             frame: focusedFrame,
             configuration: configuration
         ))
+        activationHandlers.append(onActivate)
+    }
+
+    func activateLastPresentation() {
+        activationHandlers.last.flatMap { $0 }?()
     }
 
     func dismiss() {
