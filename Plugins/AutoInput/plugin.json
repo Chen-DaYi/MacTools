@@ -29,6 +29,6 @@
     "componentPanel": false,
     "settings": "form"
   },
-  "permissions": [],
+  "permissions": ["accessibility"],
   "category": "productivity"
 }

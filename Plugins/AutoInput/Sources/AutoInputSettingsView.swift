@@ -13,6 +13,7 @@ struct AutoInputSettingsView: View {
     @ObservedObject var controller: AutoInputController
     let localization: PluginLocalization
     let onChange: () -> Void
+    let onHUDChange: (Bool) -> Void
     let section: SectionKind
 
     @ViewBuilder
@@ -26,21 +27,148 @@ struct AutoInputSettingsView: View {
     }
 
     private var behaviorSection: some View {
-        settingToggle(
-            icon: "arrow.counterclockwise",
-            title: localization.string("settings.memory.title", defaultValue: "自动记忆"),
+        VStack(spacing: 0) {
+            settingToggle(
+                icon: "arrow.counterclockwise",
+                title: localization.string("settings.memory.title", defaultValue: "自动记忆"),
+                description: localization.string(
+                    "settings.memory.description",
+                    defaultValue: "切回应用时恢复上次使用的输入法。"
+                ),
+                isOn: Binding(
+                    get: { store.remembersLastInputSource },
+                    set: { value in
+                        store.setRemembersLastInputSource(value)
+                        onChange()
+                    }
+                )
+            )
+            PluginSettingsListDivider()
+            settingToggle(
+                icon: "text.cursor",
+                title: localization.string("settings.hud.title", defaultValue: "输入法提示"),
+                description: localization.string(
+                    "settings.hud.description",
+                    defaultValue: "聚焦文本输入区域或终端时，在附近短暂显示当前输入法。需要辅助功能权限。"
+                ),
+                isOn: Binding(
+                    get: { store.isInputHUDEnabled },
+                    set: { value in
+                        guard store.setInputHUDEnabled(value) == .committed else {
+                            onChange()
+                            return
+                        }
+                        onHUDChange(value)
+                    }
+                )
+            )
+            if store.isInputHUDEnabled {
+                PluginSettingsListDivider()
+                hudSizePicker
+                PluginSettingsListDivider()
+                hudPositionPicker
+            }
+        }
+    }
+
+    private var hudSizePicker: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Image(systemName: "textformat.size")
+                    .pluginSettingsRowIconStyle()
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                    Text(localization.string("settings.hud.size.title", defaultValue: "提示大小"))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    Text(localization.string(
+                        "settings.hud.size.description",
+                        defaultValue: "调整提示的文字和面板大小。"
+                    ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Picker("", selection: Binding(
+                    get: { store.inputHUDSize },
+                    set: { value in
+                        store.setInputHUDSize(value)
+                        onChange()
+                    }
+                )) {
+                    ForEach(AutoInputHUDSize.allCases) { size in
+                        Text(localizedHUDSize(size)).tag(size)
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 130, idealWidth: 160, maxWidth: 190)
+                .accessibilityLabel(Text(localization.string(
+                    "settings.hud.size.title",
+                    defaultValue: "提示大小"
+                )))
+                .accessibilityHint(Text(localization.string(
+                    "settings.hud.size.description",
+                    defaultValue: "调整提示的文字和面板大小。"
+                )))
+                .accessibilityIdentifier("auto-input.hud-size")
+            }
+
+            GeometryReader { proxy in
+                HStack {
+                    Spacer(minLength: 0)
+                    InputSourceHUDPreview(
+                        title: hudPreviewSourceName,
+                        size: store.inputHUDSize,
+                        maximumWidth: max(proxy.size.width - 24, 1)
+                    )
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 96)
+            .pluginSettingsCardBackground(.recessed)
+            .accessibilityHidden(true)
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private var hudPreviewSourceName: String {
+        controller.sources.first(where: { $0.id == controller.currentSourceID })?.name
+            ?? controller.sources.first?.name
+            ?? "ABC"
+    }
+
+    private var hudPositionPicker: some View {
+        settingPickerRow(
+            icon: "rectangle.and.hand.point.up.left",
+            title: localization.string("settings.hud.position.title", defaultValue: "提示位置"),
             description: localization.string(
-                "settings.memory.description",
-                defaultValue: "切回应用时恢复上次使用的输入法。"
-            ),
-            isOn: Binding(
-                get: { store.remembersLastInputSource },
+                "settings.hud.position.description",
+                defaultValue: "选择提示显示在当前输入区域附近或所在显示器中央。"
+            )
+        ) {
+            Picker("", selection: Binding(
+                get: { store.inputHUDPosition },
                 set: { value in
-                    store.setRemembersLastInputSource(value)
+                    store.setInputHUDPosition(value)
                     onChange()
                 }
-            )
-        )
+            )) {
+                ForEach(AutoInputHUDPosition.allCases) { position in
+                    Text(localizedHUDPosition(position)).tag(position)
+                }
+            }
+            .labelsHidden()
+            .frame(minWidth: 150, idealWidth: 180, maxWidth: 220)
+            .accessibilityLabel(Text(localization.string(
+                "settings.hud.position.title",
+                defaultValue: "提示位置"
+            )))
+            .accessibilityHint(Text(localization.string(
+                "settings.hud.position.description",
+                defaultValue: "选择提示显示在当前输入区域附近或所在显示器中央。"
+            )))
+            .accessibilityIdentifier("auto-input.hud-position")
+        }
     }
 
     @ViewBuilder
@@ -148,8 +276,57 @@ struct AutoInputSettingsView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .accessibilityLabel(Text(title))
+                .accessibilityHint(Text(description))
         }
         .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private func settingPickerRow<Control: View>(
+        icon: String,
+        title: String,
+        description: String,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: icon)
+                .pluginSettingsRowIconStyle()
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Text(description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            control()
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private func localizedHUDSize(_ size: AutoInputHUDSize) -> String {
+        switch size {
+        case .compact:
+            localization.string("settings.hud.size.compact", defaultValue: "紧凑")
+        case .standard:
+            localization.string("settings.hud.size.standard", defaultValue: "标准")
+        case .large:
+            localization.string("settings.hud.size.large", defaultValue: "大")
+        }
+    }
+
+    private func localizedHUDPosition(_ position: AutoInputHUDPosition) -> String {
+        switch position {
+        case .automatic:
+            localization.string("settings.hud.position.automatic", defaultValue: "自动")
+        case .above:
+            localization.string("settings.hud.position.above", defaultValue: "优先显示在上方")
+        case .below:
+            localization.string("settings.hud.position.below", defaultValue: "优先显示在下方")
+        case .screenCenter:
+            localization.string("settings.hud.position.screen-center", defaultValue: "屏幕中央")
+        }
     }
 
     static func addApplication(

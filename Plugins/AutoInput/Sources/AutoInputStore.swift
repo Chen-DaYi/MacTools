@@ -9,13 +9,20 @@ enum AutoInputStoreMutationResult: Equatable {
 @MainActor
 final class AutoInputStore: ObservableObject {
     private enum Keys {
-        static let isEnabled = "isEnabled"
+        static let legacyIsEnabled = "isEnabled"
+        static let isAutoSwitchEnabled = "isAutoSwitchEnabled"
+        static let isInputHUDEnabled = "isInputHUDEnabled"
+        static let inputHUDSize = "inputHUDSize"
+        static let inputHUDPosition = "inputHUDPosition"
         static let remembersLastInputSource = "remembersLastInputSource"
         static let rules = "rules"
         static let memories = "memories"
     }
 
-    @Published private(set) var isEnabled: Bool
+    @Published private(set) var isAutoSwitchEnabled: Bool
+    @Published private(set) var isInputHUDEnabled: Bool
+    @Published private(set) var inputHUDSize: AutoInputHUDSize
+    @Published private(set) var inputHUDPosition: AutoInputHUDPosition
     @Published private(set) var remembersLastInputSource: Bool
     @Published private(set) var rules: [AutoInputRule]
     @Published private(set) var persistenceFailure: AutoInputStoreMutationResult?
@@ -27,9 +34,17 @@ final class AutoInputStore: ObservableObject {
 
     init(storage: PluginStorage) {
         self.storage = storage
-        self.isEnabled = storage.object(forKey: Keys.isEnabled) == nil
+        Self.migrateAutoSwitchPreferenceIfNeeded(storage: storage)
+        self.isAutoSwitchEnabled = storage.object(forKey: Keys.isAutoSwitchEnabled) == nil
             ? true
-            : storage.bool(forKey: Keys.isEnabled)
+            : storage.bool(forKey: Keys.isAutoSwitchEnabled)
+        self.isInputHUDEnabled = storage.object(forKey: Keys.isInputHUDEnabled) == nil
+            ? false
+            : storage.bool(forKey: Keys.isInputHUDEnabled)
+        self.inputHUDSize = storage.string(forKey: Keys.inputHUDSize)
+            .flatMap(AutoInputHUDSize.init(rawValue:)) ?? .standard
+        self.inputHUDPosition = storage.string(forKey: Keys.inputHUDPosition)
+            .flatMap(AutoInputHUDPosition.init(rawValue:)) ?? .automatic
         self.remembersLastInputSource = storage.object(forKey: Keys.remembersLastInputSource) == nil
             ? true
             : storage.bool(forKey: Keys.remembersLastInputSource)
@@ -40,10 +55,34 @@ final class AutoInputStore: ObservableObject {
     }
 
     @discardableResult
-    func setEnabled(_ value: Bool) -> AutoInputStoreMutationResult {
-        guard isEnabled != value else { return record(.committed) }
-        let result = persist(value, forKey: Keys.isEnabled)
-        if result == .committed { isEnabled = value }
+    func setAutoSwitchEnabled(_ value: Bool) -> AutoInputStoreMutationResult {
+        guard isAutoSwitchEnabled != value else { return record(.committed) }
+        let result = persist(value, forKey: Keys.isAutoSwitchEnabled)
+        if result == .committed { isAutoSwitchEnabled = value }
+        return record(result)
+    }
+
+    @discardableResult
+    func setInputHUDEnabled(_ value: Bool) -> AutoInputStoreMutationResult {
+        guard isInputHUDEnabled != value else { return record(.committed) }
+        let result = persist(value, forKey: Keys.isInputHUDEnabled)
+        if result == .committed { isInputHUDEnabled = value }
+        return record(result)
+    }
+
+    @discardableResult
+    func setInputHUDSize(_ value: AutoInputHUDSize) -> AutoInputStoreMutationResult {
+        guard inputHUDSize != value else { return record(.committed) }
+        let result = persist(value.rawValue, forKey: Keys.inputHUDSize)
+        if result == .committed { inputHUDSize = value }
+        return record(result)
+    }
+
+    @discardableResult
+    func setInputHUDPosition(_ value: AutoInputHUDPosition) -> AutoInputStoreMutationResult {
+        guard inputHUDPosition != value else { return record(.committed) }
+        let result = persist(value.rawValue, forKey: Keys.inputHUDPosition)
+        if result == .committed { inputHUDPosition = value }
         return record(result)
     }
 
@@ -118,6 +157,16 @@ final class AutoInputStore: ObservableObject {
         return .committed
     }
 
+    private func persist(_ value: String, forKey key: String) -> AutoInputStoreMutationResult {
+        let previous = storage.object(forKey: key)
+        storage.set(value, forKey: key)
+        guard storage.string(forKey: key) == value else {
+            restore(previous, forKey: key)
+            return .rejected(rollbackSucceeded: rawValue(storage.object(forKey: key), equals: previous))
+        }
+        return .committed
+    }
+
     private func persist<Value: Encodable>(
         _ value: Value,
         forKey key: String
@@ -160,6 +209,18 @@ final class AutoInputStore: ObservableObject {
     private static func decode<Value: Decodable>(_ type: Value.Type, from data: Data?) -> Value? {
         guard let data else { return nil }
         return try? JSONDecoder().decode(type, from: data)
+    }
+
+    private static func migrateAutoSwitchPreferenceIfNeeded(storage: PluginStorage) {
+        guard storage.object(forKey: Keys.isAutoSwitchEnabled) == nil,
+              let legacyValue = storage.object(forKey: Keys.legacyIsEnabled) as? Bool
+        else { return }
+
+        storage.set(legacyValue, forKey: Keys.isAutoSwitchEnabled)
+        guard storage.object(forKey: Keys.isAutoSwitchEnabled) as? Bool == legacyValue else {
+            return
+        }
+        storage.removeObject(forKey: Keys.legacyIsEnabled)
     }
 
     private static func normalizedRules(_ rules: [AutoInputRule]) -> [AutoInputRule] {

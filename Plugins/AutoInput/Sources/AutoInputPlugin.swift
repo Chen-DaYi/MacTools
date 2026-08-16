@@ -22,6 +22,10 @@ private struct AutoInputPluginProvider: PluginProvider {
 final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicationActivityStateHandling,
     PluginActionProviding
 {
+    private enum PermissionID {
+        static let accessibility = "accessibility"
+    }
+
     private enum ActionID {
         static let setEnabled = "set-enabled"
         static let toggle = "toggle"
@@ -44,7 +48,11 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "auto-input"),
         sourceController: AutoInputSourceControlling? = nil,
-        applicationMonitor: AutoInputApplicationMonitoring? = nil
+        applicationMonitor: AutoInputApplicationMonitoring? = nil,
+        focusObserver: AutoInputFocusObserving? = nil,
+        hudPresenter: InputSourceHUDPresenting? = nil,
+        hudLabelResolver: InputSourceHUDLabelResolving? = nil,
+        accessibilityCheck: AutoInputAccessibilityChecking? = nil
     ) {
         let localization = PluginLocalization(bundle: context.resourceBundle)
         let store = AutoInputStore(storage: context.storage)
@@ -52,6 +60,10 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             store: store,
             sourceController: sourceController ?? CarbonAutoInputSourceCatalog(),
             applicationMonitor: applicationMonitor ?? WorkspaceAutoInputApplicationMonitor(),
+            focusObserver: focusObserver ?? AccessibilityAutoInputFocusObserver(),
+            hudPresenter: hudPresenter ?? InputSourceHUDController(),
+            hudLabelResolver: hudLabelResolver ?? StandardInputSourceHUDLabelResolver(),
+            accessibilityCheck: accessibilityCheck ?? SystemAutoInputAccessibilityCheck(),
             switchErrorMessage: {
                 localization.string("error.switchFailed", defaultValue: "无法切换输入法")
             }
@@ -78,13 +90,31 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: panelSubtitle,
-            isOn: store.isEnabled,
+            isOn: store.isAutoSwitchEnabled,
             isExpanded: false,
             isEnabled: true,
             isVisible: true,
             detail: nil,
             errorMessage: persistenceErrorMessage ?? controller.errorMessage
         )
+    }
+
+    var permissionRequirements: [PluginPermissionRequirement] {
+        guard store.isInputHUDEnabled else { return [] }
+        return [
+            PluginPermissionRequirement(
+                id: PermissionID.accessibility,
+                kind: .accessibility,
+                title: localization.string(
+                    "permission.accessibility.title",
+                    defaultValue: "辅助功能"
+                ),
+                description: localization.string(
+                    "permission.accessibility.description",
+                    defaultValue: "仅用于在文本输入区域和终端附近显示当前输入法。"
+                )
+            ),
+        ]
     }
 
     var settingsPage: PluginSettingsPage? {
@@ -101,6 +131,12 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                     localization: localization,
                     onChange: { [weak self] in
                         self?.controller.configurationDidChange()
+                        self?.onStateChange?()
+                    },
+                    onHUDChange: { [weak self] enabled in
+                        self?.controller.configurationDidChange(
+                            promptForAccessibility: enabled
+                        )
                         self?.onStateChange?()
                     },
                     section: .behavior
@@ -120,6 +156,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                         self?.controller.configurationDidChange()
                         self?.onStateChange?()
                     },
+                    onHUDChange: { _ in },
                     section: .rules
                 )
             }
@@ -145,6 +182,9 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                 .disabled(controller.sources.isEmpty)
             }
         ])
+        .onVisibilityChange { [weak self] isVisible in
+            self?.controller.settingsVisibilityDidChange(isVisible)
+        }
     }
 
     var actionDefinitions: [ActionDefinition] {
@@ -181,11 +221,11 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         [
             ActionCatalogEntry(
                 reference: toggleActionReference,
-                title: store.isEnabled
+                title: store.isAutoSwitchEnabled
                     ? localization.string("action.disable.title", defaultValue: "暂停自动切换输入法")
                     : localization.string("action.enable.title", defaultValue: "开启自动切换输入法"),
                 subtitle: panelSubtitle,
-                presentationState: store.isEnabled ? .active : .inactive
+                presentationState: store.isAutoSwitchEnabled ? .active : .inactive
             ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
@@ -210,9 +250,33 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         controller.refresh()
     }
 
+    func permissionState(for permissionID: String) -> PluginPermissionState {
+        guard permissionID == PermissionID.accessibility else {
+            return PluginPermissionState(isGranted: true, footnote: nil)
+        }
+        return PluginPermissionState(
+            isGranted: controller.isAccessibilityGranted,
+            footnote: controller.isAccessibilityGranted
+                ? nil
+                : localization.string(
+                    "permission.accessibility.footnote",
+                    defaultValue: "系统设置 → 隐私与安全性 → 辅助功能，允许 MacTools。自动切换输入法不受影响。"
+                )
+        )
+    }
+
+    func handlePermissionAction(id: String) {
+        guard id == PermissionID.accessibility else { return }
+        _ = controller.requestAccessibilityPermission()
+        if !controller.isAccessibilityGranted {
+            requestPermissionGuidance?(PermissionID.accessibility)
+        }
+        onStateChange?()
+    }
+
     func handleAction(_ action: PluginPanelAction) {
         guard case let .setSwitch(value) = action else { return }
-        _ = setEnabled(value)
+        _ = setAutoSwitchEnabled(value)
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
@@ -220,7 +284,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         case ActionID.toggle:
             return ActionExecutionHandle { [weak self] in
                 guard let self else { return .cancelled }
-                return self.setEnabled(!self.store.isEnabled)
+                return self.setAutoSwitchEnabled(!self.store.isAutoSwitchEnabled)
             }
         case ActionID.setEnabled:
             guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
@@ -228,7 +292,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             }
             return ActionExecutionHandle { [weak self] in
                 guard let self else { return .cancelled }
-                return self.setEnabled(value)
+                return self.setAutoSwitchEnabled(value)
             }
         default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
@@ -240,7 +304,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
     }
 
     private var panelSubtitle: String {
-        guard store.isEnabled else {
+        guard store.isAutoSwitchEnabled else {
             return localization.string("panel.subtitle.paused", defaultValue: "已暂停")
         }
         if !store.rules.isEmpty {
@@ -282,8 +346,8 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             )
     }
 
-    private func setEnabled(_ enabled: Bool) -> ActionExecutionResult {
-        guard store.setEnabled(enabled) == .committed else {
+    private func setAutoSwitchEnabled(_ enabled: Bool) -> ActionExecutionResult {
+        guard store.setAutoSwitchEnabled(enabled) == .committed else {
             onStateChange?()
             return .failed(message: persistenceErrorMessage ?? PluginKitLocalization.actionUnavailable)
         }

@@ -1,0 +1,465 @@
+import AppKit
+import ApplicationServices
+import Foundation
+import MacToolsPluginKit
+
+struct AutoInputEditableFocus: Equatable, Sendable {
+    let frame: CGRect
+    let applicationProcessIdentifier: pid_t?
+
+    init(frame: CGRect, applicationProcessIdentifier: pid_t? = nil) {
+        self.frame = frame
+        self.applicationProcessIdentifier = applicationProcessIdentifier
+    }
+}
+
+@MainActor
+protocol AutoInputFocusObserving: AnyObject {
+    var onEditableFocusChanged: ((AutoInputEditableFocus?) -> Void)? { get set }
+    var onAccessibilityInvalidated: (() -> Void)? { get set }
+
+    func start()
+    func stop()
+    func refreshFocusedElement()
+}
+
+@MainActor
+protocol AutoInputAccessibilityChecking: AnyObject {
+    var isTrusted: Bool { get }
+
+    @discardableResult
+    func requestTrust(prompt: Bool) -> Bool
+}
+
+struct AutoInputObservationLifecycle {
+    private(set) var generation = 0
+    private(set) var isRunning = false
+
+    mutating func start() -> Int {
+        generation &+= 1
+        isRunning = true
+        return generation
+    }
+
+    mutating func stop() {
+        isRunning = false
+        generation &+= 1
+    }
+
+    func accepts(_ scheduledGeneration: Int) -> Bool {
+        isRunning && generation == scheduledGeneration
+    }
+}
+
+@MainActor
+final class SystemAutoInputAccessibilityCheck: AutoInputAccessibilityChecking {
+    var isTrusted: Bool {
+        AXIsProcessTrusted()
+    }
+
+    @discardableResult
+    func requestTrust(prompt: Bool) -> Bool {
+        guard prompt else { return AXIsProcessTrusted() }
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
+    }
+}
+
+@MainActor
+final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
+    typealias CallbackContext = PluginCallbackContext<AccessibilityAutoInputFocusObserver>
+
+    var onEditableFocusChanged: ((AutoInputEditableFocus?) -> Void)?
+    var onAccessibilityInvalidated: (() -> Void)?
+
+    private let workspace: NSWorkspace
+    private let notificationCenter: NotificationCenter
+    private let ignoredProcessIdentifier: pid_t
+
+    private var activationObserver: NSObjectProtocol?
+    private var accessibilityObserver: AXObserver?
+    private var observedApplication: AXUIElement?
+    private var observedApplicationProcessIdentifier: pid_t?
+    private var observedApplicationBundleIdentifier: String?
+    private var callbackContext: CallbackContext?
+    private var retainedCallbackPointer: UnsafeMutableRawPointer?
+    private var lifecycle = AutoInputObservationLifecycle()
+
+    init(
+        workspace: NSWorkspace = .shared,
+        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        ignoredProcessIdentifier: pid_t = ProcessInfo.processInfo.processIdentifier
+    ) {
+        self.workspace = workspace
+        self.notificationCenter = notificationCenter
+        self.ignoredProcessIdentifier = ignoredProcessIdentifier
+    }
+
+    func start() {
+        guard activationObserver == nil else {
+            if lifecycle.isRunning {
+                inspectFocusedElement()
+            }
+            return
+        }
+
+        let generation = lifecycle.start()
+
+        activationObserver = notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication else {
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.lifecycle.accepts(generation) else { return }
+                self.observe(application, generation: generation)
+            }
+        }
+
+        if let application = workspace.frontmostApplication {
+            observe(application, generation: generation)
+        } else {
+            onEditableFocusChanged?(nil)
+        }
+    }
+
+    func stop() {
+        lifecycle.stop()
+        if let activationObserver {
+            notificationCenter.removeObserver(activationObserver)
+            self.activationObserver = nil
+        }
+        stopObservingApplication()
+        onEditableFocusChanged?(nil)
+    }
+
+    func refreshFocusedElement() {
+        guard lifecycle.isRunning else { return }
+        inspectFocusedElement()
+    }
+
+    private func observe(_ application: NSRunningApplication, generation: Int) {
+        guard lifecycle.accepts(generation) else { return }
+        stopObservingApplication()
+
+        guard AXIsProcessTrusted() else {
+            accessibilityWasInvalidated()
+            return
+        }
+        guard application.processIdentifier != ignoredProcessIdentifier else {
+            onEditableFocusChanged?(nil)
+            return
+        }
+
+        var observer: AXObserver?
+        let createStatus = AXObserverCreate(
+            application.processIdentifier,
+            Self.accessibilityCallback,
+            &observer
+        )
+        guard createStatus == .success, let observer else {
+            handleAccessibilityFailure(createStatus)
+            return
+        }
+
+        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        let context = CallbackContext(owner: self)
+        let retainedPointer = Unmanaged.passRetained(context).toOpaque()
+        let addStatus = AXObserverAddNotification(
+            observer,
+            applicationElement,
+            kAXFocusedUIElementChangedNotification as CFString,
+            retainedPointer
+        )
+        guard addStatus == .success else {
+            Unmanaged<CallbackContext>.fromOpaque(retainedPointer).release()
+            handleAccessibilityFailure(addStatus)
+            return
+        }
+
+        accessibilityObserver = observer
+        observedApplication = applicationElement
+        observedApplicationProcessIdentifier = application.processIdentifier
+        observedApplicationBundleIdentifier = application.bundleIdentifier
+        callbackContext = context
+        retainedCallbackPointer = retainedPointer
+        CFRunLoopAddSource(
+            CFRunLoopGetMain(),
+            AXObserverGetRunLoopSource(observer),
+            .commonModes
+        )
+        inspectFocusedElement()
+    }
+
+    private func stopObservingApplication() {
+        callbackContext?.invalidate()
+
+        if let observer = accessibilityObserver,
+           let application = observedApplication {
+            AXObserverRemoveNotification(
+                observer,
+                application,
+                kAXFocusedUIElementChangedNotification as CFString
+            )
+            CFRunLoopRemoveSource(
+                CFRunLoopGetMain(),
+                AXObserverGetRunLoopSource(observer),
+                .commonModes
+            )
+        }
+
+        accessibilityObserver = nil
+        observedApplication = nil
+        observedApplicationProcessIdentifier = nil
+        observedApplicationBundleIdentifier = nil
+        callbackContext = nil
+        if let retainedCallbackPointer {
+            Unmanaged<CallbackContext>.fromOpaque(retainedCallbackPointer).release()
+            self.retainedCallbackPointer = nil
+        }
+    }
+
+    private func inspectFocusedElement() {
+        guard let observedApplication else {
+            onEditableFocusChanged?(nil)
+            return
+        }
+
+        var focusedValue: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(
+            observedApplication,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedValue
+        )
+        guard status == .success else {
+            if status == .noValue || status == .attributeUnsupported {
+                onEditableFocusChanged?(nil)
+            } else {
+                handleAccessibilityFailure(status)
+            }
+            return
+        }
+        guard let focusedValue,
+              CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+            onEditableFocusChanged?(nil)
+            return
+        }
+
+        let element = focusedValue as! AXUIElement
+        guard Self.isEditable(
+            element,
+            applicationBundleIdentifier: observedApplicationBundleIdentifier
+        ),
+              let accessibilityFrame = Self.accessibilityFrame(of: element) else {
+            onEditableFocusChanged?(nil)
+            return
+        }
+
+        onEditableFocusChanged?(AutoInputEditableFocus(
+            frame: Self.appKitFrame(
+                fromAccessibilityFrame: accessibilityFrame,
+                primaryScreenFrame: Self.primaryScreenFrame
+            ),
+            applicationProcessIdentifier: observedApplicationProcessIdentifier
+        ))
+    }
+
+    private func handleAccessibilityFailure(_ status: AXError) {
+        if status == .apiDisabled || status == .notImplemented || !AXIsProcessTrusted() {
+            accessibilityWasInvalidated()
+        } else {
+            onEditableFocusChanged?(nil)
+        }
+    }
+
+    private func accessibilityWasInvalidated() {
+        stopObservingApplication()
+        onEditableFocusChanged?(nil)
+        onAccessibilityInvalidated?()
+    }
+
+    private nonisolated static let accessibilityCallback: AXObserverCallback = {
+        _, _, notification, reference in
+        guard notification as String == kAXFocusedUIElementChangedNotification as String,
+              let reference else { return }
+
+        let context = Unmanaged<CallbackContext>.fromOpaque(reference).takeUnretainedValue()
+        context.withOwner { owner in
+            DispatchQueue.main.async { [weak owner] in
+                owner?.inspectFocusedElement()
+            }
+        }
+    }
+
+    private static let terminalBundleIdentifiers: Set<String> = [
+        "com.apple.Terminal",
+        "com.mitchellh.ghostty",
+    ]
+
+    private static func isEditable(
+        _ element: AXUIElement,
+        applicationBundleIdentifier: String?
+    ) -> Bool {
+        guard let role = stringAttribute(kAXRoleAttribute, from: element),
+              isEditableRole(role),
+              boolAttribute(kAXEnabledAttribute, from: element) != false else {
+            return false
+        }
+
+        var isSettable = DarwinBoolean(false)
+        let status = AXUIElementIsAttributeSettable(
+            element,
+            kAXValueAttribute as CFString,
+            &isSettable
+        )
+        return acceptsFocusedInput(
+            role: role,
+            valueIsSettable: status == .success ? isSettable.boolValue : nil,
+            applicationBundleIdentifier: applicationBundleIdentifier
+        )
+    }
+
+    static func isEditableRole(_ role: String) -> Bool {
+        role == kAXTextFieldRole as String
+            || role == kAXTextAreaRole as String
+            || role == kAXComboBoxRole as String
+    }
+
+    static func acceptsFocusedInput(
+        role: String,
+        valueIsSettable: Bool?,
+        applicationBundleIdentifier: String?
+    ) -> Bool {
+        guard isEditableRole(role) else { return false }
+        if valueIsSettable == true { return true }
+        guard valueIsSettable == false else { return false }
+
+        // Terminal surfaces expose their screen buffer as a focused text area, but intentionally
+        // do not allow Accessibility clients to replace that buffer through AXValue. Keep this
+        // narrow so read-only text areas in ordinary apps do not trigger the HUD.
+        return role == kAXTextAreaRole as String
+            && applicationBundleIdentifier.map(terminalBundleIdentifiers.contains) == true
+    }
+
+    private static func accessibilityFrame(of element: AXUIElement) -> CGRect? {
+        guard let position = pointAttribute(kAXPositionAttribute, from: element),
+              let size = sizeAttribute(kAXSizeAttribute, from: element),
+              size.width > 0,
+              size.height > 0 else {
+            return nil
+        }
+        let elementFrame = CGRect(origin: position, size: size)
+        return preferredAccessibilityFrame(
+            elementFrame: elementFrame,
+            selectionFrame: selectedTextBounds(of: element)
+        )
+    }
+
+    static func preferredAccessibilityFrame(
+        elementFrame: CGRect,
+        selectionFrame: CGRect?
+    ) -> CGRect {
+        guard var selectionFrame,
+              selectionFrame.height > 0,
+              selectionFrame.minX.isFinite,
+              selectionFrame.minY.isFinite,
+              selectionFrame.width.isFinite,
+              selectionFrame.height.isFinite,
+              !selectionFrame.isNull else {
+            return elementFrame
+        }
+        selectionFrame.size.width = max(selectionFrame.width, 1)
+        return selectionFrame
+    }
+
+    private static func selectedTextBounds(of element: AXUIElement) -> CGRect? {
+        var rangeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            &rangeValue
+        ) == .success,
+        let rangeValue,
+        CFGetTypeID(rangeValue) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        var boundsValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            kAXBoundsForRangeParameterizedAttribute as CFString,
+            rangeValue,
+            &boundsValue
+        ) == .success,
+        let boundsValue,
+        CFGetTypeID(boundsValue) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        let axBounds = boundsValue as! AXValue
+        guard AXValueGetType(axBounds) == .cgRect else { return nil }
+        var bounds = CGRect.zero
+        guard AXValueGetValue(axBounds, .cgRect, &bounds) else { return nil }
+        return bounds
+    }
+
+    static func appKitFrame(
+        fromAccessibilityFrame frame: CGRect,
+        primaryScreenFrame: CGRect
+    ) -> CGRect {
+        CGRect(
+            x: frame.minX,
+            y: primaryScreenFrame.maxY - frame.maxY,
+            width: frame.width,
+            height: frame.height
+        )
+    }
+
+    private static var primaryScreenFrame: CGRect {
+        NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame
+            ?? NSScreen.screens.first?.frame
+            ?? .zero
+    }
+
+    private static func stringAttribute(_ attribute: String, from element: AXUIElement) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
+            return nil
+        }
+        return value as? String
+    }
+
+    private static func boolAttribute(_ attribute: String, from element: AXUIElement) -> Bool? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
+            return nil
+        }
+        return value as? Bool
+    }
+
+    private static func pointAttribute(_ attribute: String, from element: AXUIElement) -> CGPoint? {
+        guard let value = axValueAttribute(attribute, from: element),
+              AXValueGetType(value) == .cgPoint else { return nil }
+        var point = CGPoint.zero
+        return AXValueGetValue(value, .cgPoint, &point) ? point : nil
+    }
+
+    private static func sizeAttribute(_ attribute: String, from element: AXUIElement) -> CGSize? {
+        guard let value = axValueAttribute(attribute, from: element),
+              AXValueGetType(value) == .cgSize else { return nil }
+        var size = CGSize.zero
+        return AXValueGetValue(value, .cgSize, &size) ? size : nil
+    }
+
+    private static func axValueAttribute(_ attribute: String, from element: AXUIElement) -> AXValue? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        return (value as! AXValue)
+    }
+}
