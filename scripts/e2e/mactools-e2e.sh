@@ -1762,6 +1762,7 @@ verify_code_session() {
         -only-testing:MacToolsTests/AutoInputPluginPanelTests \
         -only-testing:MacToolsTests/BatteryChargeLimitPluginTests \
         -only-testing:MacToolsTests/ClipboardClearPluginTests \
+        -only-testing:MacToolsTests/CloudflareR2PluginTests \
         -only-testing:MacToolsTests/DiskCleanPluginTests \
         -only-testing:MacToolsTests/DisplayBrightnessPluginTests \
         -only-testing:MacToolsTests/DisplayResolutionPluginTests \
