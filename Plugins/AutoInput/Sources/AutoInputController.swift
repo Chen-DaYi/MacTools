@@ -178,6 +178,19 @@ final class AutoInputController: ObservableObject {
         onStateChange?()
     }
 
+    func selectSource(id: String) throws {
+        guard sourceController.currentSourceID != id else { return }
+
+        sourceController.refresh()
+        sources = sourceController.sources
+        guard sources.contains(where: { $0.id == id }) else {
+            throw AutoInputSourceError.sourceUnavailable
+        }
+
+        try sourceController.selectSource(id: id)
+        handleSourcesChanged()
+    }
+
     @discardableResult
     func requestAccessibilityPermission() -> Bool {
         refreshAccessibilityPermission(prompt: true)
@@ -321,7 +334,9 @@ final class AutoInputController: ObservableObject {
     }
 
     private func reconcileActiveServices() {
-        let shouldMonitorSources = autoSwitchActive || hudActive
+        // Canonical input-source actions remain available even when automatic
+        // switching and the optional HUD are both off.
+        let shouldMonitorSources = isStarted && isInteractive
         let shouldMonitorApplications = autoSwitchActive || hudPermissionObservationActive
         setSourceMonitoring(active: shouldMonitorSources)
         setApplicationMonitoring(active: shouldMonitorApplications)
@@ -419,14 +434,51 @@ final class AutoInputController: ObservableObject {
               let source = sources.first(where: { $0.id == sourceID }),
               hudTriggerPolicy.consumePresentation()
         else { return }
+        presentHUD(for: source, near: focusedElement)
+    }
+
+    private func presentHUD(for source: AutoInputSource, near focus: AutoInputEditableFocus) {
         hudPresenter.show(
             label: hudLabelResolver.displayLabel(for: source),
-            near: focusedElement.frame,
+            near: focus.frame,
             configuration: AutoInputHUDConfiguration(
                 size: store.inputHUDSize,
-                position: store.inputHUDPosition
-            )
+                position: store.inputHUDPosition,
+                isInteractive: store.isInteractiveHUDEnabled
+            ),
+            onActivate: store.isInteractiveHUDEnabled ? { [weak self] in
+                self?.cycleToNextInputSourceFromHUD()
+            } : nil
         )
+    }
+
+    private func cycleToNextInputSourceFromHUD() {
+        sourceController.refresh()
+        sources = sourceController.sources
+        guard sources.count > 1,
+              let currentSourceID = validCurrentSourceID,
+              let currentIndex = sources.firstIndex(where: { $0.id == currentSourceID })
+        else { return }
+
+        let target = sources[(currentIndex + 1) % sources.count]
+
+        do {
+            try sourceController.selectSource(id: target.id)
+            _ = hudTriggerPolicy.inputSourceDidChange(to: target.id)
+            _ = hudTriggerPolicy.consumePresentation()
+            rememberCurrentSourceIfNeeded()
+            errorMessage = nil
+            onStateChange?()
+            if hudActive,
+               let focusedElement,
+               focusBelongsToCurrentApplication(focusedElement) {
+                presentHUD(for: target, near: focusedElement)
+            }
+        } catch {
+            logger.error("Failed to select input source from HUD: \(error.localizedDescription, privacy: .public)")
+            errorMessage = switchErrorMessage()
+            onStateChange?()
+        }
     }
 
     private func refreshPendingHUDFromAccessibility() {

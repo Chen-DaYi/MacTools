@@ -307,6 +307,35 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
+    func testEmbeddedActionShortcutSearchResultNavigatesToSharedRevealAnchor() throws {
+        let plugin = ActionShortcutSearchTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let result = try XCTUnwrap(
+            MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
+                $0.title == plugin.actionShortcutSettingsConfiguration.title
+            }
+        )
+        let expectedTarget = PluginSettingsSearchTarget(
+            pluginID: plugin.metadata.id,
+            entryID: PluginActionShortcutSettingsConfiguration.settingsSearchEntryID
+        )
+
+        guard case let .navigate(destination, target) = result.action else {
+            return XCTFail("Expected a navigation action")
+        }
+        XCTAssertEqual(destination, .plugins(.configuration(plugin.metadata.id)))
+        XCTAssertEqual(target, .plugin(expectedTarget))
+        XCTAssertTrue(host.hasPluginSettingsSearchTarget(expectedTarget))
+
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { $0 == plugin.metadata.id }
+        )
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+        XCTAssertTrue(coordinator.navigateFromSearch(to: destination, target: target))
+        XCTAssertEqual(coordinator.destination, destination)
+        XCTAssertEqual(coordinator.searchRevealRequest?.target, .plugin(expectedTarget))
+    }
+
     func testGeneralSettingResultCarriesGeneralPageAndExactSearchTarget() throws {
         let host = makePluginHostForTests(plugins: [])
         let result = try XCTUnwrap(
@@ -813,6 +842,67 @@ private final class SearchableTestPlugin:
 
     func handleCommand(id: String) {
         performedCommandIDs.append(id)
+    }
+}
+
+@MainActor
+private final class ActionShortcutSearchTestPlugin:
+    MacToolsPlugin,
+    PluginActionProviding,
+    PluginActionShortcutSettingsProviding,
+    PluginSettingsSearchProviding
+{
+    private static let actionID = "switch-source"
+
+    let metadata = PluginMetadata(
+        id: "action-shortcut-search",
+        title: "Input Source",
+        iconName: "keyboard",
+        iconTint: Color(nsColor: .systemBlue),
+        order: 1,
+        defaultDescription: "Switch input sources"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [])
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: Self.actionID),
+                title: "Switch Input Source",
+                description: "Switch directly to an input source.",
+                systemImage: "keyboard"
+            ),
+        ]
+    }
+
+    var actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration {
+        PluginActionShortcutSettingsConfiguration(
+            title: "Input Source Shortcuts",
+            actionIDs: [Self.actionID]
+        )
+    }
+
+    var settingsSearchEntries: [PluginSettingsSearchEntry] {
+        [
+            PluginSettingsSearchEntry(
+                id: PluginActionShortcutSettingsConfiguration.settingsSearchEntryID,
+                title: actionShortcutSettingsConfiguration.title,
+                description: "Assign shortcuts to input sources.",
+                systemImage: "command"
+            ),
+        ]
+    }
+
+    func handleAction(_ action: PluginPanelAction) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        ActionExecutionHandle { .succeeded() }
     }
 }
 

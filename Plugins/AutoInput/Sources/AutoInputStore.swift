@@ -12,6 +12,7 @@ final class AutoInputStore: ObservableObject {
         static let legacyIsEnabled = "isEnabled"
         static let isAutoSwitchEnabled = "isAutoSwitchEnabled"
         static let isInputHUDEnabled = "isInputHUDEnabled"
+        static let isInteractiveHUDEnabled = "isInteractiveHUDEnabled"
         static let inputHUDSize = "inputHUDSize"
         static let inputHUDPosition = "inputHUDPosition"
         static let remembersLastInputSource = "remembersLastInputSource"
@@ -21,6 +22,7 @@ final class AutoInputStore: ObservableObject {
 
     @Published private(set) var isAutoSwitchEnabled: Bool
     @Published private(set) var isInputHUDEnabled: Bool
+    @Published private(set) var isInteractiveHUDEnabled: Bool
     @Published private(set) var inputHUDSize: AutoInputHUDSize
     @Published private(set) var inputHUDPosition: AutoInputHUDPosition
     @Published private(set) var remembersLastInputSource: Bool
@@ -41,6 +43,9 @@ final class AutoInputStore: ObservableObject {
         self.isInputHUDEnabled = storage.object(forKey: Keys.isInputHUDEnabled) == nil
             ? false
             : storage.bool(forKey: Keys.isInputHUDEnabled)
+        self.isInteractiveHUDEnabled = storage.object(forKey: Keys.isInteractiveHUDEnabled) == nil
+            ? false
+            : storage.bool(forKey: Keys.isInteractiveHUDEnabled)
         self.inputHUDSize = storage.string(forKey: Keys.inputHUDSize)
             .flatMap(AutoInputHUDSize.init(rawValue:)) ?? .standard
         self.inputHUDPosition = storage.string(forKey: Keys.inputHUDPosition)
@@ -67,6 +72,14 @@ final class AutoInputStore: ObservableObject {
         guard isInputHUDEnabled != value else { return record(.committed) }
         let result = persist(value, forKey: Keys.isInputHUDEnabled)
         if result == .committed { isInputHUDEnabled = value }
+        return record(result)
+    }
+
+    @discardableResult
+    func setInteractiveHUDEnabled(_ value: Bool) -> AutoInputStoreMutationResult {
+        guard isInteractiveHUDEnabled != value else { return record(.committed) }
+        let result = persist(value, forKey: Keys.isInteractiveHUDEnabled)
+        if result == .committed { isInteractiveHUDEnabled = value }
         return record(result)
     }
 

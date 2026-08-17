@@ -11,6 +11,7 @@ struct PluginSettingsPageItem: Identifiable {
     let page: PluginSettingsPage?
     let permissionCards: [PluginPermissionCard]
     let shortcutItems: [ShortcutSettingsItem]
+    let actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration?
 
     var layout: PluginSettingsLayout {
         page?.body.layout ?? .form

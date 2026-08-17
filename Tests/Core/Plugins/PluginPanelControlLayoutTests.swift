@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 import MacToolsPluginKit
 import SwiftUI
 
@@ -105,6 +106,33 @@ final class PluginPanelControlLayoutTests: XCTestCase {
             MemoryLayout<PluginShortcutRecorder>.alignment,
             MemoryLayout<PluginShortcutRecorderV4Layout>.alignment
         )
+    }
+
+    @MainActor
+    func testShortcutRecorderFieldKeepsStableHeightWhenDisplayTextScales() {
+        let ordinary = NSHostingView(rootView:
+            PluginShortcutRecorderField(
+                displayText: "⌥ + ⌘ + C",
+                isRecording: false,
+                minWidth: PluginSettingsTheme.Size.shortcutRecorderWidth
+            )
+            .frame(width: PluginSettingsTheme.Size.shortcutRecorderWidth)
+        )
+        let long = NSHostingView(rootView:
+            PluginShortcutRecorderField(
+                displayText: "⌃ + ⌥ + ⇧ + ⌘ + K",
+                isRecording: false,
+                minWidth: PluginSettingsTheme.Size.shortcutRecorderWidth
+            )
+            .frame(width: PluginSettingsTheme.Size.shortcutRecorderWidth)
+        )
+
+        XCTAssertEqual(
+            ordinary.fittingSize.height,
+            PluginSettingsTheme.Size.controlHeight,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(long.fittingSize.height, ordinary.fittingSize.height, accuracy: 0.5)
     }
 
     private func tag(of kind: PluginPanelControlKind) -> UInt8 {
