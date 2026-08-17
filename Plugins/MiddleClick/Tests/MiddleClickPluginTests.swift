@@ -394,7 +394,7 @@ final class MiddleClickPluginTests: XCTestCase {
         XCTAssertFalse(plugin.permissionState(for: "accessibility").isGranted)
     }
 
-    func testSettingsPageUsesValidPluginKitV4Form() throws {
+    func testSettingsPageUsesValidPluginKitV5Form() throws {
         let plugin = makePlugin()
         let page = try XCTUnwrap(plugin.settingsPage)
 

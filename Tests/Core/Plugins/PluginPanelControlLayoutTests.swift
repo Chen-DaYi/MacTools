@@ -3,9 +3,9 @@ import AppKit
 import MacToolsPluginKit
 import SwiftUI
 
-/// Frozen source-level replica of the PluginKit v4 public value layout used by
+/// Frozen source-level replica of the PluginKit v5 public value layout used by
 /// previously released plugin binaries. Keep this independent of the production type.
-private struct PluginShortcutRecorderV4Layout {
+private struct PluginShortcutRecorderV5Layout {
     let title: String
     let displayText: String
     let placeholder: String
@@ -69,7 +69,7 @@ final class PluginPanelControlLayoutTests: XCTestCase {
         )
     }
 
-    func testShortcutRecorderStoredPropertyLayoutMatchesPluginKitV4ABI() {
+    func testShortcutRecorderStoredPropertyLayoutMatchesPluginKitV5ABI() {
         let recorder = PluginShortcutRecorder(
             title: "Shortcut",
             displayText: "",
@@ -96,15 +96,15 @@ final class PluginPanelControlLayoutTests: XCTestCase {
         )
         XCTAssertEqual(
             MemoryLayout<PluginShortcutRecorder>.size,
-            MemoryLayout<PluginShortcutRecorderV4Layout>.size
+            MemoryLayout<PluginShortcutRecorderV5Layout>.size
         )
         XCTAssertEqual(
             MemoryLayout<PluginShortcutRecorder>.stride,
-            MemoryLayout<PluginShortcutRecorderV4Layout>.stride
+            MemoryLayout<PluginShortcutRecorderV5Layout>.stride
         )
         XCTAssertEqual(
             MemoryLayout<PluginShortcutRecorder>.alignment,
-            MemoryLayout<PluginShortcutRecorderV4Layout>.alignment
+            MemoryLayout<PluginShortcutRecorderV5Layout>.alignment
         )
     }
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -12,11 +13,14 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
+RELEASE_HISTORY_PATH = ROOT_DIR / "Sources" / "Resources" / "ReleaseHistory.json"
 FRAGMENT_DIR = ROOT_DIR / "changes" / "unreleased"
 FRONT_MATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 VERSION_HEADER_RE = re.compile(r"(?m)^## \[([^\]]+)\](?: - .*)?$")
 SECTION_HEADER_RE = re.compile(r"(?m)^### ([^\n]+)$")
 APP_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+(?:[.-][0-9A-Za-z.-]+)?$")
+PLUGIN_TAG_RE = re.compile(r"^plugins-\d+\.\d+\.\d+(?:[.-][0-9A-Za-z.-]+)?$")
+RELEASE_DATE_RE = re.compile(r" - (\d{4}-\d{2}-\d{2})$")
 CJK_RE = re.compile(r"[\u3400-\u9fff]")
 
 TYPE_ORDER = [
@@ -293,7 +297,9 @@ def prepare(release: str, title: str, release_date: str, dry_run: bool) -> None:
         return
 
     content = CHANGELOG_PATH.read_text(encoding="utf-8") if CHANGELOG_PATH.exists() else default_changelog()
-    CHANGELOG_PATH.write_text(insert_release(content, title, release_text), encoding="utf-8")
+    updated_content = insert_release(content, title, release_text)
+    CHANGELOG_PATH.write_text(updated_content, encoding="utf-8")
+    RELEASE_HISTORY_PATH.write_text(render_release_history(updated_content), encoding="utf-8")
     for fragment in fragments:
         fragment.path.unlink()
 
@@ -323,6 +329,86 @@ def extract(title: str) -> str:
     if not CHANGELOG_PATH.exists():
         fail("CHANGELOG.md does not exist.")
     return extract_from_content(CHANGELOG_PATH.read_text(encoding="utf-8"), title)
+
+
+def release_history_from_content(content: str) -> dict[str, object]:
+    matches = list(VERSION_HEADER_RE.finditer(content))
+    releases: list[dict[str, object]] = []
+
+    for index, match in enumerate(matches):
+        tag = match.group(1)
+        if APP_TAG_RE.fullmatch(tag):
+            kind = "app"
+            version = tag.removeprefix("v")
+        elif PLUGIN_TAG_RE.fullmatch(tag):
+            kind = "plugin"
+            version = tag.removeprefix("plugins-")
+        else:
+            continue
+
+        date_match = RELEASE_DATE_RE.search(match.group(0))
+        if date_match is None:
+            fail(f"CHANGELOG.md entry for {tag} must include a YYYY-MM-DD release date.")
+
+        notes = release_notes_from_match(content, matches, index)
+        parsed_sections = parsed_release_sections(notes)
+        sections = [
+            {
+                "kind": entry_type,
+                "entries": parsed_sections[entry_type],
+            }
+            for entry_type in TYPE_ORDER
+            if parsed_sections.get(entry_type)
+        ]
+        if not sections:
+            fail(f"CHANGELOG.md entry for {tag} has no supported changelog sections.")
+
+        releases.append(
+            {
+                "id": tag,
+                "kind": kind,
+                "version": version,
+                "date": date_match.group(1),
+                "sections": sections,
+            }
+        )
+
+    return {
+        "schemaVersion": 1,
+        "releases": releases,
+    }
+
+
+def render_release_history(content: str) -> str:
+    return json.dumps(
+        release_history_from_content(content),
+        ensure_ascii=False,
+        indent=2,
+    ) + "\n"
+
+
+def export_release_history() -> None:
+    if not CHANGELOG_PATH.exists():
+        fail("CHANGELOG.md does not exist.")
+    RELEASE_HISTORY_PATH.write_text(
+        render_release_history(CHANGELOG_PATH.read_text(encoding="utf-8")),
+        encoding="utf-8",
+    )
+
+
+def validate_release_history() -> None:
+    if not CHANGELOG_PATH.exists():
+        fail("CHANGELOG.md does not exist.")
+    if not RELEASE_HISTORY_PATH.exists():
+        fail(f"{relative(RELEASE_HISTORY_PATH)} does not exist. Run `scripts/changelog.py export-history`.")
+
+    expected = render_release_history(CHANGELOG_PATH.read_text(encoding="utf-8"))
+    actual = RELEASE_HISTORY_PATH.read_text(encoding="utf-8")
+    if actual != expected:
+        fail(
+            f"{relative(RELEASE_HISTORY_PATH)} is out of date. "
+            "Run `scripts/changelog.py export-history`."
+        )
 
 
 def parsed_release_sections(notes: str) -> dict[str, list[str]]:
@@ -406,6 +492,7 @@ def compose_sparkle_notes(content: str, title: str, app_notes: str) -> str:
 
 def validate(require_pending: bool, release: str | None) -> None:
     load_fragments(require_pending=require_pending, release=release)
+    validate_release_history()
 
 
 def parse_args() -> argparse.Namespace:
@@ -441,6 +528,11 @@ def parse_args() -> argparse.Namespace:
     sparkle_parser.add_argument("--tag", required=True, help="App release tag, for example v1.0.31.")
     sparkle_parser.add_argument("--app-notes", required=True, help="App-only release notes file.")
     sparkle_parser.add_argument("--output", help="Write notes to this file instead of stdout.")
+
+    subparsers.add_parser(
+        "export-history",
+        help="Compile CHANGELOG.md into the release history bundled with the app.",
+    )
     return parser.parse_args()
 
 
@@ -472,6 +564,8 @@ def main() -> int:
                 Path(args.output).write_text(notes, encoding="utf-8")
             else:
                 sys.stdout.write(notes)
+        elif args.command == "export-history":
+            export_release_history()
         else:
             fail(f"Unknown command: {args.command}")
     except ChangelogError as error:

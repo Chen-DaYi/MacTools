@@ -4,6 +4,11 @@ Pending app and plugin release notes live in `changes/unreleased/*.md`. Each
 markdown file is consumed by the next matching release, merged into
 `CHANGELOG.md`, and deleted in the release commit.
 
+`CHANGELOG.md` is the canonical history. The release helper also regenerates
+`Sources/Resources/ReleaseHistory.json` for the scrollable, offline history in
+About. Do not edit the generated JSON by hand; run
+`python3 scripts/changelog.py export-history` after repairing historical notes.
+
 Use short English, user-facing entries. Avoid implementation details, duplicate
 phrasing, and long multi-clause bullets.
 

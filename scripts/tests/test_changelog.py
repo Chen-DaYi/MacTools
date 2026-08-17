@@ -92,5 +92,68 @@ class ComposeSparkleNotesTests(unittest.TestCase):
             changelog.compose_sparkle_notes("", "plugins-1.2.0", "Plugin notes.")
 
 
+class ReleaseHistoryTests(unittest.TestCase):
+    def test_exports_app_and_plugin_releases_in_changelog_order(self) -> None:
+        content = """# Changelog
+
+## [v1.2.0] - 2026-07-11
+
+### Added
+
+- Added the app feature.
+
+### Fixed
+
+- Fixed the app issue.
+
+## [plugins-1.4.0] - 2026-07-10
+
+### Changed
+
+- Improved a plugin.
+"""
+
+        history = changelog.release_history_from_content(content)
+
+        self.assertEqual(history["schemaVersion"], 1)
+        self.assertEqual(
+            history["releases"],
+            [
+                {
+                    "id": "v1.2.0",
+                    "kind": "app",
+                    "version": "1.2.0",
+                    "date": "2026-07-11",
+                    "sections": [
+                        {"kind": "added", "entries": ["Added the app feature."]},
+                        {"kind": "fixed", "entries": ["Fixed the app issue."]},
+                    ],
+                },
+                {
+                    "id": "plugins-1.4.0",
+                    "kind": "plugin",
+                    "version": "1.4.0",
+                    "date": "2026-07-10",
+                    "sections": [
+                        {"kind": "changed", "entries": ["Improved a plugin."]},
+                    ],
+                },
+            ],
+        )
+
+    def test_requires_release_dates_for_bundled_history(self) -> None:
+        content = """# Changelog
+
+## [v1.2.0]
+
+### Added
+
+- Added the app feature.
+"""
+
+        with self.assertRaisesRegex(changelog.ChangelogError, "release date"):
+            changelog.release_history_from_content(content)
+
+
 if __name__ == "__main__":
     unittest.main()

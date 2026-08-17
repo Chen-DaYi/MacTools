@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_VERSION_CONFIG = ROOT_DIR / "Configs" / "AppVersion.xcconfig"
 CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
+RELEASE_HISTORY_PATH = ROOT_DIR / "Sources" / "Resources" / "ReleaseHistory.json"
 CHANGELOG_FRAGMENT_DIR = ROOT_DIR / "changes" / "unreleased"
 PLUGIN_SOURCE_DIR = ROOT_DIR / "Plugins"
 PLUGIN_SHARED_PATHS = [ROOT_DIR / "Sources/MacToolsPluginKit"]
@@ -415,8 +416,6 @@ def read_plugins() -> dict[str, PluginInfo]:
 def plugin_catalog_path(plugin_kit_version: int) -> Path:
     if plugin_kit_version == 2:
         return LEGACY_PLUGIN_CATALOG
-    if plugin_kit_version == 4:
-        return ROOT_DIR / "docs" / "plugins" / "v4" / "host-1.2" / "catalog.json"
     return ROOT_DIR / "docs" / "plugins" / f"v{plugin_kit_version}" / "catalog.json"
 
 
@@ -425,14 +424,6 @@ def previous_plugin_catalog_path() -> Path:
     preferred_path = plugin_catalog_path(plugin_kit_version)
     if preferred_path.exists() or preferred_path == LEGACY_PLUGIN_CATALOG:
         return preferred_path
-
-    # PluginKit v4 remains ABI-compatible, but the shipped 1.1.6 verifier
-    # cannot consume catalogs containing 1.2-only entries. The first 1.2
-    # release uses the immutable legacy v4 catalog as its version baseline.
-    if plugin_kit_version == 4:
-        legacy_v4_path = ROOT_DIR / "docs" / "plugins" / "v4" / "catalog.json"
-        if legacy_v4_path.exists():
-            return legacy_v4_path
 
     previous_versioned_catalogs = []
     for candidate in (ROOT_DIR / "docs" / "plugins").glob("v*/catalog.json"):
@@ -856,7 +847,7 @@ def validate_changelog(release: str, require_pending: bool) -> None:
 
 
 def prepare_changelog(release: str, tag: str, dry_run: bool) -> list[Path]:
-    paths = [CHANGELOG_PATH, *changelog_fragment_paths(release)]
+    paths = [CHANGELOG_PATH, RELEASE_HISTORY_PATH, *changelog_fragment_paths(release)]
     info(f"Preparing CHANGELOG.md for {tag}")
     command = ["python3", "scripts/changelog.py", "prepare", "--release", release, "--tag", tag]
     if dry_run:

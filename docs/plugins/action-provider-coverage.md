@@ -26,6 +26,7 @@ Unattended automation is also an explicit provider decision. An action must publ
 The maintenance providers use deliberately narrow contracts:
 
 - Disk Clean and Xcode Clean expose only a foreground **scan and review** action. It opens the owning settings page and starts a scan; deletion still requires the plugin's existing selection, safety validation, and confirmation flow.
+- Cloudflare R2 exposes only its foreground file-picker upload action. It requires saved configuration, preserves interactive file selection and cancellation, and does not allow Run Links or unattended automation.
 - Homebrew exposes update, upgrade-all, doctor, and cleanup. Upgrade-all and cleanup retain confirmation, every command reports its real completion result, and none can be invoked through a Run Link.
 - Launch Items exposes start, stop, and restart only for user-owned items that the user has marked as favorites. Item IDs are local-only, stop/restart require confirmation, and stale or no-longer-favorite targets become unavailable.
 - IP Check exposes refreshed copy actions for local and public IPv4 addresses. Keep Awake exposes useful timed sessions, Activity Stats exposes its existing reset flow with confirmation, Display Brightness exposes guarded built-in-display disable/restore operations, and App Volume includes a 50% preset.

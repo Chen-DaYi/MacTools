@@ -14,7 +14,7 @@ enum GeneralSettingsCardLayout {
 
 private enum SettingsSplitViewLayout {
     static let sidebarMinWidth: CGFloat = 180
-    static let sidebarIdealWidth: CGFloat = 220
+    static let sidebarIdealWidth: CGFloat = 232
     static let sidebarMaxWidth: CGFloat = 280
     static let detailMinWidth: CGFloat = 560
 }
@@ -80,8 +80,8 @@ struct SettingsView: View {
             configurationItems: pluginHost.pluginSettingsItems
         )
 
-        return ZStack {
-            NavigationSplitView {
+        return NavigationSplitView {
+            SettingsSidebarColumn {
                 SettingsSidebar(
                     configurationItems: configurationItems,
                     orderedDestinations: orderedSidebarDestinations,
@@ -91,47 +91,44 @@ struct SettingsView: View {
                         navigationCoordinator.presentUnifiedSearch(origin: .settingsSidebar)
                     }
                 )
-                .navigationSplitViewColumnWidth(
-                    min: SettingsSplitViewLayout.sidebarMinWidth,
-                    ideal: SettingsSplitViewLayout.sidebarIdealWidth,
-                    max: SettingsSplitViewLayout.sidebarMaxWidth
-                )
-            } detail: {
-                SettingsDetailColumn {
-                    SettingsDetailPane(
-                        pluginHost: pluginHost,
-                        navigationCoordinator: navigationCoordinator,
-                        destination: navigationCoordinator.destination,
-                        uninstallConfirmationSession: uninstallConfirmationSession,
-                        appUpdater: appUpdater,
-                        menuBarIconSettings: menuBarIconSettings,
-                        menuBarIconGallery: menuBarIconGallery,
-                        launchAtLoginController: launchAtLoginController,
-                        menuBarPanelThemeStore: menuBarPanelThemeStore,
-                        appearanceUserDefaults: appearanceUserDefaults,
-                        showDashboard: showDashboard,
-                        showFeaturePanel: showFeaturePanel
-                    )
-                }
-                .frame(
-                    minWidth: SettingsSplitViewLayout.detailMinWidth,
-                    maxWidth: .infinity,
-                    maxHeight: .infinity
+            }
+            .toolbar(removing: .sidebarToggle)
+            .navigationSplitViewColumnWidth(
+                min: SettingsSplitViewLayout.sidebarMinWidth,
+                ideal: SettingsSplitViewLayout.sidebarIdealWidth,
+                max: SettingsSplitViewLayout.sidebarMaxWidth
+            )
+        } detail: {
+            SettingsDetailColumn {
+                SettingsDetailPane(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    destination: navigationCoordinator.destination,
+                    uninstallConfirmationSession: uninstallConfirmationSession,
+                    appUpdater: appUpdater,
+                    menuBarIconSettings: menuBarIconSettings,
+                    menuBarIconGallery: menuBarIconGallery,
+                    launchAtLoginController: launchAtLoginController,
+                    menuBarPanelThemeStore: menuBarPanelThemeStore,
+                    appearanceUserDefaults: appearanceUserDefaults,
+                    showDashboard: showDashboard,
+                    showFeaturePanel: showFeaturePanel
                 )
             }
-            .navigationSplitViewStyle(.balanced)
+            .frame(
+                minWidth: SettingsSplitViewLayout.detailMinWidth,
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    SettingsHistoryNavigationControls(
-                        coordinator: navigationCoordinator
-                    )
-                    .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
-                    .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
-                    .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
-                    .accessibilityIdentifier("mactools.settings.history-navigation")
-                }
-
                 if #available(macOS 26.0, *) {
+                    ToolbarItem(placement: .navigation) {
+                        historyNavigationControls
+                    }
+                    .sharedBackgroundVisibility(
+                        navigationCoordinator.isUnifiedSearchPresented ? .hidden : .automatic
+                    )
+
                     ToolbarItem(placement: .navigation) {
                         SettingsDetailToolbarTitle(
                             title: detailTitle,
@@ -141,6 +138,10 @@ struct SettingsView: View {
                     .sharedBackgroundVisibility(.hidden)
                 } else {
                     ToolbarItem(placement: .navigation) {
+                        historyNavigationControls
+                    }
+
+                    ToolbarItem(placement: .navigation) {
                         SettingsDetailToolbarTitle(
                             title: detailTitle,
                             isHidden: navigationCoordinator.isUnifiedSearchPresented
@@ -148,35 +149,37 @@ struct SettingsView: View {
                     }
                 }
             }
-            .toolbar(removing: .sidebarToggle)
-            .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
-                navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
+        .navigationSplitViewStyle(.balanced)
+        .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
+            navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
+        .blur(
+            radius: navigationCoordinator.isUnifiedSearchPresented
+                && !accessibilityReduceTransparency
+                ? 2.5
+                : 0
+        )
+        .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+        .overlay {
+            Group {
+                if navigationCoordinator.isUnifiedSearchPresented {
+                    UnifiedSearchPresentationView(
+                        pluginHost: pluginHost,
+                        launchAtLoginController: launchAtLoginController,
+                        appearanceUserDefaults: appearanceUserDefaults,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
-            .blur(
-                radius: navigationCoordinator.isUnifiedSearchPresented
-                    && !accessibilityReduceTransparency
-                    ? 2.5
-                    : 0
-            )
-            .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
-            .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
-
-            if navigationCoordinator.isUnifiedSearchPresented {
-                UnifiedSearchPresentationView(
-                    pluginHost: pluginHost,
-                    launchAtLoginController: launchAtLoginController,
-                    appearanceUserDefaults: appearanceUserDefaults,
-                    navigationCoordinator: navigationCoordinator
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                .zIndex(1)
-            }
+            .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
         }
         .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
-        .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
     }
 
     private var settingsSelection: Binding<SettingsNavigationDestination> {
@@ -185,6 +188,16 @@ struct SettingsView: View {
         } set: { destination in
             navigationCoordinator.navigate(to: destination)
         }
+    }
+
+    private var historyNavigationControls: some View {
+        SettingsHistoryNavigationControls(
+            coordinator: navigationCoordinator
+        )
+        .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
+        .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityIdentifier("mactools.settings.history-navigation")
     }
 
     private var layoutDirection: LayoutDirection {
@@ -1551,7 +1564,71 @@ private struct LaunchAtLoginSettingsRow: View {
     }
 }
 
+private struct SettingsSidebarSearchLauncher: NSViewRepresentable {
+    let prompt: String
+    let onActivate: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onActivate: onActivate)
+    }
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = SearchLauncherField()
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.activate(_:))
+        field.isEditable = false
+        field.isSelectable = false
+        field.focusRingType = .none
+        field.bezelStyle = .roundedBezel
+        field.controlSize = .large
+        configure(field)
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.onActivate = onActivate
+        configure(field)
+    }
+
+    private func configure(_ field: NSSearchField) {
+        field.placeholderString = prompt
+        field.stringValue = ""
+        field.toolTip = prompt
+        field.setAccessibilityLabel(prompt)
+    }
+
+    final class Coordinator: NSObject {
+        var onActivate: () -> Void
+
+        init(onActivate: @escaping () -> Void) {
+            self.onActivate = onActivate
+        }
+
+        @objc func activate(_ sender: Any?) {
+            onActivate()
+        }
+    }
+
+    private final class SearchLauncherField: NSSearchField {
+        override var acceptsFirstResponder: Bool { false }
+
+        override func mouseDown(with event: NSEvent) {
+            guard isEnabled else { return }
+            sendAction(action, to: target)
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .arrow)
+        }
+    }
+}
+
 private struct SettingsSidebar: View {
+    private enum Layout {
+        static let sectionHeaderTrailingInset: CGFloat = 8
+        static let searchSectionSpacing = PluginSettingsTheme.Spacing.sectionHeaderContent
+    }
+
     let configurationItems: [PluginSettingsPageItem]
     let orderedDestinations: [SettingsNavigationDestination]
     @ObservedObject var sidebarPreferences: SettingsSidebarPreferencesStore
@@ -1559,61 +1636,66 @@ private struct SettingsSidebar: View {
     let onSearch: () -> Void
 
     var body: some View {
-        ScrollViewReader { proxy in
-            List(selection: optionalSelectionBinding) {
-                Section {
-                    ForEach(appDestinations, id: \.self) { destination in
-                        sidebarRow(for: destination)
-                    }
-                } header: {
-                    Text("MacTools")
-                }
+        VStack(spacing: 0) {
+            SettingsSidebarSearchLauncher(
+                prompt: AppL10n.search("search.title", defaultValue: "搜索 MacTools"),
+                onActivate: onSearch
+            )
+            .frame(height: 30)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, Layout.searchSectionSpacing)
 
-                Section {
-                    ForEach(primaryPluginDestinations, id: \.self) { destination in
-                        sidebarRow(for: destination)
-                    }
-                } header: {
-                    Text(AppL10n.settings(
-                        "plugins.sidebar.pluginsSection",
-                        defaultValue: "插件"
-                    ))
-                }
-
-                Section {
-                    if configurationDestinations.isEmpty {
-                        Text(emptyConfigurationsText)
-                            .font(PluginSettingsTheme.Typography.secondaryLabel)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(configurationDestinations, id: \.self) { destination in
+            ScrollViewReader { proxy in
+                List(selection: optionalSelectionBinding) {
+                    Section {
+                        ForEach(appDestinations, id: \.self) { destination in
                             sidebarRow(for: destination)
                         }
-                        .onMove(perform: moveConfigurations)
+                    } header: {
+                        Text("MacTools")
                     }
-                } header: {
-                    configurationSectionHeader
+
+                    Section {
+                        ForEach(primaryPluginDestinations, id: \.self) { destination in
+                            sidebarRow(for: destination)
+                        }
+                    } header: {
+                        Text(AppL10n.settings(
+                            "plugins.sidebar.pluginsSection",
+                            defaultValue: "插件"
+                        ))
+                    }
+
+                    Section {
+                        if configurationDestinations.isEmpty {
+                            Text(emptyConfigurationsText)
+                                .font(PluginSettingsTheme.Typography.secondaryLabel)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(configurationDestinations, id: \.self) { destination in
+                                sidebarRow(for: destination)
+                            }
+                            .onMove(perform: moveConfigurations)
+                        }
+                    } header: {
+                        configurationSectionHeader
+                    }
                 }
-            }
-            .listStyle(.sidebar)
-            .onChange(of: selection) { _, destination in
-                withAnimation {
-                    proxy.scrollTo(destination)
+                .listStyle(.sidebar)
+                .onChange(of: selection) { _, destination in
+                    withAnimation {
+                        proxy.scrollTo(destination)
+                    }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(AppL10n.settings(
+                    "settings.sidebar.accessibilityLabel",
+                    defaultValue: "设置导航"
+                ))
+                .accessibilityHint(configurationDestinations.isEmpty ? emptyConfigurationsText : "")
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(AppL10n.settings(
-                "settings.sidebar.accessibilityLabel",
-                defaultValue: "设置导航"
-            ))
-            .accessibilityHint(configurationDestinations.isEmpty ? emptyConfigurationsText : "")
         }
-        .searchable(
-            text: nativeSearchText,
-            isPresented: nativeSearchPresentation,
-            placement: .sidebar,
-            prompt: Text(AppL10n.search("search.title", defaultValue: "搜索 MacTools"))
-        )
     }
 
     private var emptyConfigurationsText: String {
@@ -1763,6 +1845,7 @@ private struct SettingsSidebar: View {
                 "plugins.sidebar.configurationSection",
                 defaultValue: "插件设置"
             ))
+                .foregroundStyle(.secondary)
 
             Spacer(minLength: 0)
 
@@ -1814,17 +1897,17 @@ private struct SettingsSidebar: View {
                 }
                 .disabled(true)
             } label: {
-                HStack(spacing: 4) {
-                    Text(sidebarPreferences.sortMode.localizedCompactTitle)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    Image(systemName: "arrow.up.arrow.down")
-                }
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.caption2.weight(.medium))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 11, height: 11, alignment: .center)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
+            .scaleEffect(0.80, anchor: .trailing)
+            .padding(.trailing, Layout.sectionHeaderTrailingInset)
             .accessibilityLabel(sidebarPreferences.sortMode.localizedTitle)
             .help(AppL10n.settings(
                 "settings.sidebar.pluginSortHelp",
@@ -1847,24 +1930,6 @@ private struct SettingsSidebar: View {
     private func sortOption(_ sortMode: SettingsSidebarPluginSortMode) -> some View {
         Text(sortMode.localizedTitle)
             .tag(sortMode)
-    }
-
-    private var nativeSearchText: Binding<String> {
-        Binding {
-            ""
-        } set: { newValue in
-            guard !newValue.isEmpty else { return }
-            onSearch()
-        }
-    }
-
-    private var nativeSearchPresentation: Binding<Bool> {
-        Binding {
-            false
-        } set: { isPresented in
-            guard isPresented else { return }
-            onSearch()
-        }
     }
 
     private func shortcutNumber(for destination: SettingsNavigationDestination) -> Int? {
@@ -1905,6 +1970,28 @@ private struct SettingsSidebar: View {
     }
 }
 
+private struct SettingsSidebarColumn<Content: View>: View {
+    private let content: Content
+    @State private var headerHeight: CGFloat = 0
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        // Keep the sidebar viewport tied to the window chrome instead of the
+        // transient safe-area proposal from an in-window overlay.
+        content
+            .padding(.top, headerHeight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                SettingsWindowTopSafeAreaReader(topInset: $headerHeight)
+                    .frame(width: 0, height: 0)
+            }
+            .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
 private struct SettingsDetailColumn<Content: View>: View {
     private let content: Content
     @State private var headerHeight: CGFloat = 0
@@ -1919,7 +2006,7 @@ private struct SettingsDetailColumn<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .top) {
                 if headerHeight > 0 {
-                    SettingsHeaderMaterialBackground()
+                    SettingsStyle.contentBackground
                         .frame(height: headerHeight)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -1930,24 +2017,6 @@ private struct SettingsDetailColumn<Content: View>: View {
                     .frame(width: 0, height: 0)
             }
             .ignoresSafeArea(.container, edges: .top)
-    }
-}
-
-private struct SettingsHeaderMaterialBackground: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        configure(view)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        configure(nsView)
-    }
-
-    private func configure(_ view: NSVisualEffectView) {
-        view.material = .headerView
-        view.blendingMode = .behindWindow
-        view.state = .followsWindowActiveState
     }
 }
 
@@ -2031,7 +2100,7 @@ private struct SettingsSidebarRow: View {
                     .truncationMode(.tail)
             } icon: {
                 Image(systemName: PluginSystemImage.resolvedName(systemImage))
-                    .imageScale(.small)
+                    .font(PluginSettingsTheme.Typography.rowIcon)
                     .foregroundStyle(iconTint)
                     .frame(width: Layout.iconWidth)
             }
@@ -2097,35 +2166,6 @@ private extension SettingsSidebarPluginSortMode {
         }
     }
 
-    var localizedCompactTitle: String {
-        switch self {
-        case .installedOldestFirst:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.oldest",
-                defaultValue: "最早"
-            )
-        case .installedNewestFirst:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.newest",
-                defaultValue: "最新"
-            )
-        case .nameAscending:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.nameAscending",
-                defaultValue: "升序"
-            )
-        case .nameDescending:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.nameDescending",
-                defaultValue: "降序"
-            )
-        case .custom:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.custom",
-                defaultValue: "自定义"
-            )
-        }
-    }
 }
 
 private struct SettingsDetailPane: View {
@@ -3326,56 +3366,31 @@ private func statusColor(for tone: PluginStatusTone) -> Color {
 struct AboutSettingsView: View {
     @StateObject private var updateViewModel: AboutUpdateViewModel
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
+    private let releaseHistory: ReleaseHistory
 
     init(
         appUpdater: AppUpdater,
-        navigationCoordinator: SettingsNavigationCoordinator
+        navigationCoordinator: SettingsNavigationCoordinator,
+        releaseHistory: ReleaseHistory = .bundled
     ) {
         _updateViewModel = StateObject(
             wrappedValue: AboutUpdateViewModel(updater: appUpdater)
         )
         self.navigationCoordinator = navigationCoordinator
+        self.releaseHistory = releaseHistory
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 28)
+            AboutProductSummary(viewModel: updateViewModel)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 22)
 
-            AppIconPreview()
+            Divider()
 
-            Text(AppMetadata.appName)
-                .font(PluginSettingsTheme.Typography.pageTitle)
-                .padding(.top, 8)
-
-            Text(AppL10n.settingsFormat("about.versionFormat", defaultValue: "版本 %@", AppMetadata.versionDescription))
-                .font(PluginSettingsTheme.Typography.pageDescription)
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
-
-            AboutUpdateCard(viewModel: updateViewModel)
-                .padding(.top, 28)
-                .frame(maxWidth: 420)
-
-            Text(AppMetadata.aboutDescription)
-                .font(PluginSettingsTheme.Typography.rowTitle)
-                .lineLimit(nil)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 320)
-                .padding(.top, 28)
-
-            VStack(spacing: 0) {
-                Link(AppMetadata.repositoryDisplayName, destination: AppMetadata.repositoryURL)
-                    .font(PluginSettingsTheme.Typography.rowTitle)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 28)
-
-            Spacer(minLength: 36)
+            AboutReleaseHistoryView(releaseHistory: releaseHistory)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.horizontal, 40)
-        .padding(.vertical, 28)
         .background(Color(nsColor: .windowBackgroundColor))
         .onChange(
             of: navigationCoordinator.aboutUpdateActionRequest,
@@ -3397,6 +3412,197 @@ struct AboutSettingsView: View {
             await Task.yield()
             updateViewModel.performAvailableUpdateAction(version: request.version)
         }
+    }
+}
+
+private struct AboutProductSummary: View {
+    @ObservedObject var viewModel: AboutUpdateViewModel
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 20) {
+            AppIconPreview()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AppMetadata.appName)
+                    .font(PluginSettingsTheme.Typography.pageTitle)
+
+                Text(AppL10n.settingsFormat("about.versionFormat", defaultValue: "版本 %@", AppMetadata.versionDescription))
+                    .font(PluginSettingsTheme.Typography.pageDescription)
+                    .foregroundStyle(.secondary)
+
+                Text(AppMetadata.aboutDescription)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+
+                Link(destination: AppMetadata.repositoryURL) {
+                    HStack(spacing: 5) {
+                        Text(AppMetadata.repositoryDisplayName)
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                    }
+                }
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .padding(.top, 2)
+            }
+
+            Spacer(minLength: 12)
+
+            AboutUpdateCard(viewModel: viewModel)
+                .frame(minWidth: 160, idealWidth: 190, maxWidth: 220)
+        }
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct AboutReleaseHistoryView: View {
+    private static let maximumReleaseCount = 10
+
+    let releaseHistory: ReleaseHistory
+
+    private var displayedReleases: [ReleaseHistoryItem] {
+        releaseHistory.mostRecentReleases(limit: Self.maximumReleaseCount)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Label(
+                    AppL10n.settings("about.changelog.title", defaultValue: "版本记录"),
+                    systemImage: "clock.arrow.circlepath"
+                )
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+
+                Text(
+                    AppL10n.settings(
+                        "about.changelog.description",
+                        defaultValue: "MacTools 与插件最近 10 个版本的发布记录"
+                    )
+                )
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+
+            if displayedReleases.isEmpty {
+                ContentUnavailableView(
+                    AppL10n.settings(
+                        "about.changelog.empty.title",
+                        defaultValue: "暂无版本记录"
+                    ),
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text(
+                        AppL10n.settings(
+                            "about.changelog.empty.description",
+                            defaultValue: "发布新版本后，更新内容会显示在这里。"
+                        )
+                    )
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(displayedReleases) { release in
+                            AboutReleaseCard(release: release)
+                        }
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct AboutReleaseCard: View {
+    let release: ReleaseHistoryItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Label(releaseKindTitle, systemImage: releaseKindSystemImage)
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
+                    .foregroundStyle(.secondary)
+
+                Text(release.version)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                if isCurrentVersion {
+                    Text(
+                        AppL10n.settings(
+                            "about.changelog.currentVersion",
+                            defaultValue: "当前版本"
+                        )
+                    )
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
+                }
+
+                Spacer(minLength: 12)
+
+                Text(release.date)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.tertiary)
+            }
+
+            ForEach(release.sections) { section in
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(section.kind.displayName)
+                        .font(PluginSettingsTheme.Typography.secondaryLabel)
+                        .foregroundStyle(.secondary)
+
+                    ForEach(Array(section.entries.enumerated()), id: \.offset) { _, entry in
+                        HStack(alignment: .firstTextBaseline, spacing: 9) {
+                            Circle()
+                                .fill(Color.secondary.opacity(0.7))
+                                .frame(width: 4, height: 4)
+                                .alignmentGuide(.firstTextBaseline) { dimensions in
+                                    dimensions[VerticalAlignment.center]
+                                }
+                                .accessibilityHidden(true)
+
+                            Text(entry)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .pluginSettingsCardBackground(.standard)
+    }
+
+    private var releaseKindTitle: String {
+        switch release.kind {
+        case .app:
+            return AppMetadata.appName
+        case .plugin:
+            return AppL10n.settings("tab.plugins", defaultValue: "插件")
+        }
+    }
+
+    private var releaseKindSystemImage: String {
+        switch release.kind {
+        case .app:
+            return "app.fill"
+        case .plugin:
+            return "shippingbox.fill"
+        }
+    }
+
+    private var isCurrentVersion: Bool {
+        release.kind == .app && release.version == AppMetadata.shortVersion
     }
 }
 
@@ -3442,7 +3648,7 @@ private struct AboutUpdateCard: View {
 }
 
 private struct AppIconPreview: View {
-    private static let iconSize: CGFloat = 82
+    private static let iconSize: CGFloat = 76
 
     var body: some View {
         if let appIcon = AppMetadata.appIcon {

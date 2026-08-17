@@ -24,7 +24,10 @@ struct PluginManagementSettingsView: View {
         SettingsPageScaffold {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+                    VStack(
+                        alignment: .leading,
+                        spacing: SettingsPageLayout.introductionContentSpacing
+                    ) {
                         SettingsPageIntroduction(
                             configuration: marketplaceIntroductionConfiguration
                         ) {
@@ -91,7 +94,6 @@ struct PluginManagementSettingsView: View {
                             }
                         }
                     }
-                    .padding(.vertical, 2)
                 }
                 .onAppear {
                     applySearchRevealRequest(
