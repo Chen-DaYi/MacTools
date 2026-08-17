@@ -37,11 +37,11 @@ final class AppleShortcutsController: ObservableObject {
 
     @Published private(set) var snapshot = AppleShortcutsSnapshot()
 
-    let store: AppleShortcutsStore
     let executionStore: AppleShortcutsExecutionStore
     var onStateChange: (() -> Void)?
 
     private let runner: any AppleShortcutsCommandRunning
+    private let visualMetadataLoader: any AppleShortcutsVisualMetadataLoading
     private let localization: PluginLocalization
     private let now: () -> Date
     private let automaticRefreshInterval: Duration
@@ -52,28 +52,23 @@ final class AppleShortcutsController: ObservableObject {
     private var activeViews: [UUID: ActiveView] = [:]
     private var isActive = true
     private var isAutomaticRefreshEnabled = false
-    private var isApplyingDiscovery = false
+    private var visualMetadataIsUnavailable = false
     private var lifecycleGeneration = 0
 
     init(
-        store: AppleShortcutsStore,
         executionStore: AppleShortcutsExecutionStore = AppleShortcutsExecutionStore(),
         runner: any AppleShortcutsCommandRunning,
+        visualMetadataLoader: any AppleShortcutsVisualMetadataLoading = AppleShortcutsVisualMetadataLoader(),
         localization: PluginLocalization,
         now: @escaping () -> Date = { .now },
         automaticRefreshInterval: Duration = .seconds(60)
     ) {
-        self.store = store
         self.executionStore = executionStore
         self.runner = runner
+        self.visualMetadataLoader = visualMetadataLoader
         self.localization = localization
         self.now = now
         self.automaticRefreshInterval = automaticRefreshInterval
-        store.onMutation = { [weak self] in
-            guard let self, !self.isApplyingDiscovery else { return }
-            self.updateAutomaticRefreshScheduling()
-            self.onStateChange?()
-        }
     }
 
     var isExecutableAvailable: Bool {
@@ -105,7 +100,11 @@ final class AppleShortcutsController: ObservableObject {
         let generation = lifecycleGeneration
         refreshToken = token
         refreshTask = Task { @MainActor [weak self] in
-            await self?.performRefresh(expectedGeneration: generation, token: token)
+            await self?.performRefresh(
+                expectedGeneration: generation,
+                token: token,
+                refreshVisualMetadata: force || !(self?.visualMetadataIsUnavailable ?? true)
+            )
             guard self?.refreshToken == token else { return }
             self?.refreshTask = nil
             self?.refreshToken = nil
@@ -114,7 +113,8 @@ final class AppleShortcutsController: ObservableObject {
 
     func performRefresh(
         expectedGeneration: Int? = nil,
-        token: UUID? = nil
+        token: UUID? = nil,
+        refreshVisualMetadata: Bool = true
     ) async {
         let generation = expectedGeneration ?? lifecycleGeneration
         guard isActive else { return }
@@ -130,20 +130,43 @@ final class AppleShortcutsController: ObservableObject {
         do {
             async let shortcutsRequest = runner.listShortcuts()
             async let foldersRequest = runner.listFolders()
-            let (shortcuts, folders) = try await (shortcutsRequest, foldersRequest)
+            async let visualMetadataRequest = refreshVisualMetadata
+                ? visualMetadataLoader.loadVisualMetadata()
+                : .success([UUID: AppleShortcutVisualMetadata]())
+            let (shortcuts, folders, visualMetadataResult) = try await (
+                shortcutsRequest,
+                foldersRequest,
+                visualMetadataRequest
+            )
             try Task.checkCancellation()
             var memberships = try await loadMemberships(for: folders)
             try Task.checkCancellation()
             guard isActive, lifecycleGeneration == generation else { return }
 
             for folderID in memberships.failedFolderIDs {
-                let previousMembers = snapshot.discovery.folderMemberships[folderID] ?? []
-                let persistedMembers = store.state.syncedFolders[folderID]?.memberIDs ?? []
-                memberships.memberships[folderID] = previousMembers.union(persistedMembers)
+                memberships.memberships[folderID] = snapshot.discovery.folderMemberships[folderID] ?? []
             }
 
-            var itemsByID = Dictionary(uniqueKeysWithValues: shortcuts.map {
-                ($0.id, AppleShortcutItem(id: $0.id, name: $0.name))
+            let previousVisualMetadata = Dictionary(
+                uniqueKeysWithValues: snapshot.discovery.shortcuts.compactMap { item in
+                    item.visualMetadata.map { (item.id, $0) }
+                }
+            )
+            let visualMetadata: [UUID: AppleShortcutVisualMetadata]
+            switch visualMetadataResult {
+            case let .success(metadata):
+                visualMetadataIsUnavailable = false
+                visualMetadata = metadata
+            case .failure:
+                visualMetadataIsUnavailable = true
+                visualMetadata = [:]
+            }
+            var itemsByID = Dictionary(uniqueKeysWithValues: shortcuts.map { item in
+                (item.id, AppleShortcutItem(
+                    id: item.id,
+                    name: item.name,
+                    visualMetadata: visualMetadata[item.id] ?? previousVisualMetadata[item.id]
+                ))
             })
             for (folderID, memberIDs) in memberships.memberships {
                 for memberID in memberIDs {
@@ -157,18 +180,12 @@ final class AppleShortcutsController: ObservableObject {
                 failedFolderIDs: memberships.failedFolderIDs
             )
 
-            isApplyingDiscovery = true
             snapshot.discovery = discovery
             snapshot.lastSuccessfulRefresh = now()
             snapshot.errorMessage = memberships.failedFolderIDs.isEmpty ? nil : localization.string(
                 "refresh.folder.partial",
                 defaultValue: "部分文件夹无法刷新；已保留上次的成员。"
             )
-            let reconciliation = store.reconcile(discovery)
-            isApplyingDiscovery = false
-            if case let .failure(error) = reconciliation {
-                snapshot.errorMessage = storeMessage(for: error)
-            }
             onStateChange?()
         } catch is CancellationError {
             return
@@ -312,9 +329,7 @@ final class AppleShortcutsController: ObservableObject {
     }
 
     private func updateAutomaticRefreshScheduling() {
-        guard isAutomaticRefreshEnabled,
-              isActive,
-              !store.state.syncedFolders.isEmpty else {
+        guard isAutomaticRefreshEnabled, isActive else {
             automaticRefreshTask?.cancel()
             automaticRefreshTask = nil
             return
@@ -527,11 +542,6 @@ final class AppleShortcutsController: ObservableObject {
 
     private func storeMessage(for error: AppleShortcutsStoreError) -> String {
         switch error {
-        case .tooManyTrackedShortcuts:
-            localization.string(
-                "settings.limit",
-                defaultValue: "最多可启用或保留 512 个快捷指令。"
-            )
         case .recoveryRequired:
             localization.string(
                 "settings.recovery",

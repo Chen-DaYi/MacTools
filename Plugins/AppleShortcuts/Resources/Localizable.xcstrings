@@ -1634,6 +1634,29 @@
         }
       }
     },
+    "settings.discovered.format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Shortcuts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个快捷指令"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個捷徑"
+          }
+        }
+      }
+    },
     "settings.filter": {
       "extractionState": "manual",
       "localizations": {

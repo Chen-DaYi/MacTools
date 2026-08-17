@@ -1,23 +1,43 @@
 import Foundation
 
-enum AppleShortcutsLimits {
-    static let maximumTrackedShortcutCount = 512
-}
-
 struct AppleShortcutItem: Codable, Equatable, Hashable, Identifiable, Sendable {
     static let maximumNameByteCount = 1_024
 
     let id: UUID
     var name: String
     var folderIDs: Set<UUID>
+    var visualMetadata: AppleShortcutVisualMetadata?
 
-    init(id: UUID, name: String, folderIDs: Set<UUID> = []) {
+    init(
+        id: UUID,
+        name: String,
+        folderIDs: Set<UUID> = [],
+        visualMetadata: AppleShortcutVisualMetadata? = nil
+    ) {
         self.id = id
         self.name = name
         self.folderIDs = folderIDs
+        self.visualMetadata = visualMetadata
     }
 
     var actionID: String { "run.\(id.uuidString.lowercased())" }
+}
+
+struct AppleShortcutVisualMetadata: Codable, Equatable, Hashable, Sendable {
+    struct Color: Codable, Equatable, Hashable, Sendable {
+        let red: Double
+        let green: Double
+        let blue: Double
+
+        init(red: Double, green: Double, blue: Double) {
+            self.red = red
+            self.green = green
+            self.blue = blue
+        }
+    }
+
+    let color: Color
+    let iconTIFFData: Data?
 }
 
 struct AppleShortcutFolder: Codable, Equatable, Hashable, Identifiable, Sendable {
@@ -41,42 +61,14 @@ struct AppleShortcutsDiscovery: Equatable, Sendable {
 
 struct AppleShortcutPolicy: Codable, Equatable, Sendable {
     var requiresConfirmation: Bool
-    var allowsRunLink: Bool
 
     static let `default` = AppleShortcutPolicy(
-        requiresConfirmation: true,
-        allowsRunLink: false
+        requiresConfirmation: true
     )
-}
-
-struct AppleShortcutTrackedRecord: Codable, Equatable, Identifiable, Sendable {
-    let id: UUID
-    var lastKnownName: String
-    var lastKnownFolderIDs: Set<UUID>
-
-    var actionID: String { "run.\(id.uuidString.lowercased())" }
-}
-
-struct AppleShortcutSyncedFolder: Codable, Equatable, Identifiable, Sendable {
-    let id: UUID
-    var lastKnownName: String
-    var memberIDs: Set<UUID>
-}
-
-struct AppleShortcutFolderSyncPreview: Equatable, Sendable {
-    let memberIDs: Set<UUID>
-    let additionIDs: Set<UUID>
-    let excludedIDs: Set<UUID>
-    let projectedTrackedCount: Int
-
-    var exceedsLimit: Bool {
-        projectedTrackedCount > AppleShortcutsLimits.maximumTrackedShortcutCount
-    }
 }
 
 enum AppleShortcutsStoreError: Error, Equatable {
     case recoveryRequired
-    case tooManyTrackedShortcuts
     case payloadTooLarge
     case invalidData
     case persistenceFailed

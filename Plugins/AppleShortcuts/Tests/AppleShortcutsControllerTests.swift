@@ -26,22 +26,40 @@ final class AppleShortcutsControllerTests: XCTestCase {
         XCTAssertNotNil(controller.snapshot.lastSuccessfulRefresh)
     }
 
-    func testFailedFolderMembershipPreservesSyncedMembers() async throws {
-        let folder = AppleShortcutFolder(id: UUID(), name: "Synced")
-        let item = AppleShortcutItem(id: UUID(), name: "Keep", folderIDs: [folder.id])
-        let store = AppleShortcutsStore(storage: AppleShortcutsTestStorage())
-        try store.setFolderSynced(true, folder: folder, members: [item]).get()
-        let runner = AppleShortcutsRunnerStub(
-            shortcuts: [item],
-            folders: [folder],
-            memberships: [folder.id: .failure(.failed)]
+    func testRefreshAppliesVisualMetadataToDiscoveredShortcut() async throws {
+        let item = AppleShortcutItem(id: UUID(), name: "Colored")
+        let metadata = AppleShortcutVisualMetadata(
+            color: .init(red: 0.25, green: 0.5, blue: 0.75),
+            iconTIFFData: Data([0x01])
         )
-        let controller = makeController(store: store, runner: runner)
+        let controller = makeController(
+            runner: AppleShortcutsRunnerStub(shortcuts: [item]),
+            visualMetadataLoader: AppleShortcutsVisualMetadataStub(result: .success([item.id: metadata]))
+        )
 
         await controller.performRefresh()
 
-        XCTAssertTrue(store.isEnabled(item.id))
-        XCTAssertEqual(store.state.syncedFolders[folder.id]?.memberIDs, [item.id])
+        XCTAssertEqual(controller.snapshot.discovery.shortcuts, [AppleShortcutItem(
+            id: item.id,
+            name: item.name,
+            visualMetadata: metadata
+        )])
+    }
+
+    func testFailedFolderMembershipPreservesPreviousMembers() async throws {
+        let folder = AppleShortcutFolder(id: UUID(), name: "Folder")
+        let item = AppleShortcutItem(id: UUID(), name: "Keep", folderIDs: [folder.id])
+        let runner = AppleShortcutsRunnerStub(
+            shortcuts: [item],
+            folders: [folder],
+            memberships: [folder.id: .success([item])]
+        )
+        let controller = makeController(runner: runner)
+        await controller.performRefresh()
+        await runner.setMemberships([folder.id: .failure(.failed)])
+
+        await controller.performRefresh()
+
         XCTAssertEqual(controller.snapshot.discovery.folderMemberships[folder.id], [item.id])
         XCTAssertEqual(controller.snapshot.discovery.shortcuts.first?.folderIDs, [folder.id])
     }
@@ -60,7 +78,6 @@ final class AppleShortcutsControllerTests: XCTestCase {
 
         await controller.performRefresh()
 
-        XCTAssertFalse(controller.store.isFolderSynced(folder.id))
         XCTAssertEqual(controller.snapshot.discovery.folderMemberships[folder.id], [item.id])
         XCTAssertEqual(controller.snapshot.discovery.shortcuts.first?.folderIDs, [folder.id])
         XCTAssertEqual(controller.snapshot.discovery.failedFolderIDs, [folder.id])
@@ -101,13 +118,9 @@ final class AppleShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(callCount, 2)
     }
 
-    func testSyncedFoldersRefreshPeriodicallyOnlyWhileActive() async throws {
-        let folder = AppleShortcutFolder(id: UUID(), name: "Synced")
-        let store = AppleShortcutsStore(storage: AppleShortcutsTestStorage())
-        try store.setFolderSynced(true, folder: folder, members: []).get()
-        let runner = AppleShortcutsRunnerStub(folders: [folder])
+    func testDiscoveryRefreshesPeriodicallyOnlyWhileActive() async throws {
+        let runner = AppleShortcutsRunnerStub()
         let controller = makeController(
-            store: store,
             runner: runner,
             automaticRefreshInterval: .milliseconds(20)
         )
@@ -377,14 +390,14 @@ final class AppleShortcutsControllerTests: XCTestCase {
     }
 
     private func makeController(
-        store: AppleShortcutsStore? = nil,
         runner: AppleShortcutsRunnerStub,
+        visualMetadataLoader: any AppleShortcutsVisualMetadataLoading = AppleShortcutsVisualMetadataStub(),
         now: @escaping () -> Date = { .now },
         automaticRefreshInterval: Duration = .seconds(60)
     ) -> AppleShortcutsController {
         AppleShortcutsController(
-            store: store ?? AppleShortcutsStore(storage: AppleShortcutsTestStorage()),
             runner: runner,
+            visualMetadataLoader: visualMetadataLoader,
             localization: PluginLocalization(bundle: .main),
             now: now,
             automaticRefreshInterval: automaticRefreshInterval

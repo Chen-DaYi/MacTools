@@ -44,6 +44,7 @@ final class AppleShortcutsPlugin:
         context: PluginRuntimeContext,
         localization: PluginLocalization? = nil,
         runner: (any AppleShortcutsCommandRunning)? = nil,
+        visualMetadataLoader: (any AppleShortcutsVisualMetadataLoading)? = nil,
         now: @escaping () -> Date = { .now },
         beforeActionRegistration: (@MainActor () async -> Void)? = nil
     ) {
@@ -53,8 +54,8 @@ final class AppleShortcutsPlugin:
         self.beforeActionRegistration = beforeActionRegistration
         self.store = store
         self.controller = AppleShortcutsController(
-            store: store,
             runner: runner ?? ProcessAppleShortcutsCommandRunner(),
+            visualMetadataLoader: visualMetadataLoader ?? AppleShortcutsVisualMetadataLoader(),
             localization: localization,
             now: now
         )
@@ -93,22 +94,21 @@ final class AppleShortcutsPlugin:
     }
 
     var actionDefinitions: [ActionDefinition] {
-        store.trackedRecords.map { record in
-            let policy = store.policy(for: record.id)
-            let title = displayName(for: record)
-            let needsConfirmation = policy.requiresConfirmation || policy.allowsRunLink
+        controller.snapshot.discovery.shortcuts.map { item in
+            let policy = store.policy(for: item.id)
+            let title = item.name
             return ActionDefinition(
-                key: ActionKey(providerID: metadata.id, actionID: record.actionID),
+                key: ActionKey(providerID: metadata.id, actionID: item.actionID),
                 title: title,
                 description: localization.format(
                     "action.description.format",
                     defaultValue: "运行 Apple 快捷指令“%@”。",
                     title
                 ),
-                keywords: actionKeywords(for: record, title: title),
+                keywords: actionKeywords(for: item, title: title),
                 systemImage: "square.stack.3d.up.fill",
                 risk: policy.requiresConfirmation ? .confirmationRequired : .safe,
-                confirmation: needsConfirmation ? ActionConfirmation(
+                confirmation: policy.requiresConfirmation ? ActionConfirmation(
                     title: localization.format(
                         "action.confirm.title.format",
                         defaultValue: "运行“%@”？",
@@ -123,7 +123,7 @@ final class AppleShortcutsPlugin:
                         defaultValue: "运行"
                     )
                 ) : nil,
-                externalInvocationPolicy: policy.allowsRunLink ? .confirmAlways : .unavailable,
+                externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive, .cancellable],
                 executionTimeoutSeconds: ProcessAppleShortcutsCommandRunner.runTimeout
                     + ProcessAppleShortcutsCommandRunner.actionExecutionTimeoutGraceSeconds
@@ -132,23 +132,23 @@ final class AppleShortcutsPlugin:
     }
 
     var actionCatalogEntries: [ActionCatalogEntry] {
-        store.trackedRecords.map { record in
+        controller.snapshot.discovery.shortcuts.map { item in
             ActionCatalogEntry(
                 reference: ActionReference(
-                    key: ActionKey(providerID: metadata.id, actionID: record.actionID)
+                    key: ActionKey(providerID: metadata.id, actionID: item.actionID)
                 ),
-                title: displayName(for: record),
+                title: item.name,
                 subtitle: localization.string("action.subtitle", defaultValue: "Apple 快捷指令"),
-                presentationState: controller.isRunning(record.id) ? .active : .inactive
+                presentationState: controller.isRunning(item.id) ? .active : .inactive
             )
         }
     }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
-        guard let record = record(for: reference) else {
+        guard let item = item(for: reference) else {
             return .unavailable(localization.string(
-                "action.unavailable.untracked",
-                defaultValue: "此快捷指令未启用。"
+                "action.unavailable.missing",
+                defaultValue: "在 Apple“快捷指令”中找不到此项目。"
             ))
         }
         guard controller.isExecutableAvailable else {
@@ -157,13 +157,7 @@ final class AppleShortcutsPlugin:
                 defaultValue: "系统未提供“快捷指令”命令。"
             ))
         }
-        guard controller.snapshot.shortcutIDs.contains(record.id) else {
-            return .unavailable(localization.string(
-                "action.unavailable.missing",
-                defaultValue: "在 Apple“快捷指令”中找不到此项目。"
-            ))
-        }
-        guard !controller.isRunning(record.id) else {
+        guard !controller.isRunning(item.id) else {
             return .unavailable(localization.string(
                 "action.unavailable.running",
                 defaultValue: "此快捷指令正在运行。"
@@ -173,8 +167,7 @@ final class AppleShortcutsPlugin:
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        guard let record = record(for: invocation.reference),
-              controller.snapshot.shortcutIDs.contains(record.id) else {
+        guard let item = item(for: invocation.reference) else {
             return ActionExecutionHandle { [localization] in
                 .failed(message: localization.string(
                     "action.unavailable.missing",
@@ -190,19 +183,19 @@ final class AppleShortcutsPlugin:
             }
             guard !Task.isCancelled else { return .cancelled }
             let startResult = controller.startExecution(
-                shortcutID: record.id,
-                name: displayName(for: record)
+                shortcutID: item.id,
+                name: item.name
             )
             switch startResult {
             case let .success(run):
-                return await controller.waitForExecution(run, shortcutID: record.id)
+                return await controller.waitForExecution(run, shortcutID: item.id)
             case .failure(.cancelled):
                 return .cancelled
             case let .failure(error):
                 return .failed(message: controller.executionStartMessage(for: error))
             }
         } cancel: { [weak self] in
-            self?.controller.cancelExecution(shortcutID: record.id)
+            self?.controller.cancelExecution(shortcutID: item.id)
         }
     }
 
@@ -225,7 +218,7 @@ final class AppleShortcutsPlugin:
     func backupDisposition(
         for reference: ActionReference
     ) -> PluginActionReferenceBackupDisposition {
-        record(for: reference) == nil ? .excluded : .requiresPluginPreferences
+        item(for: reference) == nil ? .excluded : .requiresPluginPreferences
     }
 
     func item(id: UUID) -> AppleShortcutItem? {
@@ -234,12 +227,6 @@ final class AppleShortcutsPlugin:
 
     func folder(id: UUID) -> AppleShortcutFolder? {
         controller.snapshot.discovery.folders.first { $0.id == id }
-    }
-
-    func displayName(for record: AppleShortcutTrackedRecord) -> String {
-        item(id: record.id)?.name
-            ?? record.lastKnownName.appleShortcutsNilIfEmpty
-            ?? localization.string("shortcut.unknown", defaultValue: "未找到的快捷指令")
     }
 
     func localized(_ key: String, defaultValue: String) -> String {
@@ -264,22 +251,21 @@ final class AppleShortcutsPlugin:
         )
     }
 
-    private func record(for reference: ActionReference) -> AppleShortcutTrackedRecord? {
+    private func item(for reference: ActionReference) -> AppleShortcutItem? {
         guard reference.key.providerID == metadata.id,
               reference.schemaVersion == 1,
               reference.parameters.entries.isEmpty,
-              let id = AppleShortcutsStore.shortcutID(fromActionID: reference.key.actionID),
-              store.isEnabled(id) else { return nil }
-        return store.record(id: id)
+              let id = AppleShortcutsStore.shortcutID(fromActionID: reference.key.actionID) else {
+            return nil
+        }
+        return item(id: id)
     }
 
     private func actionKeywords(
-        for record: AppleShortcutTrackedRecord,
+        for item: AppleShortcutItem,
         title: String
     ) -> [String] {
-        let folderNames = record.lastKnownFolderIDs.compactMap { id in
-            folder(id: id)?.name ?? store.state.syncedFolders[id]?.lastKnownName
-        }
+        let folderNames = item.folderIDs.compactMap { folder(id: $0)?.name }
         return [metadata.title, title, "Apple", "Shortcuts", "快捷指令"] + folderNames
     }
 }

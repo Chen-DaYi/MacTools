@@ -25,6 +25,20 @@ final class AppleShortcutsTestStorage: PluginStorage {
     }
 }
 
+struct AppleShortcutsVisualMetadataStub: AppleShortcutsVisualMetadataLoading {
+    let result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError>
+
+    init(
+        result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> = .success([:])
+    ) {
+        self.result = result
+    }
+
+    func loadVisualMetadata() async -> Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> {
+        result
+    }
+}
+
 actor AppleShortcutsRunnerStub: AppleShortcutsCommandRunning {
     nonisolated let isExecutableAvailable: Bool
     private var shortcuts: [AppleShortcutItem]
