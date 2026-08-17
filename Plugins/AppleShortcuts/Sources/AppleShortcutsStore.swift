@@ -98,22 +98,35 @@ final class AppleShortcutsStore: ObservableObject {
         _ enabled: Bool,
         item: AppleShortcutItem?
     ) -> Result<Void, AppleShortcutsStoreError> {
-        guard let id = item?.id else { return .failure(.invalidData) }
+        guard let item else { return .failure(.invalidData) }
+        return setShortcutsEnabled(enabled, items: [item])
+    }
+
+    func setShortcutsEnabled(
+        _ enabled: Bool,
+        items: [AppleShortcutItem]
+    ) -> Result<Void, AppleShortcutsStoreError> {
+        let itemsByID = items.reduce(into: [UUID: AppleShortcutItem]()) { result, item in
+            result[item.id] = item
+        }
+        guard !itemsByID.isEmpty else { return .success(()) }
         return mutate { updated in
-            if enabled {
-                updated.explicitlyEnabledIDs.insert(id)
-                updated.excludedIDs.remove(id)
-                updated.trackedRecords[id] = AppleShortcutTrackedRecord(
-                    id: id,
-                    lastKnownName: item?.name ?? "",
-                    lastKnownFolderIDs: item?.folderIDs ?? []
-                )
-            } else {
-                updated.explicitlyEnabledIDs.remove(id)
-                if updated.syncedFolders.values.contains(where: { $0.memberIDs.contains(id) }) {
-                    updated.excludedIDs.insert(id)
+            for item in itemsByID.values {
+                if enabled {
+                    updated.explicitlyEnabledIDs.insert(item.id)
+                    updated.excludedIDs.remove(item.id)
+                    updated.trackedRecords[item.id] = AppleShortcutTrackedRecord(
+                        id: item.id,
+                        lastKnownName: item.name,
+                        lastKnownFolderIDs: item.folderIDs
+                    )
                 } else {
-                    updated.excludedIDs.remove(id)
+                    updated.explicitlyEnabledIDs.remove(item.id)
+                    if updated.syncedFolders.values.contains(where: { $0.memberIDs.contains(item.id) }) {
+                        updated.excludedIDs.insert(item.id)
+                    } else {
+                        updated.excludedIDs.remove(item.id)
+                    }
                 }
             }
             Self.prune(&updated)

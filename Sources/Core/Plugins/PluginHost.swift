@@ -2624,9 +2624,9 @@ final class PluginHost: ObservableObject {
             }
             if let safetyChangeProvider = plugin as? any PluginActionSafetyStateChangeProviding {
                 safetyChangeProvider.onActionSafetyStateChange = { [weak self] in
-                    self?.rebuildDerivedStateAfterPluginChange(pluginID: pluginID)
-                  }
-              }
+                    self?.rebuildDerivedStateAfterActionSafetyChange(pluginID: pluginID)
+                }
+            }
             configureHostStatusItemCallbacks(for: [plugin])
         }
         configureTrackpadGestureBridge()
@@ -3208,6 +3208,17 @@ final class PluginHost: ObservableObject {
 
         dirtyPluginIDs.insert(pluginID)
         schedulePluginStateChangeRebuild()
+    }
+
+    private func rebuildDerivedStateAfterActionSafetyChange(pluginID: String) {
+        dirtyPluginIDs.remove(pluginID)
+        if dirtyPluginIDs.isEmpty {
+            pluginStateChangeRebuildTask?.cancel()
+            pluginStateChangeRebuildTask = nil
+        }
+
+        actionRegistry.invalidateAvailability()
+        rebuildDerivedState(dirtyPluginIDs: [pluginID])
     }
 
     private func schedulePluginStateChangeRebuild() {

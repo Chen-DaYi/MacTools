@@ -101,6 +101,32 @@ final class AppleShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(callCount, 2)
     }
 
+    func testSyncedFoldersRefreshPeriodicallyOnlyWhileActive() async throws {
+        let folder = AppleShortcutFolder(id: UUID(), name: "Synced")
+        let store = AppleShortcutsStore(storage: AppleShortcutsTestStorage())
+        try store.setFolderSynced(true, folder: folder, members: []).get()
+        let runner = AppleShortcutsRunnerStub(folders: [folder])
+        let controller = makeController(
+            store: store,
+            runner: runner,
+            automaticRefreshInterval: .milliseconds(20)
+        )
+
+        controller.activate()
+        for _ in 0 ..< 100 {
+            if await runner.observedListCallCount() >= 2 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let periodicCallCount = await runner.observedListCallCount()
+        XCTAssertGreaterThanOrEqual(periodicCallCount, 2)
+
+        controller.deactivate()
+        let callCountAfterDeactivation = await runner.observedListCallCount()
+        try await Task.sleep(for: .milliseconds(60))
+        let finalCallCount = await runner.observedListCallCount()
+        XCTAssertEqual(finalCallCount, callCountAfterDeactivation)
+    }
+
     func testMembershipQueriesRespectConcurrencyLimit() async throws {
         let folders = (0 ..< 9).map {
             AppleShortcutFolder(id: UUID(), name: "Folder \($0)")
@@ -353,13 +379,15 @@ final class AppleShortcutsControllerTests: XCTestCase {
     private func makeController(
         store: AppleShortcutsStore? = nil,
         runner: AppleShortcutsRunnerStub,
-        now: @escaping () -> Date = { .now }
+        now: @escaping () -> Date = { .now },
+        automaticRefreshInterval: Duration = .seconds(60)
     ) -> AppleShortcutsController {
         AppleShortcutsController(
             store: store ?? AppleShortcutsStore(storage: AppleShortcutsTestStorage()),
             runner: runner,
             localization: PluginLocalization(bundle: .main),
-            now: now
+            now: now,
+            automaticRefreshInterval: automaticRefreshInterval
         )
     }
 }

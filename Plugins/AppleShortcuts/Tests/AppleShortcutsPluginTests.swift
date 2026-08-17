@@ -324,7 +324,7 @@ final class AppleShortcutsPluginTests: XCTestCase {
             JSONSerialization.jsonObject(with: Data(contentsOf: catalogURL)) as? [String: Any]
         )
         let strings = try XCTUnwrap(root["strings"] as? [String: Any])
-        XCTAssertEqual(strings.count, 87)
+        XCTAssertEqual(strings.count, 100)
 
         for (key, rawEntry) in strings {
             let entry = try XCTUnwrap(rawEntry as? [String: Any], "Invalid entry for \(key)")
@@ -349,6 +349,11 @@ final class AppleShortcutsPluginTests: XCTestCase {
             "folder.sync.enable.review": ["%lld"],
             "folder.sync.disable.review": ["%lld"],
             "settings.counts.format": ["%1$lld", "%2$lld"],
+            "batch.disable.confirm.title.format": ["%lld"],
+            "batch.disable.format": ["%lld"],
+            "batch.enable.confirm.title.format": ["%lld"],
+            "batch.enable.format": ["%lld"],
+            "batch.selected.format": ["%lld"],
         ]
         for (key, specifiers) in formatSpecifiers {
             let entry = try XCTUnwrap(strings[key] as? [String: Any])

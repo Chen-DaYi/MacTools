@@ -3,6 +3,65 @@ import XCTest
 @testable import AppleShortcutsPlugin
 
 final class AppleShortcutsSettingsFilteringTests: XCTestCase {
+    func testBatchSelectionKeepsOnlyVisibleRowsAndSeparatesEligibleActions() {
+        let enabledID = UUID()
+        let disabledID = UUID()
+        let missingEnabledID = UUID()
+        let hiddenID = UUID()
+        let visibleRows = [
+            AppleShortcutsDisplayRow(
+                id: enabledID,
+                name: "Enabled",
+                item: AppleShortcutItem(id: enabledID, name: "Enabled"),
+                isMissing: false
+            ),
+            AppleShortcutsDisplayRow(
+                id: disabledID,
+                name: "Disabled",
+                item: AppleShortcutItem(id: disabledID, name: "Disabled"),
+                isMissing: false
+            ),
+            row(id: missingEnabledID, name: "Missing", isMissing: true),
+        ]
+        let selectedIDs: Set<UUID> = [enabledID, disabledID, missingEnabledID, hiddenID]
+        let records = [
+            missingEnabledID: AppleShortcutTrackedRecord(
+                id: missingEnabledID,
+                lastKnownName: "Missing",
+                lastKnownFolderIDs: []
+            ),
+        ]
+
+        let selectedRows = AppleShortcutsBatchSelection.selectedRows(
+            selectedIDs: selectedIDs,
+            visibleRows: visibleRows
+        )
+
+        XCTAssertEqual(selectedRows.map(\.id), [enabledID, disabledID, missingEnabledID])
+        XCTAssertEqual(
+            AppleShortcutsBatchSelection.retainingVisibleIDs(
+                selectedIDs,
+                visibleRows: visibleRows
+            ),
+            Set([enabledID, disabledID, missingEnabledID])
+        )
+        XCTAssertEqual(
+            AppleShortcutsBatchSelection.enableItems(
+                from: selectedRows,
+                enabledIDs: [enabledID, missingEnabledID]
+            ).map(\.id),
+            [disabledID]
+        )
+        XCTAssertEqual(
+            AppleShortcutsBatchSelection.disableItems(
+                from: selectedRows,
+                enabledIDs: [enabledID, missingEnabledID],
+                recordsByID: records
+            ).map(\.id),
+            [enabledID, missingEnabledID]
+        )
+    }
+
     func testSearchPreservesDistinctRowsWithDuplicateNamesAndMatchesIdentifier() throws {
         let firstID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
         let secondID = try XCTUnwrap(UUID(uuidString: "11111111-2222-3333-4444-555555555555"))

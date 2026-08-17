@@ -44,11 +44,14 @@ final class AppleShortcutsController: ObservableObject {
     private let runner: any AppleShortcutsCommandRunning
     private let localization: PluginLocalization
     private let now: () -> Date
+    private let automaticRefreshInterval: Duration
     private var refreshTask: Task<Void, Never>?
+    private var automaticRefreshTask: Task<Void, Never>?
     private var refreshToken: UUID?
     private var activeRuns: [UUID: ActiveRun] = [:]
     private var activeViews: [UUID: ActiveView] = [:]
     private var isActive = true
+    private var isAutomaticRefreshEnabled = false
     private var isApplyingDiscovery = false
     private var lifecycleGeneration = 0
 
@@ -57,15 +60,18 @@ final class AppleShortcutsController: ObservableObject {
         executionStore: AppleShortcutsExecutionStore = AppleShortcutsExecutionStore(),
         runner: any AppleShortcutsCommandRunning,
         localization: PluginLocalization,
-        now: @escaping () -> Date = { .now }
+        now: @escaping () -> Date = { .now },
+        automaticRefreshInterval: Duration = .seconds(60)
     ) {
         self.store = store
         self.executionStore = executionStore
         self.runner = runner
         self.localization = localization
         self.now = now
+        self.automaticRefreshInterval = automaticRefreshInterval
         store.onMutation = { [weak self] in
             guard let self, !self.isApplyingDiscovery else { return }
+            self.updateAutomaticRefreshScheduling()
             self.onStateChange?()
         }
     }
@@ -77,6 +83,8 @@ final class AppleShortcutsController: ObservableObject {
     func activate() {
         lifecycleGeneration += 1
         isActive = true
+        isAutomaticRefreshEnabled = true
+        updateAutomaticRefreshScheduling()
         refreshIfNeeded()
     }
 
@@ -284,6 +292,9 @@ final class AppleShortcutsController: ObservableObject {
     func deactivate() {
         lifecycleGeneration += 1
         isActive = false
+        isAutomaticRefreshEnabled = false
+        automaticRefreshTask?.cancel()
+        automaticRefreshTask = nil
         refreshTask?.cancel()
         refreshTask = nil
         refreshToken = nil
@@ -298,6 +309,30 @@ final class AppleShortcutsController: ObservableObject {
         views.forEach { $0.task.cancel() }
         executionStore.clear()
         onStateChange?()
+    }
+
+    private func updateAutomaticRefreshScheduling() {
+        guard isAutomaticRefreshEnabled,
+              isActive,
+              !store.state.syncedFolders.isEmpty else {
+            automaticRefreshTask?.cancel()
+            automaticRefreshTask = nil
+            return
+        }
+        guard automaticRefreshTask == nil else { return }
+
+        let interval = automaticRefreshInterval
+        automaticRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    return
+                }
+                guard let self, self.isActive else { return }
+                self.refresh(force: true)
+            }
+        }
     }
 
     private func execute(

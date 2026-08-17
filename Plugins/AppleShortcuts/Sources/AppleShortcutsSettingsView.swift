@@ -49,6 +49,59 @@ enum AppleShortcutsSettingsFiltering {
     }
 }
 
+enum AppleShortcutsBatchSelection {
+    static func selectedRows(
+        selectedIDs: Set<UUID>,
+        visibleRows: [AppleShortcutsDisplayRow]
+    ) -> [AppleShortcutsDisplayRow] {
+        visibleRows.filter { selectedIDs.contains($0.id) }
+    }
+
+    static func retainingVisibleIDs(
+        _ selectedIDs: Set<UUID>,
+        visibleRows: [AppleShortcutsDisplayRow]
+    ) -> Set<UUID> {
+        selectedIDs.intersection(Set(visibleRows.map(\.id)))
+    }
+
+    static func enableItems(
+        from selectedRows: [AppleShortcutsDisplayRow],
+        enabledIDs: Set<UUID>
+    ) -> [AppleShortcutItem] {
+        selectedRows.compactMap { row in
+            guard !row.isMissing,
+                  !enabledIDs.contains(row.id) else {
+                return nil
+            }
+            return row.item
+        }
+    }
+
+    static func disableItems(
+        from selectedRows: [AppleShortcutsDisplayRow],
+        enabledIDs: Set<UUID>,
+        recordsByID: [UUID: AppleShortcutTrackedRecord]
+    ) -> [AppleShortcutItem] {
+        selectedRows.compactMap { row in
+            guard enabledIDs.contains(row.id) else { return nil }
+            return item(for: row, recordsByID: recordsByID)
+        }
+    }
+
+    static func item(
+        for row: AppleShortcutsDisplayRow,
+        recordsByID: [UUID: AppleShortcutTrackedRecord]
+    ) -> AppleShortcutItem? {
+        row.item ?? recordsByID[row.id].map {
+            AppleShortcutItem(
+                id: $0.id,
+                name: $0.lastKnownName,
+                folderIDs: $0.lastKnownFolderIDs
+            )
+        }
+    }
+}
+
 enum AppleShortcutsSettingsFormatting {
     static func joinedFolderNames(
         _ names: [String],
@@ -96,6 +149,29 @@ private struct AppleShortcutsFolderRow: Identifiable {
     var id: UUID { folder.id }
 }
 
+private enum AppleShortcutsBatchOperation {
+    case enable
+    case disable
+}
+
+private struct PendingAppleShortcutsBatchChange: Identifiable {
+    let operation: AppleShortcutsBatchOperation
+    let items: [AppleShortcutItem]
+    let id = UUID()
+}
+
+private enum AppleShortcutsSettingsAlert: Identifiable {
+    case testRun(AppleShortcutsDisplayRow)
+    case batchChange(PendingAppleShortcutsBatchChange)
+
+    var id: String {
+        switch self {
+        case let .testRun(row): "test-run-\(row.id.uuidString)"
+        case let .batchChange(change): "batch-change-\(change.id.uuidString)"
+        }
+    }
+}
+
 struct AppleShortcutsSettingsView: View {
     let plugin: AppleShortcutsPlugin
     @ObservedObject private var controller: AppleShortcutsController
@@ -106,8 +182,10 @@ struct AppleShortcutsSettingsView: View {
     @State private var filter: AppleShortcutsSettingsFilter = .all
     @State private var source: AppleShortcutsSource = .all
     @State private var selectedID: UUID?
+    @State private var isBatchSelecting = false
+    @State private var batchSelectedIDs = Set<UUID>()
     @State private var pendingFolderSync: PendingFolderSync?
-    @State private var pendingTestRun: AppleShortcutsDisplayRow?
+    @State private var pendingAlert: AppleShortcutsSettingsAlert?
 
     init(plugin: AppleShortcutsPlugin) {
         self.plugin = plugin
@@ -139,34 +217,50 @@ struct AppleShortcutsSettingsView: View {
                 onCancel: { pendingFolderSync = nil }
             )
         }
-        .alert(item: $pendingTestRun) { row in
-            Alert(
-                title: Text(plugin.localizedFormat(
-                    "settings.run.confirm.title",
-                    defaultValue: "运行“%@”？",
-                    row.name
-                )),
-                message: Text(plugin.localized(
-                    "settings.run.confirm.message",
-                    defaultValue: "此快捷指令将通过 Apple“快捷指令”运行，并可能访问其他应用或数据。"
-                )),
-                primaryButton: .default(Text(plugin.localized(
-                    "settings.run.confirm.button",
-                    defaultValue: "运行"
-                ))) {
-                    run(row)
-                },
-                secondaryButton: .cancel(Text(plugin.localized(
-                    "common.cancel",
-                    defaultValue: "取消"
-                )))
-            )
+        .alert(item: $pendingAlert) { alert in
+            switch alert {
+            case let .testRun(row):
+                Alert(
+                    title: Text(plugin.localizedFormat(
+                        "settings.run.confirm.title",
+                        defaultValue: "运行“%@”？",
+                        row.name
+                    )),
+                    message: Text(plugin.localized(
+                        "settings.run.confirm.message",
+                        defaultValue: "此快捷指令将通过 Apple“快捷指令”运行，并可能访问其他应用或数据。"
+                    )),
+                    primaryButton: .default(Text(plugin.localized(
+                        "settings.run.confirm.button",
+                        defaultValue: "运行"
+                    ))) {
+                        run(row)
+                    },
+                    secondaryButton: .cancel(Text(plugin.localized(
+                        "common.cancel",
+                        defaultValue: "取消"
+                    )))
+                )
+            case let .batchChange(change):
+                Alert(
+                    title: Text(batchConfirmationTitle(for: change)),
+                    message: Text(batchConfirmationMessage(for: change)),
+                    primaryButton: batchConfirmationButton(for: change),
+                    secondaryButton: .cancel(Text(plugin.localized(
+                        "common.cancel",
+                        defaultValue: "取消"
+                    )))
+                )
+            }
         }
         .onAppear {
             controller.refreshIfNeeded()
             selectFirstVisibleIfNeeded()
         }
-        .onChange(of: visibleRows.map(\.id)) { _, _ in selectFirstVisibleIfNeeded() }
+        .onChange(of: visibleRows.map(\.id)) { _, _ in
+            selectFirstVisibleIfNeeded()
+            keepBatchSelectionVisible()
+        }
     }
 
     private var toolbar: some View {
@@ -214,6 +308,25 @@ struct AppleShortcutsSettingsView: View {
             .controlSize(.small)
             .disabled(controller.snapshot.isRefreshing)
             .accessibilityIdentifier("apple-shortcuts-refresh")
+
+            Button {
+                if isBatchSelecting {
+                    finishBatchSelection()
+                } else {
+                    isBatchSelecting = true
+                }
+            } label: {
+                Label(
+                    isBatchSelecting
+                        ? plugin.localized("batch.done", defaultValue: "完成")
+                        : plugin.localized("batch.select", defaultValue: "选择"),
+                    systemImage: isBatchSelecting ? "checkmark" : "checkmark.circle"
+                )
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(visibleRows.isEmpty && !isBatchSelecting)
+            .accessibilityIdentifier("apple-shortcuts-batch-selection")
         }
     }
 
@@ -311,6 +424,11 @@ struct AppleShortcutsSettingsView: View {
                 Divider()
             }
 
+            if isBatchSelecting {
+                batchSelectionControls
+                Divider()
+            }
+
             if controller.snapshot.isRefreshing && controller.snapshot.lastSuccessfulRefresh == nil {
                 ContentUnavailableView {
                     Label(plugin.localized("settings.loading", defaultValue: "正在读取快捷指令"), systemImage: "arrow.clockwise")
@@ -335,6 +453,21 @@ struct AppleShortcutsSettingsView: View {
 
     private func shortcutRow(_ row: AppleShortcutsDisplayRow) -> some View {
         HStack(spacing: 10) {
+            if isBatchSelecting {
+                Button {
+                    toggleBatchSelection(for: row.id)
+                } label: {
+                    Image(systemName: batchSelectedIDs.contains(row.id)
+                        ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(batchSelectedIDs.contains(row.id) ? Color.accentColor : .secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(plugin.localized(
+                    "batch.selection.accessibility",
+                    defaultValue: "选择快捷指令"
+                ))
+                .accessibilityIdentifier("apple-shortcuts-batch-select-\(row.id.uuidString)")
+            }
             Image(systemName: row.isMissing ? "questionmark.square.dashed" : "square.stack.3d.up.fill")
                 .foregroundStyle(row.isMissing ? Color.secondary : Color.purple)
             VStack(alignment: .leading, spacing: 2) {
@@ -357,31 +490,76 @@ struct AppleShortcutsSettingsView: View {
                 }
             }
             Spacer()
-            Toggle("", isOn: Binding(
-                get: { store.isEnabled(row.id) },
-                set: { enabled in
-                    if enabled, let item = row.item {
-                        present(store.setShortcutEnabled(true, item: item))
-                    } else if let item = row.item
-                                ?? store.record(id: row.id).map({
-                                    AppleShortcutItem(
-                                        id: $0.id,
-                                        name: $0.lastKnownName,
-                                        folderIDs: $0.lastKnownFolderIDs
-                                    )
-                                }) {
-                        present(store.setShortcutEnabled(false, item: item))
+            if !isBatchSelecting {
+                Toggle("", isOn: Binding(
+                    get: { store.isEnabled(row.id) },
+                    set: { enabled in
+                        if enabled, let item = row.item {
+                            present(store.setShortcutEnabled(true, item: item))
+                        } else if let item = itemForBatchChange(from: row) {
+                            present(store.setShortcutEnabled(false, item: item))
+                        }
                     }
-                }
-            ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.small)
-            .disabled(row.isMissing && !store.isEnabled(row.id))
-            .accessibilityLabel(plugin.localized("shortcut.enable", defaultValue: "启用快捷指令"))
-            .accessibilityIdentifier("apple-shortcuts-enable-\(row.id.uuidString)")
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(row.isMissing && !store.isEnabled(row.id))
+                .accessibilityLabel(plugin.localized("shortcut.enable", defaultValue: "启用快捷指令"))
+                .accessibilityIdentifier("apple-shortcuts-enable-\(row.id.uuidString)")
+            }
         }
         .padding(.vertical, 3)
+    }
+
+    private var batchSelectionControls: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Text(plugin.localizedFormat(
+                "batch.selected.format",
+                defaultValue: "%lld 已选择",
+                Int64(batchSelectedIDs.count)
+            ))
+            .font(PluginSettingsTheme.Typography.rowDescription)
+            .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Menu {
+                Button(plugin.localized("batch.select.all.visible", defaultValue: "选择全部可见项")) {
+                    batchSelectedIDs = Set(visibleRows.map(\.id))
+                }
+                .disabled(visibleRows.isEmpty)
+
+                Button(plugin.localized("batch.clear", defaultValue: "清除选择")) {
+                    batchSelectedIDs.removeAll()
+                }
+                .disabled(batchSelectedIDs.isEmpty)
+
+                Divider()
+
+                Button(batchActionTitle(.enable, count: batchEnableItems.count)) {
+                    requestBatchChange(.enable, items: batchEnableItems)
+                }
+                .disabled(batchEnableItems.isEmpty)
+                .accessibilityIdentifier("apple-shortcuts-batch-enable")
+
+                Button(batchActionTitle(.disable, count: batchDisableItems.count), role: .destructive) {
+                    requestBatchChange(.disable, items: batchDisableItems)
+                }
+                .disabled(batchDisableItems.isEmpty)
+                .accessibilityIdentifier("apple-shortcuts-batch-disable")
+            } label: {
+                Label(
+                    plugin.localized("batch.actions", defaultValue: "批量操作"),
+                    systemImage: "ellipsis.circle"
+                )
+            }
+            .menuStyle(.borderlessButton)
+            .controlSize(.small)
+            .accessibilityIdentifier("apple-shortcuts-batch-actions")
+        }
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
     }
 
     @ViewBuilder
@@ -650,6 +828,28 @@ struct AppleShortcutsSettingsView: View {
         )
     }
 
+    private var batchSelectedRows: [AppleShortcutsDisplayRow] {
+        AppleShortcutsBatchSelection.selectedRows(
+            selectedIDs: batchSelectedIDs,
+            visibleRows: visibleRows
+        )
+    }
+
+    private var batchEnableItems: [AppleShortcutItem] {
+        AppleShortcutsBatchSelection.enableItems(
+            from: batchSelectedRows,
+            enabledIDs: store.state.effectiveEnabledIDs
+        )
+    }
+
+    private var batchDisableItems: [AppleShortcutItem] {
+        AppleShortcutsBatchSelection.disableItems(
+            from: batchSelectedRows,
+            enabledIDs: store.state.effectiveEnabledIDs,
+            recordsByID: store.state.trackedRecords
+        )
+    }
+
     private var emptyTitle: String {
         if !searchText.isEmpty { return plugin.localized("empty.search", defaultValue: "没有匹配项") }
         if filter == .enabled { return plugin.localized("empty.enabled", defaultValue: "尚未启用快捷指令") }
@@ -663,6 +863,112 @@ struct AppleShortcutsSettingsView: View {
         searchText.isEmpty
             ? plugin.localized("empty.library.description", defaultValue: "请先在 Apple“快捷指令”中创建快捷指令，然后刷新。")
             : plugin.localized("empty.search.description", defaultValue: "请尝试其他搜索内容。")
+    }
+
+    private func itemForBatchChange(from row: AppleShortcutsDisplayRow) -> AppleShortcutItem? {
+        AppleShortcutsBatchSelection.item(for: row, recordsByID: store.state.trackedRecords)
+    }
+
+    private func toggleBatchSelection(for id: UUID) {
+        if batchSelectedIDs.contains(id) {
+            batchSelectedIDs.remove(id)
+        } else {
+            batchSelectedIDs.insert(id)
+        }
+    }
+
+    private func keepBatchSelectionVisible() {
+        batchSelectedIDs = AppleShortcutsBatchSelection.retainingVisibleIDs(
+            batchSelectedIDs,
+            visibleRows: visibleRows
+        )
+    }
+
+    private func finishBatchSelection() {
+        isBatchSelecting = false
+        batchSelectedIDs.removeAll()
+    }
+
+    private func requestBatchChange(
+        _ operation: AppleShortcutsBatchOperation,
+        items: [AppleShortcutItem]
+    ) {
+        guard !items.isEmpty else { return }
+        pendingAlert = .batchChange(PendingAppleShortcutsBatchChange(operation: operation, items: items))
+    }
+
+    private func applyBatchChange(_ change: PendingAppleShortcutsBatchChange) {
+        let result = store.setShortcutsEnabled(change.operation == .enable, items: change.items)
+        if case .success = result {
+            batchSelectedIDs.subtract(Set(change.items.map(\.id)))
+        }
+        present(result)
+        pendingAlert = nil
+    }
+
+    private func batchActionTitle(
+        _ operation: AppleShortcutsBatchOperation,
+        count: Int
+    ) -> String {
+        switch operation {
+        case .enable:
+            return plugin.localizedFormat(
+                "batch.enable.format",
+                defaultValue: "启用 (%lld)",
+                Int64(count)
+            )
+        case .disable:
+            return plugin.localizedFormat(
+                "batch.disable.format",
+                defaultValue: "停用 (%lld)",
+                Int64(count)
+            )
+        }
+    }
+
+    private func batchConfirmationTitle(for change: PendingAppleShortcutsBatchChange) -> String {
+        switch change.operation {
+        case .enable:
+            return plugin.localizedFormat(
+                "batch.enable.confirm.title.format",
+                defaultValue: "启用 %lld 个快捷指令？",
+                Int64(change.items.count)
+            )
+        case .disable:
+            return plugin.localizedFormat(
+                "batch.disable.confirm.title.format",
+                defaultValue: "停用 %lld 个快捷指令？",
+                Int64(change.items.count)
+            )
+        }
+    }
+
+    private func batchConfirmationMessage(for change: PendingAppleShortcutsBatchChange) -> String {
+        switch change.operation {
+        case .enable:
+            return plugin.localized(
+                "batch.enable.confirm.message",
+                defaultValue: "启用后，这些快捷指令会出现在 MacTools 中。不会启用 Run Link。"
+            )
+        case .disable:
+            return plugin.localized(
+                "batch.disable.confirm.message",
+                defaultValue: "停用后，这些快捷指令将不再出现在 MacTools 中，其 MacTools 运行设置也会移除。"
+            )
+        }
+    }
+
+    private func batchConfirmationButton(for change: PendingAppleShortcutsBatchChange) -> Alert.Button {
+        switch change.operation {
+        case .enable:
+            return .default(Text(batchActionTitle(.enable, count: change.items.count))) {
+                applyBatchChange(change)
+            }
+        case .disable:
+            return .destructive(Text(batchActionTitle(.disable, count: change.items.count))) {
+                applyBatchChange(change)
+            }
+        }
     }
 
     private func statusBanner(_ text: String, image: String, color: Color) -> some View {
@@ -706,7 +1012,7 @@ struct AppleShortcutsSettingsView: View {
     private func requestRun(_ row: AppleShortcutsDisplayRow) {
         AppleShortcutsSettingsRunDisposition.route(
             policy: store.policy(for: row.id),
-            requestConfirmation: { pendingTestRun = row },
+            requestConfirmation: { pendingAlert = .testRun(row) },
             run: { run(row) }
         )
     }

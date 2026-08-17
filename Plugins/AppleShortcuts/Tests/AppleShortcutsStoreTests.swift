@@ -4,6 +4,46 @@ import XCTest
 
 @MainActor
 final class AppleShortcutsStoreTests: XCTestCase {
+    func testBatchEnableAndDisablePreservesSyncedFolderExclusions() throws {
+        let store = AppleShortcutsStore(storage: AppleShortcutsTestStorage())
+        let folder = AppleShortcutFolder(id: UUID(), name: "Home")
+        let syncedItem = AppleShortcutItem(id: UUID(), name: "Lights", folderIDs: [folder.id])
+        let individualItem = AppleShortcutItem(id: UUID(), name: "Notes")
+
+        try store.setFolderSynced(true, folder: folder, members: [syncedItem]).get()
+        try store.setShortcutsEnabled(true, items: [syncedItem, individualItem]).get()
+        try store.setAllowsRunLink(true, for: individualItem.id).get()
+
+        XCTAssertTrue(store.isEnabled(syncedItem.id))
+        XCTAssertTrue(store.isEnabled(individualItem.id))
+        XCTAssertFalse(store.state.excludedIDs.contains(syncedItem.id))
+
+        try store.setShortcutsEnabled(false, items: [syncedItem, individualItem]).get()
+
+        XCTAssertFalse(store.isEnabled(syncedItem.id))
+        XCTAssertFalse(store.isEnabled(individualItem.id))
+        XCTAssertTrue(store.state.excludedIDs.contains(syncedItem.id))
+        XCTAssertFalse(store.state.excludedIDs.contains(individualItem.id))
+        XCTAssertNil(store.record(id: syncedItem.id))
+        XCTAssertNil(store.record(id: individualItem.id))
+        XCTAssertEqual(store.policy(for: individualItem.id), .default)
+    }
+
+    func testBatchEnableRejectsLimitWithoutPersistingAnyItems() {
+        let store = AppleShortcutsStore(storage: AppleShortcutsTestStorage())
+        let items = (0 ... AppleShortcutsStore.maximumTrackedShortcutCount).map { index in
+            AppleShortcutItem(id: UUID(), name: "Shortcut \(index)")
+        }
+
+        let result = store.setShortcutsEnabled(true, items: items)
+
+        guard case .failure(.tooManyTrackedShortcuts) = result else {
+            return XCTFail("Expected the batch enable to reject the tracked shortcut limit")
+        }
+        XCTAssertTrue(store.state.effectiveEnabledIDs.isEmpty)
+        XCTAssertTrue(store.trackedRecords.isEmpty)
+    }
+
     func testIndividualEnableRenameMissingRetentionAndDisable() throws {
         let storage = AppleShortcutsTestStorage()
         let store = AppleShortcutsStore(storage: storage)

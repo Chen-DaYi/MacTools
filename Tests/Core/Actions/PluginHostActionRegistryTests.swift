@@ -344,20 +344,18 @@ final class PluginHostActionRegistryTests: XCTestCase {
         }
     }
 
-    func testConvergedShortcutAssignmentsRemainIndividuallyVisibleAndEditable() async throws {
-
     func testActionSafetyStateChangeRebuildsRegistrySynchronously() async {
         let plugin = SafetyStateActionTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
 
         XCTAssertEqual(
             host.actionRegistry.definition(for: plugin.actionKey)?.risk,
-             .safe
-         )
+            .safe
+        )
         XCTAssertEqual(
             host.actionRegistry.definition(for: plugin.actionKey)?.externalInvocationPolicy,
-             .confirmAlways
-         )
+            .confirmAlways
+        )
 
         plugin.requiresConfirmation = true
         plugin.allowsRunLink = false
@@ -365,32 +363,34 @@ final class PluginHostActionRegistryTests: XCTestCase {
 
         XCTAssertEqual(
             host.actionRegistry.definition(for: plugin.actionKey)?.risk,
-             .confirmationRequired
-         )
+            .confirmationRequired
+        )
         XCTAssertEqual(
             host.actionRegistry.definition(for: plugin.actionKey)?.externalInvocationPolicy,
-             .unavailable
-         )
+            .unavailable
+        )
 
         let localOutcome = await host.actionExecutor.execute(
             ActionInvocation(
                 reference: ActionReference(key: plugin.actionKey),
                 source: .manual,
                 mode: .background
-             ),
+            ),
             confirmationService: ActionExecutorConfirmationService { false }
-         )
+        )
         XCTAssertEqual(localOutcome, .rejected(.confirmationDenied))
         let runLinkOutcome = await host.actionExecutor.execute(
             ActionInvocation(
                 reference: ActionReference(key: plugin.actionKey),
                 source: .runLink,
                 mode: .background
-             )
-         )
+            )
+        )
         XCTAssertEqual(runLinkOutcome, .rejected(.externalInvocationUnavailable))
         XCTAssertEqual(plugin.beginCount, 0)
-     }
+    }
+
+    func testConvergedShortcutAssignmentsRemainIndividuallyVisibleAndEditable() async throws {
         let plugin = NativeActionTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
         let reference = ActionReference(key: plugin.definition.key)
