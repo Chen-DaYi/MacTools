@@ -198,11 +198,7 @@ final class PluginHostActionRegistryTests: XCTestCase {
 
         plugin.additionalDefinitions = [addedDefinition]
         plugin.onStateChange?()
-        for _ in 0 ..< 100 where !host.actionShortcutCatalogItems.contains(where: {
-            $0.reference.key == addedDefinition.key
-        }) {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await host.waitForScheduledPluginStateRebuildForTests()
 
         XCTAssertEqual(
             host.actionShortcutCatalogItems.first(where: {
@@ -210,6 +206,142 @@ final class PluginHostActionRegistryTests: XCTestCase {
             })?.title,
             "Added Later"
         )
+    }
+
+    func testPluginStateChangeUnregistersShortcutWhenDynamicActionDisappears() async throws {
+        let suiteName = "PluginHostActionRegistryTests.dynamic-removal.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let plugin = NativeActionTestPlugin()
+        let dynamicDefinition = ActionDefinition(
+            key: ActionKey(providerID: plugin.metadata.id, actionID: "dynamic-source"),
+            title: "Dynamic Source",
+            description: "Switch to a dynamic source.",
+            systemImage: "keyboard",
+            capabilities: [.foregroundInteractive]
+        )
+        plugin.additionalDefinitions = [dynamicDefinition]
+        let shortcutManager = GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        let host = makeIsolatedHost(
+            plugin: plugin,
+            defaults: defaults,
+            shortcutManager: shortcutManager,
+            pluginStateChangeRebuildDelay: .milliseconds(10)
+        )
+        let reference = ActionReference(key: dynamicDefinition.key)
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_R),
+            modifiers: [.command, .option]
+        )
+
+        XCTAssertEqual(host.setActionShortcutBinding(binding, to: reference), .success)
+        XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
+
+        plugin.additionalDefinitions = []
+        plugin.onStateChange?()
+        await host.waitForScheduledPluginStateRebuildForTests()
+
+        XCTAssertTrue(registrations(for: reference, in: host, manager: shortcutManager).isEmpty)
+        guard case .unavailable = host.actionShortcutCatalogItems.first(where: {
+            $0.reference == reference
+        })?.status else {
+            return XCTFail("Expected the preserved shortcut assignment to become unavailable")
+        }
+    }
+
+    func testPluginStateChangeRegistersPersistedShortcutWhenDynamicActionAppears() async throws {
+        let suiteName = "PluginHostActionRegistryTests.dynamic-reappearance.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let plugin = NativeActionTestPlugin()
+        let dynamicDefinition = ActionDefinition(
+            key: ActionKey(providerID: plugin.metadata.id, actionID: "dynamic-source"),
+            title: "Dynamic Source",
+            description: "Switch to a dynamic source.",
+            systemImage: "keyboard",
+            capabilities: [.foregroundInteractive]
+        )
+        let reference = ActionReference(key: dynamicDefinition.key)
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_R),
+            modifiers: [.command, .option]
+        )
+        XCTAssertEqual(
+            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([
+                ActionShortcutAssignmentRecord(reference: reference, binding: binding),
+            ]),
+            .committed
+        )
+        let shortcutManager = GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        let host = makeIsolatedHost(
+            plugin: plugin,
+            defaults: defaults,
+            shortcutManager: shortcutManager,
+            pluginStateChangeRebuildDelay: .milliseconds(10)
+        )
+
+        XCTAssertTrue(registrations(for: reference, in: host, manager: shortcutManager).isEmpty)
+
+        plugin.additionalDefinitions = [dynamicDefinition]
+        plugin.onStateChange?()
+        await host.waitForScheduledPluginStateRebuildForTests()
+
+        XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
+        XCTAssertEqual(
+            host.actionShortcutCatalogItems.first(where: { $0.reference == reference })?.status,
+            .assigned
+        )
+    }
+
+    func testPluginStateChangeSynchronizesParameterizedCatalogEntryShortcuts() async throws {
+        let suiteName = "PluginHostActionRegistryTests.dynamic-parameter.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let plugin = ParameterizedActionTestPlugin()
+        let reference = try plugin.reference(target: "display-2")
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_R),
+            modifiers: [.command, .option]
+        )
+        XCTAssertEqual(
+            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([
+                ActionShortcutAssignmentRecord(reference: reference, binding: binding),
+            ]),
+            .committed
+        )
+        let shortcutManager = GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        let host = makeIsolatedHost(
+            plugin: plugin,
+            defaults: defaults,
+            shortcutManager: shortcutManager,
+            pluginStateChangeRebuildDelay: .milliseconds(10)
+        )
+
+        XCTAssertTrue(registrations(for: reference, in: host, manager: shortcutManager).isEmpty)
+
+        plugin.targets.append("display-2")
+        plugin.onStateChange?()
+        await host.waitForScheduledPluginStateRebuildForTests()
+
+        XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
+        XCTAssertEqual(
+            host.actionShortcutCatalogItems.first(where: { $0.reference == reference })?.status,
+            .assigned
+        )
+
+        plugin.targets.removeAll { $0 == "display-2" }
+        plugin.onStateChange?()
+        await host.waitForScheduledPluginStateRebuildForTests()
+
+        XCTAssertTrue(registrations(for: reference, in: host, manager: shortcutManager).isEmpty)
+        guard case .unavailable = host.actionShortcutCatalogItems.first(where: {
+            $0.reference == reference
+        })?.status else {
+            return XCTFail("Expected the removed parameterized catalog entry to become unavailable")
+        }
     }
 
     func testConvergedShortcutAssignmentsRemainIndividuallyVisibleAndEditable() async throws {
@@ -237,11 +369,7 @@ final class PluginHostActionRegistryTests: XCTestCase {
         )
 
         plugin.onStateChange?()
-        for _ in 0 ..< 100 where host.actionShortcutCatalogItems.filter({
-            $0.reference == reference
-        }).count != 2 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await host.waitForScheduledPluginStateRebuildForTests()
         XCTAssertEqual(
             Set(host.actionShortcutCatalogItems.filter { $0.reference == reference }
                 .compactMap(\.assignmentID)),
@@ -851,7 +979,8 @@ final class PluginHostActionRegistryTests: XCTestCase {
     private func makeIsolatedHost(
         plugin: any MacToolsPlugin,
         defaults: UserDefaults,
-        shortcutManager: GlobalShortcutManager
+        shortcutManager: GlobalShortcutManager,
+        pluginStateChangeRebuildDelay: Duration = .milliseconds(80)
     ) -> PluginHost {
         PluginHost(
             plugins: [plugin],
@@ -859,6 +988,7 @@ final class PluginHostActionRegistryTests: XCTestCase {
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: shortcutManager,
+            pluginStateChangeRebuildDelay: pluginStateChangeRebuildDelay,
             loadDynamicPluginsOnInit: false,
             actionURLScheme: "mactools-tests"
         )
@@ -1106,6 +1236,7 @@ private final class ParameterizedActionTestPlugin: MacToolsPlugin, PluginActionP
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     private(set) var invocations: [ActionInvocation] = []
+    var targets = ["display-1"]
 
     let definition = ActionDefinition(
         key: ActionKey(providerID: "parameterized-action-provider", actionID: "select"),
@@ -1122,13 +1253,13 @@ private final class ParameterizedActionTestPlugin: MacToolsPlugin, PluginActionP
     var actionDefinitions: [ActionDefinition] { [definition] }
 
     var actionCatalogEntries: [ActionCatalogEntry] {
-        [
+        targets.map { target in
             ActionCatalogEntry(
-                reference: try! reference(target: "display-1"),
+                reference: try! reference(target: target),
                 title: definition.title,
                 subtitle: metadata.title
-            ),
-        ]
+            )
+        }
     }
 
     func reference(target: String) throws -> ActionReference {
