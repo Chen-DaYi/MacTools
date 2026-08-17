@@ -47,6 +47,7 @@
 | Eject Disks | Detect visible ejectable mounts when the panel opens, including external drives, disk images, and network volumes; multiple volumes on one device are ejected once. |
 | Empty Trash | Show the number of Trash items and empty Trash through Finder; the action is disabled when Trash is empty. |
 | Clear Clipboard | Clear the current clipboard content to protect privacy and avoid accidental paste. |
+| Cloudflare R2 Upload | Upload a selected file to an R2 bucket with S3-compatible credentials stored in macOS Keychain, rename it or generate a UUID name while preserving its extension, and choose to cancel, rename, or overwrite when an object already exists. Follow byte progress or cancel in the same window. A completion dialog can copy the validated public URL. The uploader is also available to global shortcuts, Action Grid, and foreground workflows. |
 | IP Check | Refresh local and public IPv4 addresses when its Feature Panel or settings page opens, double-click either address to copy it, and inspect domestic/international egress, location, ISP, ASN, and macOS network quality details. |
 | Translator | Translate the currently selected text with a global shortcut; the first version supports OpenAI-compatible services, automatic language selection, and a source editor whose actions stay clear of multi-line text. |
 | Window Switcher | Replace or customize the window-switching shortcut with direct cycling or a fixed key-selection window for running windows; click a key hint to record a stable letter, digit, or Command-key binding. |
