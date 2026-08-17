@@ -19,8 +19,8 @@ enum SettingsPageWidthPolicy {
 
 enum SettingsPageLayout {
     static let horizontalInset: CGFloat = 20
-    static let verticalInset: CGFloat = 24
-    static let introductionContentSpacing: CGFloat = 16
+    static let verticalInset: CGFloat = 20
+    static let introductionContentSpacing: CGFloat = 20
 
     /// A grouped Form adds 10pt of native card chrome on each side of an
     /// explicitly sized direct row. The host owns this adjustment so plugins
@@ -94,9 +94,8 @@ struct SettingsPageScaffold<Content: View>: View {
     }
 }
 
-/// The page shell for native grouped forms. The compact introduction is an
-/// unboxed Form section header so the description and page-level actions
-/// scroll naturally with the settings content without looking like a card.
+/// The page shell for native grouped forms. The compact introduction remains
+/// an unboxed section header so grouped Form never draws a card behind it.
 struct SettingsGroupedFormPageScaffold<IntroductionAccessory: View, Content: View>: View {
     let introduction: SettingsPageIntroductionConfiguration
     private let widthPolicy: SettingsPageWidthPolicy
@@ -130,16 +129,12 @@ struct SettingsGroupedFormPageScaffold<IntroductionAccessory: View, Content: Vie
                         introductionAccessory
                     }
                     .frame(width: widths.readableContent, alignment: .leading)
+                    .padding(.bottom, PluginSettingsTheme.Spacing.controlCluster)
                 }
 
                 content(widths)
             }
             .settingsGroupedFormStyle()
-            .contentMargins(
-                .top,
-                SettingsPageLayout.verticalInset,
-                for: .scrollContent
-            )
             .contentMargins(
                 .bottom,
                 SettingsPageLayout.verticalInset,
@@ -304,7 +299,7 @@ struct SettingsPageIntroduction<Accessory: View>: View {
 
     var body: some View {
         HStack(
-            alignment: .top,
+            alignment: .center,
             spacing: PluginSettingsTheme.Spacing.rowContentControl
         ) {
             Label {

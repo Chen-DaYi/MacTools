@@ -147,7 +147,10 @@ struct ActionShortcutSettingsView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            LazyVStack(
+                alignment: .leading,
+                spacing: SettingsPageLayout.introductionContentSpacing
+            ) {
                 introduction
                 controls
 
@@ -173,7 +176,8 @@ struct ActionShortcutSettingsView: View {
                     }
                 }
             }
-            .padding(PluginSettingsTheme.Spacing.pagePadding)
+            .padding(.horizontal, SettingsPageLayout.horizontalInset)
+            .padding(.vertical, SettingsPageLayout.verticalInset)
         }
         .background(SettingsStyle.contentBackground)
         .onAppear(perform: refreshGroups)
