@@ -127,7 +127,7 @@ public struct PluginShortcutRecorder: View {
     public let onEndRecording: (() -> Void)?
 
     @State private var isPresented = false
-    // PluginKit v4 ABI compatibility: this stored property must remain on the public
+    // PluginKit v5 ABI compatibility: this stored property must remain on the public
     // wrapper, in this order, because released plugins construct this view directly.
     @State private var isHovered = false
 

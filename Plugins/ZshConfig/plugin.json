@@ -49,8 +49,8 @@
     }
   },
   "version": "1.0.8",
-  "minHostVersion": "1.1.6",
-  "pluginKitVersion": 4,
+  "minHostVersion": "1.2.0",
+  "pluginKitVersion": 5,
   "bundleRelativePath": "ZshConfig.bundle",
   "factoryClass": "ZshConfigPlugin.ZshConfigPluginFactory",
   "build": {

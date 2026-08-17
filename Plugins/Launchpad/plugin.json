@@ -50,7 +50,7 @@
   },
   "version": "1.1.7",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 4,
+  "pluginKitVersion": 5,
   "bundleRelativePath": "Launchpad.bundle",
   "factoryClass": "LaunchpadPlugin.LaunchpadPluginFactory",
   "build": {

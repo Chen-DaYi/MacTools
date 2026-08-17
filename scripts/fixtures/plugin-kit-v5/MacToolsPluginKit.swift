@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Frozen client-facing declaration from plugins-1.1.6. This module is compiled
+// Frozen client-facing declaration from plugins-1.2.0. This module is compiled
 // without an implementation and linked against the current framework so the
 // smoke test exercises the real cross-module value ABI.
 public enum ShortcutScope {

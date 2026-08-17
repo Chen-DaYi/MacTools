@@ -16,8 +16,8 @@
     "zh-Hant": { "displayName": "自訂快速操作：鍵盤、觸控板、滑鼠", "summary": "將輸入對應至操作。" }
   },
   "version": "1.0.1",
-  "minHostVersion": "1.1.6",
-  "pluginKitVersion": 4,
+  "minHostVersion": "1.2.0",
+  "pluginKitVersion": 5,
   "bundleRelativePath": "InputRemapping.bundle",
   "factoryClass": "InputRemappingPlugin.InputRemappingPluginFactory",
   "build": { "project": "../../MacTools.xcodeproj", "scheme": "InputRemappingPlugin" },

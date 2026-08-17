@@ -34,7 +34,12 @@ class AppPluginCatalogPreflightTests(unittest.TestCase):
 
     def run_preflight(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(self.executable), *arguments],
+            [
+                str(self.executable),
+                "--required-plugin-kit-version",
+                "4",
+                *arguments,
+            ],
             cwd=ROOT_DIR,
             check=False,
             text=True,
@@ -61,6 +66,11 @@ class AppPluginCatalogPreflightTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Verified signed PluginKit 4 catalog", result.stdout)
+
+    def test_mac_tools_1_2_defaults_to_plugin_kit5_catalog(self) -> None:
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        self.assertIn('pluginKitVersion: 5', source)
+        self.assertIn('plugins/v5/catalog.json', source)
 
     def test_missing_catalog_fails_with_release_order_guidance(self) -> None:
         missing = Path(self.temporary_directory.name) / "missing.json"

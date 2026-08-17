@@ -50,7 +50,7 @@
   },
   "version": "1.0.5",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 4,
+  "pluginKitVersion": 5,
   "bundleRelativePath": "Homebrew.bundle",
   "factoryClass": "HomebrewPlugin.HomebrewPluginFactory",
   "build": {

@@ -23,16 +23,22 @@ RELEASE_SPEC.loader.exec_module(release)
 
 
 class InteractiveReleasePlanningTests(unittest.TestCase):
-    def test_plugin_kit4_release_uses_host_compatible_catalog_path(self) -> None:
+    def test_plugin_kit4_release_uses_versioned_catalog_path(self) -> None:
         self.assertEqual(
             release.plugin_catalog_path(4),
-            release.ROOT_DIR / "docs/plugins/v4/host-1.2/catalog.json",
+            release.ROOT_DIR / "docs/plugins/v4/catalog.json",
         )
 
-    def test_first_host_compatible_v4_release_uses_legacy_v4_baseline(self) -> None:
+    def test_plugin_kit5_release_uses_versioned_catalog_path(self) -> None:
+        self.assertEqual(
+            release.plugin_catalog_path(5),
+            release.ROOT_DIR / "docs/plugins/v5/catalog.json",
+        )
+
+    def test_first_plugin_kit5_release_uses_legacy_v4_baseline(self) -> None:
         with (
             mock.patch.object(release, "read_plugins", return_value={}),
-            mock.patch.object(release, "current_plugin_kit_version", return_value=4),
+            mock.patch.object(release, "current_plugin_kit_version", return_value=5),
         ):
             self.assertEqual(
                 release.previous_plugin_catalog_path(),

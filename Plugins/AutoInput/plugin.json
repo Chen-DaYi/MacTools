@@ -17,7 +17,7 @@
   },
   "version": "1.0.1",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 4,
+  "pluginKitVersion": 5,
   "bundleRelativePath": "AutoInput.bundle",
   "factoryClass": "AutoInputPlugin.AutoInputPluginFactory",
   "build": {

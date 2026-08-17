@@ -1,7 +1,7 @@
 import MacToolsPluginKit
 
 @main
-struct PluginKitV4CompatibilityClient {
+struct PluginKitV5CompatibilityClient {
     @MainActor
     static func main() {
         let recorder = PluginShortcutRecorder(
@@ -23,7 +23,7 @@ struct PluginKitV4CompatibilityClient {
             "_isPresented",
             "_isHovered",
         ] else {
-            fatalError("PluginShortcutRecorder v4 stored layout changed: \(labels)")
+            fatalError("PluginShortcutRecorder v5 stored layout changed: \(labels)")
         }
         _ = recorder.body
 
@@ -31,7 +31,7 @@ struct PluginKitV4CompatibilityClient {
         let definition = PluginShortcutDefinition(
             id: "compatibility",
             title: "Compatibility",
-            description: "Frozen v4 shortcut definition",
+            description: "Frozen v5 shortcut definition",
             actionID: "run",
             scope: .global,
             defaultBinding: binding,
@@ -47,7 +47,7 @@ struct PluginKitV4CompatibilityClient {
               definition.defaultBinding?.keyCode == 40,
               definition.defaultBinding?.modifiers == [.command, .shift],
               definition.settingsControlSystemImage == "command" else {
-            fatalError("PluginShortcutDefinition v4 value ABI changed")
+            fatalError("PluginShortcutDefinition v5 value ABI changed")
         }
 
         let requirement = PluginPermissionRequirement(
@@ -68,7 +68,7 @@ struct PluginKitV4CompatibilityClient {
               !state.isGranted,
               state.footnote == "Grant access",
               state.statusText == "Required" else {
-            fatalError("Plugin permission v4 value ABI changed")
+            fatalError("Plugin permission v5 value ABI changed")
         }
     }
 }

@@ -91,6 +91,26 @@ final class PluginPackageStoreTests: XCTestCase {
         )
     }
 
+    func testExistingPluginKit4PackageRemainsDiscoverableForVersion5Update() throws {
+        let sourceURL = try makePackage(
+            id: "com.example.v4",
+            pluginKitVersion: 4
+        )
+        let store = makeStore()
+        let installedURL = store.installedDirectory
+            .appendingPathComponent("com.example.v4", isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        try FileManager.default.copyItem(at: sourceURL, to: installedURL)
+
+        let record = try XCTUnwrap(store.installedRecords().first)
+
+        XCTAssertEqual(record.id, "com.example.v4")
+        XCTAssertEqual(record.manifest.pluginKitVersion, 4)
+        guard case .incompatible = record.state else {
+            return XCTFail("PluginKit v4 package should remain discoverable but incompatible")
+        }
+    }
+
     func testExistingV3ManifestRemainsDiscoverableForCatalogUpdate() throws {
         let store = makeStore()
         let installedURL = store.installedDirectory
