@@ -48,7 +48,7 @@
       "summary": "自動遮擋劉海螢幕頂部區域"
     }
   },
-  "version": "1.0.10",
+  "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
   "bundleRelativePath": "HideNotch.bundle",

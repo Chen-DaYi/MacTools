@@ -48,7 +48,7 @@
       "summary": "開啟幕前調度，集中顯示當前窗口並把其他窗口收納到側邊"
     }
   },
-  "version": "1.0.6",
+  "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
   "bundleRelativePath": "StageManager.bundle",

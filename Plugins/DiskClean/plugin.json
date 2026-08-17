@@ -48,7 +48,7 @@
       "summary": "掃描系統快取、開發產物與殘留安裝包，預設移到廢紙簍，執行前校驗路徑安全"
     }
   },
-  "version": "2.0.1",
+  "version": "2.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
   "bundleRelativePath": "DiskClean.bundle",
