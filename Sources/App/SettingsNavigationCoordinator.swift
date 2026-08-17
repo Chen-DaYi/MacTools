@@ -28,13 +28,6 @@ enum SettingsNavigationDestination: Hashable {
         return pane
     }
 
-    var searchField: SettingsSearchField? {
-        guard case .plugins(.marketplace) = self else {
-            return nil
-        }
-
-        return .pluginMarketplace
-    }
 }
 
 extension SettingsNavigationDestination {
@@ -57,6 +50,7 @@ extension SettingsNavigationDestination {
 
 enum SettingsSearchField: Equatable {
     case pluginMarketplace
+    case pluginSettings(String)
 }
 
 enum UnifiedSearchPresentationOrigin: Equatable {
@@ -173,6 +167,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private let pluginSettingsLandingPage: () -> FeatureSettingsPane
     private let sidebarOrder: () -> [SettingsNavigationDestination]
     private let isPluginConfigurationAvailable: (String) -> Bool
+    private let hasPluginSettingsSearchField: (String) -> Bool
+    private let focusPluginSettingsSearch: (String) -> Bool
     private let isPluginSettingsSearchTargetAvailable: (PluginSettingsSearchTarget) -> Bool
     private let isPluginManagementAvailable: (String) -> Bool
     private let isPluginSurfaceAvailable: (SurfaceSettingsSearchTarget) -> Bool
@@ -205,6 +201,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
                 )
             },
             isPluginConfigurationAvailable: { pluginHost.hasPluginSettings(pluginID: $0) },
+            hasPluginSettingsSearchField: { pluginHost.hasPluginSettingsSearchField(pluginID: $0) },
+            focusPluginSettingsSearch: { pluginHost.focusPluginSettingsSearch(pluginID: $0) },
             isPluginSettingsSearchTargetAvailable: {
                 pluginHost.hasPluginSettingsSearchTarget($0)
             },
@@ -234,6 +232,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
         pluginSettingsLandingPage: @escaping () -> FeatureSettingsPane = { .marketplace },
         sidebarOrder: @escaping () -> [SettingsNavigationDestination] = { [] },
         isPluginConfigurationAvailable: @escaping (String) -> Bool = { _ in true },
+        hasPluginSettingsSearchField: @escaping (String) -> Bool = { _ in false },
+        focusPluginSettingsSearch: @escaping (String) -> Bool = { _ in false },
         isPluginSettingsSearchTargetAvailable: @escaping (PluginSettingsSearchTarget) -> Bool = { _ in true },
         isPluginManagementAvailable: @escaping (String) -> Bool = { _ in true },
         isPluginSurfaceAvailable: @escaping (SurfaceSettingsSearchTarget) -> Bool = { _ in true },
@@ -246,6 +246,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
         self.pluginSettingsLandingPage = pluginSettingsLandingPage
         self.sidebarOrder = sidebarOrder
         self.isPluginConfigurationAvailable = isPluginConfigurationAvailable
+        self.hasPluginSettingsSearchField = hasPluginSettingsSearchField
+        self.focusPluginSettingsSearch = focusPluginSettingsSearch
         self.isPluginSettingsSearchTargetAvailable = isPluginSettingsSearchTargetAvailable
         self.isPluginManagementAvailable = isPluginManagementAvailable
         self.isPluginSurfaceAvailable = isPluginSurfaceAvailable
@@ -466,10 +468,14 @@ final class SettingsNavigationCoordinator: ObservableObject {
     func requestSearchFocus() -> Bool {
         guard
             !isUnifiedSearchPresented,
-            let field = destination.searchField,
+            let field = searchField(for: destination),
             focusedSearchField != field
         else {
             return false
+        }
+
+        if case let .pluginSettings(pluginID) = field {
+            return focusPluginSettingsSearch(pluginID)
         }
 
         nextSearchFocusRequestID &+= 1
@@ -486,7 +492,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
             return false
         }
 
-        if let searchField = destination.searchField {
+        if let searchField = searchField(for: destination) {
             if focusedSearchField == searchField {
                 return true
             }
@@ -502,6 +508,17 @@ final class SettingsNavigationCoordinator: ObservableObject {
             focusedSearchField = field
         } else if focusedSearchField == field {
             focusedSearchField = nil
+        }
+    }
+
+    private func searchField(for destination: SettingsNavigationDestination) -> SettingsSearchField? {
+        switch destination {
+        case .plugins(.marketplace):
+            .pluginMarketplace
+        case let .plugins(.configuration(pluginID)) where hasPluginSettingsSearchField(pluginID):
+            .pluginSettings(pluginID)
+        default:
+            nil
         }
     }
 

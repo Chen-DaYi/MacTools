@@ -65,12 +65,23 @@ enum AppleShortcutsSettingsRunDisposition: Equatable {
     }
 }
 
+@MainActor
+final class AppleShortcutsSettingsSearchFocusController: ObservableObject {
+    @Published private(set) var requestID: UInt = 0
+
+    func requestFocus() {
+        requestID &+= 1
+    }
+}
+
 struct AppleShortcutsSettingsView: View {
     let plugin: AppleShortcutsPlugin
     @ObservedObject private var controller: AppleShortcutsController
     @ObservedObject private var store: AppleShortcutsStore
     @ObservedObject private var executionStore: AppleShortcutsExecutionStore
+    @ObservedObject private var searchFocusController: AppleShortcutsSettingsSearchFocusController
 
+    @FocusState private var isSearchFocused: Bool
     @State private var searchText = ""
     @State private var source: AppleShortcutsSource = .all
     @State private var selectedID: UUID?
@@ -81,6 +92,7 @@ struct AppleShortcutsSettingsView: View {
         controller = plugin.controller
         store = plugin.store
         executionStore = plugin.controller.executionStore
+        searchFocusController = plugin.settingsSearchFocusController
     }
 
     var body: some View {
@@ -124,6 +136,12 @@ struct AppleShortcutsSettingsView: View {
         .onAppear {
             controller.refreshIfNeeded()
             selectFirstVisibleIfNeeded()
+            if searchFocusController.requestID > 0 {
+                isSearchFocused = true
+            }
+        }
+        .onChange(of: searchFocusController.requestID) { _, _ in
+            isSearchFocused = true
         }
         .onChange(of: visibleRows.map(\.id)) { _, _ in
             selectFirstVisibleIfNeeded()
@@ -137,6 +155,7 @@ struct AppleShortcutsSettingsView: View {
                 text: $searchText
             )
             .textFieldStyle(.roundedBorder)
+            .focused($isSearchFocused)
             .frame(minWidth: 160, idealWidth: 260, maxWidth: 360)
 
             Spacer()

@@ -26,11 +26,13 @@ final class AppleShortcutsPlugin:
     PluginPortablePreferencesRestorationReporting,
     PluginPortablePreferencesActionReferencesProviding,
     PluginActionReferenceBackupProviding,
-    PluginActionSafetyStateChangeProviding
+    PluginActionSafetyStateChangeProviding,
+    PluginSettingsSearchFocusing
 {
     let metadata: PluginMetadata
     let store: AppleShortcutsStore
     let controller: AppleShortcutsController
+    let settingsSearchFocusController = AppleShortcutsSettingsSearchFocusController()
 
     var onStateChange: (() -> Void)?
     var onActionSafetyStateChange: (() -> Void)?
@@ -93,6 +95,10 @@ final class AppleShortcutsPlugin:
         }
     }
 
+    func focusSettingsSearch() {
+        settingsSearchFocusController.requestFocus()
+    }
+
     var actionDefinitions: [ActionDefinition] {
         controller.snapshot.discovery.shortcuts.map { item in
             let policy = store.policy(for: item.id)
@@ -108,7 +114,9 @@ final class AppleShortcutsPlugin:
                 keywords: actionKeywords(for: item, title: title),
                 systemImage: "square.stack.3d.up.fill",
                 risk: policy.requiresConfirmation ? .confirmationRequired : .safe,
-                confirmation: policy.requiresConfirmation ? ActionConfirmation(
+                // Run Links always require confirmation, even when direct MacTools runs do not.
+                // The action registry also requires this metadata for `.confirmAlways` actions.
+                confirmation: ActionConfirmation(
                     title: localization.format(
                         "action.confirm.title.format",
                         defaultValue: "运行“%@”？",
@@ -122,7 +130,7 @@ final class AppleShortcutsPlugin:
                         "action.confirm.button",
                         defaultValue: "运行"
                     )
-                ) : nil,
+                ),
                 externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive, .cancellable],
                 executionTimeoutSeconds: ProcessAppleShortcutsCommandRunner.runTimeout
@@ -138,7 +146,7 @@ final class AppleShortcutsPlugin:
                     key: ActionKey(providerID: metadata.id, actionID: item.actionID)
                 ),
                 title: item.name,
-                subtitle: localization.string("action.subtitle", defaultValue: "Apple 快捷指令"),
+                subtitle: actionFolderSubtitle(for: item),
                 presentationState: controller.isRunning(item.id) ? .active : .inactive
             )
         }
@@ -265,7 +273,19 @@ final class AppleShortcutsPlugin:
         for item: AppleShortcutItem,
         title: String
     ) -> [String] {
-        let folderNames = item.folderIDs.compactMap { folder(id: $0)?.name }
+        let folderNames = folderNames(for: item)
         return [metadata.title, title, "Apple", "Shortcuts", "快捷指令"] + folderNames
+    }
+
+    private func actionFolderSubtitle(for item: AppleShortcutItem) -> String? {
+        let names = folderNames(for: item)
+        guard !names.isEmpty else { return nil }
+        return AppleShortcutsSettingsFormatting.joinedFolderNames(names)
+    }
+
+    private func folderNames(for item: AppleShortcutItem) -> [String] {
+        item.folderIDs
+            .compactMap { folder(id: $0)?.name }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 }
