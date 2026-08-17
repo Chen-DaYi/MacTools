@@ -17,7 +17,7 @@
   },
   "version": "1.0.0",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 4,
+  "pluginKitVersion": 5,
   "bundleRelativePath": "AppleShortcuts.bundle",
   "factoryClass": "AppleShortcutsPlugin.AppleShortcutsPluginFactory",
   "build": {
