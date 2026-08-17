@@ -40,87 +40,127 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         )
     }
 
-    func testMovesPluginSubpageInSuppliedVisibleOrder() {
-        let orderedPanes: [FeatureSettingsPane] = [
-            .configuration("fan-control"),
-            .marketplace,
-            .dashboardLayout
+    func testMovesSidebarSelectionInSuppliedVisualOrder() {
+        let orderedDestinations: [SettingsNavigationDestination] = [
+            .general,
+            .plugins(.automation),
+            .about,
+            .plugins(.actionsAndShortcuts)
         ]
         let coordinator = SettingsNavigationCoordinator(
-            initialDestination: .plugins(.marketplace),
-            isPluginConfigurationAvailable: { $0 == "fan-control" }
+            initialDestination: .plugins(.automation)
         )
 
-        coordinator.movePluginSubpage(.previous, in: orderedPanes)
-        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
+        coordinator.moveSidebarSelection(.previous, in: orderedDestinations)
+        XCTAssertEqual(coordinator.destination, .general)
 
-        coordinator.movePluginSubpage(.next, in: orderedPanes)
-        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+        coordinator.moveSidebarSelection(.next, in: orderedDestinations)
+        XCTAssertEqual(coordinator.destination, .plugins(.automation))
 
-        coordinator.movePluginSubpage(.next, in: orderedPanes)
-        XCTAssertEqual(coordinator.destination, .plugins(.dashboardLayout))
+        coordinator.moveSidebarSelection(.next, in: orderedDestinations)
+        XCTAssertEqual(coordinator.destination, .about)
+
+        coordinator.moveSidebarSelection(.next, in: orderedDestinations)
+        XCTAssertEqual(coordinator.destination, .plugins(.actionsAndShortcuts))
     }
 
-    func testPluginSubpageMovementStopsAtBothBoundaries() {
-        let orderedPanes: [FeatureSettingsPane] = [
-            .dashboardLayout,
-            .featurePanelLayout,
-            .marketplace
+    func testSidebarSelectionMovementStopsAtBothBoundaries() {
+        let orderedDestinations: [SettingsNavigationDestination] = [
+            .general,
+            .plugins(.marketplace),
+            .about
         ]
         let coordinator = SettingsNavigationCoordinator(
-            initialDestination: .plugins(.dashboardLayout)
+            initialDestination: .general
         )
 
-        coordinator.movePluginSubpage(.previous, in: orderedPanes)
-        XCTAssertEqual(coordinator.destination, .plugins(.dashboardLayout))
-        XCTAssertEqual(coordinator.history, [.plugins(.dashboardLayout)])
+        coordinator.moveSidebarSelection(.previous, in: orderedDestinations)
+        XCTAssertEqual(coordinator.destination, .general)
+        XCTAssertEqual(coordinator.history, [.general])
 
-        coordinator.navigate(to: .plugins(.marketplace))
-        coordinator.movePluginSubpage(.next, in: orderedPanes)
-        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+        coordinator.navigate(to: .about)
+        coordinator.moveSidebarSelection(.next, in: orderedDestinations)
+        XCTAssertEqual(coordinator.destination, .about)
         XCTAssertEqual(
             coordinator.history,
-            [.plugins(.dashboardLayout), .plugins(.marketplace)]
+            [.general, .about]
         )
     }
 
-    func testPluginSubpageMovementDoesNothingOutsidePlugins() {
-        let coordinator = SettingsNavigationCoordinator(initialDestination: .about)
+    func testSidebarSelectionMovementSkipsUnavailablePluginConfigurations() {
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { _ in false }
+        )
 
-        coordinator.movePluginSubpage(
+        coordinator.moveSidebarSelection(
             .next,
-            in: [.dashboardLayout, .featurePanelLayout, .marketplace]
+            in: [
+                .general,
+                .plugins(.configuration("removed-plugin")),
+                .about
+            ]
         )
 
         XCTAssertEqual(coordinator.destination, .about)
-        XCTAssertEqual(coordinator.history, [.about])
+        XCTAssertEqual(coordinator.history, [.general, .about])
     }
 
-    func testPluginSubpageMovementRecordsHistoryAndInvalidatesForwardHistory() {
-        let orderedPanes: [FeatureSettingsPane] = [
-            .dashboardLayout,
-            .featurePanelLayout,
-            .marketplace
+    func testSidebarSelectionMovementRecordsHistoryAndInvalidatesForwardHistory() {
+        let orderedDestinations: [SettingsNavigationDestination] = [
+            .general,
+            .plugins(.automation),
+            .about
         ]
-        let coordinator = SettingsNavigationCoordinator(
-            initialDestination: .plugins(.dashboardLayout)
-        )
-        coordinator.navigate(to: .plugins(.featurePanelLayout))
-        coordinator.navigate(to: .plugins(.marketplace))
+        let coordinator = SettingsNavigationCoordinator()
+        coordinator.navigate(to: .plugins(.automation))
+        coordinator.navigate(to: .about)
         coordinator.goBack()
 
-        coordinator.movePluginSubpage(.previous, in: orderedPanes)
+        coordinator.moveSidebarSelection(.previous, in: orderedDestinations)
 
-        XCTAssertEqual(coordinator.destination, .plugins(.dashboardLayout))
+        XCTAssertEqual(coordinator.destination, .general)
         XCTAssertEqual(
             coordinator.history,
             [
-                .plugins(.dashboardLayout),
-                .plugins(.featurePanelLayout),
-                .plugins(.dashboardLayout)
+                .general,
+                .plugins(.automation),
+                .general
             ]
         )
         XCTAssertFalse(coordinator.canGoForward)
+    }
+
+    func testSidebarSelectionMovementUsesCurrentSidebarOrderProvider() {
+        let coordinator = SettingsNavigationCoordinator(
+            sidebarOrder: {
+                [.general, .plugins(.automation), .about]
+            }
+        )
+
+        coordinator.moveSidebarSelection(.next)
+
+        XCTAssertEqual(coordinator.destination, .plugins(.automation))
+    }
+
+    func testNumberSelectionUsesAvailableVisualSidebarOrder() {
+        let coordinator = SettingsNavigationCoordinator(
+            sidebarOrder: {
+                [
+                    .general,
+                    .plugins(.configuration("removed-plugin")),
+                    .about,
+                    .plugins(.actionsAndShortcuts)
+                ]
+            },
+            isPluginConfigurationAvailable: { _ in false }
+        )
+
+        XCTAssertTrue(coordinator.selectSidebarDestination(number: 2))
+        XCTAssertEqual(coordinator.destination, .about)
+        XCTAssertTrue(coordinator.selectSidebarDestination(number: 3))
+        XCTAssertEqual(coordinator.destination, .plugins(.actionsAndShortcuts))
+        XCTAssertFalse(coordinator.selectSidebarDestination(number: 0))
+        XCTAssertFalse(coordinator.selectSidebarDestination(number: 4))
     }
 
     func testRecordsCompletePluginDestinationsAndRestoresExactPaneDuringTraversal() {
@@ -220,6 +260,32 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         coordinator.setSearchField(.pluginMarketplace, focused: false)
         XCTAssertTrue(coordinator.requestSearchFocus())
         XCTAssertNotEqual(coordinator.searchFocusRequest, firstRequest)
+    }
+
+    func testSearchRequestFallsBackToUnifiedSearchWithoutContextualSearch() {
+        let coordinator = SettingsNavigationCoordinator()
+
+        XCTAssertTrue(coordinator.requestSearch())
+
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .keyboard)
+        XCTAssertNil(coordinator.searchFocusRequest)
+    }
+
+    func testSearchRequestPrefersAndRetainsContextualSearch() {
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.marketplace)
+        )
+
+        XCTAssertTrue(coordinator.requestSearch())
+        let firstRequest = coordinator.searchFocusRequest
+        XCTAssertEqual(firstRequest?.field, .pluginMarketplace)
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+
+        coordinator.setSearchField(.pluginMarketplace, focused: true)
+        XCTAssertTrue(coordinator.requestSearch())
+        XCTAssertEqual(coordinator.searchFocusRequest, firstRequest)
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
     }
 
     func testAboutUpdateActionNavigatesAndCanOnlyBeConsumedOnce() throws {

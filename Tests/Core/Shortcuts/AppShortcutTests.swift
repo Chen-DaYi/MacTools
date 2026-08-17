@@ -117,20 +117,11 @@ final class AppShortcutTests: XCTestCase {
         XCTAssertFalse(try item(.toggleDashboard, in: host).canClear)
     }
 
-    func testCommonApplicationShortcutsRequireWarningButRemainConfigurable() {
+    func testCommonApplicationShortcutsWarnWhileSettingsNavigationShortcutsAreReserved() {
         let commandKeyCodes = [
             kVK_ANSI_Comma,
             kVK_ANSI_F,
             kVK_ANSI_K,
-            kVK_ANSI_1,
-            kVK_ANSI_2,
-            kVK_ANSI_3,
-            kVK_ANSI_4,
-            kVK_ANSI_5,
-            kVK_ANSI_6,
-            kVK_ANSI_7,
-            kVK_ANSI_8,
-            kVK_ANSI_9,
             kVK_ANSI_LeftBracket,
             kVK_ANSI_RightBracket
         ]
@@ -152,11 +143,23 @@ final class AppShortcutTests: XCTestCase {
             )
         }
 
-        for keyCode in [kVK_UpArrow, kVK_DownArrow] {
-            let binding = ShortcutBinding(
-                keyCode: UInt16(keyCode),
-                modifiers: [.control, .command]
-            )
+        let reservedBindings = [
+            kVK_ANSI_1,
+            kVK_ANSI_2,
+            kVK_ANSI_3,
+            kVK_ANSI_4,
+            kVK_ANSI_5,
+            kVK_ANSI_6,
+            kVK_ANSI_7,
+            kVK_ANSI_8,
+            kVK_ANSI_9,
+        ].map {
+            ShortcutBinding(keyCode: UInt16($0), modifiers: .command)
+        } + [kVK_UpArrow, kVK_DownArrow].map {
+            ShortcutBinding(keyCode: UInt16($0), modifiers: [.control, .command])
+        }
+
+        for binding in reservedBindings {
             XCTAssertFalse(
                 MacToolsReservedShortcutBindings.requiresConflictWarning(
                     for: binding
@@ -193,7 +196,7 @@ final class AppShortcutTests: XCTestCase {
             modifiers: .command
         )
         let pluginBinding = ShortcutBinding(
-            keyCode: UInt16(kVK_ANSI_4),
+            keyCode: UInt16(kVK_ANSI_LeftBracket),
             modifiers: .command
         )
         let manager = GlobalShortcutManager()
@@ -223,6 +226,37 @@ final class AppShortcutTests: XCTestCase {
         )
     }
 
+    func testAppAndPluginShortcutRecordersRejectSettingsNumberShortcuts() throws {
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_4),
+            modifiers: .command
+        )
+        let manager = GlobalShortcutManager()
+        let host = makeHost(
+            defaults: try makeDefaults(),
+            plugins: [AppShortcutTestPlugin(defaultBinding: nil)],
+            manager: manager
+        )
+        let expectedError = ShortcutValidationError.duplicate(
+            ownerDescription: AppMetadata.appName
+        ).localizedDescription
+
+        XCTAssertEqual(
+            host.setAppShortcutBindingAndReturnError(binding, for: .toggleDashboard),
+            expectedError
+        )
+        XCTAssertEqual(
+            host.setShortcutBindingAndReturnError(
+                binding,
+                for: AppShortcutTestPlugin.shortcutItemID
+            ),
+            expectedError
+        )
+        XCTAssertFalse(
+            manager.debugRegistrationsForTests.contains { $0.binding == binding }
+        )
+    }
+
     func testStoredCommonApplicationShortcutsRemainActive() throws {
         let defaults = try makeDefaults()
         let appBinding = ShortcutBinding(
@@ -230,7 +264,7 @@ final class AppShortcutTests: XCTestCase {
             modifiers: .command
         )
         let pluginBinding = ShortcutBinding(
-            keyCode: UInt16(kVK_ANSI_4),
+            keyCode: UInt16(kVK_ANSI_LeftBracket),
             modifiers: .command
         )
         let store = ShortcutStore(userDefaults: defaults)
@@ -263,6 +297,37 @@ final class AppShortcutTests: XCTestCase {
         )
     }
 
+    func testStoredSettingsNumberShortcutIsDisabled() throws {
+        let defaults = try makeDefaults()
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_4),
+            modifiers: .command
+        )
+        let store = ShortcutStore(userDefaults: defaults)
+        store.setCustomization(
+            .custom(binding),
+            for: AppShortcutTestPlugin.shortcutItemID
+        )
+        let manager = GlobalShortcutManager()
+        let host = makeHost(
+            defaults: defaults,
+            plugins: [AppShortcutTestPlugin(defaultBinding: nil)],
+            manager: manager
+        )
+
+        XCTAssertEqual(
+            host.shortcutItems.first {
+                $0.id == AppShortcutTestPlugin.shortcutItemID
+            }?.errorMessage,
+            ShortcutValidationError.duplicate(
+                ownerDescription: AppMetadata.appName
+            ).localizedDescription
+        )
+        XCTAssertFalse(
+            manager.debugRegistrationsForTests.contains { $0.binding == binding }
+        )
+    }
+
     func testImportAcceptsCommonApplicationShortcuts() throws {
         let plugin = AppShortcutTestPlugin(defaultBinding: nil)
         let host = makeHost(defaults: try makeDefaults(), plugins: [plugin])
@@ -271,7 +336,7 @@ final class AppShortcutTests: XCTestCase {
             modifiers: .command
         )
         let pluginBinding = ShortcutBinding(
-            keyCode: UInt16(kVK_ANSI_4),
+            keyCode: UInt16(kVK_ANSI_LeftBracket),
             modifiers: .command
         )
         let appAssignment = ActionShortcutAssignmentRecord(

@@ -310,6 +310,38 @@ final class AppWindowRouterTests: XCTestCase {
             ),
             .showUnifiedSearch
         )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(keyCode: UInt16(kVK_ANSI_LeftBracket), characters: "[")
+            ),
+            .goBack
+        )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(keyCode: UInt16(kVK_ANSI_RightBracket), characters: "]")
+            ),
+            .goForward
+        )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(
+                    keyCode: UInt16(kVK_UpArrow),
+                    characters: "",
+                    modifiers: [.control, .command]
+                )
+            ),
+            .moveSidebarSelection(.previous)
+        )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(
+                    keyCode: UInt16(kVK_DownArrow),
+                    characters: "",
+                    modifiers: [.control, .command]
+                )
+            ),
+            .moveSidebarSelection(.next)
+        )
     }
 
     func testLocalCommandMatcherLeavesCloseQuitAndUnsupportedModifiersUntouched() {
@@ -582,7 +614,7 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertFalse(panel.isVisible)
     }
 
-    func testPhysicalCommandNumberSelectsSettingsPageWhenSearchIsClosed() throws {
+    func testPhysicalCommandNumbersSelectSettingsPagesInVisualOrder() throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -595,13 +627,117 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertTrue(
             window.performKeyEquivalent(
                 with: keyEvent(
-                    keyCode: UInt16(kVK_ANSI_3),
-                    characters: "\"",
+                    keyCode: UInt16(kVK_ANSI_2),
+                    characters: "@",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertEqual(coordinator.destination, .plugins(.automation))
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_4),
+                    characters: "$",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertEqual(coordinator.destination, .plugins(.actionsAndShortcuts))
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_LeftBracket),
+                    characters: "[",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertEqual(coordinator.destination, .plugins(.automation))
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_DownArrow),
+                    characters: "",
+                    modifiers: [.control, .command],
                     windowNumber: window.windowNumber
                 )
             )
         )
         XCTAssertEqual(coordinator.destination, .about)
+
+        window.close()
+    }
+
+    func testNavigationShortcutsDoNotMoveBehindUnifiedSearch() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        coordinator.navigate(to: .plugins(.automation))
+        coordinator.navigate(to: .about)
+        coordinator.goBack()
+        XCTAssertTrue(coordinator.canGoBack)
+        XCTAssertTrue(coordinator.canGoForward)
+        let expectedDestination = coordinator.destination
+        let expectedHistoryIndex = coordinator.historyIndex
+
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        for event in [
+            keyEvent(
+                keyCode: UInt16(kVK_ANSI_LeftBracket),
+                characters: "[",
+                windowNumber: window.windowNumber
+            ),
+            keyEvent(
+                keyCode: UInt16(kVK_ANSI_RightBracket),
+                characters: "]",
+                windowNumber: window.windowNumber
+            ),
+            keyEvent(
+                keyCode: UInt16(kVK_DownArrow),
+                characters: "",
+                modifiers: [.control, .command],
+                windowNumber: window.windowNumber
+            )
+        ] {
+            _ = window.performKeyEquivalent(with: event)
+            XCTAssertEqual(coordinator.destination, expectedDestination)
+            XCTAssertEqual(coordinator.historyIndex, expectedHistoryIndex)
+        }
+
+        window.close()
+    }
+
+    func testCommandFFallsBackToUnifiedSettingsSearch() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_F),
+                    characters: "f",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .keyboard)
 
         window.close()
     }

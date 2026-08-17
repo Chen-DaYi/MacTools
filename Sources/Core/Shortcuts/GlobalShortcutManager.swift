@@ -49,26 +49,50 @@ final class SystemCarbonHotKeyRegistrar: CarbonHotKeyRegistering {
 }
 
 enum MacToolsReservedShortcutBindings {
-    private static let pluginNavigationBindings: Set<ShortcutBinding> = [
-        kVK_UpArrow,
-        kVK_DownArrow
-    ].reduce(into: Set<ShortcutBinding>()) { bindings, keyCode in
-        bindings.insert(
-            ShortcutBinding(
-                keyCode: UInt16(keyCode),
-                modifiers: [.control, .command]
+    private static let settingsNavigationBindings: Set<ShortcutBinding> = {
+        var bindings = [
+            kVK_UpArrow,
+            kVK_DownArrow
+        ].reduce(into: Set<ShortcutBinding>()) { bindings, keyCode in
+            bindings.insert(
+                ShortcutBinding(
+                    keyCode: UInt16(keyCode),
+                    modifiers: [.control, .command]
+                )
             )
-        )
-    }
+        }
+
+        for keyCode in [
+            kVK_ANSI_1,
+            kVK_ANSI_2,
+            kVK_ANSI_3,
+            kVK_ANSI_4,
+            kVK_ANSI_5,
+            kVK_ANSI_6,
+            kVK_ANSI_7,
+            kVK_ANSI_8,
+            kVK_ANSI_9
+        ] {
+            bindings.insert(
+                ShortcutBinding(
+                    keyCode: UInt16(keyCode),
+                    modifiers: .command
+                )
+            )
+        }
+
+        return bindings
+    }()
 
     static func requiresConflictWarning(for binding: ShortcutBinding) -> Bool {
-        CommonApplicationShortcutBindings.requiresConflictWarning(for: binding)
+        !settingsNavigationBindings.contains(binding)
+            && CommonApplicationShortcutBindings.requiresConflictWarning(for: binding)
     }
 
     static func validationError(
         for binding: ShortcutBinding
     ) -> ShortcutValidationError? {
-        guard pluginNavigationBindings.contains(binding) else {
+        guard settingsNavigationBindings.contains(binding) else {
             return nil
         }
 

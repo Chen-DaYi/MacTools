@@ -18,6 +18,11 @@ final class PreferencesBackupTests: XCTestCase {
         defaults.set(AppAppearancePreference.dark.rawValue, forKey: AppAppearancePreference.userDefaultsKey)
         defaults.set(AppLanguagePreference.en.rawValue, forKey: AppLanguagePreference.userDefaultsKey)
         defaults.set(MenuBarClickBehaviorPreference.swapped.rawValue, forKey: MenuBarClickBehaviorPreference.userDefaultsKey)
+        SettingsSidebarPreferencesStore.applyImportedPreferences(
+            sortMode: .custom,
+            customOrderedPluginIDs: ["second", "first"],
+            to: defaults
+        )
         defaults.set("api-key-value", forKey: "translator.apiKey")
 
         let firstPlugin = BackupTestPlugin(id: "first", order: 1, shortcutID: "toggle")
@@ -41,6 +46,14 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(backup.application.appearancePreference, AppAppearancePreference.dark.rawValue)
         XCTAssertEqual(backup.application.languagePreference, AppLanguagePreference.en.rawValue)
         XCTAssertEqual(backup.application.menuBarClickBehavior, MenuBarClickBehaviorPreference.swapped.rawValue)
+        XCTAssertEqual(
+            backup.application.settingsSidebarPluginSortMode,
+            SettingsSidebarPluginSortMode.custom.rawValue
+        )
+        XCTAssertEqual(
+            backup.application.settingsSidebarCustomPluginOrder,
+            ["second", "first"]
+        )
         XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["second", "first"])
         XCTAssertTrue(backup.pluginDisplay.hiddenPluginIDs.isEmpty)
         XCTAssertEqual(backup.pluginDisplay.dashboardOrderedPluginIDs, [])
@@ -52,6 +65,102 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(backup.shortcutCustomizations["app.open-settings"], .custom(openSettingsBinding))
         XCTAssertNil(backup.shortcutCustomizations["second.shortcut.open"])
         XCTAssertFalse(try XCTUnwrap(String(data: backup.encodedJSON(), encoding: .utf8)).contains("api-key-value"))
+    }
+
+    func testSettingsSidebarOrderRoundTripsAndUpdatesTheActiveStore() async throws {
+        let sourceDefaults = makeDefaults(suiteName: "\(suiteName)-source")
+        SettingsSidebarPreferencesStore.applyImportedPreferences(
+            sortMode: .custom,
+            customOrderedPluginIDs: ["calendar", "battery"],
+            to: sourceDefaults
+        )
+        let sourceStore = PreferencesBackupStore(userDefaults: sourceDefaults)
+        let applicationPreferences = sourceStore.applicationPreferences()
+
+        let destinationDefaults = makeDefaults(suiteName: "\(suiteName)-destination")
+        SettingsSidebarPreferencesStore.applyImportedPreferences(
+            sortMode: .nameDescending,
+            customOrderedPluginIDs: [],
+            to: destinationDefaults
+        )
+        let activeSidebarStore = SettingsSidebarPreferencesStore(userDefaults: destinationDefaults)
+        let destinationStore = PreferencesBackupStore(userDefaults: destinationDefaults)
+
+        XCTAssertTrue(destinationStore.validates(applicationPreferences))
+        destinationStore.apply(applicationPreferences)
+        await Task.yield()
+
+        XCTAssertEqual(activeSidebarStore.sortMode, .custom)
+        XCTAssertEqual(activeSidebarStore.customOrderedPluginIDs, ["calendar", "battery"])
+    }
+
+    func testUntouchedSidebarBackupPreservesUninitializedCustomOrder() async throws {
+        let sourceDefaults = makeDefaults(suiteName: "\(suiteName)-uninitialized-source")
+        let applicationPreferences = PreferencesBackupStore(
+            userDefaults: sourceDefaults
+        ).applicationPreferences()
+
+        XCTAssertEqual(
+            applicationPreferences.settingsSidebarPluginSortMode,
+            SettingsSidebarPluginSortMode.nameAscending.rawValue
+        )
+        XCTAssertNil(applicationPreferences.settingsSidebarCustomPluginOrder)
+
+        let destinationDefaults = makeDefaults(
+            suiteName: "\(suiteName)-uninitialized-destination"
+        )
+        SettingsSidebarPreferencesStore.applyImportedPreferences(
+            sortMode: .custom,
+            customOrderedPluginIDs: ["calendar", "battery"],
+            to: destinationDefaults
+        )
+        let activeSidebarStore = SettingsSidebarPreferencesStore(
+            userDefaults: destinationDefaults,
+            locale: { Locale(identifier: "en_US") }
+        )
+        let destinationStore = PreferencesBackupStore(userDefaults: destinationDefaults)
+
+        XCTAssertTrue(destinationStore.validates(applicationPreferences))
+        destinationStore.apply(applicationPreferences)
+        await Task.yield()
+
+        XCTAssertEqual(activeSidebarStore.sortMode, .nameAscending)
+        XCTAssertTrue(activeSidebarStore.customOrderedPluginIDs.isEmpty)
+
+        let availableItems = [
+            SettingsSidebarPluginOrderItem(id: "calendar", title: "Calendar", installedAt: nil),
+            SettingsSidebarPluginOrderItem(id: "battery", title: "Battery", installedAt: nil),
+            SettingsSidebarPluginOrderItem(id: "audio", title: "Audio", installedAt: nil),
+        ]
+        activeSidebarStore.setSortMode(.custom, availableItems: availableItems)
+
+        XCTAssertEqual(
+            activeSidebarStore.orderedPluginIDs(for: availableItems),
+            ["audio", "battery", "calendar"]
+        )
+    }
+
+    func testLegacyApplicationPreferencesLeaveSettingsSidebarOrderUnchanged() async throws {
+        let defaults = makeDefaults(suiteName: "\(suiteName)-legacy")
+        SettingsSidebarPreferencesStore.applyImportedPreferences(
+            sortMode: .installedNewestFirst,
+            customOrderedPluginIDs: ["battery", "calendar"],
+            to: defaults
+        )
+        let activeSidebarStore = SettingsSidebarPreferencesStore(userDefaults: defaults)
+        let backupStore = PreferencesBackupStore(userDefaults: defaults)
+        let legacyPreferences = PreferencesBackup.ApplicationPreferences(
+            appearancePreference: AppAppearancePreference.system.rawValue,
+            languagePreference: AppLanguagePreference.system.rawValue,
+            menuBarClickBehavior: MenuBarClickBehaviorPreference.standard.rawValue
+        )
+
+        XCTAssertTrue(backupStore.validates(legacyPreferences))
+        backupStore.apply(legacyPreferences)
+        await Task.yield()
+
+        XCTAssertEqual(activeSidebarStore.sortMode, .installedNewestFirst)
+        XCTAssertEqual(activeSidebarStore.customOrderedPluginIDs, ["battery", "calendar"])
     }
 
     func testPortablePluginPreferencesRoundTripThroughBackup() throws {
@@ -1812,9 +1921,13 @@ final class PreferencesBackupTests: XCTestCase {
         )
     }
 
-    private func makeDefaults() -> UserDefaults {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
+    private func makeDefaults(suiteName customSuiteName: String? = nil) -> UserDefaults {
+        let resolvedSuiteName = customSuiteName ?? suiteName
+        let defaults = UserDefaults(suiteName: resolvedSuiteName)!
+        defaults.removePersistentDomain(forName: resolvedSuiteName)
+        addTeardownBlock {
+            defaults.removePersistentDomain(forName: resolvedSuiteName)
+        }
         return defaults
     }
 

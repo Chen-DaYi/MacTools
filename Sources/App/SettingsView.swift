@@ -54,6 +54,7 @@ struct SettingsView: View {
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
+    @ObservedObject var sidebarPreferences: SettingsSidebarPreferencesStore
     let appearanceUserDefaults: UserDefaults
     @StateObject private var uninstallConfirmationSession = PluginUninstallConfirmationSession()
     var showDashboard: () -> Void = {}
@@ -62,8 +63,17 @@ struct SettingsView: View {
     var body: some View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
+        let configurationItems = pluginHost.pluginSettingsItems
+        let orderItems = configurationItems.map {
+            SettingsSidebarPluginOrderItem(
+                id: $0.id,
+                title: $0.title,
+                installedAt: $0.installedAt
+            )
+        }
+        let orderedConfigurationIDs = sidebarPreferences.orderedPluginIDs(for: orderItems)
         let orderedSidebarDestinations = SettingsNavigationDestination.settingsSidebarOrder(
-            configurationIDs: pluginHost.pluginSettingsItems.map(\.id)
+            configurationIDs: orderedConfigurationIDs
         )
         let detailTitle = settingsNavigationTitle(
             for: navigationCoordinator.destination,
@@ -73,8 +83,9 @@ struct SettingsView: View {
         return ZStack {
             NavigationSplitView {
                 SettingsSidebar(
-                    configurationItems: pluginHost.pluginSettingsItems,
+                    configurationItems: configurationItems,
                     orderedDestinations: orderedSidebarDestinations,
+                    sidebarPreferences: sidebarPreferences,
                     selection: settingsSelection,
                     onSearch: {
                         navigationCoordinator.presentUnifiedSearch(origin: .settingsSidebar)
@@ -161,9 +172,6 @@ struct SettingsView: View {
                 .zIndex(1)
             }
         }
-        .background {
-            SettingsDestinationShortcutButtons(coordinator: navigationCoordinator)
-        }
         .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
@@ -185,60 +193,6 @@ struct SettingsView: View {
             : .leftToRight
     }
 
-}
-
-// AppWindowRouter hosts Settings in an AppKit NSWindow, so scene-level SwiftUI
-// Commands are unavailable. These nonvisual buttons register window-local key
-// equivalents while keeping the Settings layout and accessibility tree clean.
-struct SettingsDestinationShortcutButtons: View {
-    @ObservedObject var coordinator: SettingsNavigationCoordinator
-
-    var body: some View {
-        HStack(spacing: 0) {
-            shortcutButton(for: .general, key: "1")
-            shortcutButton(for: .pluginConfiguration, key: "2")
-            shortcutButton(for: .about, key: "3")
-            historyShortcutButton(key: "[") { coordinator.goBack() }
-            historyShortcutButton(key: "]") { coordinator.goForward() }
-            pluginSubpageShortcutButton(key: .upArrow, direction: .previous)
-            pluginSubpageShortcutButton(key: .downArrow, direction: .next)
-        }
-        .frame(width: 0, height: 0)
-        .opacity(0)
-        .disabled(coordinator.isUnifiedSearchPresented)
-        .accessibilityHidden(true)
-    }
-
-    private func shortcutButton(
-        for destination: SettingsDestination,
-        key: KeyEquivalent
-    ) -> some View {
-        Button("") {
-            coordinator.selectSettingsDestination(destination)
-        }
-        .keyboardShortcut(key, modifiers: [.command])
-        .focusable(false)
-    }
-
-    private func historyShortcutButton(
-        key: KeyEquivalent,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button("", action: action)
-            .keyboardShortcut(key, modifiers: [.command])
-            .focusable(false)
-    }
-
-    private func pluginSubpageShortcutButton(
-        key: KeyEquivalent,
-        direction: PluginSubpageMoveDirection
-    ) -> some View {
-        Button("") {
-            coordinator.movePluginSubpage(direction)
-        }
-        .keyboardShortcut(key, modifiers: [.control, .command])
-        .focusable(false)
-    }
 }
 
 struct SettingsHistoryNavigationControls: View {
@@ -1600,6 +1554,7 @@ private struct LaunchAtLoginSettingsRow: View {
 private struct SettingsSidebar: View {
     let configurationItems: [PluginSettingsPageItem]
     let orderedDestinations: [SettingsNavigationDestination]
+    @ObservedObject var sidebarPreferences: SettingsSidebarPreferencesStore
     @Binding var selection: SettingsNavigationDestination
     let onSearch: () -> Void
 
@@ -1612,7 +1567,6 @@ private struct SettingsSidebar: View {
                     }
                 } header: {
                     Text("MacTools")
-                        .accessibilityHidden(true)
                 }
 
                 Section {
@@ -1624,7 +1578,6 @@ private struct SettingsSidebar: View {
                         "plugins.sidebar.pluginsSection",
                         defaultValue: "插件"
                     ))
-                    .accessibilityHidden(true)
                 }
 
                 Section {
@@ -1632,18 +1585,14 @@ private struct SettingsSidebar: View {
                         Text(emptyConfigurationsText)
                             .font(PluginSettingsTheme.Typography.secondaryLabel)
                             .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
                     } else {
                         ForEach(configurationDestinations, id: \.self) { destination in
                             sidebarRow(for: destination)
                         }
+                        .onMove(perform: moveConfigurations)
                     }
                 } header: {
-                    Text(AppL10n.settings(
-                        "plugins.sidebar.configurationSection",
-                        defaultValue: "插件设置"
-                    ))
-                    .accessibilityHidden(true)
+                    configurationSectionHeader
                 }
             }
             .listStyle(.sidebar)
@@ -1672,6 +1621,16 @@ private struct SettingsSidebar: View {
             "plugins.sidebar.emptyConfigurations",
             defaultValue: "暂无可设置插件"
         )
+    }
+
+    private var configurationOrderItems: [SettingsSidebarPluginOrderItem] {
+        configurationItems.map {
+            SettingsSidebarPluginOrderItem(
+                id: $0.id,
+                title: $0.title,
+                installedAt: $0.installedAt
+            )
+        }
     }
 
     private var appDestinations: [SettingsNavigationDestination] {
@@ -1718,13 +1677,15 @@ private struct SettingsSidebar: View {
             for: destination,
             configurationItems: configurationItems
         )
+        let shortcutNumber = shortcutNumber(for: destination)
 
         switch destination {
         case .general:
             SettingsSidebarRow(
                 title: title,
                 systemImage: "gearshape",
-                iconTint: .gray
+                iconTint: .gray,
+                shortcutNumber: shortcutNumber
             )
             .tag(destination)
             .id(destination)
@@ -1732,7 +1693,8 @@ private struct SettingsSidebar: View {
             SettingsSidebarRow(
                 title: title,
                 systemImage: "info.circle",
-                iconTint: .blue
+                iconTint: .blue,
+                shortcutNumber: shortcutNumber
             )
             .tag(destination)
             .id(destination)
@@ -1740,7 +1702,8 @@ private struct SettingsSidebar: View {
             SettingsSidebarRow(
                 title: title,
                 systemImage: "command",
-                iconTint: .orange
+                iconTint: .orange,
+                shortcutNumber: shortcutNumber
             )
             .tag(destination)
             .id(destination)
@@ -1748,7 +1711,8 @@ private struct SettingsSidebar: View {
             SettingsSidebarRow(
                 title: title,
                 systemImage: "bolt.horizontal.circle",
-                iconTint: .indigo
+                iconTint: .indigo,
+                shortcutNumber: shortcutNumber
             )
             .tag(destination)
             .id(destination)
@@ -1756,7 +1720,8 @@ private struct SettingsSidebar: View {
             SettingsSidebarRow(
                 title: title,
                 systemImage: "square.grid.2x2",
-                iconTint: .blue
+                iconTint: .blue,
+                shortcutNumber: shortcutNumber
             )
             .tag(destination)
             .id(destination)
@@ -1764,7 +1729,8 @@ private struct SettingsSidebar: View {
             SettingsSidebarRow(
                 title: title,
                 systemImage: "switch.2",
-                iconTint: .purple
+                iconTint: .purple,
+                shortcutNumber: shortcutNumber
             )
             .tag(destination)
             .id(destination)
@@ -1772,7 +1738,8 @@ private struct SettingsSidebar: View {
             SettingsSidebarRow(
                 title: title,
                 systemImage: "shippingbox",
-                iconTint: .blue
+                iconTint: .blue,
+                shortcutNumber: shortcutNumber
             )
             .tag(destination)
             .id(destination)
@@ -1781,12 +1748,105 @@ private struct SettingsSidebar: View {
                 SettingsSidebarRow(
                     title: title,
                     systemImage: item.iconName,
-                    iconTint: item.iconTint
+                    iconTint: item.iconTint,
+                    shortcutNumber: shortcutNumber
                 )
                 .tag(destination)
                 .id(destination)
             }
         }
+    }
+
+    private var configurationSectionHeader: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            Text(AppL10n.settings(
+                "plugins.sidebar.configurationSection",
+                defaultValue: "插件设置"
+            ))
+
+            Spacer(minLength: 0)
+
+            Menu {
+                Picker(
+                    AppL10n.settings(
+                        "plugins.sidebar.configurationSection",
+                        defaultValue: "插件设置"
+                    ),
+                    selection: configurationSortMode
+                ) {
+                    Section {
+                        sortOption(.installedOldestFirst)
+                        sortOption(.installedNewestFirst)
+                    }
+
+                    Section {
+                        sortOption(.nameAscending)
+                        sortOption(.nameDescending)
+                    }
+
+                    Section {
+                        sortOption(.custom)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+
+                Divider()
+
+                Button(AppL10n.settings(
+                    "settings.sidebar.pluginSort.resetCustom",
+                    defaultValue: "重置自定义顺序"
+                )) {
+                    sidebarPreferences.resetCustomOrder()
+                }
+                .disabled(sidebarPreferences.customOrderedPluginIDs.isEmpty)
+
+                Divider()
+
+                Button {} label: {
+                    Label(
+                        AppL10n.settings(
+                            "settings.sidebar.pluginSort.scopeNote",
+                            defaultValue: "仅影响设置侧边栏"
+                        ),
+                        systemImage: "info.circle"
+                    )
+                }
+                .disabled(true)
+            } label: {
+                HStack(spacing: 4) {
+                    Text(sidebarPreferences.sortMode.localizedCompactTitle)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel(sidebarPreferences.sortMode.localizedTitle)
+            .help(AppL10n.settings(
+                "settings.sidebar.pluginSortHelp",
+                defaultValue: "调整设置侧边栏中的插件页面顺序，不影响仪表盘或功能面板"
+            ))
+        }
+    }
+
+    private var configurationSortMode: Binding<SettingsSidebarPluginSortMode> {
+        Binding {
+            sidebarPreferences.sortMode
+        } set: { sortMode in
+            sidebarPreferences.setSortMode(
+                sortMode,
+                availableItems: configurationOrderItems
+            )
+        }
+    }
+
+    private func sortOption(_ sortMode: SettingsSidebarPluginSortMode) -> some View {
+        Text(sortMode.localizedTitle)
+            .tag(sortMode)
     }
 
     private var nativeSearchText: Binding<String> {
@@ -1805,6 +1865,24 @@ private struct SettingsSidebar: View {
             guard isPresented else { return }
             onSearch()
         }
+    }
+
+    private func shortcutNumber(for destination: SettingsNavigationDestination) -> Int? {
+        guard
+            let index = orderedDestinations.firstIndex(of: destination),
+            index < 9
+        else {
+            return nil
+        }
+        return index + 1
+    }
+
+    private func moveConfigurations(fromOffsets: IndexSet, toOffset: Int) {
+        _ = sidebarPreferences.movePlugins(
+            fromOffsets: fromOffsets,
+            toOffset: toOffset,
+            availableItems: configurationOrderItems
+        )
     }
 
     private var optionalSelectionBinding: Binding<SettingsNavigationDestination?> {
@@ -1943,21 +2021,110 @@ private struct SettingsSidebarRow: View {
     let title: String
     let systemImage: String
     let iconTint: Color
+    let shortcutNumber: Int?
 
     var body: some View {
-        Label {
-            Text(title)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } icon: {
-            Image(systemName: PluginSystemImage.resolvedName(systemImage))
-                .imageScale(.small)
-                .foregroundStyle(iconTint)
-                .frame(width: Layout.iconWidth)
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            Label {
+                Text(title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            } icon: {
+                Image(systemName: PluginSystemImage.resolvedName(systemImage))
+                    .imageScale(.small)
+                    .foregroundStyle(iconTint)
+                    .frame(width: Layout.iconWidth)
+            }
+
+            Spacer(minLength: 0)
+
+            if let shortcutNumber {
+                Text("⌘\(shortcutNumber)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+                    .accessibilityHidden(true)
+            }
         }
         .font(.body)
         .focusable(false)
         .help(title)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityHint(shortcutAccessibilityHint)
+    }
+
+    private var shortcutAccessibilityHint: String {
+        guard let shortcutNumber else {
+            return ""
+        }
+        return AppL10n.settingsFormat(
+            "settings.sidebar.shortcutAccessibilityHint",
+            defaultValue: "Keyboard shortcut: Command-%d",
+            shortcutNumber
+        )
+    }
+}
+
+private extension SettingsSidebarPluginSortMode {
+    var localizedTitle: String {
+        switch self {
+        case .installedOldestFirst:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.installedOldestFirst",
+                defaultValue: "安装时间：最早优先"
+            )
+        case .installedNewestFirst:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.installedNewestFirst",
+                defaultValue: "安装时间：最新优先"
+            )
+        case .nameAscending:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.nameAscending",
+                defaultValue: "名称：升序"
+            )
+        case .nameDescending:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.nameDescending",
+                defaultValue: "名称：降序"
+            )
+        case .custom:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.custom",
+                defaultValue: "自定义顺序"
+            )
+        }
+    }
+
+    var localizedCompactTitle: String {
+        switch self {
+        case .installedOldestFirst:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.compact.oldest",
+                defaultValue: "最早"
+            )
+        case .installedNewestFirst:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.compact.newest",
+                defaultValue: "最新"
+            )
+        case .nameAscending:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.compact.nameAscending",
+                defaultValue: "升序"
+            )
+        case .nameDescending:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.compact.nameDescending",
+                defaultValue: "降序"
+            )
+        case .custom:
+            AppL10n.settings(
+                "settings.sidebar.pluginSort.compact.custom",
+                defaultValue: "自定义"
+            )
+        }
     }
 }
 

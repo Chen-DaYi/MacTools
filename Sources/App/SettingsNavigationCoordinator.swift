@@ -65,7 +65,7 @@ enum UnifiedSearchPresentationOrigin: Equatable {
     case globalShortcut(String)
 }
 
-enum PluginSubpageMoveDirection {
+enum SettingsSidebarMoveDirection: Equatable {
     case previous
     case next
 }
@@ -171,7 +171,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private(set) var focusedSearchField: SettingsSearchField?
 
     private let pluginSettingsLandingPage: () -> FeatureSettingsPane
-    private let pluginSubpageOrder: () -> [FeatureSettingsPane]
+    private let sidebarOrder: () -> [SettingsNavigationDestination]
     private let isPluginConfigurationAvailable: (String) -> Bool
     private let isPluginSettingsSearchTargetAvailable: (PluginSettingsSearchTarget) -> Bool
     private let isPluginManagementAvailable: (String) -> Bool
@@ -183,12 +183,25 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private var nextSearchRevealRequestID: UInt = 0
     private var nextUnifiedSearchQuickSelectionRequestID: UInt = 0
 
-    convenience init(pluginHost: PluginHost) {
+    convenience init(
+        pluginHost: PluginHost,
+        sidebarPreferences: SettingsSidebarPreferencesStore? = nil
+    ) {
         self.init(
             pluginSettingsLandingPage: { pluginHost.pluginSettingsLandingPage() },
-            pluginSubpageOrder: {
-                FeatureSettingsPane.settingsSidebarOrder(
-                    configurationIDs: pluginHost.pluginSettingsItems.map(\.id)
+            sidebarOrder: {
+                let settingsItems = pluginHost.pluginSettingsItems
+                let orderItems = settingsItems.map {
+                    SettingsSidebarPluginOrderItem(
+                        id: $0.id,
+                        title: $0.title,
+                        installedAt: $0.installedAt
+                    )
+                }
+                let configurationIDs = sidebarPreferences?.orderedPluginIDs(for: orderItems)
+                    ?? settingsItems.map(\.id)
+                return SettingsNavigationDestination.settingsSidebarOrder(
+                    configurationIDs: configurationIDs
                 )
             },
             isPluginConfigurationAvailable: { pluginHost.hasPluginSettings(pluginID: $0) },
@@ -219,7 +232,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     init(
         initialDestination: SettingsNavigationDestination = .general,
         pluginSettingsLandingPage: @escaping () -> FeatureSettingsPane = { .marketplace },
-        pluginSubpageOrder: @escaping () -> [FeatureSettingsPane] = { [] },
+        sidebarOrder: @escaping () -> [SettingsNavigationDestination] = { [] },
         isPluginConfigurationAvailable: @escaping (String) -> Bool = { _ in true },
         isPluginSettingsSearchTargetAvailable: @escaping (PluginSettingsSearchTarget) -> Bool = { _ in true },
         isPluginManagementAvailable: @escaping (String) -> Bool = { _ in true },
@@ -231,7 +244,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
         self.history = [initialDestination]
         self.historyIndex = 0
         self.pluginSettingsLandingPage = pluginSettingsLandingPage
-        self.pluginSubpageOrder = pluginSubpageOrder
+        self.sidebarOrder = sidebarOrder
         self.isPluginConfigurationAvailable = isPluginConfigurationAvailable
         self.isPluginSettingsSearchTargetAvailable = isPluginSettingsSearchTargetAvailable
         self.isPluginManagementAvailable = isPluginManagementAvailable
@@ -280,34 +293,50 @@ final class SettingsNavigationCoordinator: ObservableObject {
         activate(destination)
     }
 
-    func movePluginSubpage(
-        _ direction: PluginSubpageMoveDirection,
-        in orderedPanes: [FeatureSettingsPane]
-    ) {
+    @discardableResult
+    func moveSidebarSelection(
+        _ direction: SettingsSidebarMoveDirection,
+        in orderedDestinations: [SettingsNavigationDestination]
+    ) -> Bool {
         guard
-            case let .plugins(currentPane) = destination,
-            let currentIndex = orderedPanes.firstIndex(of: currentPane)
+            let currentIndex = orderedDestinations.firstIndex(of: destination)
         else {
-            return
+            return false
         }
 
-        let adjacentIndex: Int
-        switch direction {
+        let step = switch direction {
         case .previous:
-            adjacentIndex = currentIndex - 1
+            -1
         case .next:
-            adjacentIndex = currentIndex + 1
+            1
         }
+        var adjacentIndex = currentIndex + step
 
-        guard orderedPanes.indices.contains(adjacentIndex) else {
-            return
+        while orderedDestinations.indices.contains(adjacentIndex) {
+            let candidate = orderedDestinations[adjacentIndex]
+            if isAvailable(candidate) {
+                navigate(to: candidate)
+                return true
+            }
+            adjacentIndex += step
         }
-
-        navigate(to: .plugins(orderedPanes[adjacentIndex]))
+        return false
     }
 
-    func movePluginSubpage(_ direction: PluginSubpageMoveDirection) {
-        movePluginSubpage(direction, in: pluginSubpageOrder())
+    @discardableResult
+    func moveSidebarSelection(_ direction: SettingsSidebarMoveDirection) -> Bool {
+        moveSidebarSelection(direction, in: sidebarOrder())
+    }
+
+    @discardableResult
+    func selectSidebarDestination(number: Int) -> Bool {
+        guard (1...9).contains(number) else { return false }
+        let availableDestinations = sidebarOrder().filter(isAvailable)
+        let index = number - 1
+        guard availableDestinations.indices.contains(index) else { return false }
+
+        navigate(to: availableDestinations[index])
+        return true
     }
 
     func requestAboutUpdateAction(version: String) {
@@ -448,6 +477,23 @@ final class SettingsNavigationCoordinator: ObservableObject {
             id: nextSearchFocusRequestID,
             field: field
         )
+        return true
+    }
+
+    @discardableResult
+    func requestSearch() -> Bool {
+        guard !isUnifiedSearchPresented else {
+            return false
+        }
+
+        if let searchField = destination.searchField {
+            if focusedSearchField == searchField {
+                return true
+            }
+            return requestSearchFocus()
+        }
+
+        presentUnifiedSearch(origin: .keyboard)
         return true
     }
 

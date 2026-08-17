@@ -8,6 +8,7 @@ struct PluginSettingsPageItem: Identifiable {
     let description: String
     let iconName: String
     let iconTint: Color
+    let installedAt: Date?
     let page: PluginSettingsPage?
     let permissionCards: [PluginPermissionCard]
     let shortcutItems: [ShortcutSettingsItem]

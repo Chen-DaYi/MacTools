@@ -426,6 +426,7 @@ final class PluginHost: ObservableObject {
     private var dynamicPluginCategoriesByID: [String: String?] = [:]
     private var dynamicPluginReleaseChannelsByID: [String: String?] = [:]
     private var dynamicPluginManifestsByID: [String: PluginPackageManifest] = [:]
+    private var dynamicPluginInstalledAtByID: [String: Date] = [:]
     private var shortcutErrors: [String: String] = [:]
     private var appShortcutErrors: [AppShortcutAction: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
@@ -633,6 +634,7 @@ final class PluginHost: ObservableObject {
             self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
             self.dynamicPluginReleaseChannelsByID = dynamicPluginManager.installedReleaseChannelsByID()
             self.dynamicPluginManifestsByID = dynamicPluginManager.installedManifestsByID()
+            self.dynamicPluginInstalledAtByID = dynamicPluginManager.installedAtByID()
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
@@ -2687,6 +2689,7 @@ final class PluginHost: ObservableObject {
         dynamicPluginCategoriesByID = dynamicPluginManager?.installedCategoriesByID() ?? [:]
         dynamicPluginReleaseChannelsByID = dynamicPluginManager?.installedReleaseChannelsByID() ?? [:]
         dynamicPluginManifestsByID = dynamicPluginManager?.installedManifestsByID() ?? [:]
+        dynamicPluginInstalledAtByID = dynamicPluginManager?.installedAtByID() ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
@@ -4021,6 +4024,7 @@ final class PluginHost: ObservableObject {
                 description: page?.description ?? descriptor.metadata.defaultDescription,
                 iconName: descriptor.metadata.iconName,
                 iconTint: descriptor.metadata.iconTint,
+                installedAt: dynamicPluginInstalledAtByID[pluginID],
                 page: page,
                 permissionCards: matchingPermissionCards,
                 shortcutItems: matchingShortcutItems,
