@@ -672,6 +672,51 @@ final class AppWindowRouterTests: XCTestCase {
         window.close()
     }
 
+    func testNavigationShortcutsDoNotMoveBehindUnifiedSearch() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        coordinator.navigate(to: .plugins(.automation))
+        coordinator.navigate(to: .about)
+        coordinator.goBack()
+        XCTAssertTrue(coordinator.canGoBack)
+        XCTAssertTrue(coordinator.canGoForward)
+        let expectedDestination = coordinator.destination
+        let expectedHistoryIndex = coordinator.historyIndex
+
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        for event in [
+            keyEvent(
+                keyCode: UInt16(kVK_ANSI_LeftBracket),
+                characters: "[",
+                windowNumber: window.windowNumber
+            ),
+            keyEvent(
+                keyCode: UInt16(kVK_ANSI_RightBracket),
+                characters: "]",
+                windowNumber: window.windowNumber
+            ),
+            keyEvent(
+                keyCode: UInt16(kVK_DownArrow),
+                characters: "",
+                modifiers: [.control, .command],
+                windowNumber: window.windowNumber
+            )
+        ] {
+            _ = window.performKeyEquivalent(with: event)
+            XCTAssertEqual(coordinator.destination, expectedDestination)
+            XCTAssertEqual(coordinator.historyIndex, expectedHistoryIndex)
+        }
+
+        window.close()
+    }
+
     func testCommandFFallsBackToUnifiedSettingsSearch() throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

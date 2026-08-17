@@ -87,13 +87,24 @@ final class SettingsSidebarPreferencesStore: ObservableObject {
         }
     }
 
+    static func storedCustomOrderIfInitialized(in userDefaults: UserDefaults) -> [String]? {
+        guard userDefaults.object(forKey: DefaultsKey.customOrder) != nil else {
+            return nil
+        }
+        return storedCustomOrder(in: userDefaults)
+    }
+
     static func applyImportedPreferences(
         sortMode: SettingsSidebarPluginSortMode,
-        customOrderedPluginIDs: [String],
+        customOrderedPluginIDs: [String]?,
         to userDefaults: UserDefaults
     ) {
         userDefaults.set(sortMode.rawValue, forKey: DefaultsKey.sortMode)
-        userDefaults.set(customOrderedPluginIDs, forKey: DefaultsKey.customOrder)
+        if let customOrderedPluginIDs {
+            userDefaults.set(customOrderedPluginIDs, forKey: DefaultsKey.customOrder)
+        } else {
+            userDefaults.removeObject(forKey: DefaultsKey.customOrder)
+        }
         NotificationCenter.default.post(name: didImportNotification, object: nil)
     }
 
@@ -154,14 +165,18 @@ final class SettingsSidebarPreferencesStore: ObservableObject {
         remainingIDs.insert(contentsOf: movingIDs, at: insertionIndex)
 
         guard remainingIDs != currentOrder else { return false }
+        let mergedOrder = mergedCustomOrder(
+            reorderedAvailableIDs: remainingIDs,
+            availableIDs: currentOrder
+        )
         sortMode = .custom
-        customOrderedPluginIDs = remainingIDs
+        customOrderedPluginIDs = mergedOrder
         isCustomOrderInitialized = true
         userDefaults.set(
             SettingsSidebarPluginSortMode.custom.rawValue,
             forKey: DefaultsKey.sortMode
         )
-        userDefaults.set(remainingIDs, forKey: DefaultsKey.customOrder)
+        userDefaults.set(mergedOrder, forKey: DefaultsKey.customOrder)
         return true
     }
 
@@ -186,6 +201,42 @@ final class SettingsSidebarPreferencesStore: ObservableObject {
             availableIDSet.contains($0) && seen.insert($0).inserted
         }
         return savedIDs + availableIDs.filter { seen.insert($0).inserted }
+    }
+
+    /// Replaces available IDs in their saved slots while retaining IDs for
+    /// temporarily unavailable plugins so reinstalling can restore their order.
+    private func mergedCustomOrder(
+        reorderedAvailableIDs: [String],
+        availableIDs: [String]
+    ) -> [String] {
+        let availableIDSet = Set(availableIDs)
+        var reorderedIterator = reorderedAvailableIDs.makeIterator()
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for savedID in customOrderedPluginIDs {
+            let nextID: String
+            if availableIDSet.contains(savedID) {
+                guard let reorderedID = reorderedIterator.next() else {
+                    continue
+                }
+                nextID = reorderedID
+            } else {
+                nextID = savedID
+            }
+
+            if seen.insert(nextID).inserted {
+                result.append(nextID)
+            }
+        }
+
+        while let reorderedID = reorderedIterator.next() {
+            if seen.insert(reorderedID).inserted {
+                result.append(reorderedID)
+            }
+        }
+
+        return result
     }
 
     private func orderedByName(

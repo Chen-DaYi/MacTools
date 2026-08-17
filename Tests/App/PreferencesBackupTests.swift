@@ -94,6 +94,52 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(activeSidebarStore.customOrderedPluginIDs, ["calendar", "battery"])
     }
 
+    func testUntouchedSidebarBackupPreservesUninitializedCustomOrder() async throws {
+        let sourceDefaults = makeDefaults(suiteName: "\(suiteName)-uninitialized-source")
+        let applicationPreferences = PreferencesBackupStore(
+            userDefaults: sourceDefaults
+        ).applicationPreferences()
+
+        XCTAssertEqual(
+            applicationPreferences.settingsSidebarPluginSortMode,
+            SettingsSidebarPluginSortMode.nameAscending.rawValue
+        )
+        XCTAssertNil(applicationPreferences.settingsSidebarCustomPluginOrder)
+
+        let destinationDefaults = makeDefaults(
+            suiteName: "\(suiteName)-uninitialized-destination"
+        )
+        SettingsSidebarPreferencesStore.applyImportedPreferences(
+            sortMode: .custom,
+            customOrderedPluginIDs: ["calendar", "battery"],
+            to: destinationDefaults
+        )
+        let activeSidebarStore = SettingsSidebarPreferencesStore(
+            userDefaults: destinationDefaults,
+            locale: { Locale(identifier: "en_US") }
+        )
+        let destinationStore = PreferencesBackupStore(userDefaults: destinationDefaults)
+
+        XCTAssertTrue(destinationStore.validates(applicationPreferences))
+        destinationStore.apply(applicationPreferences)
+        await Task.yield()
+
+        XCTAssertEqual(activeSidebarStore.sortMode, .nameAscending)
+        XCTAssertTrue(activeSidebarStore.customOrderedPluginIDs.isEmpty)
+
+        let availableItems = [
+            SettingsSidebarPluginOrderItem(id: "calendar", title: "Calendar", installedAt: nil),
+            SettingsSidebarPluginOrderItem(id: "battery", title: "Battery", installedAt: nil),
+            SettingsSidebarPluginOrderItem(id: "audio", title: "Audio", installedAt: nil),
+        ]
+        activeSidebarStore.setSortMode(.custom, availableItems: availableItems)
+
+        XCTAssertEqual(
+            activeSidebarStore.orderedPluginIDs(for: availableItems),
+            ["audio", "battery", "calendar"]
+        )
+    }
+
     func testLegacyApplicationPreferencesLeaveSettingsSidebarOrderUnchanged() async throws {
         let defaults = makeDefaults(suiteName: "\(suiteName)-legacy")
         SettingsSidebarPreferencesStore.applyImportedPreferences(

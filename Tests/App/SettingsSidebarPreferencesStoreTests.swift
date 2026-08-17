@@ -38,15 +38,39 @@ final class SettingsSidebarPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(store.orderedPluginIDs(for: items), ["battery", "calendar", "audio"])
     }
 
-    func testCustomOrderIgnoresUnavailableIDsAndAppendsNewPlugins() throws {
+    func testCustomOrderPreservesUnavailableIDsWhileReorderingVisibleItems() throws {
         let defaults = try makeDefaults()
         defaults.set(SettingsSidebarPluginSortMode.custom.rawValue, forKey: "settings.sidebar.pluginSortMode")
         defaults.set(["removed", "battery", "calendar"], forKey: "settings.sidebar.customPluginOrder")
         let store = SettingsSidebarPreferencesStore(userDefaults: defaults)
+        let availableItems = makeItems()
 
         XCTAssertEqual(
-            store.orderedPluginIDs(for: makeItems()),
+            store.orderedPluginIDs(for: availableItems),
             ["battery", "calendar", "audio"]
+        )
+        XCTAssertTrue(
+            store.movePlugins(
+                fromOffsets: IndexSet(integer: 2),
+                toOffset: 0,
+                availableItems: availableItems
+            )
+        )
+        XCTAssertEqual(
+            store.customOrderedPluginIDs,
+            ["removed", "audio", "battery", "calendar"]
+        )
+
+        let restoredItems = availableItems + [
+            SettingsSidebarPluginOrderItem(
+                id: "removed",
+                title: "Restored",
+                installedAt: nil
+            )
+        ]
+        XCTAssertEqual(
+            store.orderedPluginIDs(for: restoredItems),
+            ["removed", "audio", "battery", "calendar"]
         )
     }
 
@@ -161,7 +185,7 @@ final class SettingsSidebarPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(store.orderedPluginIDs(for: items), ["newest", "oldest", "unknown"])
     }
 
-    func testSortFeatureStringsCoverEverySupportedLanguage() throws {
+    func testSidebarFeatureStringsCoverEverySupportedLanguage() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -179,6 +203,7 @@ final class SettingsSidebarPreferencesStoreTests: XCTestCase {
                 .map(\.rawValue)
         )
         let keys = [
+            "settings.sidebar.shortcutAccessibilityHint",
             "settings.sidebar.pluginSortHelp",
             "settings.sidebar.pluginSort.installedOldestFirst",
             "settings.sidebar.pluginSort.installedNewestFirst",

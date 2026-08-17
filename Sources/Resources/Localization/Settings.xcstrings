@@ -382,6 +382,22 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "設定導覽" } }
       }
     },
+    "settings.sidebar.shortcutAccessibilityHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "اختصار لوحة المفاتيح: Command-%d" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Tastaturkurzbefehl: Befehl-%d" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Keyboard shortcut: Command-%d" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Atajo de teclado: Comando-%d" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Raccourci clavier : Commande-%d" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "キーボードショートカット：Command-%d" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "키보드 단축키: Command-%d" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Atalho de teclado: Comando-%d" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Сочетание клавиш: Command-%d" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "键盘快捷键：Command-%d" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "鍵盤快速鍵：Command-%d" } }
+      }
+    },
     "settings.sidebar.pluginSortHelp": {
       "extractionState": "manual",
       "localizations": {

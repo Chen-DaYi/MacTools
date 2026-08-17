@@ -874,15 +874,33 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
             return settingsNavigationCoordinator.selectSidebarDestination(number: number)
         case .goBack:
-            guard settingsNavigationCoordinator?.canGoBack == true else { return false }
-            settingsNavigationCoordinator?.goBack()
+            guard
+                let settingsNavigationCoordinator,
+                !settingsNavigationCoordinator.isUnifiedSearchPresented,
+                settingsNavigationCoordinator.canGoBack
+            else {
+                return false
+            }
+            settingsNavigationCoordinator.goBack()
             return true
         case .goForward:
-            guard settingsNavigationCoordinator?.canGoForward == true else { return false }
-            settingsNavigationCoordinator?.goForward()
+            guard
+                let settingsNavigationCoordinator,
+                !settingsNavigationCoordinator.isUnifiedSearchPresented,
+                settingsNavigationCoordinator.canGoForward
+            else {
+                return false
+            }
+            settingsNavigationCoordinator.goForward()
             return true
         case let .moveSidebarSelection(direction):
-            return settingsNavigationCoordinator?.moveSidebarSelection(direction) ?? false
+            guard
+                let settingsNavigationCoordinator,
+                !settingsNavigationCoordinator.isUnifiedSearchPresented
+            else {
+                return false
+            }
+            return settingsNavigationCoordinator.moveSidebarSelection(direction)
         }
     }
 

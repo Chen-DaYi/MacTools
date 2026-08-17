@@ -2049,6 +2049,20 @@ private struct SettingsSidebarRow: View {
         .font(.body)
         .focusable(false)
         .help(title)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityHint(shortcutAccessibilityHint)
+    }
+
+    private var shortcutAccessibilityHint: String {
+        guard let shortcutNumber else {
+            return ""
+        }
+        return AppL10n.settingsFormat(
+            "settings.sidebar.shortcutAccessibilityHint",
+            defaultValue: "Keyboard shortcut: Command-%d",
+            shortcutNumber
+        )
     }
 }
 

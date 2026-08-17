@@ -15,9 +15,8 @@ final class PreferencesBackupStore: PreferencesBackupApplicationStoring {
             languagePreference: AppLanguagePreference.stored(in: userDefaults).rawValue,
             menuBarClickBehavior: MenuBarClickBehaviorPreference.current(userDefaults).rawValue,
             settingsSidebarPluginSortMode: sidebarSortMode.rawValue,
-            settingsSidebarCustomPluginOrder: SettingsSidebarPreferencesStore.storedCustomOrder(
-                in: userDefaults
-            )
+            settingsSidebarCustomPluginOrder:
+                SettingsSidebarPreferencesStore.storedCustomOrderIfInitialized(in: userDefaults)
         )
     }
 
@@ -35,11 +34,16 @@ final class PreferencesBackupStore: PreferencesBackupApplicationStoring {
         ) {
         case (nil, nil):
             return true
-        case let (rawSortMode?, customOrder?):
-            return SettingsSidebarPluginSortMode(rawValue: rawSortMode) != nil
-                && customOrder.allSatisfy { !$0.isEmpty }
+        case let (rawSortMode?, customOrder):
+            guard SettingsSidebarPluginSortMode(rawValue: rawSortMode) != nil else {
+                return false
+            }
+            guard let customOrder else {
+                return true
+            }
+            return customOrder.allSatisfy { !$0.isEmpty }
                 && Set(customOrder).count == customOrder.count
-        default:
+        case (nil, _?):
             return false
         }
     }
@@ -57,11 +61,10 @@ final class PreferencesBackupStore: PreferencesBackupApplicationStoring {
         userDefaults.set(clickBehavior.rawValue, forKey: MenuBarClickBehaviorPreference.userDefaultsKey)
 
         if let rawSortMode = preferences.settingsSidebarPluginSortMode,
-           let sortMode = SettingsSidebarPluginSortMode(rawValue: rawSortMode),
-           let customOrder = preferences.settingsSidebarCustomPluginOrder {
+           let sortMode = SettingsSidebarPluginSortMode(rawValue: rawSortMode) {
             SettingsSidebarPreferencesStore.applyImportedPreferences(
                 sortMode: sortMode,
-                customOrderedPluginIDs: customOrder,
+                customOrderedPluginIDs: preferences.settingsSidebarCustomPluginOrder,
                 to: userDefaults
             )
         }
