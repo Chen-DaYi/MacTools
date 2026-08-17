@@ -3,4 +3,5 @@ release: app
 type: fixed
 ---
 
-Improved narrow Automation layouts, stabilized Actions & Shortcuts filters, moved Run Link copying into expanded details, and made workflow reordering reliable with native drag and compact context actions.
+- Automation keeps its resizable workflow list stable and readable, with reliable reordering and action replacement in narrow layouts.
+- Actions & Shortcuts filters remain stable, and Run Link copying is available from expanded action details.

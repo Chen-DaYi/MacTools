@@ -4,4 +4,4 @@ type: changed
 area: Automation
 ---
 
-Plugin actions now declare unattended automation support explicitly, reject unsafe overlapping runs by default, and use consistent execution deadlines.
+Automatic workflows now run only plugin actions that explicitly support unattended execution. Overlapping runs are rejected by default, and every action uses a consistent deadline.

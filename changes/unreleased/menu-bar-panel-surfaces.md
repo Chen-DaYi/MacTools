@@ -4,4 +4,4 @@ type: changed
 area: Menu Bar
 ---
 
-Menu-bar panels and their attachment arrows now use one stable opaque semantic background in both Light and Dark appearances without reducing the panel's content area.
+Menu-bar panels and their attachment arrows now use a consistent opaque background in Light and Dark appearance without reducing the content area.

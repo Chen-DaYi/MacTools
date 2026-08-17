@@ -4,4 +4,5 @@ type: added
 area: Productivity
 ---
 
-Expanded reusable actions across display, audio, system, cleanup, app, input, Homebrew, battery, and fan plugins. Long operations hand off to durable progress surfaces while preserving cancellation and safety checks.
+- Added reusable actions across display, audio, system, cleanup, app, input, Homebrew, battery, and fan tools. Long operations retain progress, cancellation, and safety checks.
+- Added live-state toggle actions for appearance, mute, Night Shift, Stage Manager, auto-hide, True Tone, Hide Notch, and Auto Input.

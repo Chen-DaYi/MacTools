@@ -4,4 +4,4 @@ type: fixed
 area: Sidecar
 ---
 
-Sidecar actions now use available system icons, and restored or third-party action icons fall back visibly when their symbol is unavailable on the current macOS version.
+Sidecar and restored third-party actions now use visible fallback icons when their preferred system symbol is unavailable on the current macOS version.

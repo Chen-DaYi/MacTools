@@ -4,4 +4,4 @@ type: fixed
 area: Automation
 ---
 
-Action Grid, Unified Search, and Run Links now hand long-running workflows to Automation. Unified Search also keeps accepted actions running after its palette closes while cancelling work that has not started.
+Long-running workflows launched from Action Grid, Unified Search, or Run Links now continue in Automation after the originating surface closes.

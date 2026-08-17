@@ -4,4 +4,4 @@ type: fixed
 area: Automation
 ---
 
-Scheduled workflows now adjust when the system clock or time zone changes while MacTools is running.
+Scheduled workflows now adjust to system clock and time-zone changes, and live-state listeners remain active while enabled rules depend on them.

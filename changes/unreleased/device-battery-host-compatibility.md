@@ -4,4 +4,4 @@ type: fixed
 area: Device Battery
 ---
 
-Device Battery packages now require a MacTools version that supports their shared component appearance.
+Device Battery updates no longer install on MacTools versions that lack the required component appearance support.
