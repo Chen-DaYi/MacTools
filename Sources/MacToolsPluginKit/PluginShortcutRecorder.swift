@@ -97,7 +97,12 @@ public struct PluginShortcutRecorderField: View {
             .minimumScaleFactor(0.8)
             .padding(.horizontal, PluginSettingsTheme.Spacing.sectionHeaderContent)
             .padding(.vertical, PluginSettingsTheme.Spacing.controlCluster - 3)
-            .frame(minWidth: minWidth, alignment: .center)
+            .frame(
+                minWidth: minWidth,
+                minHeight: PluginSettingsTheme.Size.controlHeight,
+                maxHeight: PluginSettingsTheme.Size.controlHeight,
+                alignment: .center
+            )
             .background(
                 RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
                     .fill(PluginSettingsTheme.Palette.fieldBackground)

@@ -1597,6 +1597,10 @@ final class PluginHost: ObservableObject {
         appPresentationHandler?(.settings(.pluginMarketplace))
     }
 
+    func presentActionsAndShortcutsSettings() {
+        appPresentationHandler?(.settings(.feature(.actionsAndShortcuts)))
+    }
+
     /// Chooses the entry page for a normal Plugins-tab selection. Explicit
     /// navigation to Marketplace or a plugin configuration bypasses this so
     /// the requested destination is always respected.
@@ -3230,8 +3234,15 @@ final class PluginHost: ObservableObject {
 
             actionRegistry.invalidateAvailability()
             rebuildDerivedState(dirtyPluginIDs: pluginIDs)
+            syncGlobalShortcuts()
         }
     }
+
+    #if DEBUG
+    func waitForScheduledPluginStateRebuildForTests() async {
+        await pluginStateChangeRebuildTask?.value
+    }
+    #endif
 
     private func cancelScheduledPluginStateRebuild() {
         pluginStateChangeRebuildTask?.cancel()
@@ -3976,8 +3987,30 @@ final class PluginHost: ObservableObject {
             } else {
                 page = nil
             }
+            let actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration?
+            if descriptor.hasSettings,
+               let provider = descriptor.plugin as? any PluginActionShortcutSettingsProviding,
+               let configuration = guardedValue(
+                   for: descriptor.plugin,
+                   operation: "read action shortcut settings configuration",
+                   provider.actionShortcutSettingsConfiguration
+               ) {
+                let title = configuration.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let systemImage = configuration.systemImage.trimmingCharacters(in: .whitespacesAndNewlines)
+                if title.isEmpty || systemImage.isEmpty || configuration.actionIDs.isEmpty {
+                    AppLog.pluginHost.error(
+                        "Plugin \(pluginID, privacy: .public) returned invalid action shortcut settings configuration"
+                    )
+                    actionShortcutSettingsConfiguration = nil
+                } else {
+                    actionShortcutSettingsConfiguration = configuration
+                }
+            } else {
+                actionShortcutSettingsConfiguration = nil
+            }
             let hasSettingsSurface = !matchingPermissionCards.isEmpty
                 || !matchingShortcutItems.isEmpty
+                || actionShortcutSettingsConfiguration != nil
                 || page != nil
 
             guard hasSettingsSurface else {
@@ -3994,7 +4027,8 @@ final class PluginHost: ObservableObject {
                 installedAt: dynamicPluginInstalledAtByID[pluginID],
                 page: page,
                 permissionCards: matchingPermissionCards,
-                shortcutItems: matchingShortcutItems
+                shortcutItems: matchingShortcutItems,
+                actionShortcutSettingsConfiguration: actionShortcutSettingsConfiguration
             )
         }
     }

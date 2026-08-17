@@ -362,6 +362,96 @@ struct ActionShortcutSettingsView: View {
     }
 }
 
+struct PluginActionShortcutRowsContent: View {
+    @ObservedObject var pluginHost: PluginHost
+    let providerID: String
+    let actionIDs: Set<String>
+    @State private var pendingReplacement: PendingActionShortcutReplacement?
+
+    private var items: [ActionShortcutCatalogItem] {
+        pluginHost.actionShortcutCatalogItems.filter { item in
+            item.reference.key.providerID == providerID
+                && actionIDs.contains(item.reference.key.actionID)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let error = pluginHost.actionShortcutLoadError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.red)
+                    .pluginSettingsListRowPadding(interactive: false)
+            } else if items.isEmpty {
+                ContentUnavailableView(
+                    FeatureL10n.string("没有匹配的操作"),
+                    systemImage: "command"
+                )
+                .frame(maxWidth: .infinity, minHeight: 120)
+            } else {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    ActionShortcutCatalogRow(
+                        pluginHost: pluginHost,
+                        item: item,
+                        displaysRunLink: false,
+                        onRecord: { binding in record(binding, for: item) },
+                        onClear: {
+                            pluginHost.clearActionShortcut(
+                                for: item.reference,
+                                assignmentID: item.assignmentID
+                            )
+                        }
+                    )
+                    if index < items.count - 1 {
+                        PluginSettingsListDivider()
+                    }
+                }
+            }
+        }
+        .alert(item: $pendingReplacement) { replacement in
+            Alert(
+                title: Text(FeatureL10n.string("替换快捷键？")),
+                message: Text(FeatureL10n.format(
+                    "此快捷键已分配给“%@”。替换后，原操作将不再使用它。",
+                    replacement.ownerDescription
+                )),
+                primaryButton: .destructive(Text(FeatureL10n.string("替换"))) {
+                    _ = pluginHost.setActionShortcutBinding(
+                        replacement.binding,
+                        to: replacement.reference,
+                        assignmentID: replacement.assignmentID,
+                        replacingConflictingActionAssignments: true
+                    )
+                },
+                secondaryButton: .cancel()
+            )
+        }
+    }
+
+    private func record(
+        _ binding: ShortcutBinding,
+        for item: ActionShortcutCatalogItem
+    ) -> PluginShortcutRecordingResult {
+        switch pluginHost.setActionShortcutBinding(
+            binding,
+            to: item.reference,
+            assignmentID: item.assignmentID
+        ) {
+        case .success:
+            return .accepted
+        case let .failure(.conflict(ownerDescription)):
+            pendingReplacement = PendingActionShortcutReplacement(
+                reference: item.reference,
+                assignmentID: item.assignmentID,
+                binding: binding,
+                ownerDescription: ownerDescription
+            )
+            return .accepted
+        case let .failure(error):
+            return .rejected(error.localizedDescription)
+        }
+    }
+}
 private struct ActionShortcutGroup {
     let providerID: String
     let title: String
@@ -370,12 +460,13 @@ private struct ActionShortcutGroup {
 
 private struct ActionShortcutCatalogRow: View {
     private enum Layout {
-        static let recorderWidth: CGFloat = 126
+        static let recorderWidth = PluginSettingsTheme.Size.shortcutRecorderWidth
         static let actionButtonSize: CGFloat = 22
     }
 
     @ObservedObject var pluginHost: PluginHost
     let item: ActionShortcutCatalogItem
+    var displaysRunLink = true
     let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
     let onClear: () -> Void
 
@@ -428,12 +519,14 @@ private struct ActionShortcutCatalogRow: View {
                 )
             }
 
-            ActionRunLinkControl(
-                pluginHost: pluginHost,
-                reference: item.reference,
-                displaysUnavailableReason: false
-            )
-            .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
+            if displaysRunLink {
+                ActionRunLinkControl(
+                    pluginHost: pluginHost,
+                    reference: item.reference,
+                    displaysUnavailableReason: false
+                )
+                .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
+            }
         }
         .pluginSettingsListRowPadding(interactive: true)
     }

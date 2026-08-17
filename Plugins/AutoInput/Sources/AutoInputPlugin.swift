@@ -3,6 +3,13 @@ import Foundation
 import SwiftUI
 import MacToolsPluginKit
 
+enum AutoInputSettingsSearchEntryID {
+    static let behavior = "behavior"
+    static let rules = "rules"
+    static let hud = "hud"
+    static let shortcuts = PluginActionShortcutSettingsConfiguration.settingsSearchEntryID
+}
+
 public final class AutoInputPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
         AutoInputPluginProvider(context: context)
@@ -20,15 +27,20 @@ private struct AutoInputPluginProvider: PluginProvider {
 
 @MainActor
 final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicationActivityStateHandling,
-    PluginActionProviding
+    PluginActionProviding, PluginActionShortcutSettingsProviding, PluginSettingsSearchProviding
 {
     private enum PermissionID {
         static let accessibility = "accessibility"
     }
 
     private enum ActionID {
+        static let selectSource = "select-input-source"
         static let setEnabled = "set-enabled"
         static let toggle = "toggle"
+    }
+
+    private enum ActionParameterID {
+        static let inputSource = "inputSourceID"
     }
 
     let metadata: PluginMetadata
@@ -100,8 +112,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
     }
 
     var permissionRequirements: [PluginPermissionRequirement] {
-        guard store.isInputHUDEnabled else { return [] }
-        return [
+        [
             PluginPermissionRequirement(
                 id: PermissionID.accessibility,
                 kind: .accessibility,
@@ -113,6 +124,111 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                     "permission.accessibility.description",
                     defaultValue: "仅用于在文本输入区域和终端附近显示当前输入法。"
                 )
+            ),
+        ]
+    }
+
+    var actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration {
+        PluginActionShortcutSettingsConfiguration(
+            title: localization.string(
+                "settings.shortcuts.title",
+                defaultValue: "输入法快捷键"
+            ),
+            description: localization.string(
+                "settings.shortcuts.description",
+                defaultValue: "为常用输入法分配全局快捷键，按下即可直接切换。"
+            ),
+            actionIDs: [ActionID.selectSource],
+            placementAfterSectionID: "hud"
+        )
+    }
+
+    var settingsSearchEntries: [PluginSettingsSearchEntry] {
+        [
+            PluginSettingsSearchEntry(
+                id: AutoInputSettingsSearchEntryID.behavior,
+                title: localization.string(
+                    "settings.memory.title",
+                    defaultValue: "自动记忆"
+                ),
+                description: localization.string(
+                    "settings.memory.description",
+                    defaultValue: "切回应用时恢复上次使用的输入法。"
+                ),
+                keywords: [
+                    localization.string(
+                        "settings.behavior.title",
+                        defaultValue: "切换行为"
+                    ),
+                ],
+                systemImage: "arrow.counterclockwise"
+            ),
+            PluginSettingsSearchEntry(
+                id: AutoInputSettingsSearchEntryID.rules,
+                title: localization.string(
+                    "settings.rules.title",
+                    defaultValue: "固定规则"
+                ),
+                description: localization.string(
+                    "settings.rules.empty",
+                    defaultValue: "添加应用，为它指定固定输入法"
+                ),
+                keywords: [
+                    localization.string(
+                        "settings.rules.add",
+                        defaultValue: "添加"
+                    ),
+                    localization.string(
+                        "action.selectSource.parameterTitle",
+                        defaultValue: "输入法"
+                    ),
+                ],
+                systemImage: "app.badge.checkmark"
+            ),
+            PluginSettingsSearchEntry(
+                id: AutoInputSettingsSearchEntryID.hud,
+                title: localization.string(
+                    "settings.hud.title",
+                    defaultValue: "输入法提示"
+                ),
+                description: localization.string(
+                    "settings.hud.description",
+                    defaultValue: "聚焦文本输入区域或终端时，在附近短暂显示当前输入法。需要辅助功能权限。"
+                ),
+                keywords: [
+                    localization.string(
+                        "settings.hud.size.title",
+                        defaultValue: "提示大小"
+                    ),
+                    localization.string(
+                        "settings.hud.position.title",
+                        defaultValue: "提示位置"
+                    ),
+                    localization.string(
+                        "settings.hud.interactive.title",
+                        defaultValue: "交互式提示"
+                    ),
+                    "HUD",
+                ],
+                systemImage: "text.cursor"
+            ),
+            PluginSettingsSearchEntry(
+                id: AutoInputSettingsSearchEntryID.shortcuts,
+                title: localization.string(
+                    "settings.shortcuts.title",
+                    defaultValue: "输入法快捷键"
+                ),
+                description: localization.string(
+                    "settings.shortcuts.description",
+                    defaultValue: "为常用输入法分配全局快捷键，按下即可直接切换。"
+                ),
+                keywords: [
+                    localization.string(
+                        "action.selectSource.parameterTitle",
+                        defaultValue: "输入法"
+                    ),
+                ],
+                systemImage: "command"
             ),
         ]
     }
@@ -180,6 +296,29 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(controller.sources.isEmpty)
+            },
+            PluginSettingsSection(
+                id: "hud",
+                title: localization.string("settings.hud.title", defaultValue: "输入法提示"),
+                systemImage: "text.cursor",
+                presentation: .edgeToEdge
+            ) { [self] _ in
+                AutoInputSettingsView(
+                    store: store,
+                    controller: controller,
+                    localization: localization,
+                    onChange: { [weak self] in
+                        self?.controller.configurationDidChange()
+                        self?.onStateChange?()
+                    },
+                    onHUDChange: { [weak self] enabled in
+                        self?.controller.configurationDidChange(
+                            promptForAccessibility: enabled
+                        )
+                        self?.onStateChange?()
+                    },
+                    section: .hud
+                )
             }
         ])
         .onVisibilityChange { [weak self] isVisible in
@@ -214,11 +353,44 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                 externalInvocationPolicy: .allowed,
                 capabilities: [.automatic, .background, .foregroundInteractive]
             ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.selectSource),
+                title: localization.string(
+                    "action.selectSource.definitionTitle",
+                    defaultValue: "选择输入法"
+                ),
+                description: localization.string(
+                    "action.selectSource.description",
+                    defaultValue: "直接切换到指定输入法。"
+                ),
+                keywords: [
+                    metadata.title,
+                    localization.string(
+                        "action.selectSource.definitionTitle",
+                        defaultValue: "选择输入法"
+                    ),
+                ],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: ActionParameterID.inputSource,
+                        title: localization.string(
+                            "action.selectSource.parameterTitle",
+                            defaultValue: "输入法"
+                        ),
+                        kind: .string,
+                        portability: .localOnly
+                    ),
+                ],
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.automatic, .background, .foregroundInteractive],
+                concurrencyPolicy: .serialize
+            ),
         ]
     }
 
     var actionCatalogEntries: [ActionCatalogEntry] {
-        [
+        let stateActions = [
             ActionCatalogEntry(
                 reference: toggleActionReference,
                 title: store.isAutoSwitchEnabled
@@ -236,6 +408,33 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                 title: "\(metadata.title) · \(localization.string("panel.subtitle.paused", defaultValue: "已暂停"))"
             ),
         ]
+        let sourceActions = controller.sources.map { source in
+            ActionCatalogEntry(
+                reference: sourceActionReference(sourceID: source.id),
+                title: localization.format(
+                    "action.selectSource.titleFormat",
+                    defaultValue: "切换到 %@",
+                    source.name
+                ),
+                subtitle: metadata.title,
+                presentationState: controller.currentSourceID == source.id ? .active : .inactive
+            )
+        }
+        return stateActions + sourceActions
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key.actionID == ActionID.selectSource else {
+            return .available
+        }
+        guard let sourceID = sourceID(for: reference),
+              controller.sources.contains(where: { $0.id == sourceID }) else {
+            return .unavailable(localization.string(
+                "action.selectSource.unavailable",
+                defaultValue: "输入法已停用或不可用。"
+            ))
+        }
+        return .available
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -294,6 +493,27 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                 guard let self else { return .cancelled }
                 return self.setAutoSwitchEnabled(value)
             }
+        case ActionID.selectSource:
+            guard let sourceID = sourceID(for: invocation.reference) else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            return ActionExecutionHandle { [weak self] in
+                guard let self else { return .cancelled }
+                do {
+                    try self.controller.selectSource(id: sourceID)
+                    return .succeeded()
+                } catch AutoInputSourceError.sourceUnavailable {
+                    return .failed(message: self.localization.string(
+                        "action.selectSource.unavailable",
+                        defaultValue: "输入法已停用或不可用。"
+                    ))
+                } catch {
+                    return .failed(message: self.localization.string(
+                        "error.switchFailed",
+                        defaultValue: "无法切换输入法"
+                    ))
+                }
+            }
         default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
@@ -329,6 +549,24 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
 
     private var toggleActionReference: ActionReference {
         ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    private func sourceActionReference(sourceID: String) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.selectSource),
+            parameters: try! ActionParameterSet([
+                ActionParameterID.inputSource: .string(sourceID),
+            ])
+        )
+    }
+
+    private func sourceID(for reference: ActionReference) -> String? {
+        guard reference.key == ActionKey(
+            providerID: metadata.id,
+            actionID: ActionID.selectSource
+        ), case let .string(sourceID)? = reference.parameters[ActionParameterID.inputSource]
+        else { return nil }
+        return sourceID
     }
 
     private var persistenceErrorMessage: String? {

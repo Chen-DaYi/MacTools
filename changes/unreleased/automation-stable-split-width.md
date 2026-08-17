@@ -4,4 +4,4 @@ type: fixed
 area: Automation
 ---
 
-The Automation workflow list starts wider, stays stable on selection, and uses a continuous background with cleaner rows. The Replace button for each step reliably opens the action picker.
+Automation now keeps its resizable workflow list stable, uses cleaner rows and summaries, groups editor header controls, and reliably opens the action picker from each step's Replace button.

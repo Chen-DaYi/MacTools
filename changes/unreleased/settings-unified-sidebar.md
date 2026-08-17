@@ -4,4 +4,4 @@ type: changed
 area: Settings
 ---
 
-Settings uses one always-visible native resizable sidebar with responsive navigation. Run Link controls use a consistent disclosure flow and require a preset before the first expansion.
+Settings now uses one resizable sidebar for General, About, management, and plugin pages. Detail pages avoid duplicate headings, and Actions & Shortcuts uses consistent search, filters, and Run Link controls.
