@@ -1845,6 +1845,7 @@ private struct SettingsSidebar: View {
                 "plugins.sidebar.configurationSection",
                 defaultValue: "插件设置"
             ))
+                .foregroundStyle(.secondary)
 
             Spacer(minLength: 0)
 
@@ -1896,20 +1897,18 @@ private struct SettingsSidebar: View {
                 }
                 .disabled(true)
             } label: {
-                Label(
-                    sidebarPreferences.sortMode.localizedTitle,
-                    systemImage: "arrow.up.arrow.down"
-                )
-                .labelStyle(.iconOnly)
-                .font(.caption2.weight(.semibold))
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.secondary)
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.caption2.weight(.medium))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 11, height: 11, alignment: .center)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .scaleEffect(0.86, anchor: .trailing)
+            .scaleEffect(0.80, anchor: .trailing)
             .padding(.trailing, Layout.sectionHeaderTrailingInset)
+            .accessibilityLabel(sidebarPreferences.sortMode.localizedTitle)
             .help(AppL10n.settings(
                 "settings.sidebar.pluginSortHelp",
                 defaultValue: "调整设置侧边栏中的插件页面顺序，不影响仪表盘或功能面板"
