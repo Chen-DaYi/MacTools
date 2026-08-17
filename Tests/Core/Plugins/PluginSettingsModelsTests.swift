@@ -22,6 +22,17 @@ final class PluginSettingsModelsTests: XCTestCase {
                             )
                         ),
                         PluginSettingsRow(
+                            id: "visible-mode",
+                            title: "显示模式",
+                            control: .choiceGroup(
+                                selectionID: "automatic",
+                                options: [
+                                    PluginSettingsOption(id: "automatic", title: "自动"),
+                                    PluginSettingsOption(id: "manual", title: "手动")
+                                ]
+                            )
+                        ),
+                        PluginSettingsRow(
                             id: "level",
                             title: "级别",
                             control: .slider(

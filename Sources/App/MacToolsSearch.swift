@@ -752,12 +752,14 @@ enum MacToolsSearchIndexBuilder {
             }
 
             return rows.filter(\.isVisible).map { row in
+                let helpText = row.help ?? row.helpItems.joined(separator: " ")
                 let optionKeywords: [String]
-                if case let .picker(_, options, _) = row.control {
+                switch row.control {
+                case let .picker(_, options, _), let .choiceGroup(_, options):
                     optionKeywords = options.flatMap { option in
                         [option.title, option.description].compactMap { $0 }
                     }
-                } else {
+                default:
                     optionKeywords = []
                 }
 
@@ -765,10 +767,10 @@ enum MacToolsSearchIndexBuilder {
                     id: "setting-row.\(item.pluginID).\(row.id)",
                     item: item,
                     title: row.title,
-                    detail: row.description ?? row.help ?? "",
+                    detail: row.description ?? helpText,
                     keywords: row.keywords
                         + optionKeywords
-                        + [section.title, row.help, row.error].compactMap { $0 },
+                        + [section.title, helpText, row.error].compactMap { $0 },
                     systemImage: row.systemImage ?? section.systemImage ?? "slider.horizontal.3",
                     entryID: row.id
                 )

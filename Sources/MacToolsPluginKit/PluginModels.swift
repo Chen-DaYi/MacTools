@@ -58,7 +58,7 @@ public enum PluginMenuActionBehavior {
     case dismissBeforeHandling
 }
 
-public enum PluginStatusTone {
+public enum PluginStatusTone: Equatable, Sendable {
     case neutral
     case positive
     case caution
