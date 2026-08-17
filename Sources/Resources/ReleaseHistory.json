@@ -2,6 +2,54 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "id": "v1.2.0",
+      "kind": "app",
+      "version": "1.2.0",
+      "date": "2026-08-17",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Added a shared action system with global shortcuts, reusable workflows, automatic rules, secure Run Links, and selective portable backups.",
+            "Menu-bar panels now support independent Light and Dark themes, ten built-in palettes, live previews, System Default, and accessible iTerm2 or Base16/Base24 theme imports."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "About now keeps app details and update controls visible above a scrollable offline history of the 10 most recent App and Plugin releases.",
+            "Actions and workflows now preview runs, simplify step editing, reject overlapping work by default, limit unattended concurrency, and enforce per-action deadlines. Step delays also state when each wait begins.",
+            "MacTools now appears in the Dock while its Settings window is open.",
+            "Menu-bar panels and their attachment arrows now use a consistent opaque background in Light and Dark appearance without reducing the content area.",
+            "Settings now uses one resizable sidebar for app, management, and plugin pages, with consistent search, headers, and keyboard navigation. Unified Search preserves the sidebar position while open.",
+            "Plugin pages can be ordered by localized name, installation date, or drag and drop. The saved order is included in backups without changing menu-bar layouts."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Actions and Run Links now reject duplicate, recursive, stale, or unsafe requests, preserve cancellation, and explain failures. Imports and backups reject corrupt data and roll back safely.",
+            "Automatic rules preserve unattended execution through nested or delayed steps and reject newly interactive actions instead of opening MacTools.",
+            "Long-running workflows launched from Action Grid, Unified Search, or Run Links now continue in Automation after the originating surface closes.",
+            "Actions & Shortcuts, Run Links, and Automation now follow the selected app language across controls, status messages, errors, and accessibility labels.",
+            "Automation keeps its resizable workflow list stable and readable, with reliable reordering and action replacement in narrow layouts.",
+            "Actions & Shortcuts filters remain stable, and Run Link copying is available from expanded action details.",
+            "Text completion, global shortcuts, and system callbacks no longer crash MacTools when actions open windows, rebuild menu-bar items, or change displays. Unified Search restores the previously active app when it closes.",
+            "Relaunching MacTools now brings Settings forward in the single running instance and preserves deep links received during startup.",
+            "Auto Input now activates or releases saved input-source shortcuts as sources are enabled or disabled, without requiring a relaunch.",
+            "Scheduled workflows now adjust to system clock and time-zone changes, and live-state listeners remain active while enabled rules depend on them.",
+            "Plugin settings controls and footers now align consistently, and descriptions update immediately when the app language changes."
+          ]
+        },
+        {
+          "kind": "maintenance",
+          "entries": [
+            "Allowed release preparation to publish a predeclared app version while advancing its build number."
+          ]
+        }
+      ]
+    },
+    {
       "id": "plugins-1.2.0",
       "kind": "plugin",
       "version": "1.2.0",
