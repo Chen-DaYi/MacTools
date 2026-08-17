@@ -8,7 +8,10 @@ enum MacToolsLocalKeyboardCommand: Equatable {
     case showSettings
     case focusSearch
     case showUnifiedSearch
-    case selectUnifiedSearchResult(Int)
+    case selectNumber(Int)
+    case goBack
+    case goForward
+    case moveSidebarSelection(SettingsSidebarMoveDirection)
 
     static func resolve(for event: NSEvent) -> MacToolsLocalKeyboardCommand? {
         guard event.type == .keyDown else {
@@ -16,12 +19,34 @@ enum MacToolsLocalKeyboardCommand: Equatable {
         }
 
         let relevantModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
-        guard event.modifierFlags.intersection(relevantModifiers) == .command else {
+        let modifiers = event.modifierFlags.intersection(relevantModifiers)
+
+        if modifiers == [.control, .command] {
+            switch Int(event.keyCode) {
+            case kVK_UpArrow:
+                return .moveSidebarSelection(.previous)
+            case kVK_DownArrow:
+                return .moveSidebarSelection(.next)
+            default:
+                return nil
+            }
+        }
+
+        guard modifiers == .command else {
             return nil
         }
 
         if let selectionNumber = physicalNumberRowSelection(for: event.keyCode) {
-            return .selectUnifiedSearchResult(selectionNumber)
+            return .selectNumber(selectionNumber)
+        }
+
+        switch Int(event.keyCode) {
+        case kVK_ANSI_LeftBracket:
+            return .goBack
+        case kVK_ANSI_RightBracket:
+            return .goForward
+        default:
+            break
         }
 
         switch event.charactersIgnoringModifiers?.lowercased() {
@@ -255,7 +280,7 @@ final class MacToolsCommandPalettePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if case let .selectUnifiedSearchResult(number) = MacToolsLocalKeyboardCommand.resolve(for: event),
+        if case let .selectNumber(number) = MacToolsLocalKeyboardCommand.resolve(for: event),
            onQuickSelection?(number) == true {
             return true
         }
@@ -385,6 +410,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let launchAtLoginController: LaunchAtLoginController
     private let menuBarPanelThemeStore: MenuBarPanelThemeStore
     private let appearanceUserDefaults: UserDefaults
+    private let settingsSidebarPreferences: SettingsSidebarPreferencesStore
     private let commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration
     private(set) var settingsWindow: NSWindow?
     private(set) var settingsNavigationCoordinator: SettingsNavigationCoordinator?
@@ -422,6 +448,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.launchAtLoginController = launchAtLoginController
         self.menuBarPanelThemeStore = menuBarPanelThemeStore
         self.appearanceUserDefaults = appearanceUserDefaults
+        self.settingsSidebarPreferences = SettingsSidebarPreferencesStore(
+            userDefaults: appearanceUserDefaults
+        )
         self.commandPaletteFocusRestoration = commandPaletteFocusRestoration
         super.init()
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
@@ -585,7 +614,10 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     private func makeSettingsWindow() -> NSWindow {
-        let navigationCoordinator = SettingsNavigationCoordinator(pluginHost: pluginHost)
+        let navigationCoordinator = SettingsNavigationCoordinator(
+            pluginHost: pluginHost,
+            sidebarPreferences: settingsSidebarPreferences
+        )
         let window = MacToolsCommandWindow(
             contentRect: NSRect(origin: .zero, size: SettingsWindowLayout.defaultContentSize),
             styleMask: [
@@ -612,6 +644,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 menuBarIconGallery: menuBarIconGallery,
                 launchAtLoginController: launchAtLoginController,
                 menuBarPanelThemeStore: menuBarPanelThemeStore,
+                sidebarPreferences: settingsSidebarPreferences,
                 appearanceUserDefaults: appearanceUserDefaults,
                 showDashboard: { [weak self] in
                     self?.panelPresentationActions.present(.dashboard)
@@ -720,7 +753,10 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         target: SettingsSearchRevealTarget?
     ) -> Bool {
         let validator = settingsNavigationCoordinator
-            ?? SettingsNavigationCoordinator(pluginHost: pluginHost)
+            ?? SettingsNavigationCoordinator(
+                pluginHost: pluginHost,
+                sidebarPreferences: settingsSidebarPreferences
+            )
         guard validator.canNavigateFromSearch(to: destination, target: target) else {
             return false
         }
@@ -823,12 +859,11 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             showSettings()
             return true
         case .focusSearch:
-            settingsNavigationCoordinator?.requestSearchFocus()
-            return true
+            return settingsNavigationCoordinator?.requestSearch() ?? false
         case .showUnifiedSearch:
             showUnifiedSearch()
             return true
-        case let .selectUnifiedSearchResult(number):
+        case let .selectNumber(number):
             guard let settingsNavigationCoordinator else {
                 return false
             }
@@ -837,17 +872,17 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 return true
             }
 
-            switch number {
-            case 1:
-                settingsNavigationCoordinator.selectSettingsDestination(.general)
-            case 2:
-                settingsNavigationCoordinator.selectSettingsDestination(.pluginConfiguration)
-            case 3:
-                settingsNavigationCoordinator.selectSettingsDestination(.about)
-            default:
-                return false
-            }
+            return settingsNavigationCoordinator.selectSidebarDestination(number: number)
+        case .goBack:
+            guard settingsNavigationCoordinator?.canGoBack == true else { return false }
+            settingsNavigationCoordinator?.goBack()
             return true
+        case .goForward:
+            guard settingsNavigationCoordinator?.canGoForward == true else { return false }
+            settingsNavigationCoordinator?.goForward()
+            return true
+        case let .moveSidebarSelection(direction):
+            return settingsNavigationCoordinator?.moveSidebarSelection(direction) ?? false
         }
     }
 

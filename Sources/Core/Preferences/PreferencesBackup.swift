@@ -9,6 +9,22 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
         let appearancePreference: String
         let languagePreference: String
         let menuBarClickBehavior: String
+        let settingsSidebarPluginSortMode: String?
+        let settingsSidebarCustomPluginOrder: [String]?
+
+        init(
+            appearancePreference: String,
+            languagePreference: String,
+            menuBarClickBehavior: String,
+            settingsSidebarPluginSortMode: String? = nil,
+            settingsSidebarCustomPluginOrder: [String]? = nil
+        ) {
+            self.appearancePreference = appearancePreference
+            self.languagePreference = languagePreference
+            self.menuBarClickBehavior = menuBarClickBehavior
+            self.settingsSidebarPluginSortMode = settingsSidebarPluginSortMode
+            self.settingsSidebarCustomPluginOrder = settingsSidebarCustomPluginOrder
+        }
     }
 
     let formatVersion: Int

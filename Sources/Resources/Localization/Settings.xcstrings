@@ -382,6 +382,214 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "設定導覽" } }
       }
     },
+    "settings.sidebar.pluginSortHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تغيير ترتيب صفحات المكونات الإضافية في الشريط الجانبي للإعدادات فقط" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Reihenfolge der Plug-in-Seiten nur in der Einstellungen-Seitenleiste ändern" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Change plugin page order only in the Settings sidebar" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Cambiar el orden de las páginas de complementos solo en la barra lateral de Ajustes" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Modifier l’ordre des pages de plugins uniquement dans la barre latérale Réglages" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "設定サイドバー内のプラグインページ順のみを変更" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "설정 사이드바의 플러그인 페이지 순서만 변경" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Alterar a ordem das páginas de plug-ins apenas na barra lateral de Ajustes" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Изменить порядок страниц плагинов только в боковой панели настроек" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅调整设置侧边栏中的插件页面顺序" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "僅調整設定側邊欄中的外掛頁面順序" } }
+      }
+    },
+    "settings.sidebar.pluginSort.installedOldestFirst": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "التثبيت: الأقدم أولاً" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Installation: Älteste zuerst" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Installed: Oldest First" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Instalación: más antiguos primero" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Installation : plus anciens d’abord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "インストール日時：古い順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "설치: 오래된 순" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Instalação: mais antigos primeiro" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Установка: сначала старые" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "安装时间：最早优先" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "安裝時間：最早優先" } }
+      }
+    },
+    "settings.sidebar.pluginSort.installedNewestFirst": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "التثبيت: الأحدث أولاً" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Installation: Neueste zuerst" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Installed: Newest First" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Instalación: más recientes primero" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Installation : plus récents d’abord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "インストール日時：新しい順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "설치: 최신 순" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Instalação: mais recentes primeiro" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Установка: сначала новые" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "安装时间：最新优先" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "安裝時間：最新優先" } }
+      }
+    },
+    "settings.sidebar.pluginSort.nameAscending": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الاسم: تصاعدي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Name: Aufsteigend" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Name: Ascending" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Nombre: ascendente" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Nom : croissant" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "名前：昇順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이름: 오름차순" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Nome: crescente" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Имя: по возрастанию" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "名称：升序" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "名稱：升冪" } }
+      }
+    },
+    "settings.sidebar.pluginSort.nameDescending": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الاسم: تنازلي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Name: Absteigend" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Name: Descending" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Nombre: descendente" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Nom : décroissant" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "名前：降順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이름: 내림차순" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Nome: decrescente" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Имя: по убыванию" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "名称：降序" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "名稱：降冪" } }
+      }
+    },
+    "settings.sidebar.pluginSort.compact.nameAscending": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تصاعدي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Aufsteigend" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Ascending" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Ascendente" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Croissant" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "昇順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "오름차순" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Crescente" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "По возрастанию" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "升序" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "升冪" } }
+      }
+    },
+    "settings.sidebar.pluginSort.compact.nameDescending": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تنازلي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Absteigend" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Descending" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Descendente" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Décroissant" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "降順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "내림차순" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Decrescente" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "По убыванию" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "降序" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "降冪" } }
+      }
+    },
+    "settings.sidebar.pluginSort.compact.oldest": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الأقدم" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Älteste" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Oldest" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Antiguos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Anciens" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "古い順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "오래된 순" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Antigos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Старые" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最早" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "最早" } }
+      }
+    },
+    "settings.sidebar.pluginSort.compact.newest": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الأحدث" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Neueste" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Newest" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Recientes" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Récents" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "新しい順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "최신 순" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Recentes" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Новые" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最新" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "最新" } }
+      }
+    },
+    "settings.sidebar.pluginSort.compact.custom": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "مخصص" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Eigene" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Custom" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Personalizado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Personnalisé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "カスタム" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "사용자 지정" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Personalizada" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Свой" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自定义" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "自訂" } }
+      }
+    },
+    "settings.sidebar.pluginSort.custom": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "ترتيب مخصص" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Benutzerdefinierte Reihenfolge" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Custom Order" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Orden personalizado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ordre personnalisé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "カスタム順" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "사용자 지정 순서" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ordem personalizada" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Пользовательский порядок" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自定义顺序" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "自訂順序" } }
+      }
+    },
+    "settings.sidebar.pluginSort.resetCustom": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إعادة تعيين الترتيب المخصص" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Benutzerdefinierte Reihenfolge zurücksetzen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reset Custom Order" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Restablecer orden personalizado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Réinitialiser l’ordre personnalisé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "カスタム順をリセット" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "사용자 지정 순서 재설정" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Redefinir ordem personalizada" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Сбросить пользовательский порядок" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置自定义顺序" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "重設自訂順序" } }
+      }
+    },
+    "settings.sidebar.pluginSort.scopeNote": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الشريط الجانبي للإعدادات فقط" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Nur Einstellungen-Seitenleiste" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Settings sidebar only" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Solo barra lateral de Ajustes" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Barre latérale Réglages uniquement" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "設定サイドバーのみ" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "설정 사이드바에만 적용" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Apenas barra lateral de Ajustes" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Только боковая панель настроек" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅影响设置侧边栏" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "僅影響設定側邊欄" } }
+      }
+    },
     "plugins.sidebar.pluginsSection": {
       "extractionState": "manual",
       "localizations": {
