@@ -427,7 +427,6 @@ final class KeepAwakePlugin:
                         PluginSettingsRow(
                             id: KeepAwakeSettingsSearchEntryID.behavior,
                             title: localization.string("settings.mode.section", defaultValue: "行为"),
-                            description: settingsBehaviorDescription(preferences.behavior),
                             systemImage: "moon.zzz",
                             help: settingsBehaviorHelp,
                             control: .picker(
@@ -435,10 +434,11 @@ final class KeepAwakePlugin:
                                 options: KeepAwakeBehavior.allCases.map {
                                     PluginSettingsOption(
                                         id: $0.rawValue,
-                                        title: settingsBehaviorTitle($0)
+                                        title: settingsBehaviorTitle($0),
+                                        description: settingsBehaviorDescription($0)
                                     )
                                 },
-                                style: .menu
+                                style: .radioGroup
                             )
                         )
                     ]

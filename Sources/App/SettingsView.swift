@@ -3106,7 +3106,11 @@ private struct PluginSettingsPickerControl: View {
         case .segmented:
             picker.pickerStyle(.segmented)
         case .radioGroup:
-            picker.pickerStyle(.radioGroup)
+            PluginSettingsRadioGroupControl(
+                selectionID: selectionID,
+                options: options,
+                onSelect: onSelect
+            )
         }
     }
 
@@ -3126,6 +3130,61 @@ private struct PluginSettingsPickerControl: View {
         .frame(minWidth: 120, idealWidth: 180, maxWidth: 240)
     }
 }
+
+private struct PluginSettingsRadioGroupControl: View {
+    let selectionID: String
+    let options: [PluginSettingsOption]
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowVertical) {
+            ForEach(options) { option in
+                radioRow(option: option)
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private func radioRow(option: PluginSettingsOption) -> some View {
+        let isSelected = selectionID == option.id
+        Button {
+            onSelect(option.id)
+         } label: {
+            HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Circle()
+                     .fill(isSelected ? Color.accentColor : Color.clear)
+                     .overlay(
+                        Circle()
+                             .stroke(PluginSettingsTheme.Palette.cardBorder, lineWidth: PluginSettingsTheme.Stroke.hairline)
+                     )
+                     .frame(width: 16, height: 16)
+                     .overlay(
+                        Circle()
+                             .fill(Color.white)
+                             .frame(width: 8, height: 8)
+                     )
+                     .opacity(isSelected ? 1 : 0)
+
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                    Text(option.title)
+                         .font(PluginSettingsTheme.Typography.controlLabel)
+                         .foregroundStyle(isSelected ? .primary : .secondary)
+
+                    if let description = option.description {
+                        Text(description)
+                             .font(PluginSettingsTheme.Typography.rowDescription)
+                             .foregroundStyle(.secondary)
+                             .fixedSize(horizontal: false, vertical: true)
+                     }
+                 }
+             }
+         }
+         .buttonStyle(.plain)
+         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 
 private struct PluginSettingsSliderControl: View {
     let controlID: String
