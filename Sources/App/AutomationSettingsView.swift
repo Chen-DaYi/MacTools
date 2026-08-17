@@ -2,6 +2,12 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
+private enum AutomationSplitViewLayout {
+    static let workflowListMinWidth: CGFloat = 220
+    static let workflowListIdealWidth: CGFloat = 240
+    static let workflowListMaxWidth: CGFloat = 340
+}
+
 enum WorkflowListReorder {
     static func move(
         sourceOffsets: IndexSet,
@@ -82,25 +88,15 @@ struct AutomationSettingsView: View {
     var body: some View {
         HSplitView {
             workflowList
-                .frame(minWidth: 230, idealWidth: 260, maxWidth: 320)
+                .frame(
+                    minWidth: AutomationSplitViewLayout.workflowListMinWidth,
+                    idealWidth: AutomationSplitViewLayout.workflowListIdealWidth,
+                    maxWidth: AutomationSplitViewLayout.workflowListMaxWidth
+                )
+                .layoutPriority(1)
 
-            if let workflow = selectedWorkflow {
-                WorkflowDetailView(
-                    pluginHost: pluginHost,
-                    automation: automation,
-                    workflow: workflow,
-                    previewBeforeRunning: $previewBeforeRunning,
-                    onRun: { requestRun($0) }
-                )
-                .id(workflow.id)
-            } else {
-                ContentUnavailableView(
-                    FeatureL10n.string("尚无工作流"),
-                    systemImage: "bolt.horizontal.circle",
-                    description: Text(FeatureL10n.string("创建工作流后，可组合多个 MacTools 操作。"))
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            workflowDetail
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         }
         .overlay(alignment: .top) {
             if let error = automation.definitionLoadErrorMessage {
@@ -147,6 +143,27 @@ struct AutomationSettingsView: View {
         .accessibilityIdentifier("mactools.automation")
     }
 
+    @ViewBuilder
+    private var workflowDetail: some View {
+        if let workflow = selectedWorkflow {
+            WorkflowDetailView(
+                pluginHost: pluginHost,
+                automation: automation,
+                workflow: workflow,
+                previewBeforeRunning: $previewBeforeRunning,
+                onRun: { requestRun($0) }
+            )
+            .id(workflow.id)
+        } else {
+            ContentUnavailableView(
+                FeatureL10n.string("尚无工作流"),
+                systemImage: "bolt.horizontal.circle",
+                description: Text(FeatureL10n.string("创建工作流后，可组合多个 MacTools 操作。"))
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
     private var workflowList: some View {
         VStack(spacing: 0) {
             HStack {
@@ -191,13 +208,19 @@ struct AutomationSettingsView: View {
                             }
                         )
                         .moveDisabled(!automation.canEditDefinitions)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                         .tag(workflow.id)
                     }
                     .onMove(perform: moveWorkflows)
                 }
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
             }
         }
+        .background(SettingsStyle.contentBackground)
     }
 
     private var selectedWorkflow: WorkflowDefinition? {
@@ -305,7 +328,8 @@ private struct WorkflowCollectionRow: View {
                 Text(summary)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
@@ -321,6 +345,7 @@ private struct WorkflowCollectionRow: View {
                 Image(systemName: isRunning ? "stop.fill" : "play.fill")
             }
             .buttonStyle(.plain)
+            .frame(width: 22, height: 24)
             .disabled(!isRunning && (!workflow.isEnabled || workflow.steps.isEmpty))
             .help(isRunning ? FeatureL10n.string("停止当前工作流运行") : FeatureL10n.string("运行工作流"))
             .accessibilityLabel(
@@ -430,22 +455,14 @@ private struct WorkflowDetailView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    workflowIdentity
-                        .frame(minWidth: 240, maxWidth: .infinity, alignment: .leading)
-                        .layoutPriority(1)
-                    headerControls
-                }
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                workflowIdentity
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
 
-                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    workflowIdentity
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        headerControls
-                    }
-                }
+                headerControls
+                    .layoutPriority(2)
             }
 
             Text(FeatureL10n.string("按顺序运行多个操作；每个步骤都会重新检查可用性、权限和确认要求。"))
@@ -766,10 +783,9 @@ private struct WorkflowActionPicker: View {
     let select: (ActionReference) -> Void
     var buttonTitle = FeatureL10n.string("添加操作")
     var buttonSystemImage = "plus"
+    var accessibilityIdentifier = "mactools.automation.add-action"
 
     @State private var isPresented = false
-    @State private var query = ""
-    @State private var filter: WorkflowActionPickerFilter = .available
 
     var body: some View {
         Button {
@@ -780,12 +796,27 @@ private struct WorkflowActionPicker: View {
         .buttonStyle(.bordered)
         .controlSize(.small)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            pickerContent
+            WorkflowActionPickerPopoverContent(
+                pluginHost: pluginHost,
+                excluding: excluding,
+                select: { reference in
+                    select(reference)
+                    isPresented = false
+                }
+            )
         }
-        .accessibilityIdentifier("mactools.automation.add-action")
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
+}
 
-    private var pickerContent: some View {
+private struct WorkflowActionPickerPopoverContent: View {
+    @ObservedObject var pluginHost: PluginHost
+    let excluding: ActionKey
+    let select: (ActionReference) -> Void
+    @State private var query = ""
+    @State private var filter: WorkflowActionPickerFilter = .available
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             TextField(FeatureL10n.string("搜索操作、插件或快捷键"), text: $query)
                 .textFieldStyle(.roundedBorder)
@@ -824,7 +855,6 @@ private struct WorkflowActionPicker: View {
                                     )
                                     Button {
                                         select(item.entry.reference)
-                                        isPresented = false
                                     } label: {
                                         HStack(spacing: 10) {
                                             Image(systemName: PluginSystemImage.resolvedName(item.systemImage))
@@ -1590,6 +1620,7 @@ private struct WorkflowStepEditor: View {
     let canMoveUp: Bool
     let canMoveDown: Bool
     @State private var isAdvancedExpanded = false
+    @State private var isReplacementPickerPresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
@@ -1615,19 +1646,20 @@ private struct WorkflowStepEditor: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 ControlGroup {
-                    WorkflowActionPicker(
-                        pluginHost: pluginHost,
-                        excluding: workflow.actionKey,
-                        select: {
-                            automation.replaceStepReference(
-                                workflowID: workflow.id,
-                                stepID: step.id,
-                                reference: $0
-                            )
-                        },
-                        buttonTitle: FeatureL10n.string("替换操作"),
-                        buttonSystemImage: "arrow.triangle.2.circlepath"
+                    Button {
+                        isReplacementPickerPresented = true
+                    } label: {
+                        Label(
+                            FeatureL10n.string("替换操作"),
+                            systemImage: "rectangle.2.swap"
+                        )
+                        .labelStyle(.iconOnly)
+                    }
+                    .help(FeatureL10n.string("替换操作"))
+                    .accessibilityIdentifier(
+                        "mactools.automation.replace-action.\(step.id.uuidString)"
                     )
+
                     Button { automation.moveStep(workflowID: workflow.id, stepID: step.id, offset: -1) } label: {
                         Image(systemName: "chevron.up")
                     }
@@ -1649,6 +1681,21 @@ private struct WorkflowStepEditor: View {
                     .help(FeatureL10n.string("删除"))
                 }
                 .controlSize(.small)
+                .fixedSize(horizontal: true, vertical: false)
+                .popover(isPresented: $isReplacementPickerPresented, arrowEdge: .bottom) {
+                    WorkflowActionPickerPopoverContent(
+                        pluginHost: pluginHost,
+                        excluding: workflow.actionKey,
+                        select: { reference in
+                            automation.replaceStepReference(
+                                workflowID: workflow.id,
+                                stepID: step.id,
+                                reference: reference
+                            )
+                            isReplacementPickerPresented = false
+                        }
+                    )
+                }
             }
 
             DisclosureGroup(

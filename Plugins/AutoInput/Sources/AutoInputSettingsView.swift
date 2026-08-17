@@ -4,8 +4,15 @@ import UniformTypeIdentifiers
 import MacToolsPluginKit
 
 struct AutoInputSettingsView: View {
+    private enum Layout {
+        static let trailingControlMinWidth: CGFloat = 220
+        static let trailingControlIdealWidth: CGFloat = 260
+        static let trailingControlMaxWidth: CGFloat = 300
+    }
+
     enum SectionKind {
         case behavior
+        case hud
         case rules
     }
 
@@ -18,32 +25,53 @@ struct AutoInputSettingsView: View {
 
     @ViewBuilder
     var body: some View {
+        Group {
+            switch section {
+            case .behavior:
+                behaviorSection
+            case .hud:
+                hudSection
+            case .rules:
+                rulesSection
+            }
+        }
+        .pluginSettingsSearchAnchor(
+            pluginID: "auto-input",
+            entryID: searchEntryID
+        )
+    }
+
+    private var searchEntryID: String {
         switch section {
         case .behavior:
-            behaviorSection
+            AutoInputSettingsSearchEntryID.behavior
+        case .hud:
+            AutoInputSettingsSearchEntryID.hud
         case .rules:
-            rulesSection
+            AutoInputSettingsSearchEntryID.rules
         }
     }
 
     private var behaviorSection: some View {
-        VStack(spacing: 0) {
-            settingToggle(
-                icon: "arrow.counterclockwise",
-                title: localization.string("settings.memory.title", defaultValue: "自动记忆"),
-                description: localization.string(
-                    "settings.memory.description",
-                    defaultValue: "切回应用时恢复上次使用的输入法。"
-                ),
-                isOn: Binding(
-                    get: { store.remembersLastInputSource },
-                    set: { value in
-                        store.setRemembersLastInputSource(value)
-                        onChange()
-                    }
-                )
+        settingToggle(
+            icon: "arrow.counterclockwise",
+            title: localization.string("settings.memory.title", defaultValue: "自动记忆"),
+            description: localization.string(
+                "settings.memory.description",
+                defaultValue: "切回应用时恢复上次使用的输入法。"
+            ),
+            isOn: Binding(
+                get: { store.remembersLastInputSource },
+                set: { value in
+                    store.setRemembersLastInputSource(value)
+                    onChange()
+                }
             )
-            PluginSettingsListDivider()
+        )
+    }
+
+    private var hudSection: some View {
+        VStack(spacing: 0) {
             settingToggle(
                 icon: "text.cursor",
                 title: localization.string("settings.hud.title", defaultValue: "输入法提示"),
@@ -67,8 +95,31 @@ struct AutoInputSettingsView: View {
                 hudSizePicker
                 PluginSettingsListDivider()
                 hudPositionPicker
+                PluginSettingsListDivider()
+                interactiveHUDToggle
             }
         }
+    }
+
+    private var interactiveHUDToggle: some View {
+        settingToggle(
+            icon: "hand.tap",
+            title: localization.string(
+                "settings.hud.interactive.title",
+                defaultValue: "交互式提示"
+            ),
+            description: localization.string(
+                "settings.hud.interactive.description",
+                defaultValue: "悬停时保持显示；可连续点击循环切换输入法。"
+            ),
+            isOn: Binding(
+                get: { store.isInteractiveHUDEnabled },
+                set: { value in
+                    store.setInteractiveHUDEnabled(value)
+                    onChange()
+                }
+            )
+        )
     }
 
     private var hudSizePicker: some View {
@@ -101,7 +152,12 @@ struct AutoInputSettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 130, idealWidth: 160, maxWidth: 190)
+                .pickerStyle(.segmented)
+                .frame(
+                    minWidth: Layout.trailingControlMinWidth,
+                    idealWidth: Layout.trailingControlIdealWidth,
+                    maxWidth: Layout.trailingControlMaxWidth
+                )
                 .accessibilityLabel(Text(localization.string(
                     "settings.hud.size.title",
                     defaultValue: "提示大小"
@@ -114,17 +170,16 @@ struct AutoInputSettingsView: View {
             }
 
             GeometryReader { proxy in
-                HStack {
-                    Spacer(minLength: 0)
+                ZStack {
                     InputSourceHUDPreview(
                         title: hudPreviewSourceName,
                         size: store.inputHUDSize,
                         maximumWidth: max(proxy.size.width - 24, 1)
                     )
-                    Spacer(minLength: 0)
                 }
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             }
-            .frame(maxWidth: .infinity, minHeight: 96)
+            .frame(maxWidth: .infinity, minHeight: 96, idealHeight: 96, maxHeight: 96)
             .pluginSettingsCardBackground(.recessed)
             .accessibilityHidden(true)
         }
@@ -158,7 +213,7 @@ struct AutoInputSettingsView: View {
                 }
             }
             .labelsHidden()
-            .frame(minWidth: 150, idealWidth: 180, maxWidth: 220)
+            .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel(Text(localization.string(
                 "settings.hud.position.title",
                 defaultValue: "提示位置"
@@ -276,6 +331,12 @@ struct AutoInputSettingsView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .frame(
+                    minWidth: Layout.trailingControlMinWidth,
+                    idealWidth: Layout.trailingControlIdealWidth,
+                    maxWidth: Layout.trailingControlMaxWidth,
+                    alignment: .trailing
+                )
                 .accessibilityLabel(Text(title))
                 .accessibilityHint(Text(description))
         }
@@ -301,6 +362,12 @@ struct AutoInputSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             control()
+                .frame(
+                    minWidth: Layout.trailingControlMinWidth,
+                    idealWidth: Layout.trailingControlIdealWidth,
+                    maxWidth: Layout.trailingControlMaxWidth,
+                    alignment: .trailing
+                )
         }
         .pluginSettingsListRowPadding(interactive: true)
     }

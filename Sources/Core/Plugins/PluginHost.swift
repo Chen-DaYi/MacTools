@@ -201,6 +201,11 @@ struct PluginSurfaceLayoutItem: Identifiable {
     let releaseChannel: String?
 }
 
+struct ActionOwnerAppearance {
+    let systemImage: String
+    let iconTint: Color
+}
+
 struct AppShortcutSettingsItem: Identifiable, Equatable {
     let id: String
     let action: AppShortcutAction
@@ -421,6 +426,7 @@ final class PluginHost: ObservableObject {
     private var dynamicPluginCategoriesByID: [String: String?] = [:]
     private var dynamicPluginReleaseChannelsByID: [String: String?] = [:]
     private var dynamicPluginManifestsByID: [String: PluginPackageManifest] = [:]
+    private var dynamicPluginInstalledAtByID: [String: Date] = [:]
     private var shortcutErrors: [String: String] = [:]
     private var appShortcutErrors: [AppShortcutAction: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
@@ -628,6 +634,7 @@ final class PluginHost: ObservableObject {
             self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
             self.dynamicPluginReleaseChannelsByID = dynamicPluginManager.installedReleaseChannelsByID()
             self.dynamicPluginManifestsByID = dynamicPluginManager.installedManifestsByID()
+            self.dynamicPluginInstalledAtByID = dynamicPluginManager.installedAtByID()
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
@@ -1588,6 +1595,10 @@ final class PluginHost: ObservableObject {
 
     func presentPluginMarketplace() {
         appPresentationHandler?(.settings(.pluginMarketplace))
+    }
+
+    func presentActionsAndShortcutsSettings() {
+        appPresentationHandler?(.settings(.feature(.actionsAndShortcuts)))
     }
 
     /// Chooses the entry page for a normal Plugins-tab selection. Explicit
@@ -2683,6 +2694,7 @@ final class PluginHost: ObservableObject {
         dynamicPluginCategoriesByID = dynamicPluginManager?.installedCategoriesByID() ?? [:]
         dynamicPluginReleaseChannelsByID = dynamicPluginManager?.installedReleaseChannelsByID() ?? [:]
         dynamicPluginManifestsByID = dynamicPluginManager?.installedManifestsByID() ?? [:]
+        dynamicPluginInstalledAtByID = dynamicPluginManager?.installedAtByID() ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
@@ -3227,8 +3239,15 @@ final class PluginHost: ObservableObject {
 
             actionRegistry.invalidateAvailability()
             rebuildDerivedState(dirtyPluginIDs: pluginIDs)
+            syncGlobalShortcuts()
         }
     }
+
+    #if DEBUG
+    func waitForScheduledPluginStateRebuildForTests() async {
+        await pluginStateChangeRebuildTask?.value
+    }
+    #endif
 
     private func cancelScheduledPluginStateRebuild() {
         pluginStateChangeRebuildTask?.cancel()
@@ -3974,8 +3993,30 @@ final class PluginHost: ObservableObject {
             } else {
                 page = nil
             }
+            let actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration?
+            if descriptor.hasSettings,
+               let provider = descriptor.plugin as? any PluginActionShortcutSettingsProviding,
+               let configuration = guardedValue(
+                   for: descriptor.plugin,
+                   operation: "read action shortcut settings configuration",
+                   provider.actionShortcutSettingsConfiguration
+               ) {
+                let title = configuration.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let systemImage = configuration.systemImage.trimmingCharacters(in: .whitespacesAndNewlines)
+                if title.isEmpty || systemImage.isEmpty || configuration.actionIDs.isEmpty {
+                    AppLog.pluginHost.error(
+                        "Plugin \(pluginID, privacy: .public) returned invalid action shortcut settings configuration"
+                    )
+                    actionShortcutSettingsConfiguration = nil
+                } else {
+                    actionShortcutSettingsConfiguration = configuration
+                }
+            } else {
+                actionShortcutSettingsConfiguration = nil
+            }
             let hasSettingsSurface = !matchingPermissionCards.isEmpty
                 || !matchingShortcutItems.isEmpty
+                || actionShortcutSettingsConfiguration != nil
                 || page != nil
 
             guard hasSettingsSurface else {
@@ -3989,9 +4030,11 @@ final class PluginHost: ObservableObject {
                 description: page?.description ?? descriptor.metadata.defaultDescription,
                 iconName: descriptor.metadata.iconName,
                 iconTint: descriptor.metadata.iconTint,
+                installedAt: dynamicPluginInstalledAtByID[pluginID],
                 page: page,
                 permissionCards: matchingPermissionCards,
-                shortcutItems: matchingShortcutItems
+                shortcutItems: matchingShortcutItems,
+                actionShortcutSettingsConfiguration: actionShortcutSettingsConfiguration
             )
         }
     }
@@ -5104,6 +5147,29 @@ final class PluginHost: ObservableObject {
                 return providerID
             }
             return localizedMetadata(for: metadata).title
+        }
+    }
+
+    func actionOwnerAppearance(providerID: String) -> ActionOwnerAppearance {
+        switch providerID {
+        case "mactools":
+            return ActionOwnerAppearance(systemImage: "hammer", iconTint: .orange)
+        case AutomationController.providerID:
+            return ActionOwnerAppearance(
+                systemImage: "bolt.horizontal.circle",
+                iconTint: .indigo
+            )
+        default:
+            guard let metadata = corePlugin(for: providerID)?.metadata else {
+                return ActionOwnerAppearance(
+                    systemImage: "puzzlepiece.extension",
+                    iconTint: .secondary
+                )
+            }
+            return ActionOwnerAppearance(
+                systemImage: metadata.iconName,
+                iconTint: metadata.iconTint
+            )
         }
     }
 

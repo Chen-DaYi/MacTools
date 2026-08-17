@@ -65,6 +65,86 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開啟自動切換輸入法" } }
       }
     },
+    "action.selectSource.definitionTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اختيار مصدر إدخال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequelle auswählen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select Input Source" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Seleccionar fuente de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sélectionner la source de saisie" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースを選択" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스 선택" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Selecionar fonte de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать источник ввода" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇輸入法" } }
+      }
+    },
+    "action.selectSource.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "التبديل مباشرةً إلى مصدر إدخال محدد." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Direkt zu einer bestimmten Eingabequelle wechseln." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch directly to a specific input source." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cambiar directamente a una fuente de entrada específica." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Passer directement à une source de saisie précise." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "指定した入力ソースに直接切り替えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "지정한 입력 소스로 바로 전환합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Alterne diretamente para uma fonte de entrada específica." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переключиться непосредственно на выбранный источник ввода." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "直接切换到指定输入法。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "直接切換到指定輸入法。" } }
+      }
+    },
+    "action.selectSource.parameterTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مصدر الإدخال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequelle" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input Source" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Fuente de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Source de saisie" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソース" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Fonte de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Источник ввода" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入法" } }
+      }
+    },
+    "action.selectSource.titleFormat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "التبديل إلى %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zu %@ wechseln" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch to %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cambiar a %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Passer à %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@に切り替える" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@(으)로 전환" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Alternar para %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переключиться на %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换到 %@" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切換到 %@" } }
+      }
+    },
+    "action.selectSource.unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مصدر الإدخال معطّل أو غير متاح." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Eingabequelle ist deaktiviert oder nicht verfügbar." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The input source is disabled or unavailable." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La fuente de entrada está desactivada o no está disponible." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La source de saisie est désactivée ou indisponible." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースが無効になっているか、利用できません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스가 비활성화되었거나 사용할 수 없습니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A fonte de entrada está desativada ou indisponível." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Источник ввода отключен или недоступен." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入法已停用或不可用。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入法已停用或無法使用。" } }
+      }
+    },
     "error.switchFailed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -193,6 +273,38 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切換行為" } }
       }
     },
+    "settings.shortcuts.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اختصارات مصادر الإدخال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequellen-Kurzbefehle" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input Source Shortcuts" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Atajos de fuente de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Raccourcis de source de saisie" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースのショートカット" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스 단축키" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Atalhos de fonte de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сочетания клавиш источников ввода" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入法快捷键" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入法快速鍵" } }
+      }
+    },
+    "settings.shortcuts.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "عيّن اختصارات عامة لمصادر الإدخال المستخدمة كثيرًا وانتقل إليها مباشرة بضغطة مفتاح." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Globale Kurzbefehle für häufig verwendete Eingabequellen festlegen und per Tastendruck direkt wechseln." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Assign global shortcuts to frequently used input sources and switch directly with a key press." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Asigna atajos globales a las fuentes de entrada que más usas y cambia directamente con una tecla." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Attribuez des raccourcis globaux aux sources de saisie fréquentes et changez directement d’une touche." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "よく使う入力ソースにグローバルショートカットを割り当て、キー操作ですぐに切り替えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "자주 사용하는 입력 소스에 전역 단축키를 지정하고 키 한 번으로 바로 전환합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Atribua atalhos globais às fontes de entrada mais usadas e alterne diretamente com uma tecla." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Назначьте глобальные сочетания клавиш часто используемым источникам ввода и переключайтесь одним нажатием." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为常用输入法分配全局快捷键，按下即可直接切换。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "為常用輸入法指派全域快速鍵，按下即可直接切換。" } }
+      }
+    },
     "settings.hud.title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -303,6 +415,38 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Большой" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "大" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "大" } }
+      }
+    },
+    "settings.hud.interactive.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مؤشر تفاعلي" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Interaktives HUD" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interactive HUD" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Indicador interactivo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Indicateur interactif" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "操作可能な表示" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "대화형 표시" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Indicador interativo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Интерактивный индикатор" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交互式提示" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "互動式提示" } }
+      }
+    },
+    "settings.hud.interactive.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يبقى ظاهرًا عند تمرير المؤشر؛ انقر عدة مرات للتنقل بين مصادر الإدخال." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bleibt beim Darüberfahren sichtbar; wiederholt klicken, um durch die Eingabequellen zu wechseln." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stays visible while hovered; click repeatedly to cycle through input sources." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Permanece visible al pasar el puntero; haz clic varias veces para recorrer las fuentes de entrada." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Reste visible au survol ; cliquez plusieurs fois pour parcourir les sources de saisie." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ポインタを重ねると表示を維持し、繰り返しクリックして入力ソースを切り替えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "포인터를 올려 두면 계속 표시되며, 반복해서 클릭해 입력 소스를 순환합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Permanece visível ao passar o cursor; clique repetidamente para alternar entre as fontes de entrada." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Остаётся видимым при наведении; нажимайте, чтобы переключаться между источниками ввода." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "悬停时保持显示；可连续点击循环切换输入法。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "停留時保持顯示；可連續按一下循環切換輸入法。" } }
       }
     },
     "settings.hud.position.title" : {

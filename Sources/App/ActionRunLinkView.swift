@@ -22,20 +22,9 @@ struct ActionRunLinkControl: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
             switch pluginHost.actionRunLinkPresentation(for: reference) {
             case let .available(representation, _):
-                availableContent(representation)
+                runLinkContent(representation)
             case .needsPreset:
-                Button {
-                    switch pluginHost.createActionRunLink(for: reference) {
-                    case let .success(representation):
-                        copy(representation.url)
-                    case let .failure(error):
-                        errorMessage = message(for: error)
-                    }
-                } label: {
-                    Label(FeatureL10n.string("复制运行链接"), systemImage: "doc.on.doc")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                runLinkContent(nil)
             case let .unavailable(reason):
                 if displaysUnavailableReason {
                     Label(reason, systemImage: "link.badge.plus")
@@ -53,17 +42,19 @@ struct ActionRunLinkControl: View {
         .accessibilityIdentifier("mactools.run-link.\(reference.key.id)")
     }
 
-    private func availableContent(_ representation: ActionRunLinkRepresentation) -> some View {
+    private func runLinkContent(
+        _ representation: ActionRunLinkRepresentation?
+    ) -> some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
             Button {
-                isExpanded.toggle()
+                toggleExpansion(hasRepresentation: representation != nil)
             } label: {
                 Label(FeatureL10n.string("运行链接"), systemImage: isExpanded ? "chevron.down" : "chevron.right")
                     .font(PluginSettingsTheme.Typography.rowDescription)
             }
             .buttonStyle(.plain)
 
-            if isExpanded {
+            if isExpanded, let representation {
                 runLinkValueRow(
                     title: FeatureL10n.string("运行链接"),
                     value: representation.url
@@ -73,6 +64,27 @@ struct ActionRunLinkControl: View {
                     value: representation.terminalCommand
                 )
             }
+        }
+    }
+
+    private func toggleExpansion(hasRepresentation: Bool) {
+        if isExpanded {
+            isExpanded = false
+            return
+        }
+
+        guard !hasRepresentation else {
+            errorMessage = nil
+            isExpanded = true
+            return
+        }
+
+        switch pluginHost.createActionRunLink(for: reference) {
+        case .success:
+            errorMessage = nil
+            isExpanded = true
+        case let .failure(error):
+            errorMessage = message(for: error)
         }
     }
 

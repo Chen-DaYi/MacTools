@@ -12,6 +12,7 @@ struct PluginPackageRecord: Identifiable, Equatable {
     let manifest: PluginPackageManifest
     let packageURL: URL
     let bundleURL: URL
+    let installedAt: Date
     let state: State
     let requiresRestartToFullyUnload: Bool
 }
@@ -51,6 +52,7 @@ final class PluginPackageStore {
         // Keep the previous key so upgrades can safely discover packages that
         // were disabled before the installed/uninstalled-only model.
         static let legacyDisabledPluginIDs = "plugins.dynamic.disabledPluginIDs"
+        static let installedAtByPluginID = "plugins.dynamic.installedAtByPluginID"
     }
 
     let rootDirectory: URL
@@ -63,6 +65,7 @@ final class PluginPackageStore {
     private let fileManager: FileManager
     private let userDefaults: UserDefaults
     private let synchronizeUserDefaults: (UserDefaults) -> Bool
+    private let now: () -> Date
     let hostVersion: String
     private var pendingRestartPluginIDs: Set<String> = []
 
@@ -71,11 +74,13 @@ final class PluginPackageStore {
         fileManager: FileManager = .default,
         userDefaults: UserDefaults = .standard,
         synchronizeUserDefaults: @escaping (UserDefaults) -> Bool = { $0.synchronize() },
+        now: @escaping () -> Date = { Date() },
         hostVersion: String = AppMetadata.shortVersion ?? "0"
     ) {
         self.fileManager = fileManager
         self.userDefaults = userDefaults
         self.synchronizeUserDefaults = synchronizeUserDefaults
+        self.now = now
         self.hostVersion = hostVersion
 
         let root = rootDirectory ?? Self.defaultRootDirectory(fileManager: fileManager)
@@ -102,11 +107,26 @@ final class PluginPackageStore {
 
         let packageURLs = (try? fileManager.contentsOfDirectory(
             at: installedDirectory,
-            includingPropertiesForKeys: [.isDirectoryKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .creationDateKey],
             options: [.skipsHiddenFiles]
         )) ?? []
+        let originalInstalledAtTimestamps = installedAtTimestamps()
+        var installedAtTimestamps = originalInstalledAtTimestamps
 
-        return packageURLs
+        func installedAt(pluginID: String, packageURL: URL) -> Date {
+            if let timestamp = installedAtTimestamps[pluginID] {
+                return Date(timeIntervalSince1970: timestamp)
+            }
+
+            let creationDate = try? packageURL.resourceValues(
+                forKeys: [.creationDateKey]
+            ).creationDate
+            let date = creationDate ?? now()
+            installedAtTimestamps[pluginID] = date.timeIntervalSince1970
+            return date
+        }
+
+        let records = packageURLs
             .filter { $0.pathExtension == "mactoolsplugin" }
             .filter { packageURL in
                 packageURL.deletingPathExtension().lastPathComponent != pendingSourceUninstallID
@@ -151,6 +171,7 @@ final class PluginPackageStore {
                         manifest: manifest,
                         packageURL: packageURL,
                         bundleURL: bundleURL,
+                        installedAt: installedAt(pluginID: manifest.id, packageURL: packageURL),
                         state: state,
                         requiresRestartToFullyUnload: pendingRestartPluginIDs.contains(manifest.id)
                     )
@@ -167,14 +188,21 @@ final class PluginPackageStore {
                         ),
                         packageURL: packageURL,
                         bundleURL: packageURL,
+                        installedAt: installedAt(pluginID: fallbackID, packageURL: packageURL),
                         state: .failed(error.localizedDescription),
                         requiresRestartToFullyUnload: pendingRestartPluginIDs.contains(fallbackID)
                     )
                 }
             }
-            .sorted { lhs, rhs in
-                lhs.manifest.localizedDisplayName.localizedCompare(rhs.manifest.localizedDisplayName) == .orderedAscending
-            }
+        if installedAtTimestamps != originalInstalledAtTimestamps {
+            userDefaults.set(installedAtTimestamps, forKey: DefaultsKey.installedAtByPluginID)
+        }
+
+        return records.sorted { lhs, rhs in
+            lhs.manifest.localizedDisplayName.localizedCompare(
+                rhs.manifest.localizedDisplayName
+            ) == .orderedAscending
+        }
     }
 
     func featureExtractionMigrationIsInProgress() -> Bool {
@@ -302,6 +330,9 @@ final class PluginPackageStore {
         }
 
         clearPendingRestart(pluginID: manifest.id)
+        if !hadExistingPackage {
+            recordFirstInstalledAt(pluginID: manifest.id, date: now())
+        }
 
         guard let record = installedRecords().first(where: { $0.id == manifest.id }) else {
             throw PluginPackageStoreError.installFailed(AppL10n.plugins(
@@ -361,6 +392,7 @@ final class PluginPackageStore {
         }
 
         try removePackageFiles(pluginID: pluginID)
+        removeInstalledAt(pluginID: pluginID)
         markPendingRestart(pluginID: pluginID)
 
         if removeData {
@@ -425,6 +457,7 @@ final class PluginPackageStore {
                 return
             }
         }
+        removeInstalledAt(pluginID: policy.sourcePluginID)
 
         if userDefaults.bool(forKey: policy.sourceUninstallRemoveDataKey) {
             removePluginData(pluginID: policy.sourcePluginID)
@@ -465,6 +498,25 @@ final class PluginPackageStore {
         try? fileManager.removeItem(at: cacheDirectory.appendingPathComponent(pluginID, isDirectory: true))
         try? fileManager.removeItem(at: temporaryDirectory.appendingPathComponent(pluginID, isDirectory: true))
         UserDefaultsPluginStorage.removeAllValues(pluginID: pluginID, userDefaults: userDefaults)
+    }
+
+    private func installedAtTimestamps() -> [String: TimeInterval] {
+        userDefaults.dictionary(forKey: DefaultsKey.installedAtByPluginID)?
+            .compactMapValues { ($0 as? NSNumber)?.doubleValue }
+            ?? [:]
+    }
+
+    private func recordFirstInstalledAt(pluginID: String, date: Date) {
+        var timestamps = installedAtTimestamps()
+        guard timestamps[pluginID] == nil else { return }
+        timestamps[pluginID] = date.timeIntervalSince1970
+        userDefaults.set(timestamps, forKey: DefaultsKey.installedAtByPluginID)
+    }
+
+    private func removeInstalledAt(pluginID: String) {
+        var timestamps = installedAtTimestamps()
+        guard timestamps.removeValue(forKey: pluginID) != nil else { return }
+        userDefaults.set(timestamps, forKey: DefaultsKey.installedAtByPluginID)
     }
 
     private func createBaseDirectories() {

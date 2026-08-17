@@ -770,6 +770,14 @@ final class DynamicPluginManager: ObservableObject {
         )
     }
 
+    func installedAtByID() -> [String: Date] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.installedAt)
+            }
+        )
+    }
+
     func installedCategoriesByID() -> [String: String?] {
         Dictionary(
             uniqueKeysWithValues: packageStore.installedRecords().map {
@@ -1095,6 +1103,7 @@ private extension PluginPackageRecord {
             manifest: manifest,
             packageURL: packageURL,
             bundleURL: bundleURL,
+            installedAt: installedAt,
             state: state,
             requiresRestartToFullyUnload: true
         )

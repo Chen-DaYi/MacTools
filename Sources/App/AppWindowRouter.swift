@@ -8,7 +8,10 @@ enum MacToolsLocalKeyboardCommand: Equatable {
     case showSettings
     case focusSearch
     case showUnifiedSearch
-    case selectUnifiedSearchResult(Int)
+    case selectNumber(Int)
+    case goBack
+    case goForward
+    case moveSidebarSelection(SettingsSidebarMoveDirection)
 
     static func resolve(for event: NSEvent) -> MacToolsLocalKeyboardCommand? {
         guard event.type == .keyDown else {
@@ -16,12 +19,34 @@ enum MacToolsLocalKeyboardCommand: Equatable {
         }
 
         let relevantModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
-        guard event.modifierFlags.intersection(relevantModifiers) == .command else {
+        let modifiers = event.modifierFlags.intersection(relevantModifiers)
+
+        if modifiers == [.control, .command] {
+            switch Int(event.keyCode) {
+            case kVK_UpArrow:
+                return .moveSidebarSelection(.previous)
+            case kVK_DownArrow:
+                return .moveSidebarSelection(.next)
+            default:
+                return nil
+            }
+        }
+
+        guard modifiers == .command else {
             return nil
         }
 
         if let selectionNumber = physicalNumberRowSelection(for: event.keyCode) {
-            return .selectUnifiedSearchResult(selectionNumber)
+            return .selectNumber(selectionNumber)
+        }
+
+        switch Int(event.keyCode) {
+        case kVK_ANSI_LeftBracket:
+            return .goBack
+        case kVK_ANSI_RightBracket:
+            return .goForward
+        default:
+            break
         }
 
         switch event.charactersIgnoringModifiers?.lowercased() {
@@ -150,6 +175,44 @@ enum AppDockVisibilityPolicy {
 }
 
 @MainActor
+enum SettingsToolbarPolicy {
+    static func removeSidebarToggle(from toolbar: NSToolbar?) {
+        guard let toolbar else { return }
+
+        while let index = toolbar.items.firstIndex(where: {
+            $0.itemIdentifier == .toggleSidebar
+                || $0.itemIdentifier.rawValue.localizedCaseInsensitiveContains("toggleSidebar")
+        }) {
+            toolbar.removeItem(at: index)
+        }
+    }
+}
+
+@MainActor
+enum AppDockVisibilityController {
+    static func update(hasVisibleSettingsWindow: Bool) {
+        update(
+            hasVisibleSettingsWindow: hasVisibleSettingsWindow,
+            isRunningTests: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+            setActivationPolicy: NSApplication.shared.setActivationPolicy
+        )
+    }
+
+    static func update(
+        hasVisibleSettingsWindow: Bool,
+        isRunningTests: Bool,
+        setActivationPolicy: (NSApplication.ActivationPolicy) -> Bool
+    ) {
+        guard !isRunningTests else { return }
+        _ = setActivationPolicy(
+            AppDockVisibilityPolicy.activationPolicy(
+                hasVisibleSettingsWindow: hasVisibleSettingsWindow
+            )
+        )
+    }
+}
+
+@MainActor
 final class StandaloneCommandPaletteState: ObservableObject {
     @Published private(set) var presentationOrigin: UnifiedSearchPresentationOrigin?
     @Published private(set) var shortcutHint: String?
@@ -217,7 +280,7 @@ final class MacToolsCommandPalettePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if case let .selectUnifiedSearchResult(number) = MacToolsLocalKeyboardCommand.resolve(for: event),
+        if case let .selectNumber(number) = MacToolsLocalKeyboardCommand.resolve(for: event),
            onQuickSelection?(number) == true {
             return true
         }
@@ -347,12 +410,14 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let launchAtLoginController: LaunchAtLoginController
     private let menuBarPanelThemeStore: MenuBarPanelThemeStore
     private let appearanceUserDefaults: UserDefaults
+    private let settingsSidebarPreferences: SettingsSidebarPreferencesStore
     private let commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration
     private(set) var settingsWindow: NSWindow?
     private(set) var settingsNavigationCoordinator: SettingsNavigationCoordinator?
     private(set) var commandPalettePanel: NSPanel?
     private(set) var commandPaletteState: StandaloneCommandPaletteState?
     private var runtimeLocaleCancellable: AnyCancellable?
+    private var settingsNavigationCancellable: AnyCancellable?
     private var appDeactivationObserver: NSObjectProtocol?
     private var appearanceObserver: NSObjectProtocol?
     private var panelPresentationActions = SettingsPanelPresentationActions()
@@ -383,6 +448,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.launchAtLoginController = launchAtLoginController
         self.menuBarPanelThemeStore = menuBarPanelThemeStore
         self.appearanceUserDefaults = appearanceUserDefaults
+        self.settingsSidebarPreferences = SettingsSidebarPreferencesStore(
+            userDefaults: appearanceUserDefaults
+        )
         self.commandPaletteFocusRestoration = commandPaletteFocusRestoration
         super.init()
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
@@ -420,6 +488,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     isolated deinit {
         runtimeLocaleCancellable?.cancel()
+        settingsNavigationCancellable?.cancel()
         if let appDeactivationObserver {
             NotificationCenter.default.removeObserver(appDeactivationObserver)
         }
@@ -545,14 +614,26 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     private func makeSettingsWindow() -> NSWindow {
-        let navigationCoordinator = SettingsNavigationCoordinator(pluginHost: pluginHost)
+        let navigationCoordinator = SettingsNavigationCoordinator(
+            pluginHost: pluginHost,
+            sidebarPreferences: settingsSidebarPreferences
+        )
         let window = MacToolsCommandWindow(
             contentRect: NSRect(origin: .zero, size: SettingsWindowLayout.defaultContentSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [
+                .titled,
+                .closable,
+                .miniaturizable,
+                .resizable,
+                .fullSizeContentView
+            ],
             backing: .buffered,
             defer: false
         )
         window.title = Self.settingsWindowTitle
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
         AppAppearancePreference.stored(in: appearanceUserDefaults).apply(to: window)
         let hostingView = NSHostingView(
             rootView: SettingsView(
@@ -563,6 +644,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 menuBarIconGallery: menuBarIconGallery,
                 launchAtLoginController: launchAtLoginController,
                 menuBarPanelThemeStore: menuBarPanelThemeStore,
+                sidebarPreferences: settingsSidebarPreferences,
                 appearanceUserDefaults: appearanceUserDefaults,
                 showDashboard: { [weak self] in
                     self?.panelPresentationActions.present(.dashboard)
@@ -582,6 +664,22 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         }
         window.center()
         settingsNavigationCoordinator = navigationCoordinator
+        settingsNavigationCancellable = navigationCoordinator.$destination
+            .dropFirst()
+            .sink { [weak self, weak window] _ in
+                DispatchQueue.main.async { [weak self, weak window] in
+                    guard
+                        let self,
+                        let window,
+                        settingsWindow === window
+                    else {
+                        return
+                    }
+
+                    window.layoutIfNeeded()
+                    SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
+                }
+            }
         return window
     }
 
@@ -655,7 +753,10 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         target: SettingsSearchRevealTarget?
     ) -> Bool {
         let validator = settingsNavigationCoordinator
-            ?? SettingsNavigationCoordinator(pluginHost: pluginHost)
+            ?? SettingsNavigationCoordinator(
+                pluginHost: pluginHost,
+                sidebarPreferences: settingsSidebarPreferences
+            )
         guard validator.canNavigateFromSearch(to: destination, target: target) else {
             return false
         }
@@ -707,16 +808,20 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
         let contentSize = window.contentView?.bounds.size ?? SettingsWindowLayout.defaultContentSize
         settingsWindow = window
-        NSApplication.shared.setActivationPolicy(
-            AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: true)
-        )
+        AppDockVisibilityController.update(hasVisibleSettingsWindow: true)
         show(window)
         // SwiftUI installs its toolbar when the window becomes visible. Finish that
         // layout before restoring the content size.
         window.layoutIfNeeded()
+        SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
         window.setContentSize(contentSize)
         window.layoutIfNeeded()
         onProgrammaticSettingsPresentation()
+
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window, settingsWindow === window else { return }
+            SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
+        }
 
         if let pendingAppUpdateVersion {
             settingsNavigationCoordinator?.requestAboutUpdateAction(
@@ -754,12 +859,11 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             showSettings()
             return true
         case .focusSearch:
-            settingsNavigationCoordinator?.requestSearchFocus()
-            return true
+            return settingsNavigationCoordinator?.requestSearch() ?? false
         case .showUnifiedSearch:
             showUnifiedSearch()
             return true
-        case let .selectUnifiedSearchResult(number):
+        case let .selectNumber(number):
             guard let settingsNavigationCoordinator else {
                 return false
             }
@@ -768,17 +872,35 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 return true
             }
 
-            switch number {
-            case 1:
-                settingsNavigationCoordinator.selectSettingsDestination(.general)
-            case 2:
-                settingsNavigationCoordinator.selectSettingsDestination(.pluginConfiguration)
-            case 3:
-                settingsNavigationCoordinator.selectSettingsDestination(.about)
-            default:
+            return settingsNavigationCoordinator.selectSidebarDestination(number: number)
+        case .goBack:
+            guard
+                let settingsNavigationCoordinator,
+                !settingsNavigationCoordinator.isUnifiedSearchPresented,
+                settingsNavigationCoordinator.canGoBack
+            else {
                 return false
             }
+            settingsNavigationCoordinator.goBack()
             return true
+        case .goForward:
+            guard
+                let settingsNavigationCoordinator,
+                !settingsNavigationCoordinator.isUnifiedSearchPresented,
+                settingsNavigationCoordinator.canGoForward
+            else {
+                return false
+            }
+            settingsNavigationCoordinator.goForward()
+            return true
+        case let .moveSidebarSelection(direction):
+            guard
+                let settingsNavigationCoordinator,
+                !settingsNavigationCoordinator.isUnifiedSearchPresented
+            else {
+                return false
+            }
+            return settingsNavigationCoordinator.moveSidebarSelection(direction)
         }
     }
 
@@ -803,10 +925,10 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
         window.delegate = nil
         window.contentView = nil
+        settingsNavigationCancellable?.cancel()
+        settingsNavigationCancellable = nil
         settingsWindow = nil
         settingsNavigationCoordinator = nil
-        NSApplication.shared.setActivationPolicy(
-            AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: false)
-        )
+        AppDockVisibilityController.update(hasVisibleSettingsWindow: false)
     }
 }

@@ -48,12 +48,35 @@ final class AppWindowRouterTests: XCTestCase {
         await settleWindowLayout(window)
         let initialWidth = window.frame.width
         let initialToolbarItemCount = window.toolbar?.items.count
+        let toolbarItemIdentifiers = window.toolbar?.items.map(\.itemIdentifier.rawValue) ?? []
+        let sidebarToggleIndex = toolbarItemIdentifiers.firstIndex {
+            $0.contains("toggleSidebar")
+        }
+        let splitSeparatorIndex = toolbarItemIdentifiers.firstIndex {
+            $0.contains("splitViewSeparator")
+        }
 
         XCTAssertNotNil(window.toolbar)
         XCTAssertEqual(window.toolbarStyle, .unified)
-        XCTAssertFalse(
-            window.toolbar?.items.contains { $0.itemIdentifier == .toggleSidebar } ?? false
+        XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
+        XCTAssertEqual(window.titleVisibility, .hidden)
+        XCTAssertTrue(window.titlebarAppearsTransparent)
+        XCTAssertEqual(window.titlebarSeparatorStyle, .none)
+        XCTAssertNil(
+            sidebarToggleIndex,
+            "Expected the settings sidebar toggle to be removed, got \(toolbarItemIdentifiers)"
         )
+        XCTAssertNotNil(
+            splitSeparatorIndex,
+            "Expected a split-view toolbar separator, got \(toolbarItemIdentifiers)"
+        )
+        if let splitSeparatorIndex {
+            XCTAssertGreaterThanOrEqual(
+                toolbarItemIdentifiers.count,
+                splitSeparatorIndex + 3,
+                "Expected separate history and title items after the sidebar separator"
+            )
+        }
         XCTAssertEqual(hostingView.sizingOptions, [])
         XCTAssertEqual(
             hostingView.frame.width,
@@ -73,8 +96,17 @@ final class AppWindowRouterTests: XCTestCase {
         ] {
             coordinator.navigate(to: destination)
             await settleWindowLayout(window)
+            let currentToolbarItemIdentifiers = window.toolbar?.items.map(\.itemIdentifier.rawValue) ?? []
             XCTAssertEqual(window.frame.width, resizedWidth, accuracy: 0.5)
-            XCTAssertEqual(window.toolbar?.items.count, initialToolbarItemCount)
+            XCTAssertFalse(
+                currentToolbarItemIdentifiers.contains { $0.contains("toggleSidebar") },
+                "Expected the settings sidebar toggle to remain removed, got \(currentToolbarItemIdentifiers)"
+            )
+            XCTAssertEqual(
+                window.toolbar?.items.count,
+                initialToolbarItemCount,
+                "Expected a stable toolbar after navigating to \(destination), got \(currentToolbarItemIdentifiers)"
+            )
         }
 
         window.close()
@@ -278,6 +310,38 @@ final class AppWindowRouterTests: XCTestCase {
             ),
             .showUnifiedSearch
         )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(keyCode: UInt16(kVK_ANSI_LeftBracket), characters: "[")
+            ),
+            .goBack
+        )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(keyCode: UInt16(kVK_ANSI_RightBracket), characters: "]")
+            ),
+            .goForward
+        )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(
+                    keyCode: UInt16(kVK_UpArrow),
+                    characters: "",
+                    modifiers: [.control, .command]
+                )
+            ),
+            .moveSidebarSelection(.previous)
+        )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(
+                    keyCode: UInt16(kVK_DownArrow),
+                    characters: "",
+                    modifiers: [.control, .command]
+                )
+            ),
+            .moveSidebarSelection(.next)
+        )
     }
 
     func testLocalCommandMatcherLeavesCloseQuitAndUnsupportedModifiersUntouched() {
@@ -322,6 +386,28 @@ final class AppWindowRouterTests: XCTestCase {
             AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: false),
             .accessory
         )
+    }
+
+    func testDockVisibilityControllerDoesNotMutateApplicationPolicyDuringTests() {
+        var requestedPolicies = [NSApplication.ActivationPolicy]()
+        let setActivationPolicy: (NSApplication.ActivationPolicy) -> Bool = { policy in
+            requestedPolicies.append(policy)
+            return true
+        }
+
+        AppDockVisibilityController.update(
+            hasVisibleSettingsWindow: true,
+            isRunningTests: true,
+            setActivationPolicy: setActivationPolicy
+        )
+        XCTAssertTrue(requestedPolicies.isEmpty)
+
+        AppDockVisibilityController.update(
+            hasVisibleSettingsWindow: true,
+            isRunningTests: false,
+            setActivationPolicy: setActivationPolicy
+        )
+        XCTAssertEqual(requestedPolicies, [.regular])
     }
 
     func testSettingsPaletteVisibilityPolicyRejectsMiniaturizedAndInactiveSpaceWindows() {
@@ -528,7 +614,7 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertFalse(panel.isVisible)
     }
 
-    func testPhysicalCommandNumberSelectsSettingsTabWhenSearchIsClosed() throws {
+    func testPhysicalCommandNumbersSelectSettingsPagesInVisualOrder() throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -541,13 +627,117 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertTrue(
             window.performKeyEquivalent(
                 with: keyEvent(
-                    keyCode: UInt16(kVK_ANSI_3),
-                    characters: "\"",
+                    keyCode: UInt16(kVK_ANSI_2),
+                    characters: "@",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertEqual(coordinator.destination, .plugins(.automation))
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_4),
+                    characters: "$",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertEqual(coordinator.destination, .plugins(.actionsAndShortcuts))
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_LeftBracket),
+                    characters: "[",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertEqual(coordinator.destination, .plugins(.automation))
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_DownArrow),
+                    characters: "",
+                    modifiers: [.control, .command],
                     windowNumber: window.windowNumber
                 )
             )
         )
         XCTAssertEqual(coordinator.destination, .about)
+
+        window.close()
+    }
+
+    func testNavigationShortcutsDoNotMoveBehindUnifiedSearch() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        coordinator.navigate(to: .plugins(.automation))
+        coordinator.navigate(to: .about)
+        coordinator.goBack()
+        XCTAssertTrue(coordinator.canGoBack)
+        XCTAssertTrue(coordinator.canGoForward)
+        let expectedDestination = coordinator.destination
+        let expectedHistoryIndex = coordinator.historyIndex
+
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        for event in [
+            keyEvent(
+                keyCode: UInt16(kVK_ANSI_LeftBracket),
+                characters: "[",
+                windowNumber: window.windowNumber
+            ),
+            keyEvent(
+                keyCode: UInt16(kVK_ANSI_RightBracket),
+                characters: "]",
+                windowNumber: window.windowNumber
+            ),
+            keyEvent(
+                keyCode: UInt16(kVK_DownArrow),
+                characters: "",
+                modifiers: [.control, .command],
+                windowNumber: window.windowNumber
+            )
+        ] {
+            _ = window.performKeyEquivalent(with: event)
+            XCTAssertEqual(coordinator.destination, expectedDestination)
+            XCTAssertEqual(coordinator.historyIndex, expectedHistoryIndex)
+        }
+
+        window.close()
+    }
+
+    func testCommandFFallsBackToUnifiedSettingsSearch() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_F),
+                    characters: "f",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .keyboard)
 
         window.close()
     }

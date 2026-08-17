@@ -29,6 +29,8 @@ NEW_API_MINIMUM_HOSTS = {
     "ActionExecutionResult": "1.2.0",
     "ActionExecutionHandle": "1.2.0",
     "PluginActionProviding": "1.2.0",
+    "PluginActionShortcutSettingsConfiguration": "1.2.0",
+    "PluginActionShortcutSettingsProviding": "1.2.0",
     "PluginActionExecutionRevisionProviding": "1.2.0",
     "PluginActionExposureProviding": "1.2.0",
     "PluginActionPermissionProviding": "1.2.0",

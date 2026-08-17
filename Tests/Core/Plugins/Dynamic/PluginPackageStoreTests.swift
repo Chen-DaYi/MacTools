@@ -178,6 +178,25 @@ final class PluginPackageStoreTests: XCTestCase {
         XCTAssertEqual(record.state, .installed)
     }
 
+    func testInstallDateSurvivesUpdatesAndResetsAfterReinstall() throws {
+        let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
+        let updateURL = try makePackage(id: "com.example.demo", version: "2.0.0")
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let store = makeStore(now: { currentDate })
+
+        let installedRecord = try store.installPackage(from: sourceURL)
+        XCTAssertEqual(installedRecord.installedAt, currentDate)
+
+        currentDate = Date(timeIntervalSince1970: 200)
+        let updatedRecord = try store.updatePackage(from: updateURL)
+        XCTAssertEqual(updatedRecord.installedAt, Date(timeIntervalSince1970: 100))
+
+        try store.uninstall(pluginID: "com.example.demo", removeData: false)
+        currentDate = Date(timeIntervalSince1970: 300)
+        let reinstalledRecord = try store.installPackage(from: sourceURL)
+        XCTAssertEqual(reinstalledRecord.installedAt, currentDate)
+    }
+
     func testUpdateDoesNotInstallPackageThatIsNoLongerInstalled() throws {
         let updateURL = try makePackage(id: "com.example.demo", version: "2.0.0")
         let store = makeStore()
@@ -203,10 +222,13 @@ final class PluginPackageStoreTests: XCTestCase {
         )
     }
 
-    private func makeStore() -> PluginPackageStore {
+    private func makeStore(
+        now: @escaping () -> Date = { Date() }
+    ) -> PluginPackageStore {
         PluginPackageStore(
             rootDirectory: temporaryRoot,
             userDefaults: defaults,
+            now: now,
             hostVersion: "1.0.0"
         )
     }

@@ -539,6 +539,45 @@ public protocol PluginActionProviding: AnyObject {
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle
 }
 
+/// Describes a host-rendered shortcut section for a subset of a plugin's canonical actions.
+///
+/// This companion contract keeps shortcut persistence, conflict handling, and registration in
+/// the host while allowing a plugin to place the relevant actions beside its own settings. It is
+/// separate from `MacToolsPlugin` and `PluginActionProviding` so existing PluginKit v4 witness
+/// tables remain unchanged.
+public struct PluginActionShortcutSettingsConfiguration: Sendable {
+    /// Stable settings-search entry used by the host-rendered action shortcut section.
+    ///
+    /// This is a static contract rather than stored configuration so adding it does not change
+    /// the binary layout of the public PluginKit v4 value type.
+    public static let settingsSearchEntryID = "action-shortcuts"
+
+    public let title: String
+    public let description: String?
+    public let systemImage: String
+    public let actionIDs: Set<String>
+    public let placementAfterSectionID: String?
+
+    public init(
+        title: String,
+        description: String? = nil,
+        systemImage: String = "command",
+        actionIDs: Set<String>,
+        placementAfterSectionID: String? = nil
+    ) {
+        self.title = title
+        self.description = description
+        self.systemImage = systemImage
+        self.actionIDs = actionIDs
+        self.placementAfterSectionID = placementAfterSectionID
+    }
+}
+
+@MainActor
+public protocol PluginActionShortcutSettingsProviding: AnyObject {
+    var actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration { get }
+}
+
 /// Optional live revision for provider-owned execution state that is not represented by an
 /// `ActionDefinition` or `ActionCatalogEntry`. The host revalidates this value after confirmation
 /// and immediately before execution so mutable payloads cannot be substituted after approval.

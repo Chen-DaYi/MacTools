@@ -20,7 +20,7 @@ enum SettingsPageWidthPolicy {
 enum SettingsPageLayout {
     static let horizontalInset: CGFloat = 20
     static let verticalInset: CGFloat = 24
-    static let headerContentSpacing: CGFloat = 20
+    static let introductionContentSpacing: CGFloat = 16
 
     /// A grouped Form adds 10pt of native card chrome on each side of an
     /// explicitly sized direct row. The host owns this adjustment so plugins
@@ -51,90 +51,67 @@ enum SettingsPageLayout {
     }
 }
 
-struct SettingsPageHeaderConfiguration {
-    let title: String
+struct SettingsPageIntroductionConfiguration {
     let description: String
-    let systemImage: String
-    let iconTint: Color
     let descriptionColor: Color
 
     init(
-        title: String,
         description: String,
-        systemImage: String,
-        iconTint: Color,
         descriptionColor: Color = .secondary
     ) {
-        self.title = title
         self.description = description
-        self.systemImage = systemImage
-        self.iconTint = iconTint
         self.descriptionColor = descriptionColor
     }
 }
 
 /// The page shell for readable settings workspaces. It owns the semantic
-/// window background, shared content guide, and page header; scrolling remains
-/// the responsibility of the supplied content container.
-struct SettingsPageScaffold<HeaderAccessory: View, Content: View>: View {
-    let header: SettingsPageHeaderConfiguration
+/// window background and shared content guide; scrolling and page-level
+/// introductions remain the responsibility of the supplied content container.
+struct SettingsPageScaffold<Content: View>: View {
     private let widthPolicy: SettingsPageWidthPolicy
-    private let headerAccessory: HeaderAccessory
     private let content: Content
 
     init(
-        header: SettingsPageHeaderConfiguration,
         widthPolicy: SettingsPageWidthPolicy = .standard,
-        @ViewBuilder headerAccessory: () -> HeaderAccessory,
         @ViewBuilder content: () -> Content
     ) {
-        self.header = header
         self.widthPolicy = widthPolicy
-        self.headerAccessory = headerAccessory()
         self.content = content()
     }
 
     var body: some View {
-        VStack(spacing: SettingsPageLayout.headerContentSpacing) {
-            SettingsPageHeaderContent(
-                configuration: header,
-                accessory: headerAccessory
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(
+                maxWidth: widthPolicy.maximumContentWidth,
+                maxHeight: .infinity,
+                alignment: .topLeading
             )
-
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .frame(
-            maxWidth: widthPolicy.maximumContentWidth,
-            maxHeight: .infinity,
-            alignment: .topLeading
-        )
-        .padding(.horizontal, SettingsPageLayout.horizontalInset)
-        .padding(.vertical, SettingsPageLayout.verticalInset)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(SettingsStyle.contentBackground, ignoresSafeAreaEdges: .all)
+            .padding(.horizontal, SettingsPageLayout.horizontalInset)
+            .padding(.vertical, SettingsPageLayout.verticalInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(SettingsStyle.contentBackground, ignoresSafeAreaEdges: .all)
     }
 }
 
-/// The page shell for native grouped forms. The header stays outside Form so
-/// every plugin page shares the same title-to-content spacing, while Form
-/// continues to own native cards, section spacing, keyboard focus,
-/// accessibility, and content scrolling.
-struct SettingsGroupedFormPageScaffold<HeaderAccessory: View, Content: View>: View {
-    let header: SettingsPageHeaderConfiguration
+/// The page shell for native grouped forms. The compact introduction is an
+/// unboxed Form section header so the description and page-level actions
+/// scroll naturally with the settings content without looking like a card.
+struct SettingsGroupedFormPageScaffold<IntroductionAccessory: View, Content: View>: View {
+    let introduction: SettingsPageIntroductionConfiguration
     private let widthPolicy: SettingsPageWidthPolicy
-    private let headerAccessory: HeaderAccessory
+    private let introductionAccessory: IntroductionAccessory
     private let content: (SettingsGroupedFormWidths) -> Content
 
     init(
-        header: SettingsPageHeaderConfiguration,
+        introduction: SettingsPageIntroductionConfiguration,
         widthPolicy: SettingsPageWidthPolicy = .standard,
-        @ViewBuilder headerAccessory: () -> HeaderAccessory,
+        @ViewBuilder introductionAccessory: () -> IntroductionAccessory,
         @ViewBuilder content: @escaping (SettingsGroupedFormWidths) -> Content
     ) {
-        self.header = header
+        self.introduction = introduction
         self.widthPolicy = widthPolicy
-        self.headerAccessory = headerAccessory()
+        self.introductionAccessory = introductionAccessory()
         self.content = content
     }
 
@@ -145,28 +122,30 @@ struct SettingsGroupedFormPageScaffold<HeaderAccessory: View, Content: View>: Vi
                 widthPolicy: widthPolicy
             )
 
-            VStack(spacing: 0) {
-                SettingsPageHeaderContent(
-                    configuration: header,
-                    accessory: headerAccessory
-                )
-                .frame(width: widths.readableContent)
-                .padding(.top, SettingsPageLayout.verticalInset)
-                .padding(.bottom, SettingsPageLayout.headerContentSpacing)
-
-                Form {
-                    content(widths)
+            Form {
+                Section {
+                    EmptyView()
+                } header: {
+                    SettingsPageIntroduction(configuration: introduction) {
+                        introductionAccessory
+                    }
+                    .frame(width: widths.readableContent, alignment: .leading)
                 }
-                .settingsGroupedFormStyle()
-                .contentMargins(.top, 0, for: .scrollContent)
-                .contentMargins(
-                    .bottom,
-                    SettingsPageLayout.verticalInset,
-                    for: .scrollContent
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                content(widths)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .settingsGroupedFormStyle()
+            .contentMargins(
+                .top,
+                SettingsPageLayout.verticalInset,
+                for: .scrollContent
+            )
+            .contentMargins(
+                .bottom,
+                SettingsPageLayout.verticalInset,
+                for: .scrollContent
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsStyle.contentBackground, ignoresSafeAreaEdges: .all)
     }
@@ -226,59 +205,18 @@ extension View {
     }
 }
 
-extension SettingsGroupedFormPageScaffold where HeaderAccessory == EmptyView {
+extension SettingsGroupedFormPageScaffold where IntroductionAccessory == EmptyView {
     init(
-        header: SettingsPageHeaderConfiguration,
+        introduction: SettingsPageIntroductionConfiguration,
         widthPolicy: SettingsPageWidthPolicy = .standard,
         @ViewBuilder content: @escaping (SettingsGroupedFormWidths) -> Content
     ) {
         self.init(
-            header: header,
+            introduction: introduction,
             widthPolicy: widthPolicy,
-            headerAccessory: { EmptyView() },
+            introductionAccessory: { EmptyView() },
             content: content
         )
-    }
-}
-
-extension SettingsPageScaffold where HeaderAccessory == EmptyView {
-    init(
-        header: SettingsPageHeaderConfiguration,
-        widthPolicy: SettingsPageWidthPolicy = .standard,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.init(
-            header: header,
-            widthPolicy: widthPolicy,
-            headerAccessory: { EmptyView() },
-            content: content
-        )
-    }
-}
-
-struct SettingsPageHeader: View {
-    let configuration: SettingsPageHeaderConfiguration
-
-    init(configuration: SettingsPageHeaderConfiguration) {
-        self.configuration = configuration
-    }
-
-    init(
-        title: String,
-        description: String,
-        systemImage: String,
-        iconTint: Color
-    ) {
-        configuration = SettingsPageHeaderConfiguration(
-            title: title,
-            description: description,
-            systemImage: systemImage,
-            iconTint: iconTint
-        )
-    }
-
-    var body: some View {
-        SettingsPageHeaderCore(configuration: configuration)
     }
 }
 
@@ -352,51 +290,46 @@ extension SettingsGroupedFormSectionHeader where Accessory == EmptyView {
     }
 }
 
-private struct SettingsPageHeaderContent<Accessory: View>: View {
-    let configuration: SettingsPageHeaderConfiguration
-    let accessory: Accessory
+struct SettingsPageIntroduction<Accessory: View>: View {
+    let configuration: SettingsPageIntroductionConfiguration
+    private let accessory: Accessory
+
+    init(
+        configuration: SettingsPageIntroductionConfiguration,
+        @ViewBuilder accessory: () -> Accessory
+    ) {
+        self.configuration = configuration
+        self.accessory = accessory()
+    }
 
     var body: some View {
         HStack(
-            alignment: .center,
+            alignment: .top,
             spacing: PluginSettingsTheme.Spacing.rowContentControl
         ) {
-            SettingsPageHeaderCore(configuration: configuration)
+            Label {
+                Text(configuration.description)
+            } icon: {
+                Image(systemName: "info.circle")
+                    .frame(width: PluginSettingsTheme.Size.rowIcon)
+            }
+            .font(PluginSettingsTheme.Typography.pageDescription)
+            .foregroundStyle(configuration.descriptionColor)
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
+
             Spacer(minLength: PluginSettingsTheme.Spacing.controlCluster)
+
             accessory
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .textCase(nil)
     }
 }
 
-private struct SettingsPageHeaderCore: View {
-    let configuration: SettingsPageHeaderConfiguration
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(configuration.iconTint.opacity(0.14))
-
-                Image(systemName: configuration.systemImage)
-                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
-                    .foregroundStyle(configuration.iconTint)
-            }
-            .frame(width: PluginSettingsTheme.Size.pageIcon, height: PluginSettingsTheme.Size.pageIcon)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(configuration.title)
-                    .font(PluginSettingsTheme.Typography.pageTitle)
-                    .foregroundStyle(.primary)
-
-                Text(configuration.description)
-                    .font(PluginSettingsTheme.Typography.pageDescription)
-                    .foregroundStyle(configuration.descriptionColor)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
+extension SettingsPageIntroduction where Accessory == EmptyView {
+    init(configuration: SettingsPageIntroductionConfiguration) {
+        self.init(configuration: configuration, accessory: { EmptyView() })
     }
 }
 

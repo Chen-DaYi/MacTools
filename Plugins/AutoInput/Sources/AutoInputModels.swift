@@ -25,6 +25,17 @@ enum AutoInputHUDPosition: String, Codable, CaseIterable, Identifiable, Sendable
 struct AutoInputHUDConfiguration: Equatable, Sendable {
     let size: AutoInputHUDSize
     let position: AutoInputHUDPosition
+    let isInteractive: Bool
+
+    init(
+        size: AutoInputHUDSize,
+        position: AutoInputHUDPosition,
+        isInteractive: Bool = false
+    ) {
+        self.size = size
+        self.position = position
+        self.isInteractive = isInteractive
+    }
 }
 
 struct AutoInputApplication: Equatable, Sendable {

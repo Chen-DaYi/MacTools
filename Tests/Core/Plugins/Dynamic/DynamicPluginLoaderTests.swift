@@ -85,6 +85,7 @@ final class DynamicPluginLoaderTests: XCTestCase {
             ),
             packageURL: packageURL,
             bundleURL: packageURL.appendingPathComponent("Demo.bundle", isDirectory: true),
+            installedAt: Date(timeIntervalSince1970: 100),
             state: .installed,
             requiresRestartToFullyUnload: false
         )
