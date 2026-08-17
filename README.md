@@ -106,6 +106,8 @@ MacTools quietly checks for app updates once per day. When an update is availabl
 
 The in-app update dialog separates App Updates from Plugin Updates and includes plugin releases published since the previous app version.
 
+About keeps the app summary and update action visible above a scrollable, offline history of the 10 most recent App and Plugin releases.
+
 If Homebrew still reports that the cask is already up to date, check the locally resolved cask version first:
 
 ```bash

@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_VERSION_CONFIG = ROOT_DIR / "Configs" / "AppVersion.xcconfig"
 CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
+RELEASE_HISTORY_PATH = ROOT_DIR / "Sources" / "Resources" / "ReleaseHistory.json"
 CHANGELOG_FRAGMENT_DIR = ROOT_DIR / "changes" / "unreleased"
 PLUGIN_SOURCE_DIR = ROOT_DIR / "Plugins"
 PLUGIN_SHARED_PATHS = [ROOT_DIR / "Sources/MacToolsPluginKit"]
@@ -856,7 +857,7 @@ def validate_changelog(release: str, require_pending: bool) -> None:
 
 
 def prepare_changelog(release: str, tag: str, dry_run: bool) -> list[Path]:
-    paths = [CHANGELOG_PATH, *changelog_fragment_paths(release)]
+    paths = [CHANGELOG_PATH, RELEASE_HISTORY_PATH, *changelog_fragment_paths(release)]
     info(f"Preparing CHANGELOG.md for {tag}")
     command = ["python3", "scripts/changelog.py", "prepare", "--release", release, "--tag", tag]
     if dry_run:

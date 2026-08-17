@@ -3366,56 +3366,31 @@ private func statusColor(for tone: PluginStatusTone) -> Color {
 struct AboutSettingsView: View {
     @StateObject private var updateViewModel: AboutUpdateViewModel
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
+    private let releaseHistory: ReleaseHistory
 
     init(
         appUpdater: AppUpdater,
-        navigationCoordinator: SettingsNavigationCoordinator
+        navigationCoordinator: SettingsNavigationCoordinator,
+        releaseHistory: ReleaseHistory = .bundled
     ) {
         _updateViewModel = StateObject(
             wrappedValue: AboutUpdateViewModel(updater: appUpdater)
         )
         self.navigationCoordinator = navigationCoordinator
+        self.releaseHistory = releaseHistory
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 28)
+            AboutProductSummary(viewModel: updateViewModel)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 22)
 
-            AppIconPreview()
+            Divider()
 
-            Text(AppMetadata.appName)
-                .font(PluginSettingsTheme.Typography.pageTitle)
-                .padding(.top, 8)
-
-            Text(AppL10n.settingsFormat("about.versionFormat", defaultValue: "版本 %@", AppMetadata.versionDescription))
-                .font(PluginSettingsTheme.Typography.pageDescription)
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
-
-            AboutUpdateCard(viewModel: updateViewModel)
-                .padding(.top, 28)
-                .frame(maxWidth: 420)
-
-            Text(AppMetadata.aboutDescription)
-                .font(PluginSettingsTheme.Typography.rowTitle)
-                .lineLimit(nil)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 320)
-                .padding(.top, 28)
-
-            VStack(spacing: 0) {
-                Link(AppMetadata.repositoryDisplayName, destination: AppMetadata.repositoryURL)
-                    .font(PluginSettingsTheme.Typography.rowTitle)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 28)
-
-            Spacer(minLength: 36)
+            AboutReleaseHistoryView(releaseHistory: releaseHistory)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.horizontal, 40)
-        .padding(.vertical, 28)
         .background(Color(nsColor: .windowBackgroundColor))
         .onChange(
             of: navigationCoordinator.aboutUpdateActionRequest,
@@ -3437,6 +3412,197 @@ struct AboutSettingsView: View {
             await Task.yield()
             updateViewModel.performAvailableUpdateAction(version: request.version)
         }
+    }
+}
+
+private struct AboutProductSummary: View {
+    @ObservedObject var viewModel: AboutUpdateViewModel
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 20) {
+            AppIconPreview()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AppMetadata.appName)
+                    .font(PluginSettingsTheme.Typography.pageTitle)
+
+                Text(AppL10n.settingsFormat("about.versionFormat", defaultValue: "版本 %@", AppMetadata.versionDescription))
+                    .font(PluginSettingsTheme.Typography.pageDescription)
+                    .foregroundStyle(.secondary)
+
+                Text(AppMetadata.aboutDescription)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+
+                Link(destination: AppMetadata.repositoryURL) {
+                    HStack(spacing: 5) {
+                        Text(AppMetadata.repositoryDisplayName)
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                    }
+                }
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .padding(.top, 2)
+            }
+
+            Spacer(minLength: 12)
+
+            AboutUpdateCard(viewModel: viewModel)
+                .frame(minWidth: 160, idealWidth: 190, maxWidth: 220)
+        }
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct AboutReleaseHistoryView: View {
+    private static let maximumReleaseCount = 10
+
+    let releaseHistory: ReleaseHistory
+
+    private var displayedReleases: [ReleaseHistoryItem] {
+        releaseHistory.mostRecentReleases(limit: Self.maximumReleaseCount)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Label(
+                    AppL10n.settings("about.changelog.title", defaultValue: "版本记录"),
+                    systemImage: "clock.arrow.circlepath"
+                )
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+
+                Text(
+                    AppL10n.settings(
+                        "about.changelog.description",
+                        defaultValue: "MacTools 与插件最近 10 个版本的发布记录"
+                    )
+                )
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+
+            if displayedReleases.isEmpty {
+                ContentUnavailableView(
+                    AppL10n.settings(
+                        "about.changelog.empty.title",
+                        defaultValue: "暂无版本记录"
+                    ),
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text(
+                        AppL10n.settings(
+                            "about.changelog.empty.description",
+                            defaultValue: "发布新版本后，更新内容会显示在这里。"
+                        )
+                    )
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(displayedReleases) { release in
+                            AboutReleaseCard(release: release)
+                        }
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct AboutReleaseCard: View {
+    let release: ReleaseHistoryItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Label(releaseKindTitle, systemImage: releaseKindSystemImage)
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
+                    .foregroundStyle(.secondary)
+
+                Text(release.version)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                if isCurrentVersion {
+                    Text(
+                        AppL10n.settings(
+                            "about.changelog.currentVersion",
+                            defaultValue: "当前版本"
+                        )
+                    )
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
+                }
+
+                Spacer(minLength: 12)
+
+                Text(release.date)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.tertiary)
+            }
+
+            ForEach(release.sections) { section in
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(section.kind.displayName)
+                        .font(PluginSettingsTheme.Typography.secondaryLabel)
+                        .foregroundStyle(.secondary)
+
+                    ForEach(Array(section.entries.enumerated()), id: \.offset) { _, entry in
+                        HStack(alignment: .firstTextBaseline, spacing: 9) {
+                            Circle()
+                                .fill(Color.secondary.opacity(0.7))
+                                .frame(width: 4, height: 4)
+                                .alignmentGuide(.firstTextBaseline) { dimensions in
+                                    dimensions[VerticalAlignment.center]
+                                }
+                                .accessibilityHidden(true)
+
+                            Text(entry)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .pluginSettingsCardBackground(.standard)
+    }
+
+    private var releaseKindTitle: String {
+        switch release.kind {
+        case .app:
+            return AppMetadata.appName
+        case .plugin:
+            return AppL10n.settings("tab.plugins", defaultValue: "插件")
+        }
+    }
+
+    private var releaseKindSystemImage: String {
+        switch release.kind {
+        case .app:
+            return "app.fill"
+        case .plugin:
+            return "shippingbox.fill"
+        }
+    }
+
+    private var isCurrentVersion: Bool {
+        release.kind == .app && release.version == AppMetadata.shortVersion
     }
 }
 
@@ -3482,7 +3648,7 @@ private struct AboutUpdateCard: View {
 }
 
 private struct AppIconPreview: View {
-    private static let iconSize: CGFloat = 82
+    private static let iconSize: CGFloat = 76
 
     var body: some View {
         if let appIcon = AppMetadata.appIcon {

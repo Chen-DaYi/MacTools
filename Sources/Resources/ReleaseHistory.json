@@ -1,0 +1,560 @@
+{
+  "schemaVersion": 1,
+  "releases": [
+    {
+      "id": "v1.1.6",
+      "kind": "app",
+      "version": "1.1.6",
+      "date": "2026-08-10",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Added navigation-only deep links for Settings, installed plugin settings, Dashboard, Feature Panel, and search.",
+            "Command Palette can now set the app appearance, manage Launch at Login, and show or hide installed plugins on each supported surface.",
+            "An optional global shortcut can now open a standalone Command Palette from any app."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "Dashboard and Feature Panel context menus can now move plugins to either end of the list and show or hide them on the current surface.",
+            "Settings pages now use native macOS backgrounds, appearance-aware sidebars and cards, consistent spacing, responsive widths, compact shortcuts, and live slider readouts; General preferences retain a readable width.",
+            "Common application shortcuts can now be used after confirming their global effect.",
+            "Plugin updates now install and validate Trackpad Gestures before Mouse Enhancer retires legacy middle-click behavior, with rollback on failure and a compatibility fallback for temporary app downgrades."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Plugin settings now use a lighter sidebar surface in Light appearance."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.1.6",
+      "kind": "plugin",
+      "version": "1.1.6",
+      "date": "2026-08-10",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Calendar now lets you choose any weekday as the start of the week, with Sunday as the default.",
+            "Added a dedicated Trackpad Gestures plugin with configurable TipTap, three- to five-finger taps, double taps, and long touches that can trigger keyboard shortcuts or middle clicks.",
+            "TipTap actions can repeat for each additional-finger tap while fixed fingers remain on the trackpad, and can consume matching native clicks.",
+            "Adjustable typing protection is enabled by default to prevent palm-triggered gestures while using the keyboard.",
+            "Responsive mapping controls provide focused editing, unique gesture choices, visible deletion, guidance, accessibility labels, and a safe no-action test mode.",
+            "Automatic updates install Trackpad Gestures before migrating affected Mouse Enhancer middle-click settings; Mouse Enhancer then focuses on scrolling."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "App Hotkey now asks before assigning a common application shortcut globally.",
+            "Keep Awake now offers three modes: allow display sleep, keep the display on, or keep screen tools active. Screen Tools can prevent automatic locking and support closed-lid use on power; manual locking still works.",
+            "All plugins now use a unified settings layout with native forms, adaptive system cards for complex managers, single-line shortcut controls, compact menus for long choices, and tick-free stepped sliders.",
+            "Window Switcher and Physical Clean Mode shortcut fields no longer repeat their row labels, while Display Brightness keeps compact direction icons and aligns both shortcut fields beside the description.",
+            "Sidecar now asks before assigning a common application shortcut globally."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Fan Control now reports an error when its helper is not running with administrator privileges or when macOS does not apply the requested SMC fan value, instead of showing an unapplied speed change as successful.",
+            "Launch Items settings now adapt to smaller windows without clipping filters, lists, details, or scan progress.",
+            "Mouse Enhancer now preserves separate mouse and trackpad scroll directions after screen locking, sleep and wake, or external-display changes.",
+            "Sidecar's two global shortcut fields now show their actions beside the recorder, making connect-first and disconnect-all settings easy to distinguish.",
+            "Translator settings now show their section title in every supported app language."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.1.5",
+      "kind": "app",
+      "version": "1.1.5",
+      "date": "2026-08-03",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Press Command-K or use the Plugins sidebar to search app destinations, settings, plugins, and supported commands in one accessible palette. Results support number-key selection, exact navigation, and protected shortcuts."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "MacTools now explains its local-only System Audio Recording use when an installed plugin provides per-app volume controls.",
+            "Plugin settings now use an adaptive, resizable native sidebar with focused keyboard navigation and no extra focus outlines. Settings keeps a usable window size and adds Back and Forward toolbar controls."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "The Settings sidebar search field now opens search when clicking anywhere inside its visible bounds."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.1.5",
+      "kind": "plugin",
+      "version": "1.1.5",
+      "date": "2026-08-03",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Added App Volume controls for adjusting and remembering the volume of each app currently playing audio on macOS 15 or later.",
+            "Added Auto Input to remember the last input source used in each app and apply fixed per-app input sources.",
+            "Keep Awake can create a built-in virtual display while a powered MacBook's lid is closed, allowing screen sharing, remote control, and desktop automation without an external display.",
+            "Display Brightness and Prevent Sleep expose direct setting destinations, while Display Sleep and Lock Screen opt in to safe command discovery."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "Disk Cleanup now scans system caches, developer artifacts, and leftover installers faster. Cleanup moves items to Trash by default and blocks protected, incomplete, locked, or overly broad targets."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Device Battery command sampling no longer stalls when a spawned helper leaves output pipes open, and preserves partial output when a command times out."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.1.4",
+      "kind": "app",
+      "version": "1.1.4",
+      "date": "2026-07-25",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "MacTools now checks quietly for app updates once per day and surfaces an Update action in the menu-bar panel when a new version is available."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "The website About page now tells the MacTools story through an immersive, skippable galactic opening crawl.",
+            "The website plugin page now provides an interactive, responsive preview of the Marketplace and plugin settings."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Restored loading for plugins installed before MacTools 1.1.3."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.1.4",
+      "kind": "plugin",
+      "version": "1.1.4",
+      "date": "2026-07-25",
+      "sections": [
+        {
+          "kind": "fixed",
+          "entries": [
+            "Rebuilt every plugin package for compatibility with the current MacTools PluginKit runtime."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.1.3",
+      "kind": "plugin",
+      "version": "1.1.3",
+      "date": "2026-07-24",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Keep Awake can optionally keep a Mac laptop running with its lid closed. The preference can be enabled on battery, waits for external power, and activates automatically when power connects."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "IP Check now performs a lightweight local and public IPv4 refresh whenever its Feature Panel or settings page opens."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Sidecar device settings now keep connection options and shortcuts readable in narrow Settings windows."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.1.3",
+      "kind": "app",
+      "version": "1.1.3",
+      "date": "2026-07-24",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "General Settings now offers optional global shortcuts to toggle Dashboard and Feature Panel.",
+            "The Feature Panel now copies button and switch subtitles, including either inline IP Check address, on double-click and briefly confirms successful copies.",
+            "Settings now provides Back and Forward navigation with ⌘[ and ⌘], including exact restoration of Plugin subpages.",
+            "Menu-bar panels and Settings now support standard local shortcuts for dismissal, Settings, and search."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Grouped shortcut controls now stay readable and inside their settings card when labels are long or many actions are shown."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.1.2",
+      "kind": "app",
+      "version": "1.1.2",
+      "date": "2026-07-20",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Use Command-number shortcuts to switch menu-bar panels and jump among the main Settings pages.",
+            "Show, hide, and reorder Dashboard components and Feature Panel actions independently. Hiding affects only that surface and does not stop a plugin’s background behavior.",
+            "Manage installation, updates, and removal in Marketplace, or open plugin settings and uninstall directly from a layout row. Repeated uninstall confirmations can be paused for the current Settings session.",
+            "Existing global layouts and older backups migrate safely to both surfaces. New backups preserve independent layouts while retaining a conservative legacy projection for older app versions.",
+            "Plugins previously disabled from Installed load after upgrade but remain hidden on supported surfaces. Downgrading cannot restore the former disabled lifecycle state, so uninstall plugins you do not want running.",
+            "The online icon gallery now includes a curated set of static icons across every category and marks animated icons with a clear badge for easier browsing."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "Background-aware plugins can now pause nonessential work while the session is locked or the Mac is asleep.",
+            "Animated items in the online icon gallery now use a compact play indicator that leaves more of each icon visible.",
+            "Menu bar icon settings now show the current selection in a compact preview, play animations at their default speed, and omit playback controls, contrast warnings, and the recent-icons list."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Feature-panel switches now update reliably after being clicked on macOS 27.",
+            "Importing menu bar icons now preserves their original colors and transparency, preventing white artwork on transparent PNGs from disappearing.",
+            "Monochrome icons from the online gallery now automatically adapt to light and dark menu bar backgrounds while colorful icons keep their original appearance."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.1.2",
+      "kind": "plugin",
+      "version": "1.1.2",
+      "date": "2026-07-20",
+      "sections": [
+        {
+          "kind": "changed",
+          "entries": [
+            "Use clear visibility controls when choosing System Status metrics for the panel or menu bar."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Device Battery now avoids unnecessary Bluetooth scans when its widget and low-battery alerts are inactive.",
+            "Keep Fan Control’s faster refresh limited to its visible, expanded panel, and keep Hide Menu Bar Icons running when it is hidden from a layout."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.1.1",
+      "kind": "plugin",
+      "version": "1.1.1",
+      "date": "2026-07-17",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Connect nearby Sidecar-compatible displays with direct actions and status indicators. Switching disconnects the current display before connecting another.",
+            "Save per-display connection priorities and shortcuts, with a priority-aware shortcut that connects the first available display.",
+            "Request wired-only transport without falling back to Wi-Fi. Automatic Sidecar controls remain available when wired-only transport is unsupported.",
+            "Sidecar shortcuts now use MacTools-wide conflict validation, imported settings are normalized, and unavailable states stay distinct from connectable displays. Panel feedback clears on close or before it becomes stale."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Eject Disks now detects all visible ejectable mounts when the panel opens, including disk images, fixed external drives, and network volumes.",
+            "Homebrew, Mouse Enhancer, Activity Bar, System Status, and Window Switcher controls now use the selected app language.",
+            "Quit Apps now groups multiple running instances of the same app into one entry, preventing blank or misplaced cells while still quitting every instance selected.",
+            "Finder Right Click now offers path-copy actions on window backgrounds and copies the current folder instead of requiring a selected item."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.1.1",
+      "kind": "app",
+      "version": "1.1.1",
+      "date": "2026-07-16",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "MacTools preferences can be exported and imported as a versioned JSON backup, including app preferences, plugin display settings, and shortcuts. During import, missing plugins can be installed from the verified catalog.",
+            "The website now provides a bilingual privacy policy explaining MacTools' local-first data handling, system permissions, and network-dependent features."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "The feature and component panel switcher is now centered in a capsule-shaped toolbar control, with matching hover shapes for toolbar actions.",
+            "Plugin Marketplace name sorting now follows the language selected in MacTools, with localized ascending and descending labels.",
+            "MacTools can now assign a global shortcut to open its Settings window, and the menu-bar panel no longer shows a misleading dashboard focus outline while viewing features.",
+            "Portable plugin settings can now opt in to preference backup and restore, including Sidecar display priority and shortcut configuration."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Secondary menu-bar lists now open on the available side of the panel and switch to an in-panel view when screen space is limited.",
+            "Feature-panel action buttons now match switch widths, preserve label spacing, and expose full long labels in tooltips.",
+            "Plugin update progress now advances after each plugin finishes during automatic and manual bulk updates.",
+            "Language names in Settings now remain readable instead of being truncated.",
+            "Right-clicking the menu bar icon now opens the intended panel reliably on macOS 27 without briefly showing the primary panel or closing immediately.",
+            "Shortcut recording now accepts F1-F12 as standalone shortcuts, including the shortcut for opening Settings, and explains when other keys require a modifier.",
+            "The website download now points to the latest stable MacTools DMG instead of a plugin batch release. The Homebrew install command adapts to light and dark appearance and keeps its copy action compact on phones."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.1.0",
+      "kind": "app",
+      "version": "1.1.0",
+      "date": "2026-07-12",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "The plugin marketplace can sort by install status (not installed first, or installed first with updates prioritized) or by name (A–Z / Z–A)."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "Placed plugin-specific settings between permission and shortcut sections for a more natural configuration flow.",
+            "The in-app update dialog now includes plugin changes released since the previous app version.",
+            "Changing the app language now refreshes all Settings and plugin controls immediately without requiring a restart.",
+            "The language picker now shows each option in the system language alongside its native name.",
+            "New app versions use a PluginKit-versioned plugin catalog and update installed plugins before loading them, while older app versions continue using the legacy catalog."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Custom and gallery menu bar icons now use one standard height and content inset with consistent settings previews."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.1.0",
+      "kind": "plugin",
+      "version": "1.1.0",
+      "date": "2026-07-12",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Device Battery can show trusted iPhone, iPad, iPod touch, Vision Pro, and paired Apple Watch battery and charging status over USB or Wi-Fi.",
+            "Keep Awake can optionally keep the display on for every session through its plugin settings and shows an indicator while that mode is active."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "Refined the native window switcher overlay and added editable, stable single-key app shortcuts.",
+            "Device Battery now refreshes Apple mobile devices less often while the component panel is hidden.",
+            "All plugin packages are rebuilt for PluginKit 3 and published together in a versioned catalog so they remain compatible with the new app runtime."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Eject Disks no longer treats internal system or non-ejectable volumes as removable disks.",
+            "Translator source text no longer overlaps the copy and speech actions when the text spans multiple lines."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.0.31",
+      "kind": "app",
+      "version": "1.0.31",
+      "date": "2026-07-09",
+      "sections": [
+        {
+          "kind": "changed",
+          "entries": [
+            "Improved the menu bar icon settings previews so uploaded and online icons are easier to inspect."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.0.32",
+      "kind": "plugin",
+      "version": "1.0.32",
+      "date": "2026-07-09",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "System Status now includes settings for arranging component-panel metrics and optional compact menu bar metrics.",
+            "Added Window Switcher for shortcut-driven window switching with direct cycling, key-based selection, configurable ordering, stable key hints, and hover quit buttons."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Activity Bar now includes Cursor coding activity in AI work summaries and coding tool trends.",
+            "Activity Bar now listens for installed AI hooks independently of Input Monitoring tracking.",
+            "Activity Bar can now uninstall the AI activity hooks it adds for Claude Code, Cursor, and Codex.",
+            "Battery Charge Limit now prefers the system charge ceiling path when available, uses the correct macOS 26 charging key, and verifies SMC writes to reduce USB-C display disconnects when charging stops at the limit.",
+            "System Status now reports total GPU usage from the accelerator's total activity metric instead of pipeline-specific counters, avoiding false 100% history samples.",
+            "Translator service order and enabled-state changes now persist immediately."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.0.30",
+      "kind": "app",
+      "version": "1.0.30",
+      "date": "2026-07-07",
+      "sections": [
+        {
+          "kind": "fixed",
+          "entries": [
+            "Reduce unnecessary menu bar refresh work when plugins report state changes, keeping panels steadier during frequent updates."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.0.31",
+      "kind": "plugin",
+      "version": "1.0.31",
+      "date": "2026-07-07",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Add a Homebrew management plugin for browsing packages, installing and upgrading formulae, and running diagnostics from the menu bar and settings."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Hide Menu Bar Icons no longer quits after Accessibility is granted before Screen Recording is approved.",
+            "Hide Menu Bar Icons now keeps the divider where you drag it instead of snapping it back next to the MacTools icon.",
+            "Keep Awake now restores permanent sessions after restarting MacTools."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.0.29",
+      "kind": "app",
+      "version": "1.0.29",
+      "date": "2026-07-05",
+      "sections": [
+        {
+          "kind": "fixed",
+          "entries": [
+            "Kept panel position stable and feature panel height accurate as controls expand."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.0.30",
+      "kind": "plugin",
+      "version": "1.0.30",
+      "date": "2026-07-05",
+      "sections": [
+        {
+          "kind": "changed",
+          "entries": [
+            "Stop Battery Charge Limit background monitoring while the charging limit is disabled.",
+            "Pause Menu Bar Hidden background observers when the feature is hidden or not actively in use.",
+            "Reduce System Status background sampling to lower idle energy use while keeping foreground updates responsive."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Prevent repeated low-battery notifications when device battery readings switch sources or briefly disappear.",
+            "Refresh Empty Trash availability when opening the feature panel.",
+            "Fixed Mouse Enhancer settings switches rendering incorrectly on first open.",
+            "Avoid administrator password prompts on quit when Fan Control or Battery Charge Limit did not apply SMC changes."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v1.0.28",
+      "kind": "app",
+      "version": "1.0.28",
+      "date": "2026-07-03",
+      "sections": [
+        {
+          "kind": "fixed",
+          "entries": [
+            "Finder right-click menu items now stay hidden while the Right Click plugin is disabled."
+          ]
+        },
+        {
+          "kind": "maintenance",
+          "entries": [
+            "App release notes now come from concise changelog fragments that are compiled into CHANGELOG.md during release."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plugins-1.0.29",
+      "kind": "plugin",
+      "version": "1.0.29",
+      "date": "2026-07-03",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Added Mouse Enhancer, a mouse and trackpad controls plugin with separate horizontal and vertical scroll reversing plus trackpad-tap middle-click simulation."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Right Click now keeps Finder extension menu visibility aligned with the plugin's enabled state."
+          ]
+        },
+        {
+          "kind": "maintenance",
+          "entries": [
+            "Plugin batch release notes now come from plugin changelog fragments compiled into CHANGELOG.md during release."
+          ]
+        }
+      ]
+    }
+  ]
+}

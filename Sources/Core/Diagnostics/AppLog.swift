@@ -14,6 +14,7 @@ enum AppLog {
     static let autoHideDockPlugin = Logger(subsystem: subsystem, category: "AutoHideDockPlugin")
     static let pluginHost = Logger(subsystem: subsystem, category: "PluginHost")
     static let launchAtLogin = Logger(subsystem: subsystem, category: "LaunchAtLogin")
+    static let releaseHistory = Logger(subsystem: subsystem, category: "ReleaseHistory")
 
     static var isVerboseLoggingEnabled: Bool {
         #if DEBUG
