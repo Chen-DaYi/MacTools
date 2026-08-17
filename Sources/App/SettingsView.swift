@@ -14,7 +14,7 @@ enum GeneralSettingsCardLayout {
 
 private enum SettingsSplitViewLayout {
     static let sidebarMinWidth: CGFloat = 180
-    static let sidebarIdealWidth: CGFloat = 220
+    static let sidebarIdealWidth: CGFloat = 232
     static let sidebarMaxWidth: CGFloat = 280
     static let detailMinWidth: CGFloat = 560
 }
@@ -2100,7 +2100,7 @@ private struct SettingsSidebarRow: View {
                     .truncationMode(.tail)
             } icon: {
                 Image(systemName: PluginSystemImage.resolvedName(systemImage))
-                    .imageScale(.small)
+                    .font(PluginSettingsTheme.Typography.rowIcon)
                     .foregroundStyle(iconTint)
                     .frame(width: Layout.iconWidth)
             }
