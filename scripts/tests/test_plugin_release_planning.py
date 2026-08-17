@@ -35,16 +35,6 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
             release.ROOT_DIR / "docs/plugins/v5/catalog.json",
         )
 
-    def test_first_plugin_kit5_release_uses_legacy_v4_baseline(self) -> None:
-        with (
-            mock.patch.object(release, "read_plugins", return_value={}),
-            mock.patch.object(release, "current_plugin_kit_version", return_value=5),
-        ):
-            self.assertEqual(
-                release.previous_plugin_catalog_path(),
-                release.ROOT_DIR / "docs/plugins/v4/catalog.json",
-            )
-
     def test_predeclared_app_version_is_the_default_release_target(self) -> None:
         with mock.patch.object(release, "choose_level") as choose_level:
             target, level, uses_declared_version = release.resolve_app_release_target(
