@@ -80,8 +80,8 @@ struct SettingsView: View {
             configurationItems: pluginHost.pluginSettingsItems
         )
 
-        return ZStack {
-            NavigationSplitView {
+        return NavigationSplitView {
+            SettingsSidebarColumn {
                 SettingsSidebar(
                     configurationItems: configurationItems,
                     orderedDestinations: orderedSidebarDestinations,
@@ -91,47 +91,44 @@ struct SettingsView: View {
                         navigationCoordinator.presentUnifiedSearch(origin: .settingsSidebar)
                     }
                 )
-                .navigationSplitViewColumnWidth(
-                    min: SettingsSplitViewLayout.sidebarMinWidth,
-                    ideal: SettingsSplitViewLayout.sidebarIdealWidth,
-                    max: SettingsSplitViewLayout.sidebarMaxWidth
-                )
-            } detail: {
-                SettingsDetailColumn {
-                    SettingsDetailPane(
-                        pluginHost: pluginHost,
-                        navigationCoordinator: navigationCoordinator,
-                        destination: navigationCoordinator.destination,
-                        uninstallConfirmationSession: uninstallConfirmationSession,
-                        appUpdater: appUpdater,
-                        menuBarIconSettings: menuBarIconSettings,
-                        menuBarIconGallery: menuBarIconGallery,
-                        launchAtLoginController: launchAtLoginController,
-                        menuBarPanelThemeStore: menuBarPanelThemeStore,
-                        appearanceUserDefaults: appearanceUserDefaults,
-                        showDashboard: showDashboard,
-                        showFeaturePanel: showFeaturePanel
-                    )
-                }
-                .frame(
-                    minWidth: SettingsSplitViewLayout.detailMinWidth,
-                    maxWidth: .infinity,
-                    maxHeight: .infinity
+            }
+            .toolbar(removing: .sidebarToggle)
+            .navigationSplitViewColumnWidth(
+                min: SettingsSplitViewLayout.sidebarMinWidth,
+                ideal: SettingsSplitViewLayout.sidebarIdealWidth,
+                max: SettingsSplitViewLayout.sidebarMaxWidth
+            )
+        } detail: {
+            SettingsDetailColumn {
+                SettingsDetailPane(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    destination: navigationCoordinator.destination,
+                    uninstallConfirmationSession: uninstallConfirmationSession,
+                    appUpdater: appUpdater,
+                    menuBarIconSettings: menuBarIconSettings,
+                    menuBarIconGallery: menuBarIconGallery,
+                    launchAtLoginController: launchAtLoginController,
+                    menuBarPanelThemeStore: menuBarPanelThemeStore,
+                    appearanceUserDefaults: appearanceUserDefaults,
+                    showDashboard: showDashboard,
+                    showFeaturePanel: showFeaturePanel
                 )
             }
-            .navigationSplitViewStyle(.balanced)
+            .frame(
+                minWidth: SettingsSplitViewLayout.detailMinWidth,
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    SettingsHistoryNavigationControls(
-                        coordinator: navigationCoordinator
-                    )
-                    .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
-                    .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
-                    .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
-                    .accessibilityIdentifier("mactools.settings.history-navigation")
-                }
-
                 if #available(macOS 26.0, *) {
+                    ToolbarItem(placement: .navigation) {
+                        historyNavigationControls
+                    }
+                    .sharedBackgroundVisibility(
+                        navigationCoordinator.isUnifiedSearchPresented ? .hidden : .automatic
+                    )
+
                     ToolbarItem(placement: .navigation) {
                         SettingsDetailToolbarTitle(
                             title: detailTitle,
@@ -141,6 +138,10 @@ struct SettingsView: View {
                     .sharedBackgroundVisibility(.hidden)
                 } else {
                     ToolbarItem(placement: .navigation) {
+                        historyNavigationControls
+                    }
+
+                    ToolbarItem(placement: .navigation) {
                         SettingsDetailToolbarTitle(
                             title: detailTitle,
                             isHidden: navigationCoordinator.isUnifiedSearchPresented
@@ -148,35 +149,37 @@ struct SettingsView: View {
                     }
                 }
             }
-            .toolbar(removing: .sidebarToggle)
-            .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
-                navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
+        .navigationSplitViewStyle(.balanced)
+        .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
+            navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
+        .blur(
+            radius: navigationCoordinator.isUnifiedSearchPresented
+                && !accessibilityReduceTransparency
+                ? 2.5
+                : 0
+        )
+        .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+        .overlay {
+            Group {
+                if navigationCoordinator.isUnifiedSearchPresented {
+                    UnifiedSearchPresentationView(
+                        pluginHost: pluginHost,
+                        launchAtLoginController: launchAtLoginController,
+                        appearanceUserDefaults: appearanceUserDefaults,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
-            .blur(
-                radius: navigationCoordinator.isUnifiedSearchPresented
-                    && !accessibilityReduceTransparency
-                    ? 2.5
-                    : 0
-            )
-            .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
-            .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
-
-            if navigationCoordinator.isUnifiedSearchPresented {
-                UnifiedSearchPresentationView(
-                    pluginHost: pluginHost,
-                    launchAtLoginController: launchAtLoginController,
-                    appearanceUserDefaults: appearanceUserDefaults,
-                    navigationCoordinator: navigationCoordinator
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                .zIndex(1)
-            }
+            .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
         }
         .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
-        .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
     }
 
     private var settingsSelection: Binding<SettingsNavigationDestination> {
@@ -185,6 +188,16 @@ struct SettingsView: View {
         } set: { destination in
             navigationCoordinator.navigate(to: destination)
         }
+    }
+
+    private var historyNavigationControls: some View {
+        SettingsHistoryNavigationControls(
+            coordinator: navigationCoordinator
+        )
+        .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
+        .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityIdentifier("mactools.settings.history-navigation")
     }
 
     private var layoutDirection: LayoutDirection {
@@ -1551,7 +1564,71 @@ private struct LaunchAtLoginSettingsRow: View {
     }
 }
 
+private struct SettingsSidebarSearchLauncher: NSViewRepresentable {
+    let prompt: String
+    let onActivate: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onActivate: onActivate)
+    }
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = SearchLauncherField()
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.activate(_:))
+        field.isEditable = false
+        field.isSelectable = false
+        field.focusRingType = .none
+        field.bezelStyle = .roundedBezel
+        field.controlSize = .large
+        configure(field)
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.onActivate = onActivate
+        configure(field)
+    }
+
+    private func configure(_ field: NSSearchField) {
+        field.placeholderString = prompt
+        field.stringValue = ""
+        field.toolTip = prompt
+        field.setAccessibilityLabel(prompt)
+    }
+
+    final class Coordinator: NSObject {
+        var onActivate: () -> Void
+
+        init(onActivate: @escaping () -> Void) {
+            self.onActivate = onActivate
+        }
+
+        @objc func activate(_ sender: Any?) {
+            onActivate()
+        }
+    }
+
+    private final class SearchLauncherField: NSSearchField {
+        override var acceptsFirstResponder: Bool { false }
+
+        override func mouseDown(with event: NSEvent) {
+            guard isEnabled else { return }
+            sendAction(action, to: target)
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .arrow)
+        }
+    }
+}
+
 private struct SettingsSidebar: View {
+    private enum Layout {
+        static let sectionHeaderTrailingInset: CGFloat = 8
+        static let searchSectionSpacing = PluginSettingsTheme.Spacing.sectionHeaderContent
+    }
+
     let configurationItems: [PluginSettingsPageItem]
     let orderedDestinations: [SettingsNavigationDestination]
     @ObservedObject var sidebarPreferences: SettingsSidebarPreferencesStore
@@ -1559,61 +1636,66 @@ private struct SettingsSidebar: View {
     let onSearch: () -> Void
 
     var body: some View {
-        ScrollViewReader { proxy in
-            List(selection: optionalSelectionBinding) {
-                Section {
-                    ForEach(appDestinations, id: \.self) { destination in
-                        sidebarRow(for: destination)
-                    }
-                } header: {
-                    Text("MacTools")
-                }
+        VStack(spacing: 0) {
+            SettingsSidebarSearchLauncher(
+                prompt: AppL10n.search("search.title", defaultValue: "搜索 MacTools"),
+                onActivate: onSearch
+            )
+            .frame(height: 30)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, Layout.searchSectionSpacing)
 
-                Section {
-                    ForEach(primaryPluginDestinations, id: \.self) { destination in
-                        sidebarRow(for: destination)
-                    }
-                } header: {
-                    Text(AppL10n.settings(
-                        "plugins.sidebar.pluginsSection",
-                        defaultValue: "插件"
-                    ))
-                }
-
-                Section {
-                    if configurationDestinations.isEmpty {
-                        Text(emptyConfigurationsText)
-                            .font(PluginSettingsTheme.Typography.secondaryLabel)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(configurationDestinations, id: \.self) { destination in
+            ScrollViewReader { proxy in
+                List(selection: optionalSelectionBinding) {
+                    Section {
+                        ForEach(appDestinations, id: \.self) { destination in
                             sidebarRow(for: destination)
                         }
-                        .onMove(perform: moveConfigurations)
+                    } header: {
+                        Text("MacTools")
                     }
-                } header: {
-                    configurationSectionHeader
+
+                    Section {
+                        ForEach(primaryPluginDestinations, id: \.self) { destination in
+                            sidebarRow(for: destination)
+                        }
+                    } header: {
+                        Text(AppL10n.settings(
+                            "plugins.sidebar.pluginsSection",
+                            defaultValue: "插件"
+                        ))
+                    }
+
+                    Section {
+                        if configurationDestinations.isEmpty {
+                            Text(emptyConfigurationsText)
+                                .font(PluginSettingsTheme.Typography.secondaryLabel)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(configurationDestinations, id: \.self) { destination in
+                                sidebarRow(for: destination)
+                            }
+                            .onMove(perform: moveConfigurations)
+                        }
+                    } header: {
+                        configurationSectionHeader
+                    }
                 }
-            }
-            .listStyle(.sidebar)
-            .onChange(of: selection) { _, destination in
-                withAnimation {
-                    proxy.scrollTo(destination)
+                .listStyle(.sidebar)
+                .onChange(of: selection) { _, destination in
+                    withAnimation {
+                        proxy.scrollTo(destination)
+                    }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(AppL10n.settings(
+                    "settings.sidebar.accessibilityLabel",
+                    defaultValue: "设置导航"
+                ))
+                .accessibilityHint(configurationDestinations.isEmpty ? emptyConfigurationsText : "")
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(AppL10n.settings(
-                "settings.sidebar.accessibilityLabel",
-                defaultValue: "设置导航"
-            ))
-            .accessibilityHint(configurationDestinations.isEmpty ? emptyConfigurationsText : "")
         }
-        .searchable(
-            text: nativeSearchText,
-            isPresented: nativeSearchPresentation,
-            placement: .sidebar,
-            prompt: Text(AppL10n.search("search.title", defaultValue: "搜索 MacTools"))
-        )
     }
 
     private var emptyConfigurationsText: String {
@@ -1814,18 +1896,20 @@ private struct SettingsSidebar: View {
                 }
                 .disabled(true)
             } label: {
-                HStack(spacing: 4) {
-                    Text(sidebarPreferences.sortMode.localizedCompactTitle)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    Image(systemName: "arrow.up.arrow.down")
-                }
+                Label(
+                    sidebarPreferences.sortMode.localizedTitle,
+                    systemImage: "arrow.up.arrow.down"
+                )
+                .labelStyle(.iconOnly)
+                .font(.caption2.weight(.semibold))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(.secondary)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .accessibilityLabel(sidebarPreferences.sortMode.localizedTitle)
+            .scaleEffect(0.86, anchor: .trailing)
+            .padding(.trailing, Layout.sectionHeaderTrailingInset)
             .help(AppL10n.settings(
                 "settings.sidebar.pluginSortHelp",
                 defaultValue: "调整设置侧边栏中的插件页面顺序，不影响仪表盘或功能面板"
@@ -1847,24 +1931,6 @@ private struct SettingsSidebar: View {
     private func sortOption(_ sortMode: SettingsSidebarPluginSortMode) -> some View {
         Text(sortMode.localizedTitle)
             .tag(sortMode)
-    }
-
-    private var nativeSearchText: Binding<String> {
-        Binding {
-            ""
-        } set: { newValue in
-            guard !newValue.isEmpty else { return }
-            onSearch()
-        }
-    }
-
-    private var nativeSearchPresentation: Binding<Bool> {
-        Binding {
-            false
-        } set: { isPresented in
-            guard isPresented else { return }
-            onSearch()
-        }
     }
 
     private func shortcutNumber(for destination: SettingsNavigationDestination) -> Int? {
@@ -1905,6 +1971,28 @@ private struct SettingsSidebar: View {
     }
 }
 
+private struct SettingsSidebarColumn<Content: View>: View {
+    private let content: Content
+    @State private var headerHeight: CGFloat = 0
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        // Keep the sidebar viewport tied to the window chrome instead of the
+        // transient safe-area proposal from an in-window overlay.
+        content
+            .padding(.top, headerHeight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                SettingsWindowTopSafeAreaReader(topInset: $headerHeight)
+                    .frame(width: 0, height: 0)
+            }
+            .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
 private struct SettingsDetailColumn<Content: View>: View {
     private let content: Content
     @State private var headerHeight: CGFloat = 0
@@ -1919,7 +2007,7 @@ private struct SettingsDetailColumn<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .top) {
                 if headerHeight > 0 {
-                    SettingsHeaderMaterialBackground()
+                    SettingsStyle.contentBackground
                         .frame(height: headerHeight)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -1930,24 +2018,6 @@ private struct SettingsDetailColumn<Content: View>: View {
                     .frame(width: 0, height: 0)
             }
             .ignoresSafeArea(.container, edges: .top)
-    }
-}
-
-private struct SettingsHeaderMaterialBackground: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        configure(view)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        configure(nsView)
-    }
-
-    private func configure(_ view: NSVisualEffectView) {
-        view.material = .headerView
-        view.blendingMode = .behindWindow
-        view.state = .followsWindowActiveState
     }
 }
 
@@ -2097,35 +2167,6 @@ private extension SettingsSidebarPluginSortMode {
         }
     }
 
-    var localizedCompactTitle: String {
-        switch self {
-        case .installedOldestFirst:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.oldest",
-                defaultValue: "最早"
-            )
-        case .installedNewestFirst:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.newest",
-                defaultValue: "最新"
-            )
-        case .nameAscending:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.nameAscending",
-                defaultValue: "升序"
-            )
-        case .nameDescending:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.nameDescending",
-                defaultValue: "降序"
-            )
-        case .custom:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.custom",
-                defaultValue: "自定义"
-            )
-        }
-    }
 }
 
 private struct SettingsDetailPane: View {
