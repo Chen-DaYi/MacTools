@@ -43,7 +43,9 @@ public enum PluginPresentationSafety {
             }
 
             if window === restorationWindow {
-                let responder = fieldEditor.delegate as? NSResponder ?? fieldEditor
+                let responder = fieldEditor.isFieldEditor
+                    ? fieldEditor.delegate as? NSResponder ?? fieldEditor
+                    : fieldEditor
                 restoration = TextEditingRestoration(window: window, responder: responder)
             }
             fieldEditor.inputContext?.discardMarkedText()

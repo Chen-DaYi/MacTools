@@ -212,6 +212,14 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                         "settings.hud.reducedFrequency.title",
                         defaultValue: "减少频繁提示"
                     ),
+                    localization.string(
+                        "settings.hud.reminderInterval.title",
+                        defaultValue: "提示间隔"
+                    ),
+                    localization.string(
+                        "settings.hud.appSwitchReminder.title",
+                        defaultValue: "应用切换提示"
+                    ),
                     "HUD",
                 ],
                 systemImage: "text.cursor"

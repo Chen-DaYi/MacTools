@@ -12,6 +12,8 @@ final class AutoInputStoreTests: XCTestCase {
         XCTAssertTrue(store.isAutoSwitchEnabled)
         XCTAssertFalse(store.isInputHUDEnabled)
         XCTAssertFalse(store.reducesFrequentHUDPresentations)
+        XCTAssertEqual(store.inputHUDReminderIntervalSeconds, 60)
+        XCTAssertEqual(store.inputHUDAppSwitchReminderCount, 3)
         XCTAssertFalse(store.isInteractiveHUDEnabled)
         XCTAssertEqual(store.inputHUDSize, .standard)
         XCTAssertEqual(store.inputHUDPosition, .automatic)
@@ -20,6 +22,8 @@ final class AutoInputStoreTests: XCTestCase {
         store.setAutoSwitchEnabled(false)
         store.setInputHUDEnabled(true)
         store.setReducesFrequentHUDPresentations(true)
+        store.setInputHUDReminderIntervalSeconds(25)
+        store.setInputHUDAppSwitchReminderCount(2)
         store.setInteractiveHUDEnabled(true)
         store.setInputHUDSize(.large)
         store.setInputHUDPosition(.above)
@@ -31,6 +35,8 @@ final class AutoInputStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.isAutoSwitchEnabled)
         XCTAssertTrue(reloaded.isInputHUDEnabled)
         XCTAssertTrue(reloaded.reducesFrequentHUDPresentations)
+        XCTAssertEqual(reloaded.inputHUDReminderIntervalSeconds, 25)
+        XCTAssertEqual(reloaded.inputHUDAppSwitchReminderCount, 2)
         XCTAssertTrue(reloaded.isInteractiveHUDEnabled)
         XCTAssertEqual(reloaded.inputHUDSize, .large)
         XCTAssertEqual(reloaded.inputHUDPosition, .above)
@@ -76,6 +82,8 @@ final class AutoInputStoreTests: XCTestCase {
             "isAutoSwitchEnabled",
             "isInputHUDEnabled",
             "reducesFrequentHUDPresentations",
+            "inputHUDReminderIntervalSeconds",
+            "inputHUDAppSwitchReminderCount",
             "isInteractiveHUDEnabled",
             "inputHUDSize",
             "inputHUDPosition",
@@ -89,12 +97,22 @@ final class AutoInputStoreTests: XCTestCase {
             store.setReducesFrequentHUDPresentations(true),
             .rejected(rollbackSucceeded: true)
         )
+        XCTAssertEqual(
+            store.setInputHUDReminderIntervalSeconds(25),
+            .rejected(rollbackSucceeded: true)
+        )
+        XCTAssertEqual(
+            store.setInputHUDAppSwitchReminderCount(2),
+            .rejected(rollbackSucceeded: true)
+        )
         XCTAssertEqual(store.setInteractiveHUDEnabled(true), .rejected(rollbackSucceeded: true))
         XCTAssertEqual(store.setInputHUDSize(.large), .rejected(rollbackSucceeded: true))
         XCTAssertEqual(store.setInputHUDPosition(.above), .rejected(rollbackSucceeded: true))
         XCTAssertTrue(store.isAutoSwitchEnabled)
         XCTAssertFalse(store.isInputHUDEnabled)
         XCTAssertFalse(store.reducesFrequentHUDPresentations)
+        XCTAssertEqual(store.inputHUDReminderIntervalSeconds, 60)
+        XCTAssertEqual(store.inputHUDAppSwitchReminderCount, 3)
         XCTAssertFalse(store.isInteractiveHUDEnabled)
         XCTAssertEqual(store.inputHUDSize, .standard)
         XCTAssertEqual(store.inputHUDPosition, .automatic)
@@ -108,6 +126,8 @@ final class AutoInputStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.isAutoSwitchEnabled)
         XCTAssertFalse(reloaded.isInputHUDEnabled)
         XCTAssertFalse(reloaded.reducesFrequentHUDPresentations)
+        XCTAssertEqual(reloaded.inputHUDReminderIntervalSeconds, 60)
+        XCTAssertEqual(reloaded.inputHUDAppSwitchReminderCount, 3)
         XCTAssertFalse(reloaded.isInteractiveHUDEnabled)
         XCTAssertEqual(reloaded.inputHUDSize, .standard)
         XCTAssertEqual(reloaded.inputHUDPosition, .automatic)
@@ -132,18 +152,23 @@ final class AutoInputStoreTests: XCTestCase {
         let storage = AutoInputMemoryStorage()
         storage.setRawValue("enormous", forKey: "inputHUDSize")
         storage.setRawValue("center", forKey: "inputHUDPosition")
+        storage.setRawValue(-1, forKey: "inputHUDReminderIntervalSeconds")
+        storage.setRawValue(99, forKey: "inputHUDAppSwitchReminderCount")
 
         let store = AutoInputStore(storage: storage)
 
         XCTAssertEqual(store.inputHUDSize, .standard)
         XCTAssertEqual(store.inputHUDPosition, .automatic)
+        XCTAssertEqual(store.inputHUDReminderIntervalSeconds, 60)
+        XCTAssertEqual(store.inputHUDAppSwitchReminderCount, 3)
     }
 }
 
 @MainActor
 final class AutoInputHUDFrequencyPolicyTests: XCTestCase {
     func testReducedModeUsesExactReminderBoundaryWithoutExtendingSuppressedWindow() {
-        var policy = AutoInputHUDFrequencyPolicy(reminderInterval: 60)
+        var policy = AutoInputHUDFrequencyPolicy()
+        policy.applicationDidChange(to: "app-a")
 
         assertPresentation(true, policy: &policy, at: 100)
         assertPresentation(false, policy: &policy, at: 130)
@@ -154,7 +179,8 @@ final class AutoInputHUDFrequencyPolicyTests: XCTestCase {
     }
 
     func testReducedModePresentsEverySourceChangeImmediatelyAndRestartsReminderWindow() {
-        var policy = AutoInputHUDFrequencyPolicy(reminderInterval: 60)
+        var policy = AutoInputHUDFrequencyPolicy()
+        policy.applicationDidChange(to: "app-a")
 
         assertPresentation(true, policy: &policy, sourceID: "en", at: 100)
         assertPresentation(true, policy: &policy, sourceID: "zh", at: 101)
@@ -164,7 +190,8 @@ final class AutoInputHUDFrequencyPolicyTests: XCTestCase {
     }
 
     func testReducedModeRecoversFromClockRollback() {
-        var policy = AutoInputHUDFrequencyPolicy(reminderInterval: 60)
+        var policy = AutoInputHUDFrequencyPolicy()
+        policy.applicationDidChange(to: "app-a")
 
         assertPresentation(true, policy: &policy, at: 100)
         assertPresentation(true, policy: &policy, at: 90)
@@ -173,7 +200,8 @@ final class AutoInputHUDFrequencyPolicyTests: XCTestCase {
     }
 
     func testDisabledModeAlwaysPresentsAndEachReducedSessionStartsWithPresentation() {
-        var policy = AutoInputHUDFrequencyPolicy(reminderInterval: 60)
+        var policy = AutoInputHUDFrequencyPolicy()
+        policy.applicationDidChange(to: "app-a")
 
         assertPresentation(true, policy: &policy, reducesFrequency: false, at: 100)
         assertPresentation(true, policy: &policy, reducesFrequency: false, at: 100.1)
@@ -183,6 +211,36 @@ final class AutoInputHUDFrequencyPolicyTests: XCTestCase {
         policy.reset()
 
         assertPresentation(true, policy: &policy, at: 100.4)
+    }
+
+    func testReducedModePresentsAtExactAppSwitchThresholdAndIgnoresDuplicates() {
+        var policy = AutoInputHUDFrequencyPolicy()
+        policy.applicationDidChange(to: "app-a")
+        assertPresentation(true, policy: &policy, at: 100)
+
+        policy.applicationDidChange(to: "app-b")
+        assertPresentation(false, policy: &policy, at: 101)
+        policy.applicationDidChange(to: "app-b")
+        assertPresentation(false, policy: &policy, at: 102)
+        policy.applicationDidChange(to: "app-c")
+        assertPresentation(false, policy: &policy, at: 103)
+        policy.applicationDidChange(to: "app-d")
+        assertPresentation(true, policy: &policy, at: 104)
+        policy.applicationDidChange(to: "app-e")
+        assertPresentation(false, policy: &policy, at: 105)
+    }
+
+    func testSourceChangeResetsAccumulatedAppSwitches() {
+        var policy = AutoInputHUDFrequencyPolicy()
+        policy.applicationDidChange(to: "app-a")
+        assertPresentation(true, policy: &policy, sourceID: "en", at: 100)
+        policy.applicationDidChange(to: "app-b")
+        policy.applicationDidChange(to: "app-c")
+
+        assertPresentation(true, policy: &policy, sourceID: "zh", at: 101)
+        policy.applicationDidChange(to: "app-d")
+        policy.applicationDidChange(to: "app-e")
+        assertPresentation(false, policy: &policy, sourceID: "zh", at: 102)
     }
 
     private func assertPresentation(
@@ -198,6 +256,8 @@ final class AutoInputHUDFrequencyPolicyTests: XCTestCase {
             policy.shouldPresent(
                 sourceID: sourceID,
                 reducesFrequentPresentations: reducesFrequency,
+                reminderInterval: 60,
+                appSwitchThreshold: 3,
                 at: time
             ),
             expected,
@@ -664,6 +724,161 @@ final class AutoInputControllerTests: XCTestCase {
         ])
     }
 
+    func testAdaptiveHUDReminderUsesConfiguredIntervalBoundary() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.store.setInputHUDReminderIntervalSeconds(15)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        now = 24.999
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+        now = 25
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 600, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            CGRect(x: 100, y: 600, width: 300, height: 24),
+        ])
+    }
+
+    func testAdaptiveHUDReminderPresentsAfterConfiguredAppSwitchCountBeforeInterval() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.store.setInputHUDAppSwitchReminderCount(3)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        let apps = (1...3).map { index in
+            AutoInputApplication(
+                bundleIdentifier: "com.example.app-\(index)",
+                displayName: "App \(index)",
+                bundleURL: nil,
+                processIdentifier: pid_t(300 + index)
+            )
+        }
+        for (index, app) in apps.enumerated() {
+            now += 1
+            fixture.applications.activate(app)
+            fixture.focusObserver.focus(AutoInputEditableFocus(
+                frame: CGRect(x: 100, y: 400 + (index * 100), width: 300, height: 24),
+                applicationProcessIdentifier: app.processIdentifier
+            ))
+        }
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            CGRect(x: 100, y: 600, width: 300, height: 24),
+        ])
+    }
+
+    func testAdaptiveHUDReminderKeepsAppSwitchThresholdPendingUntilEditableFocus() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.store.setInputHUDAppSwitchReminderCount(2)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+        fixture.focusObserver.focus(nil)
+
+        let secondApp = AutoInputApplication(
+            bundleIdentifier: "com.example.second",
+            displayName: "Second",
+            bundleURL: nil,
+            processIdentifier: 202
+        )
+        let thirdApp = AutoInputApplication(
+            bundleIdentifier: "com.example.third",
+            displayName: "Third",
+            bundleURL: nil,
+            processIdentifier: 303
+        )
+        now = 11
+        fixture.applications.activate(secondApp)
+        now = 12
+        fixture.applications.activate(thirdApp)
+
+        XCTAssertEqual(fixture.hud.presentations.count, 1)
+
+        now = 13
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 500, width: 300, height: 24),
+            applicationProcessIdentifier: thirdApp.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            CGRect(x: 100, y: 500, width: 300, height: 24),
+        ])
+    }
+
+    func testQuieterModeOffOnTransitionStartsFreshSessionWithoutInterveningFocus() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        fixture.store.setReducesFrequentHUDPresentations(false)
+        fixture.controller.configurationDidChange()
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.controller.configurationDidChange()
+        now = 11
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            CGRect(x: 100, y: 400, width: 300, height: 24),
+        ])
+    }
+
     func testAccessoryApplicationFocusPresentsHUDEvenWhenAnotherAppRemainsFrontmost() {
         let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
         fixture.store.setAutoSwitchEnabled(false)
@@ -703,9 +918,119 @@ final class AutoInputControllerTests: XCTestCase {
             fixture.store.rememberedInputSourceID(for: "com.raycast.macos"),
             "zh"
         )
-        XCTAssertNil(
-            fixture.store.rememberedInputSourceID(for: fixture.app.bundleIdentifier)
+        XCTAssertEqual(
+            fixture.store.rememberedInputSourceID(for: fixture.app.bundleIdentifier),
+            "en"
         )
+    }
+
+    func testAccessoryApplicationFocusAppliesFixedRule() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.upsertRule(makeRule(bundleID: "com.raycast.macos", sourceID: "zh"))
+        fixture.controller.start()
+
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 120, y: 700, width: 1, height: 22),
+            applicationProcessIdentifier: 47_571,
+            applicationBundleIdentifier: "com.raycast.macos",
+            isFromAccessoryApplication: true
+        ))
+
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh"])
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["中文"])
+    }
+
+    func testFocusReturningFromAccessoryApplicationRestoresUnderlyingAppMemory() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.remember(inputSourceID: "en", for: fixture.app.bundleIdentifier)
+        fixture.store.remember(inputSourceID: "zh", for: "com.raycast.macos")
+        fixture.controller.start()
+
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 120, y: 700, width: 1, height: 22),
+            applicationProcessIdentifier: 47_571,
+            applicationBundleIdentifier: "com.raycast.macos",
+            isFromAccessoryApplication: true
+        ))
+        fixture.focusObserver.focus(nil)
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier,
+            applicationBundleIdentifier: fixture.app.bundleIdentifier
+        ))
+
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh", "en"])
+        XCTAssertEqual(
+            fixture.store.rememberedInputSourceID(for: "com.raycast.macos"),
+            "zh"
+        )
+        XCTAssertEqual(
+            fixture.store.rememberedInputSourceID(for: fixture.app.bundleIdentifier),
+            "en"
+        )
+    }
+
+    func testLaunchingAppFromAccessoryPaletteDoesNotOverwriteUnderlyingAppMemory() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.remember(inputSourceID: "en", for: fixture.app.bundleIdentifier)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 120, y: 700, width: 1, height: 22),
+            applicationProcessIdentifier: 47_571,
+            applicationBundleIdentifier: "com.raycast.macos",
+            isFromAccessoryApplication: true
+        ))
+        fixture.sources.currentSourceID = "zh"
+        fixture.sources.emitChange()
+        fixture.focusObserver.focus(nil)
+
+        let launchedApp = AutoInputApplication(
+            bundleIdentifier: "com.example.launched",
+            displayName: "Launched",
+            bundleURL: nil,
+            processIdentifier: 909
+        )
+        fixture.applications.activate(launchedApp)
+
+        XCTAssertEqual(
+            fixture.store.rememberedInputSourceID(for: fixture.app.bundleIdentifier),
+            "en"
+        )
+        XCTAssertEqual(
+            fixture.store.rememberedInputSourceID(for: "com.raycast.macos"),
+            "zh"
+        )
+    }
+
+    func testLaunchingAppFromAccessoryPaletteLearnsInheritedAccessorySource() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 120, y: 700, width: 1, height: 22),
+            applicationProcessIdentifier: 47_571,
+            applicationBundleIdentifier: "com.raycast.macos",
+            isFromAccessoryApplication: true
+        ))
+        fixture.focusObserver.focus(nil)
+
+        let launchedApp = AutoInputApplication(
+            bundleIdentifier: "com.example.launched",
+            displayName: "Launched",
+            bundleURL: nil,
+            processIdentifier: 909
+        )
+        fixture.store.upsertRule(makeRule(bundleID: launchedApp.bundleIdentifier, sourceID: "zh"))
+        fixture.applications.activate(launchedApp)
+
+        XCTAssertEqual(
+            fixture.store.rememberedInputSourceID(for: "com.raycast.macos"),
+            "en"
+        )
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh"])
     }
 
     func testHUDPresentsForMacToolsOwnedEditableFocus() {
@@ -1297,16 +1622,68 @@ final class AutoInputFocusObserverTests: XCTestCase {
         XCTAssertTrue(lifecycle.accepts(nextGeneration))
     }
 
-    func testObservationRetryPolicyBacksOffFailedProcessButAllowsNewProcess() {
-        var policy = AutoInputObservationRetryPolicy(retryInterval: 5)
-        policy.recordFailure(processIdentifier: 101, at: 10)
+    func testObservationRegistryTracksFrontmostAndAccessoryProcessesEventDriven() {
+        var registry = AutoInputApplicationObservationRegistry()
 
-        XCTAssertFalse(policy.shouldAttempt(processIdentifier: 101, at: 10.25))
-        XCTAssertTrue(policy.shouldAttempt(processIdentifier: 202, at: 10.25))
-        XCTAssertTrue(policy.shouldAttempt(processIdentifier: 101, at: 15))
+        XCTAssertNil(registry.activateRegularApplication(processIdentifier: 101))
+        XCTAssertNil(registry.activateRegularApplication(processIdentifier: 101))
+        XCTAssertEqual(registry.activateRegularApplication(processIdentifier: 202), 101)
+        registry.registerAccessoryApplication(processIdentifier: 303)
+        registry.registerAccessoryApplication(processIdentifier: 404)
 
-        policy.recordSuccess()
-        XCTAssertTrue(policy.shouldAttempt(processIdentifier: 101, at: 10.25))
+        XCTAssertEqual(
+            registry.focusCandidates(
+                preferredProcessIdentifier: 404
+            ),
+            [404, 303, 202]
+        )
+        XCTAssertEqual(
+            registry.focusCandidates(preferredProcessIdentifier: nil),
+            [303, 404, 202]
+        )
+        XCTAssertEqual(
+            registry.focusCandidates(preferredProcessIdentifier: 303),
+            [303, 404, 202]
+        )
+
+        registry.terminateApplication(processIdentifier: 404)
+        XCTAssertEqual(registry.accessoryProcessIdentifiers, [303])
+        registry.terminateApplication(processIdentifier: 202)
+        XCTAssertNil(registry.frontmostProcessIdentifier)
+    }
+
+    func testObservationRegistrationRetryIsBoundedAndResetsPerProcess() {
+        var policy = AutoInputObservationRegistrationRetryPolicy()
+
+        XCTAssertEqual(policy.nextDelayMilliseconds(processIdentifier: 101), 100)
+        XCTAssertEqual(policy.nextDelayMilliseconds(processIdentifier: 101), 200)
+        XCTAssertEqual(policy.nextDelayMilliseconds(processIdentifier: 202), 100)
+        XCTAssertEqual(policy.nextDelayMilliseconds(processIdentifier: 101), 400)
+        XCTAssertNil(policy.nextDelayMilliseconds(processIdentifier: 101))
+        XCTAssertEqual(policy.nextDelayMilliseconds(processIdentifier: 101), 100)
+
+        policy.reset(processIdentifier: 101)
+        XCTAssertEqual(policy.nextDelayMilliseconds(processIdentifier: 101), 100)
+        XCTAssertEqual(policy.nextDelayMilliseconds(processIdentifier: 202), 200)
+
+        policy.reset()
+        XCTAssertEqual(policy.nextDelayMilliseconds(processIdentifier: 202), 100)
+    }
+
+    func testFocusObserverUsesWorkspaceEventsInsteadOfSystemWidePolling() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/AutoInputFocusObserver.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("NSWorkspace.didLaunchApplicationNotification"))
+        XCTAssertTrue(source.contains("NSWorkspace.didTerminateApplicationNotification"))
+        XCTAssertTrue(source.contains("preferredProcessIdentifier: processIdentifier"))
+        XCTAssertFalse(source.contains("?.isActive == true"))
+        XCTAssertFalse(source.contains("AXUIElementCreateSystemWide"))
+        XCTAssertFalse(source.contains("AXUIElementSetMessagingTimeout"))
+        XCTAssertFalse(source.contains("Task.detached"))
     }
 
     func testAccessibilityCoordinatesConvertToAppKitCoordinates() {
@@ -1693,6 +2070,27 @@ final class AutoInputPluginPanelTests: XCTestCase {
             plugin.actionDefinitions.map(\.key.actionID),
             ["toggle", "set-enabled", "select-input-source"]
         )
+        let hudEntry = plugin.settingsSearchEntries.first {
+            $0.id == AutoInputSettingsSearchEntryID.hud
+        }
+        XCTAssertTrue(hudEntry?.keywords.contains("提示间隔") == true)
+        XCTAssertTrue(hudEntry?.keywords.contains("应用切换提示") == true)
+    }
+
+    func testAdaptiveHUDSettingsCommitInvalidTextOnFocusLossAndLabelEveryControl() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/AutoInputSettingsView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("previousField == field && currentField != field"))
+        XCTAssertTrue(source.contains("commitReminderIntervalText"))
+        XCTAssertTrue(source.contains("commitAppSwitchCountText"))
+        XCTAssertTrue(source.contains("auto-input.hud-reminder-interval-slider"))
+        XCTAssertTrue(source.contains("auto-input.hud-reminder-interval-field"))
+        XCTAssertTrue(source.contains("auto-input.hud-app-switch-field"))
+        XCTAssertTrue(source.contains("auto-input.hud-app-switch-stepper"))
     }
 
     func testSettingsVisibilityRefreshesTheInputSourceCatalog() throws {
