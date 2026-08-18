@@ -3,13 +3,27 @@ import ApplicationServices
 import Foundation
 import MacToolsPluginKit
 
+struct AutoInputEditableFocusIdentity: Hashable, Sendable {
+    private let rawValue: UUID
+
+    init() {
+        rawValue = UUID()
+    }
+}
+
 struct AutoInputEditableFocus: Equatable, Sendable {
     let frame: CGRect
     let applicationProcessIdentifier: pid_t?
+    let identity: AutoInputEditableFocusIdentity
 
-    init(frame: CGRect, applicationProcessIdentifier: pid_t? = nil) {
+    init(
+        frame: CGRect,
+        applicationProcessIdentifier: pid_t? = nil,
+        identity: AutoInputEditableFocusIdentity = AutoInputEditableFocusIdentity()
+    ) {
         self.frame = frame
         self.applicationProcessIdentifier = applicationProcessIdentifier
+        self.identity = identity
     }
 }
 
@@ -81,6 +95,8 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
     private var observedApplication: AXUIElement?
     private var observedApplicationProcessIdentifier: pid_t?
     private var observedApplicationBundleIdentifier: String?
+    private var focusedAccessibilityElement: AXUIElement?
+    private var focusedElementIdentity: AutoInputEditableFocusIdentity?
     private var callbackContext: CallbackContext?
     private var retainedCallbackPointer: UnsafeMutableRawPointer?
     private var lifecycle = AutoInputObservationLifecycle()
@@ -123,7 +139,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         if let application = workspace.frontmostApplication {
             observe(application, generation: generation)
         } else {
-            onEditableFocusChanged?(nil)
+            publishNoEditableFocus()
         }
     }
 
@@ -134,7 +150,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             self.activationObserver = nil
         }
         stopObservingApplication()
-        onEditableFocusChanged?(nil)
+        publishNoEditableFocus()
     }
 
     func refreshFocusedElement() {
@@ -151,7 +167,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             return
         }
         guard application.processIdentifier != ignoredProcessIdentifier else {
-            onEditableFocusChanged?(nil)
+            publishNoEditableFocus()
             return
         }
 
@@ -216,6 +232,8 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         observedApplication = nil
         observedApplicationProcessIdentifier = nil
         observedApplicationBundleIdentifier = nil
+        focusedAccessibilityElement = nil
+        focusedElementIdentity = nil
         callbackContext = nil
         if let retainedCallbackPointer {
             Unmanaged<CallbackContext>.fromOpaque(retainedCallbackPointer).release()
@@ -225,7 +243,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
     private func inspectFocusedElement() {
         guard let observedApplication else {
-            onEditableFocusChanged?(nil)
+            publishNoEditableFocus()
             return
         }
 
@@ -237,7 +255,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         )
         guard status == .success else {
             if status == .noValue || status == .attributeUnsupported {
-                onEditableFocusChanged?(nil)
+                publishNoEditableFocus()
             } else {
                 handleAccessibilityFailure(status)
             }
@@ -245,7 +263,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         }
         guard let focusedValue,
               CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
-            onEditableFocusChanged?(nil)
+            publishNoEditableFocus()
             return
         }
 
@@ -255,7 +273,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             applicationBundleIdentifier: observedApplicationBundleIdentifier
         ),
               let accessibilityFrame = Self.accessibilityFrame(of: element) else {
-            onEditableFocusChanged?(nil)
+            publishNoEditableFocus()
             return
         }
 
@@ -264,21 +282,41 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
                 fromAccessibilityFrame: accessibilityFrame,
                 primaryScreenFrame: Self.primaryScreenFrame
             ),
-            applicationProcessIdentifier: observedApplicationProcessIdentifier
+            applicationProcessIdentifier: observedApplicationProcessIdentifier,
+            identity: identity(for: element)
         ))
+    }
+
+    private func identity(for element: AXUIElement) -> AutoInputEditableFocusIdentity {
+        if let focusedAccessibilityElement,
+           CFEqual(focusedAccessibilityElement, element),
+           let focusedElementIdentity {
+            return focusedElementIdentity
+        }
+
+        let identity = AutoInputEditableFocusIdentity()
+        focusedAccessibilityElement = element
+        focusedElementIdentity = identity
+        return identity
+    }
+
+    private func publishNoEditableFocus() {
+        focusedAccessibilityElement = nil
+        focusedElementIdentity = nil
+        onEditableFocusChanged?(nil)
     }
 
     private func handleAccessibilityFailure(_ status: AXError) {
         if status == .apiDisabled || status == .notImplemented || !AXIsProcessTrusted() {
             accessibilityWasInvalidated()
         } else {
-            onEditableFocusChanged?(nil)
+            publishNoEditableFocus()
         }
     }
 
     private func accessibilityWasInvalidated() {
         stopObservingApplication()
-        onEditableFocusChanged?(nil)
+        publishNoEditableFocus()
         onAccessibilityInvalidated?()
     }
 

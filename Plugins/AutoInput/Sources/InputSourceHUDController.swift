@@ -9,6 +9,7 @@ protocol InputSourceHUDPresenting: AnyObject {
         label: InputSourceHUDLabel,
         near focusedFrame: CGRect,
         configuration: AutoInputHUDConfiguration,
+        presentationID: AutoInputHUDPresentationID,
         onActivate: (() -> Void)?
     )
     func dismiss()
@@ -37,6 +38,7 @@ struct InputSourceHUDPresentationGate {
     private var lastLabel: InputSourceHUDLabel?
     private var lastFocusedFrame: CGRect?
     private var lastConfiguration: AutoInputHUDConfiguration?
+    private var lastPresentationID: AutoInputHUDPresentationID?
     private var lastPresentationTime: TimeInterval?
 
     init(duplicateInterval: TimeInterval) {
@@ -47,9 +49,11 @@ struct InputSourceHUDPresentationGate {
         label: InputSourceHUDLabel,
         focusedFrame: CGRect,
         configuration: AutoInputHUDConfiguration,
+        presentationID: AutoInputHUDPresentationID,
         at presentationTime: TimeInterval
     ) -> Bool {
-        if label == lastLabel,
+        if presentationID == lastPresentationID,
+           label == lastLabel,
            focusedFrame == lastFocusedFrame,
            configuration == lastConfiguration,
            let lastPresentationTime,
@@ -59,6 +63,7 @@ struct InputSourceHUDPresentationGate {
         lastLabel = label
         lastFocusedFrame = focusedFrame
         lastConfiguration = configuration
+        lastPresentationID = presentationID
         lastPresentationTime = presentationTime
         return true
     }
@@ -67,6 +72,7 @@ struct InputSourceHUDPresentationGate {
         lastLabel = nil
         lastFocusedFrame = nil
         lastConfiguration = nil
+        lastPresentationID = nil
         lastPresentationTime = nil
     }
 }
@@ -103,6 +109,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         label: InputSourceHUDLabel,
         near focusedFrame: CGRect,
         configuration: AutoInputHUDConfiguration,
+        presentationID: AutoInputHUDPresentationID,
         onActivate: (() -> Void)? = nil
     ) {
         let normalizedName = label.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -119,6 +126,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             ),
             focusedFrame: integralFocusedFrame,
             configuration: configuration,
+            presentationID: presentationID,
             at: now()
         ) else {
             return

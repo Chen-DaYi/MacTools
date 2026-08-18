@@ -330,7 +330,7 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.errorMessage, "无法切换输入法")
     }
 
-    func testHUDDoesNotRepeatForFocusChangesInsideSameApplication() {
+    func testHUDPresentsOnceForEachMeaningfulFocusInsideSameApplication() {
         let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
         fixture.store.setAutoSwitchEnabled(false)
         fixture.store.setInputHUDEnabled(true)
@@ -343,7 +343,71 @@ final class AutoInputControllerTests: XCTestCase {
             frame: CGRect(x: 100, y: 400, width: 300, height: 24)
         ))
 
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "ABC"])
+    }
+
+    func testDuplicateNotificationsForSameEditableFocusPresentHUDOnce() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        let focus = AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        )
+
+        fixture.focusObserver.focus(focus)
+        fixture.focusObserver.focus(focus)
+
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC"])
+    }
+
+    func testDifferentEditableElementsAtSameFrameEachPresentHUD() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        let frame = CGRect(x: 100, y: 200, width: 300, height: 24)
+
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: frame,
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: frame,
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "ABC"])
+    }
+
+    func testChromeTabSwitchToGoogleDocsLikeEditorFocusPresentsHUD() {
+        let chrome = AutoInputApplication(
+            bundleIdentifier: "com.google.Chrome",
+            displayName: "Google Chrome",
+            bundleURL: URL(fileURLWithPath: "/Applications/Google Chrome.app"),
+            processIdentifier: 404
+        )
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            application: chrome
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        let sharedFrame = CGRect(x: 160, y: 120, width: 960, height: 720)
+
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: sharedFrame,
+            applicationProcessIdentifier: chrome.processIdentifier
+        ))
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: sharedFrame,
+            applicationProcessIdentifier: chrome.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "ABC"])
     }
 
     func testHUDPresentsAtFirstEditableFocusAfterChangingApplications() {
@@ -352,16 +416,19 @@ final class AutoInputControllerTests: XCTestCase {
         fixture.store.setInputHUDEnabled(true)
         fixture.controller.start()
         fixture.focusObserver.focus(AutoInputEditableFocus(
-            frame: CGRect(x: 100, y: 200, width: 300, height: 24)
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
         ))
 
         fixture.applications.activate(AutoInputApplication(
             bundleIdentifier: "com.example.chat",
             displayName: "Chat",
-            bundleURL: nil
+            bundleURL: nil,
+            processIdentifier: 202
         ))
         fixture.focusObserver.focus(AutoInputEditableFocus(
-            frame: CGRect(x: 100, y: 400, width: 300, height: 24)
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: 202
         ))
 
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "ABC"])
@@ -396,7 +463,7 @@ final class AutoInputControllerTests: XCTestCase {
         ])
     }
 
-    func testHUDDoesNotPresentStaleFocusAfterChangingApplications() {
+    func testHUDDoesNotPresentStaleFocusAgainAfterChangingApplications() {
         let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
         fixture.store.setAutoSwitchEnabled(false)
         fixture.store.setInputHUDEnabled(true)
@@ -419,7 +486,31 @@ final class AutoInputControllerTests: XCTestCase {
 
         XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
             CGRect(x: 100, y: 200, width: 300, height: 24),
+            CGRect(x: 100, y: 400, width: 300, height: 24),
         ])
+    }
+
+    func testReturningToApplicationWithFocusedEditableElementPresentsHUD() {
+        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+        let editorFocus = AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        )
+        fixture.focusObserver.focus(editorFocus)
+
+        fixture.applications.activate(AutoInputApplication(
+            bundleIdentifier: "com.example.chat",
+            displayName: "Chat",
+            bundleURL: nil,
+            processIdentifier: 202
+        ))
+        fixture.focusObserver.setCurrentFocusWithoutNotification(editorFocus)
+        fixture.applications.activate(fixture.app)
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "ABC"])
     }
 
     func testSourceChangeRefreshesCaretFrameBeforePresentingHUD() {
@@ -669,6 +760,7 @@ final class AutoInputControllerTests: XCTestCase {
     private func makeFixture(
         currentSourceID: String,
         accessibilityGranted: Bool = false,
+        application: AutoInputApplication? = nil,
         hudLabelResolver: InputSourceHUDLabelResolving = StandardInputSourceHUDLabelResolver()
     ) -> AutoInputFixture {
         let storage = AutoInputMemoryStorage()
@@ -680,7 +772,7 @@ final class AutoInputControllerTests: XCTestCase {
             ],
             currentSourceID: currentSourceID
         )
-        let app = AutoInputApplication(
+        let app = application ?? AutoInputApplication(
             bundleIdentifier: "com.example.editor",
             displayName: "Editor",
             bundleURL: URL(fileURLWithPath: "/Applications/Editor.app"),
@@ -796,6 +888,14 @@ final class AutoInputFocusObserverTests: XCTestCase {
         ))
     }
 
+    func testGoogleDocsLikeSettableTextAreaIsAccepted() {
+        XCTAssertTrue(AccessibilityAutoInputFocusObserver.acceptsFocusedInput(
+            role: kAXTextAreaRole as String,
+            valueIsSettable: true,
+            applicationBundleIdentifier: "com.google.Chrome"
+        ))
+    }
+
     func testStoppedObservationLifecycleRejectsQueuedGeneration() {
         var lifecycle = AutoInputObservationLifecycle()
         let firstGeneration = lifecycle.start()
@@ -842,6 +942,18 @@ final class AutoInputFocusObserverTests: XCTestCase {
             elementFrame
         )
     }
+
+    func testGoogleDocsPlacementFallsBackToVisibleEditorFrameWithoutCaretBounds() {
+        let editorFrame = CGRect(x: 160, y: 120, width: 960, height: 720)
+
+        XCTAssertEqual(
+            AccessibilityAutoInputFocusObserver.preferredAccessibilityFrame(
+                elementFrame: editorFrame,
+                selectionFrame: nil
+            ),
+            editorFrame
+        )
+    }
 }
 
 @MainActor
@@ -869,26 +981,51 @@ final class InputSourceHUDControllerTests: XCTestCase {
         let abc = InputSourceHUDLabel(title: "ABC", modeIndicator: nil)
         let customChinese = InputSourceHUDLabel(title: "Custom", modeIndicator: "中")
         let customEnglish = InputSourceHUDLabel(title: "Custom", modeIndicator: "A")
+        let firstPresentationID = AutoInputHUDPresentationID()
 
         XCTAssertTrue(gate.shouldPresent(
-            label: abc, focusedFrame: frame, configuration: configuration, at: 1
+            label: abc,
+            focusedFrame: frame,
+            configuration: configuration,
+            presentationID: firstPresentationID,
+            at: 1
         ))
         XCTAssertFalse(gate.shouldPresent(
-            label: abc, focusedFrame: frame, configuration: configuration, at: 1.1
+            label: abc,
+            focusedFrame: frame,
+            configuration: configuration,
+            presentationID: firstPresentationID,
+            at: 1.1
         ))
         XCTAssertTrue(gate.shouldPresent(
-            label: customChinese, focusedFrame: frame, configuration: configuration, at: 1.11
+            label: abc,
+            focusedFrame: frame,
+            configuration: configuration,
+            presentationID: AutoInputHUDPresentationID(),
+            at: 1.105
+        ))
+        XCTAssertTrue(gate.shouldPresent(
+            label: customChinese,
+            focusedFrame: frame,
+            configuration: configuration,
+            presentationID: AutoInputHUDPresentationID(),
+            at: 1.11
         ))
         XCTAssertTrue(gate.shouldPresent(
             label: customEnglish,
             focusedFrame: frame.offsetBy(dx: 10, dy: 0),
             configuration: configuration,
+            presentationID: AutoInputHUDPresentationID(),
             at: 1.12
         ))
 
         gate.reset()
         XCTAssertTrue(gate.shouldPresent(
-            label: abc, focusedFrame: frame, configuration: configuration, at: 1.13
+            label: abc,
+            focusedFrame: frame,
+            configuration: configuration,
+            presentationID: firstPresentationID,
+            at: 1.13
         ))
     }
 
@@ -949,6 +1086,7 @@ final class InputSourceHUDControllerTests: XCTestCase {
                 ),
                 near: focusedFrame,
                 configuration: configuration,
+                presentationID: AutoInputHUDPresentationID(),
                 onActivate: activationHandler
             )
         }
@@ -957,6 +1095,7 @@ final class InputSourceHUDControllerTests: XCTestCase {
             label: InputSourceHUDLabel(title: "U.S.", modeIndicator: nil),
             near: focusedFrame,
             configuration: configuration,
+            presentationID: AutoInputHUDPresentationID(),
             onActivate: activationHandler
         )
         let panel = try XCTUnwrap(controller.presentedPanelForTests)
@@ -1608,6 +1747,7 @@ private final class FakeInputSourceHUDPresenter: InputSourceHUDPresenting {
         label: InputSourceHUDLabel,
         near focusedFrame: CGRect,
         configuration: AutoInputHUDConfiguration,
+        presentationID _: AutoInputHUDPresentationID,
         onActivate: (() -> Void)?
     ) {
         presentations.append(Presentation(
