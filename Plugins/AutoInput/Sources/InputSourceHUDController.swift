@@ -190,7 +190,15 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             panel.contentView = hostingView
         }
 
-        PluginPresentationSafety.prepareForWindowOrdering(panel)
+        let windowsToPrepare = Self.presentationSafetyWindows(
+            applicationIsActive: NSApp.isActive,
+            keyWindow: NSApp.keyWindow,
+            windows: NSApp.windows
+        )
+        PluginPresentationSafety.prepareForWindowOrdering(
+            panel,
+            windows: windowsToPrepare
+        )
         panel.orderFrontRegardless()
 
         if !wasVisible {
@@ -301,6 +309,15 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             .ignoresCycle,
         ]
         return panel
+    }
+
+    static func presentationSafetyWindows(
+        applicationIsActive: Bool,
+        keyWindow: NSWindow?,
+        windows: [NSWindow]
+    ) -> [NSWindow] {
+        guard applicationIsActive, let keyWindow else { return windows }
+        return windows.filter { $0 !== keyWindow }
     }
 
     static func panelSize(

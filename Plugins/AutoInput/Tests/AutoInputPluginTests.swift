@@ -346,6 +346,30 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "ABC"])
     }
 
+    func testHUDPresentsForMacToolsOwnedEditableFocus() {
+        let application = AutoInputApplication(
+            bundleIdentifier: "cc.ggbond.mactools",
+            displayName: "MacTools",
+            bundleURL: nil,
+            processIdentifier: ProcessInfo.processInfo.processIdentifier
+        )
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            application: application
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.start()
+
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: ProcessInfo.processInfo.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC"])
+    }
+
     func testDuplicateNotificationsForSameEditableFocusPresentHUDOnce() {
         let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
         fixture.store.setAutoSwitchEnabled(false)
@@ -1057,6 +1081,35 @@ final class InputSourceHUDControllerTests: XCTestCase {
         XCTAssertFalse(panel.canBecomeMain)
         XCTAssertFalse(panel.ignoresMouseEvents)
         XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
+    }
+
+    func testHUDOrderingPreservesActiveKeyWindowEditing() {
+        let keyWindow = NSWindow()
+        let backgroundWindow = NSWindow()
+
+        let windows = InputSourceHUDController.presentationSafetyWindows(
+            applicationIsActive: true,
+            keyWindow: keyWindow,
+            windows: [keyWindow, backgroundWindow]
+        )
+
+        XCTAssertFalse(windows.contains { $0 === keyWindow })
+        XCTAssertTrue(windows.contains { $0 === backgroundWindow })
+    }
+
+    func testHUDOrderingPreparesEveryWindowWhileAnotherAppIsActive() {
+        let keyWindow = NSWindow()
+        let backgroundWindow = NSWindow()
+
+        let windows = InputSourceHUDController.presentationSafetyWindows(
+            applicationIsActive: false,
+            keyWindow: keyWindow,
+            windows: [keyWindow, backgroundWindow]
+        )
+
+        XCTAssertEqual(windows.count, 2)
+        XCTAssertTrue(windows.contains { $0 === keyWindow })
+        XCTAssertTrue(windows.contains { $0 === backgroundWindow })
     }
 
     func testInteractiveHUDRepeatedClicksReusePanelAndHostingView() throws {

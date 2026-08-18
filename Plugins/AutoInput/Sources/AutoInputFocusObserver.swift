@@ -88,7 +88,6 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
     private let workspace: NSWorkspace
     private let notificationCenter: NotificationCenter
-    private let ignoredProcessIdentifier: pid_t
 
     private var activationObserver: NSObjectProtocol?
     private var accessibilityObserver: AXObserver?
@@ -103,12 +102,10 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
     init(
         workspace: NSWorkspace = .shared,
-        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
-        ignoredProcessIdentifier: pid_t = ProcessInfo.processInfo.processIdentifier
+        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
     ) {
         self.workspace = workspace
         self.notificationCenter = notificationCenter
-        self.ignoredProcessIdentifier = ignoredProcessIdentifier
     }
 
     func start() {
@@ -166,11 +163,6 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             accessibilityWasInvalidated()
             return
         }
-        guard application.processIdentifier != ignoredProcessIdentifier else {
-            publishNoEditableFocus()
-            return
-        }
-
         var observer: AXObserver?
         let createStatus = AXObserverCreate(
             application.processIdentifier,
