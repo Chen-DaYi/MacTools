@@ -436,17 +436,17 @@
     "settings.hud.reducedFrequency.description" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يظهر عند أول تركيز على منطقة إدخال، ثم عند تغيير مصدر الإدخال فقط. يبقى مخفيًا عند تبديل التطبيقات إذا لم يتغير المصدر." } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beim ersten Fokus auf ein Eingabefeld anzeigen, danach nur bei einem Wechsel der Eingabequelle. App-Wechsel bleiben ohne Quellenwechsel still." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show at the first editable focus, then only when the input source changes. App switches stay quiet when the source is unchanged." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar al enfocar por primera vez un área de entrada y después solo al cambiar la fuente de entrada. Los cambios de app no avisan si la fuente no cambia." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Afficher au premier focus d’une zone de saisie, puis seulement lorsque la source de saisie change. Les changements d’app restent silencieux si la source ne change pas." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "最初に入力領域へフォーカスしたときに表示し、その後は入力ソースが変わったときだけ表示します。入力ソースが同じままのアプリ切り替えでは表示しません。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "처음 입력 영역에 초점을 맞출 때 표시하고 이후에는 입력 소스가 바뀔 때만 표시합니다. 입력 소스가 같으면 앱을 전환해도 표시하지 않습니다." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar no primeiro foco em uma área de entrada e depois apenas quando a fonte de entrada mudar. A troca de app fica silenciosa se a fonte não mudar." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показывать при первом фокусе на поле ввода, затем только при смене источника ввода. При переключении приложений индикатор не появляется, если источник не изменился." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "首次聚焦输入区域时显示；之后仅在输入法变化时提示。输入法未变化时，切换应用不再显示。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "首次聚焦輸入區域時顯示；之後僅在輸入法變化時提示。輸入法未變化時，切換應用程式不再顯示。" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يظهر عند أول تركيز على منطقة إدخال. تظهر تغييرات مصدر الإدخال فورًا؛ وفي الحالات الأخرى يظهر عند تبديل الحقول أو التطبيقات مرة واحدة في الدقيقة كحد أقصى." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beim ersten Fokus auf ein Eingabefeld anzeigen. Eingabequellenwechsel erscheinen sofort; sonst bei Feld- oder App-Wechseln höchstens einmal pro Minute." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show at the first editable focus. Source changes appear immediately; otherwise field and app switches show at most once per minute." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar al enfocar por primera vez un área de entrada. Los cambios de fuente aparecen de inmediato; los cambios de campo o app, como máximo una vez por minuto." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Afficher au premier focus d’une zone de saisie. Les changements de source sont immédiats ; sinon, les changements de champ ou d’app s’affichent au plus une fois par minute." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "最初に入力領域へフォーカスしたときに表示します。入力ソースの変更時はすぐに表示し、それ以外の入力領域やアプリの切り替えでは 1 分に 1 回まで表示します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "처음 입력 영역에 초점을 맞출 때 표시합니다. 입력 소스 변경은 즉시 표시하고, 그 외의 입력 영역이나 앱 전환은 1분에 한 번만 표시합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar no primeiro foco em uma área de entrada. Mudanças da fonte aparecem imediatamente; outras trocas de campo ou app aparecem no máximo uma vez por minuto." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показывать при первом фокусе на поле ввода. Смена источника отображается сразу; при переходе между полями или приложениями — не чаще раза в минуту." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "首次聚焦时显示。输入法变化时立即提示；其他情况下，切换输入区域或应用时每分钟最多显示一次。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "首次聚焦時顯示。輸入法變化時立即提示；其他情況下，切換輸入區域或應用程式時每分鐘最多顯示一次。" } }
       }
     },
     "settings.hud.interactive.title" : {

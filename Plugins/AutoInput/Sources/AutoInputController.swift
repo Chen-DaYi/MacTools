@@ -85,36 +85,54 @@ struct AutoInputHUDTriggerPolicy {
 }
 
 struct AutoInputHUDFrequencyPolicy {
+    private let reminderInterval: TimeInterval
     private var wasReducingFrequentPresentations = false
     private var lastPresentedSourceID: String?
+    private var lastPresentationTime: TimeInterval?
+
+    init(reminderInterval: TimeInterval = 60) {
+        self.reminderInterval = reminderInterval
+    }
 
     mutating func shouldPresent(
         sourceID: String,
-        reducesFrequentPresentations: Bool
+        reducesFrequentPresentations: Bool,
+        at presentationTime: TimeInterval
     ) -> Bool {
         guard reducesFrequentPresentations else {
             wasReducingFrequentPresentations = false
             lastPresentedSourceID = sourceID
+            lastPresentationTime = presentationTime
             return true
         }
 
         if !wasReducingFrequentPresentations {
             wasReducingFrequentPresentations = true
             lastPresentedSourceID = sourceID
+            lastPresentationTime = presentationTime
             return true
         }
 
-        guard lastPresentedSourceID != sourceID else {
+        if lastPresentedSourceID != sourceID {
+            lastPresentedSourceID = sourceID
+            lastPresentationTime = presentationTime
+            return true
+        }
+
+        if let lastPresentationTime,
+           presentationTime >= lastPresentationTime,
+           presentationTime - lastPresentationTime < reminderInterval {
             return false
         }
 
-        lastPresentedSourceID = sourceID
+        lastPresentationTime = presentationTime
         return true
     }
 
     mutating func reset() {
         wasReducingFrequentPresentations = false
         lastPresentedSourceID = nil
+        lastPresentationTime = nil
     }
 }
 
@@ -135,6 +153,7 @@ final class AutoInputController: ObservableObject {
     private let accessibilityCheck: AutoInputAccessibilityChecking
     private let applicationNotificationCenter: NotificationCenter
     private let switchErrorMessage: () -> String
+    private let now: () -> TimeInterval
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "AutoInputPlugin"
@@ -165,6 +184,7 @@ final class AutoInputController: ObservableObject {
         hudLabelResolver: InputSourceHUDLabelResolving = StandardInputSourceHUDLabelResolver(),
         accessibilityCheck: AutoInputAccessibilityChecking = SystemAutoInputAccessibilityCheck(),
         applicationNotificationCenter: NotificationCenter = .default,
+        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         switchErrorMessage: @escaping () -> String = { "无法切换输入法" }
     ) {
         self.store = store
@@ -175,6 +195,7 @@ final class AutoInputController: ObservableObject {
         self.hudLabelResolver = hudLabelResolver
         self.accessibilityCheck = accessibilityCheck
         self.applicationNotificationCenter = applicationNotificationCenter
+        self.now = now
         self.switchErrorMessage = switchErrorMessage
         self.sources = sourceController.sources
         self.isAccessibilityGranted = accessibilityCheck.isTrusted
@@ -532,7 +553,8 @@ final class AutoInputController: ObservableObject {
         else { return }
         guard hudFrequencyPolicy.shouldPresent(
             sourceID: source.id,
-            reducesFrequentPresentations: store.reducesFrequentHUDPresentations
+            reducesFrequentPresentations: store.reducesFrequentHUDPresentations,
+            at: now()
         ) else { return }
         presentHUD(for: source, near: focusedElement, presentationID: presentation.id)
     }
@@ -580,7 +602,8 @@ final class AutoInputController: ObservableObject {
                let focusedElement,
                hudFrequencyPolicy.shouldPresent(
                    sourceID: target.id,
-                   reducesFrequentPresentations: store.reducesFrequentHUDPresentations
+                   reducesFrequentPresentations: store.reducesFrequentHUDPresentations,
+                   at: now()
                ) {
                 presentHUD(
                     for: target,

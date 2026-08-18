@@ -141,6 +141,73 @@ final class AutoInputStoreTests: XCTestCase {
 }
 
 @MainActor
+final class AutoInputHUDFrequencyPolicyTests: XCTestCase {
+    func testReducedModeUsesExactReminderBoundaryWithoutExtendingSuppressedWindow() {
+        var policy = AutoInputHUDFrequencyPolicy(reminderInterval: 60)
+
+        assertPresentation(true, policy: &policy, at: 100)
+        assertPresentation(false, policy: &policy, at: 130)
+        assertPresentation(false, policy: &policy, at: 159.999)
+        assertPresentation(true, policy: &policy, at: 160)
+        assertPresentation(false, policy: &policy, at: 219.999)
+        assertPresentation(true, policy: &policy, at: 220)
+    }
+
+    func testReducedModePresentsEverySourceChangeImmediatelyAndRestartsReminderWindow() {
+        var policy = AutoInputHUDFrequencyPolicy(reminderInterval: 60)
+
+        assertPresentation(true, policy: &policy, sourceID: "en", at: 100)
+        assertPresentation(true, policy: &policy, sourceID: "zh", at: 101)
+        assertPresentation(true, policy: &policy, sourceID: "en", at: 102)
+        assertPresentation(false, policy: &policy, sourceID: "en", at: 161.999)
+        assertPresentation(true, policy: &policy, sourceID: "en", at: 162)
+    }
+
+    func testReducedModeRecoversFromClockRollback() {
+        var policy = AutoInputHUDFrequencyPolicy(reminderInterval: 60)
+
+        assertPresentation(true, policy: &policy, at: 100)
+        assertPresentation(true, policy: &policy, at: 90)
+        assertPresentation(false, policy: &policy, at: 149.999)
+        assertPresentation(true, policy: &policy, at: 150)
+    }
+
+    func testDisabledModeAlwaysPresentsAndEachReducedSessionStartsWithPresentation() {
+        var policy = AutoInputHUDFrequencyPolicy(reminderInterval: 60)
+
+        assertPresentation(true, policy: &policy, reducesFrequency: false, at: 100)
+        assertPresentation(true, policy: &policy, reducesFrequency: false, at: 100.1)
+        assertPresentation(true, policy: &policy, at: 100.2)
+        assertPresentation(false, policy: &policy, at: 100.3)
+
+        policy.reset()
+
+        assertPresentation(true, policy: &policy, at: 100.4)
+    }
+
+    private func assertPresentation(
+        _ expected: Bool,
+        policy: inout AutoInputHUDFrequencyPolicy,
+        sourceID: String = "en",
+        reducesFrequency: Bool = true,
+        at time: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            policy.shouldPresent(
+                sourceID: sourceID,
+                reducesFrequentPresentations: reducesFrequency,
+                at: time
+            ),
+            expected,
+            file: file,
+            line: line
+        )
+    }
+}
+
+@MainActor
 final class AutoInputControllerTests: XCTestCase {
     func testFixedRuleTakesPriorityOverRememberedSource() {
         let fixture = makeFixture(currentSourceID: "en")
@@ -356,8 +423,13 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "ABC"])
     }
 
-    func testReducedHUDFrequencySuppressesFocusChangesWhileSourceIsUnchanged() {
-        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+    func testReducedHUDFrequencyRemindsAtExactIntervalWithoutExtendingForSuppressedFocus() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
         fixture.store.setAutoSwitchEnabled(false)
         fixture.store.setInputHUDEnabled(true)
         fixture.store.setReducesFrequentHUDPresentations(true)
@@ -367,22 +439,35 @@ final class AutoInputControllerTests: XCTestCase {
             frame: CGRect(x: 100, y: 200, width: 300, height: 24),
             applicationProcessIdentifier: fixture.app.processIdentifier
         ))
+        now = 40
         fixture.focusObserver.focus(AutoInputEditableFocus(
             frame: CGRect(x: 100, y: 400, width: 300, height: 24),
             applicationProcessIdentifier: fixture.app.processIdentifier
         ))
+        now = 69.999
         fixture.focusObserver.focus(AutoInputEditableFocus(
             frame: CGRect(x: 100, y: 600, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+        now = 70
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 700, width: 300, height: 24),
             applicationProcessIdentifier: fixture.app.processIdentifier
         ))
 
         XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
             CGRect(x: 100, y: 200, width: 300, height: 24),
+            CGRect(x: 100, y: 700, width: 300, height: 24),
         ])
     }
 
-    func testReducedHUDFrequencySkipsApplicationChangesUntilSourceChanges() {
-        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+    func testReducedHUDFrequencySkipsRecentAppSwitchButRemindsAfterInterval() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
         fixture.store.setAutoSwitchEnabled(false)
         fixture.store.setInputHUDEnabled(true)
         fixture.store.setReducesFrequentHUDPresentations(true)
@@ -398,20 +483,129 @@ final class AutoInputControllerTests: XCTestCase {
             bundleURL: nil,
             processIdentifier: 202
         )
+        now = 20
         fixture.applications.activate(chat)
         fixture.focusObserver.focus(AutoInputEditableFocus(
             frame: CGRect(x: 100, y: 400, width: 300, height: 24),
             applicationProcessIdentifier: chat.processIdentifier
         ))
 
+        let notes = AutoInputApplication(
+            bundleIdentifier: "com.example.notes",
+            displayName: "Notes",
+            bundleURL: nil,
+            processIdentifier: 303
+        )
+        now = 70
+        fixture.applications.activate(notes)
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 600, width: 300, height: 24),
+            applicationProcessIdentifier: notes.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            CGRect(x: 100, y: 600, width: 300, height: 24),
+        ])
+    }
+
+    func testReducedHUDFrequencyPresentsRapidSourceChangesImmediately() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        now = 11
         fixture.sources.currentSourceID = "zh"
         fixture.sources.emitChange()
+        now = 12
+        fixture.sources.currentSourceID = "en"
+        fixture.sources.emitChange()
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文", "ABC"])
+    }
+
+    func testReducedHUDFrequencyDefersSourceChangeUntilEditableFocusExists() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        fixture.focusObserver.focus(nil)
+        now = 11
+        fixture.sources.currentSourceID = "zh"
+        fixture.sources.emitChange()
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC"])
+
+        now = 12
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
 
         XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
     }
 
+    func testReducedHUDFrequencyPresentsAutomaticSourceChangeOnRecentAppSwitch() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        let chat = AutoInputApplication(
+            bundleIdentifier: "com.example.chat",
+            displayName: "Chat",
+            bundleURL: nil,
+            processIdentifier: 202
+        )
+        fixture.store.upsertRule(makeRule(bundleID: chat.bundleIdentifier, sourceID: "zh"))
+        now = 20
+        fixture.applications.activate(chat)
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: chat.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh"])
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
+    }
+
     func testInteractiveHUDSourceChangeUpdatesReducedFrequencyState() {
-        let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
         fixture.store.setAutoSwitchEnabled(false)
         fixture.store.setInputHUDEnabled(true)
         fixture.store.setInteractiveHUDEnabled(true)
@@ -422,13 +616,52 @@ final class AutoInputControllerTests: XCTestCase {
             applicationProcessIdentifier: fixture.app.processIdentifier
         ))
 
+        now = 11
         fixture.hud.activateLastPresentation()
+        now = 40
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+        now = 71
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 600, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文", "中文"])
+    }
+
+    func testReducedHUDFrequencyResetsAfterHUDIsDisabledAndReenabled() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        fixture.store.setInputHUDEnabled(false)
+        fixture.controller.configurationDidChange()
+        now = 20
+        fixture.store.setInputHUDEnabled(true)
+        fixture.controller.configurationDidChange()
         fixture.focusObserver.focus(AutoInputEditableFocus(
             frame: CGRect(x: 100, y: 400, width: 300, height: 24),
             applicationProcessIdentifier: fixture.app.processIdentifier
         ))
 
-        XCTAssertEqual(fixture.hud.presentations.map(\.sourceName), ["ABC", "中文"])
+        XCTAssertEqual(fixture.hud.presentations.map(\.frame), [
+            CGRect(x: 100, y: 200, width: 300, height: 24),
+            CGRect(x: 100, y: 400, width: 300, height: 24),
+        ])
     }
 
     func testAccessoryApplicationFocusPresentsHUDEvenWhenAnotherAppRemainsFrontmost() {
@@ -914,7 +1147,8 @@ final class AutoInputControllerTests: XCTestCase {
         currentSourceID: String,
         accessibilityGranted: Bool = false,
         application: AutoInputApplication? = nil,
-        hudLabelResolver: InputSourceHUDLabelResolving = StandardInputSourceHUDLabelResolver()
+        hudLabelResolver: InputSourceHUDLabelResolving = StandardInputSourceHUDLabelResolver(),
+        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) -> AutoInputFixture {
         let storage = AutoInputMemoryStorage()
         let store = AutoInputStore(storage: storage)
@@ -944,7 +1178,8 @@ final class AutoInputControllerTests: XCTestCase {
             hudPresenter: hud,
             hudLabelResolver: hudLabelResolver,
             accessibilityCheck: accessibility,
-            applicationNotificationCenter: applicationNotificationCenter
+            applicationNotificationCenter: applicationNotificationCenter,
+            now: now
         )
         return AutoInputFixture(
             store: store,
