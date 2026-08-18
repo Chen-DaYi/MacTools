@@ -112,7 +112,7 @@ struct AutoInputSettingsView: View {
             ),
             description: localization.string(
                 "settings.hud.reducedFrequency.description",
-                defaultValue: "同一应用内快速切换输入区域时，1 秒内只显示一次；切换应用或输入法时仍立即显示。"
+                defaultValue: "首次聚焦输入区域时显示；之后仅在输入法变化时提示。输入法未变化时，切换应用不再显示。"
             ),
             isOn: Binding(
                 get: { store.reducesFrequentHUDPresentations },

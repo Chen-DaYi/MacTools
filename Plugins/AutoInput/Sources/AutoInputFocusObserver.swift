@@ -15,6 +15,7 @@ struct AutoInputEditableFocus: Equatable, Sendable {
     let frame: CGRect
     let avoidanceFrame: CGRect
     let applicationProcessIdentifier: pid_t?
+    let applicationBundleIdentifier: String?
     let isFromAccessoryApplication: Bool
     let identity: AutoInputEditableFocusIdentity
 
@@ -22,12 +23,14 @@ struct AutoInputEditableFocus: Equatable, Sendable {
         frame: CGRect,
         avoidanceFrame: CGRect? = nil,
         applicationProcessIdentifier: pid_t? = nil,
+        applicationBundleIdentifier: String? = nil,
         isFromAccessoryApplication: Bool = false,
         identity: AutoInputEditableFocusIdentity = AutoInputEditableFocusIdentity()
     ) {
         self.frame = frame
         self.avoidanceFrame = avoidanceFrame ?? frame
         self.applicationProcessIdentifier = applicationProcessIdentifier
+        self.applicationBundleIdentifier = applicationBundleIdentifier
         self.isFromAccessoryApplication = isFromAccessoryApplication
         self.identity = identity
     }
@@ -71,6 +74,36 @@ struct AutoInputObservationLifecycle {
     }
 }
 
+struct AutoInputObservationRetryPolicy {
+    private let retryInterval: TimeInterval
+    private var failedProcessIdentifier: pid_t?
+    private var retryAfter: TimeInterval?
+
+    init(retryInterval: TimeInterval = 5) {
+        self.retryInterval = retryInterval
+    }
+
+    func shouldAttempt(processIdentifier: pid_t, at time: TimeInterval) -> Bool {
+        guard failedProcessIdentifier == processIdentifier,
+              let retryAfter else { return true }
+        return time >= retryAfter
+    }
+
+    mutating func recordFailure(processIdentifier: pid_t, at time: TimeInterval) {
+        failedProcessIdentifier = processIdentifier
+        retryAfter = time + retryInterval
+    }
+
+    mutating func recordSuccess() {
+        failedProcessIdentifier = nil
+        retryAfter = nil
+    }
+
+    mutating func reset() {
+        recordSuccess()
+    }
+}
+
 @MainActor
 final class SystemAutoInputAccessibilityCheck: AutoInputAccessibilityChecking {
     var isTrusted: Bool {
@@ -94,6 +127,8 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
     private let workspace: NSWorkspace
     private let notificationCenter: NotificationCenter
+    private let focusedProcessResolver: @Sendable () -> pid_t?
+    private let now: @Sendable () -> TimeInterval
 
     private var activationObserver: NSObjectProtocol?
     private var accessibilityObserver: AXObserver?
@@ -107,13 +142,22 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
     private var retainedCallbackPointer: UnsafeMutableRawPointer?
     private var focusedApplicationPollingTask: Task<Void, Never>?
     private var lifecycle = AutoInputObservationLifecycle()
+    private var observationRetryPolicy = AutoInputObservationRetryPolicy()
 
     init(
         workspace: NSWorkspace = .shared,
-        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
+        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        focusedProcessResolver: @escaping @Sendable () -> pid_t? = {
+            AccessibilityAutoInputFocusObserver.systemWideFocusedProcessIdentifier()
+        },
+        now: @escaping @Sendable () -> TimeInterval = {
+            ProcessInfo.processInfo.systemUptime
+        }
     ) {
         self.workspace = workspace
         self.notificationCenter = notificationCenter
+        self.focusedProcessResolver = focusedProcessResolver
+        self.now = now
     }
 
     func start() {
@@ -125,6 +169,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         }
 
         let generation = lifecycle.start()
+        observationRetryPolicy.reset()
 
         activationObserver = notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -142,9 +187,6 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         }
 
         startFocusedApplicationPolling(generation: generation)
-        if followSystemWideFocusedApplication(generation: generation) {
-            return
-        }
         if let application = workspace.frontmostApplication {
             observe(application, generation: generation)
         } else {
@@ -160,36 +202,49 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         }
         focusedApplicationPollingTask?.cancel()
         focusedApplicationPollingTask = nil
+        observationRetryPolicy.reset()
         stopObservingApplication()
         publishNoEditableFocus()
     }
 
     func refreshFocusedElement() {
         guard lifecycle.isRunning else { return }
-        if followSystemWideFocusedApplication(generation: lifecycle.generation) {
-            return
-        }
         inspectFocusedElement()
     }
 
     private func startFocusedApplicationPolling(generation: Int) {
         focusedApplicationPollingTask?.cancel()
+        let focusedProcessResolver = focusedProcessResolver
         focusedApplicationPollingTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(250))
+                let processIdentifier = await Task.detached(priority: .utility) {
+                    focusedProcessResolver()
+                }.value
                 guard !Task.isCancelled,
                       let self,
                       self.lifecycle.accepts(generation) else { return }
-                _ = self.followSystemWideFocusedApplication(generation: generation)
+                if let processIdentifier {
+                    _ = self.followSystemWideFocusedApplication(
+                        processIdentifier: processIdentifier,
+                        generation: generation
+                    )
+                }
+                try? await Task.sleep(for: .milliseconds(250))
             }
         }
     }
 
     @discardableResult
-    private func followSystemWideFocusedApplication(generation: Int) -> Bool {
+    private func followSystemWideFocusedApplication(
+        processIdentifier: pid_t,
+        generation: Int
+    ) -> Bool {
         guard lifecycle.accepts(generation),
-              let processIdentifier = Self.systemWideFocusedProcessIdentifier(),
               processIdentifier != observedApplicationProcessIdentifier,
+              observationRetryPolicy.shouldAttempt(
+                  processIdentifier: processIdentifier,
+                  at: now()
+              ),
               let application = NSRunningApplication(processIdentifier: processIdentifier)
         else { return false }
 
@@ -198,7 +253,12 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
     }
 
     private func observe(_ application: NSRunningApplication, generation: Int) {
-        guard lifecycle.accepts(generation) else { return }
+        let processIdentifier = application.processIdentifier
+        guard lifecycle.accepts(generation),
+              observationRetryPolicy.shouldAttempt(
+                  processIdentifier: processIdentifier,
+                  at: now()
+              ) else { return }
         stopObservingApplication()
 
         guard AXIsProcessTrusted() else {
@@ -212,6 +272,10 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             &observer
         )
         guard createStatus == .success, let observer else {
+            observationRetryPolicy.recordFailure(
+                processIdentifier: processIdentifier,
+                at: now()
+            )
             handleAccessibilityFailure(createStatus)
             return
         }
@@ -227,6 +291,10 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         )
         guard addStatus == .success else {
             Unmanaged<CallbackContext>.fromOpaque(retainedPointer).release()
+            observationRetryPolicy.recordFailure(
+                processIdentifier: processIdentifier,
+                at: now()
+            )
             handleAccessibilityFailure(addStatus)
             return
         }
@@ -236,6 +304,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         observedApplicationProcessIdentifier = application.processIdentifier
         observedApplicationBundleIdentifier = application.bundleIdentifier
         observedApplicationIsAccessory = application.activationPolicy == .accessory
+        observationRetryPolicy.recordSuccess()
         callbackContext = context
         retainedCallbackPointer = retainedPointer
         CFRunLoopAddSource(
@@ -327,6 +396,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
                 primaryScreenFrame: Self.primaryScreenFrame
             ),
             applicationProcessIdentifier: observedApplicationProcessIdentifier,
+            applicationBundleIdentifier: observedApplicationBundleIdentifier,
             isFromAccessoryApplication: observedApplicationIsAccessory,
             identity: identity(for: element)
         ))
@@ -498,10 +568,12 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         )
     }
 
-    private static func systemWideFocusedProcessIdentifier() -> pid_t? {
+    private nonisolated static func systemWideFocusedProcessIdentifier() -> pid_t? {
+        let systemWideElement = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(systemWideElement, 0.2)
         var focusedValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
-            AXUIElementCreateSystemWide(),
+            systemWideElement,
             kAXFocusedUIElementAttribute as CFString,
             &focusedValue
         ) == .success,

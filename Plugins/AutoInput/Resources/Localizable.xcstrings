@@ -436,17 +436,17 @@
     "settings.hud.reducedFrequency.description" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "عند التنقل سريعًا بين مناطق الإدخال في التطبيق نفسه، يظهر مرة واحدة فقط في الثانية؛ ويظهر فورًا عند تبديل التطبيق أو مصدر الإدخال." } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beim schnellen Wechsel zwischen Eingabebereichen derselben App höchstens einmal pro Sekunde anzeigen. App- und Eingabequellenwechsel erscheinen weiterhin sofort." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "When moving quickly between input areas in the same app, show at most once per second. App and input-source changes still show immediately." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Al cambiar rápidamente entre áreas de entrada de la misma app, muestra como máximo un aviso por segundo. Los cambios de app o fuente de entrada siguen apareciendo de inmediato." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lors d’un passage rapide entre les zones de saisie d’une même app, affiche au maximum une fois par seconde. Les changements d’app ou de source de saisie restent immédiats." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "同じアプリ内で入力領域をすばやく移動したときは、1 秒に 1 回まで表示します。アプリや入力ソースの切り替え時は引き続きすぐに表示します。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "같은 앱에서 입력 영역을 빠르게 이동할 때는 1초에 한 번만 표시합니다. 앱이나 입력 소스 변경은 계속 즉시 표시됩니다." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ao alternar rapidamente entre áreas de entrada no mesmo app, mostra no máximo uma vez por segundo. Mudanças de app ou fonte de entrada continuam aparecendo imediatamente." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "При быстром переходе между полями одного приложения показывать не чаще раза в секунду. При смене приложения или источника ввода индикатор по-прежнему появляется сразу." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "同一应用内快速切换输入区域时，1 秒内只显示一次；切换应用或输入法时仍立即显示。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "在同一應用程式內快速切換輸入區域時，1 秒內只顯示一次；切換應用程式或輸入法時仍會立即顯示。" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يظهر عند أول تركيز على منطقة إدخال، ثم عند تغيير مصدر الإدخال فقط. يبقى مخفيًا عند تبديل التطبيقات إذا لم يتغير المصدر." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beim ersten Fokus auf ein Eingabefeld anzeigen, danach nur bei einem Wechsel der Eingabequelle. App-Wechsel bleiben ohne Quellenwechsel still." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show at the first editable focus, then only when the input source changes. App switches stay quiet when the source is unchanged." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar al enfocar por primera vez un área de entrada y después solo al cambiar la fuente de entrada. Los cambios de app no avisan si la fuente no cambia." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Afficher au premier focus d’une zone de saisie, puis seulement lorsque la source de saisie change. Les changements d’app restent silencieux si la source ne change pas." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "最初に入力領域へフォーカスしたときに表示し、その後は入力ソースが変わったときだけ表示します。入力ソースが同じままのアプリ切り替えでは表示しません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "처음 입력 영역에 초점을 맞출 때 표시하고 이후에는 입력 소스가 바뀔 때만 표시합니다. 입력 소스가 같으면 앱을 전환해도 표시하지 않습니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar no primeiro foco em uma área de entrada e depois apenas quando a fonte de entrada mudar. A troca de app fica silenciosa se a fonte não mudar." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показывать при первом фокусе на поле ввода, затем только при смене источника ввода. При переключении приложений индикатор не появляется, если источник не изменился." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "首次聚焦输入区域时显示；之后仅在输入法变化时提示。输入法未变化时，切换应用不再显示。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "首次聚焦輸入區域時顯示；之後僅在輸入法變化時提示。輸入法未變化時，切換應用程式不再顯示。" } }
       }
     },
     "settings.hud.interactive.title" : {

@@ -200,16 +200,13 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             panel.contentView = hostingView
         }
 
-        let windowsToPrepare = Self.presentationSafetyWindows(
-            applicationIsActive: NSApp.isActive,
-            keyWindow: NSApp.keyWindow,
-            windows: NSApp.windows
-        )
-        PluginPresentationSafety.prepareForWindowOrdering(
+        let textEditingRestoration = PluginPresentationSafety.prepareForWindowOrdering(
             panel,
-            windows: windowsToPrepare
+            windows: NSApp.windows,
+            restoringTextEditingIn: NSApp.isActive ? NSApp.keyWindow : nil
         )
         panel.orderFrontRegardless()
+        textEditingRestoration?.restore()
 
         if !wasVisible {
             isPointerHovering = false
@@ -321,15 +318,6 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         return panel
     }
 
-    static func presentationSafetyWindows(
-        applicationIsActive: Bool,
-        keyWindow: NSWindow?,
-        windows: [NSWindow]
-    ) -> [NSWindow] {
-        guard applicationIsActive, let keyWindow else { return windows }
-        return windows.filter { $0 !== keyWindow }
-    }
-
     static func panelSize(
         for sourceName: String,
         size: AutoInputHUDSize = .standard,
@@ -384,26 +372,59 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             ? min(max(preferredX, minX), maxX)
             : visibleFrame.midX - panelSize.width / 2
 
-        let belowY = avoidanceFrame.minY - panelSize.height - gap
-        let aboveY = avoidanceFrame.maxY + gap
         let minY = visibleFrame.minY + displayMargin
         let maxY = visibleFrame.maxY - panelSize.height - displayMargin
-        let belowFits = belowY >= minY
-        let aboveFits = aboveY <= maxY
-        let preferredY = preferredVerticalOrigin(
+        let belowY = avoidanceFrame.minY - panelSize.height - gap
+        let aboveY = avoidanceFrame.maxY + gap
+        let preferredVerticalY = preferredVerticalOrigin(
             position: position,
             belowY: belowY,
             aboveY: aboveY,
-            belowFits: belowFits,
-            aboveFits: aboveFits,
+            belowFits: belowY >= minY,
+            aboveFits: aboveY <= maxY,
             minY: minY,
             maxY: maxY
         )
-        let y = maxY >= minY
-            ? min(max(preferredY, minY), maxY)
+        let clampedVerticalY = maxY >= minY
+            ? min(max(preferredVerticalY, minY), maxY)
             : visibleFrame.midY - panelSize.height / 2
+        let alternateVerticalY = preferredVerticalY == belowY ? aboveY : belowY
+        let clampedAlternateY = maxY >= minY
+            ? min(max(alternateVerticalY, minY), maxY)
+            : clampedVerticalY
 
-        return pixelAlignedPanelFrame(x: x, y: y, size: panelSize)
+        let minPanelX = visibleFrame.minX + displayMargin
+        let maxPanelX = visibleFrame.maxX - panelSize.width - displayMargin
+        let lateralY = maxY >= minY
+            ? min(max(focusedFrame.midY - panelSize.height / 2, minY), maxY)
+            : visibleFrame.midY - panelSize.height / 2
+        let rightX = maxPanelX >= minPanelX
+            ? min(max(avoidanceFrame.maxX + gap, minPanelX), maxPanelX)
+            : x
+        let leftX = maxPanelX >= minPanelX
+            ? min(max(avoidanceFrame.minX - panelSize.width - gap, minPanelX), maxPanelX)
+            : x
+
+        let preferredLateralFrames = avoidanceFrame.midX <= visibleFrame.midX
+            ? [
+                pixelAlignedPanelFrame(x: rightX, y: lateralY, size: panelSize),
+                pixelAlignedPanelFrame(x: leftX, y: lateralY, size: panelSize),
+            ]
+            : [
+                pixelAlignedPanelFrame(x: leftX, y: lateralY, size: panelSize),
+                pixelAlignedPanelFrame(x: rightX, y: lateralY, size: panelSize),
+            ]
+        let candidates = [
+            pixelAlignedPanelFrame(x: x, y: clampedVerticalY, size: panelSize),
+            pixelAlignedPanelFrame(x: x, y: clampedAlternateY, size: panelSize),
+        ] + preferredLateralFrames
+
+        if let nonoverlapping = candidates.first(where: { !$0.intersects(avoidanceFrame) }) {
+            return nonoverlapping
+        }
+        return candidates.min {
+            intersectionArea($0, avoidanceFrame) < intersectionArea($1, avoidanceFrame)
+        } ?? candidates[0]
     }
 
     private static func pixelAlignedPanelFrame(
@@ -450,6 +471,12 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             return min(max(belowY, minY), maxY)
         }
         return min(max(position == .above ? aboveY : belowY, minY), maxY)
+    }
+
+    private static func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        let intersection = lhs.intersection(rhs)
+        guard !intersection.isNull else { return 0 }
+        return intersection.width * intersection.height
     }
 
     fileprivate static func metrics(for size: AutoInputHUDSize) -> InputSourceHUDMetrics {

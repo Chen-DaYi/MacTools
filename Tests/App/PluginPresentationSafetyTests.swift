@@ -51,6 +51,37 @@ final class PluginPresentationSafetyTests: XCTestCase {
         XCTAssertTrue(window.firstResponder === fieldEditor)
     }
 
+    func testPreparationCanRestoreEditingAfterOrderingNonactivatingPanel() throws {
+        let editorWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        let textField = NSTextField(frame: NSRect(x: 20, y: 20, width: 200, height: 24))
+        editorWindow.contentView = NSView(frame: editorWindow.contentLayoutRect)
+        editorWindow.contentView?.addSubview(textField)
+
+        XCTAssertTrue(editorWindow.makeFirstResponder(textField))
+        XCTAssertTrue(editorWindow.firstResponder is NSTextView)
+
+        let restoration = PluginPresentationSafety.prepareForWindowOrdering(
+            panel,
+            windows: [editorWindow, panel],
+            restoringTextEditingIn: editorWindow
+        )
+
+        XCTAssertFalse(editorWindow.firstResponder is NSTextView)
+        restoration?.restore()
+        XCTAssertTrue(editorWindow.firstResponder is NSTextView)
+    }
+
     func testEveryWindowPresentationCallsiteUsesTheSharedSafetyBoundary() throws {
         let violations = try sourceFiles().flatMap { url -> [String] in
             let source = try String(contentsOf: url, encoding: .utf8)

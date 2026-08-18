@@ -10,19 +10,46 @@ import Foundation
 /// presentation from any action surface follows the same lifecycle rule.
 @MainActor
 public enum PluginPresentationSafety {
+    @MainActor
+    public final class TextEditingRestoration {
+        private weak var window: NSWindow?
+        private weak var responder: NSResponder?
+
+        fileprivate init(window: NSWindow?, responder: NSResponder?) {
+            self.window = window
+            self.responder = responder
+        }
+
+        public func restore() {
+            guard let window, let responder else { return }
+            window.makeFirstResponder(responder)
+        }
+    }
+
+    /// Detaches AppKit's field editor before another window is ordered. When
+    /// `restoringTextEditingIn` is supplied, call `restore()` on the returned
+    /// value immediately after ordering a nonactivating auxiliary panel.
+    @discardableResult
     public static func prepareForWindowOrdering(
         _ orderingWindow: NSWindow? = nil,
-        windows: [NSWindow] = NSApplication.shared.windows
-    ) {
+        windows: [NSWindow] = NSApplication.shared.windows,
+        restoringTextEditingIn restorationWindow: NSWindow? = nil
+    ) -> TextEditingRestoration? {
+        var restoration: TextEditingRestoration?
         for window in windows where window !== orderingWindow {
             guard let fieldEditor = window.firstResponder as? NSTextView,
                   fieldEditor.isEditable else {
                 continue
             }
 
+            if window === restorationWindow {
+                let responder = fieldEditor.delegate as? NSResponder ?? fieldEditor
+                restoration = TextEditingRestoration(window: window, responder: responder)
+            }
             fieldEditor.inputContext?.discardMarkedText()
             window.makeFirstResponder(nil)
         }
+        return restoration
     }
 }
 
