@@ -388,10 +388,12 @@ final class AutoInputController: ObservableObject {
                 setFocusMonitoring(active: hudActive)
             }
         }
-        if applicationChanged && hudActive && !focusBelongs(to: application) {
-            focusedElement = nil
-            hudTriggerPolicy.editableFocusDidChange(to: nil)
+        if applicationChanged && hudActive {
             hudPresenter.dismiss()
+            if !focusBelongs(to: application) {
+                focusedElement = nil
+                hudTriggerPolicy.editableFocusDidChange(to: nil)
+            }
         }
         if let inputSourceOwnerBeforeActivation,
            inputSourceOwnerBeforeActivation != application.bundleIdentifier {
@@ -594,6 +596,7 @@ final class AutoInputController: ObservableObject {
         let applicationIdentifier = hudApplicationIdentifier(for: focus)
         if hudTriggerPolicy.applicationDidActivate(applicationIdentifier) {
             hudFrequencyPolicy.applicationDidChange(to: applicationIdentifier)
+            hudPresenter.dismiss()
         }
         hudTriggerPolicy.editableFocusDidChange(to: focus.identity)
         showPendingHUDForCurrentFocus()

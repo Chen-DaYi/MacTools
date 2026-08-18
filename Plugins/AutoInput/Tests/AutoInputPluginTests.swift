@@ -847,6 +847,82 @@ final class AutoInputControllerTests: XCTestCase {
         ])
     }
 
+    func testReducedHUDDismissesPreviousPanelWhenNextFocusPrecedesSuppressedActivation() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.store.setInputHUDReminderIntervalSeconds(30)
+        fixture.store.setInputHUDAppSwitchReminderCount(4)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+        let dismissCountBeforeSwitch = fixture.hud.dismissCount
+
+        let nextApplication = AutoInputApplication(
+            bundleIdentifier: "com.example.next",
+            displayName: "Next",
+            bundleURL: nil,
+            processIdentifier: 202
+        )
+        now = 11
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 500, width: 300, height: 24),
+            applicationProcessIdentifier: nextApplication.processIdentifier
+        ))
+        fixture.applications.activate(nextApplication)
+
+        XCTAssertEqual(fixture.hud.presentations.count, 1)
+        XCTAssertEqual(fixture.hud.dismissCount, dismissCountBeforeSwitch + 1)
+    }
+
+    func testReducedHUDDismissesPreviousPanelAcrossAccessoryFocusTransitions() {
+        var now: TimeInterval = 10
+        let fixture = makeFixture(
+            currentSourceID: "en",
+            accessibilityGranted: true,
+            now: { now }
+        )
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(true)
+        fixture.store.setReducesFrequentHUDPresentations(true)
+        fixture.store.setInputHUDReminderIntervalSeconds(30)
+        fixture.store.setInputHUDAppSwitchReminderCount(4)
+        fixture.controller.start()
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 200, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+        let dismissCountBeforeAccessory = fixture.hud.dismissCount
+
+        now = 11
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 700, y: 500, width: 300, height: 24),
+            applicationProcessIdentifier: 909,
+            applicationBundleIdentifier: "com.raycast.macos",
+            isFromAccessoryApplication: true
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.count, 1)
+        XCTAssertEqual(fixture.hud.dismissCount, dismissCountBeforeAccessory + 1)
+
+        now = 12
+        fixture.focusObserver.focus(AutoInputEditableFocus(
+            frame: CGRect(x: 100, y: 400, width: 300, height: 24),
+            applicationProcessIdentifier: fixture.app.processIdentifier
+        ))
+
+        XCTAssertEqual(fixture.hud.presentations.count, 1)
+        XCTAssertEqual(fixture.hud.dismissCount, dismissCountBeforeAccessory + 2)
+    }
+
     func testQuieterModeOffOnTransitionStartsFreshSessionWithoutInterveningFocus() {
         var now: TimeInterval = 10
         let fixture = makeFixture(
@@ -1633,17 +1709,38 @@ final class AutoInputFocusObserverTests: XCTestCase {
 
         XCTAssertEqual(
             registry.focusCandidates(
+                focusedApplicationProcessIdentifier: 202,
                 preferredProcessIdentifier: 404
             ),
-            [404, 303, 202]
+            [202]
         )
         XCTAssertEqual(
-            registry.focusCandidates(preferredProcessIdentifier: nil),
-            [303, 404, 202]
+            registry.focusCandidates(
+                focusedApplicationProcessIdentifier: 404,
+                preferredProcessIdentifier: 202
+            ),
+            [404]
         )
         XCTAssertEqual(
-            registry.focusCandidates(preferredProcessIdentifier: 303),
-            [303, 404, 202]
+            registry.focusCandidates(
+                focusedApplicationProcessIdentifier: 999,
+                preferredProcessIdentifier: 404
+            ),
+            []
+        )
+        XCTAssertEqual(
+            registry.focusCandidates(
+                focusedApplicationProcessIdentifier: nil,
+                preferredProcessIdentifier: 404
+            ),
+            [202]
+        )
+        XCTAssertEqual(
+            registry.focusCandidates(
+                focusedApplicationProcessIdentifier: nil,
+                preferredProcessIdentifier: 202
+            ),
+            [202]
         )
 
         registry.terminateApplication(processIdentifier: 404)
@@ -1680,10 +1777,15 @@ final class AutoInputFocusObserverTests: XCTestCase {
         XCTAssertTrue(source.contains("NSWorkspace.didLaunchApplicationNotification"))
         XCTAssertTrue(source.contains("NSWorkspace.didTerminateApplicationNotification"))
         XCTAssertTrue(source.contains("preferredProcessIdentifier: processIdentifier"))
+        XCTAssertTrue(source.contains("kAXFocusedApplicationAttribute"))
+        XCTAssertEqual(
+            source.components(separatedBy: "AXUIElementCreateSystemWide").count - 1,
+            1
+        )
         XCTAssertFalse(source.contains("?.isActive == true"))
-        XCTAssertFalse(source.contains("AXUIElementCreateSystemWide"))
         XCTAssertFalse(source.contains("AXUIElementSetMessagingTimeout"))
         XCTAssertFalse(source.contains("Task.detached"))
+        XCTAssertFalse(source.contains("Timer.scheduledTimer"))
     }
 
     func testAccessibilityCoordinatesConvertToAppKitCoordinates() {

@@ -95,23 +95,24 @@ struct AutoInputApplicationObservationRegistry {
         }
     }
 
-    func focusCandidates(preferredProcessIdentifier: pid_t?) -> [pid_t] {
-        var candidates: [pid_t] = []
+    func focusCandidates(
+        focusedApplicationProcessIdentifier: pid_t?,
+        preferredProcessIdentifier: pid_t?
+    ) -> [pid_t] {
         let registeredProcessIdentifiers = accessoryProcessIdentifiers.union(
             frontmostProcessIdentifier.map { [$0] } ?? []
         )
+        if let focusedApplicationProcessIdentifier {
+            return registeredProcessIdentifiers.contains(focusedApplicationProcessIdentifier)
+                ? [focusedApplicationProcessIdentifier]
+                : []
+        }
+
         if let preferredProcessIdentifier,
-           registeredProcessIdentifiers.contains(preferredProcessIdentifier) {
-            candidates.append(preferredProcessIdentifier)
+           preferredProcessIdentifier == frontmostProcessIdentifier {
+            return [preferredProcessIdentifier]
         }
-        candidates.append(contentsOf: accessoryProcessIdentifiers.sorted().filter {
-            $0 != preferredProcessIdentifier
-        })
-        if let frontmostProcessIdentifier,
-           frontmostProcessIdentifier != preferredProcessIdentifier {
-            candidates.append(frontmostProcessIdentifier)
-        }
-        return candidates
+        return frontmostProcessIdentifier.map { [$0] } ?? []
     }
 }
 
@@ -195,6 +196,7 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
     private let workspace: NSWorkspace
     private let notificationCenter: NotificationCenter
+    private let focusedApplicationProcessIdentifier: () -> pid_t?
 
     private var activationObserver: NSObjectProtocol?
     private var launchObserver: NSObjectProtocol?
@@ -209,10 +211,14 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
 
     init(
         workspace: NSWorkspace = .shared,
-        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
+        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        focusedApplicationProcessIdentifier: @escaping () -> pid_t? = {
+            AccessibilityAutoInputFocusObserver.systemFocusedApplicationProcessIdentifier()
+        }
     ) {
         self.workspace = workspace
         self.notificationCenter = notificationCenter
+        self.focusedApplicationProcessIdentifier = focusedApplicationProcessIdentifier
     }
 
     func start() {
@@ -335,7 +341,9 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         }
         observe(application, isAccessory: false)
         if refreshAfterObservation {
-            refreshEffectiveFocusedElement()
+            refreshEffectiveFocusedElement(
+                focusedApplicationProcessIdentifier: application.processIdentifier
+            )
         }
     }
 
@@ -438,9 +446,15 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         }
     }
 
-    private func refreshEffectiveFocusedElement(preferredProcessIdentifier: pid_t? = nil) {
+    private func refreshEffectiveFocusedElement(
+        preferredProcessIdentifier: pid_t? = nil,
+        focusedApplicationProcessIdentifier focusedApplicationOverride: pid_t? = nil
+    ) {
         guard lifecycle.isRunning else { return }
+        let focusedApplicationProcessIdentifier = focusedApplicationOverride
+            ?? self.focusedApplicationProcessIdentifier()
         let candidates = observationRegistry.focusCandidates(
+            focusedApplicationProcessIdentifier: focusedApplicationProcessIdentifier,
             preferredProcessIdentifier: preferredProcessIdentifier
                 ?? focusedObservationProcessIdentifier
         )
@@ -462,6 +476,28 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         guard lifecycle.isRunning,
               applicationObservations[processIdentifier] != nil else { return }
         refreshEffectiveFocusedElement(preferredProcessIdentifier: processIdentifier)
+    }
+
+    private nonisolated static func systemFocusedApplicationProcessIdentifier() -> pid_t? {
+        let systemWideElement = AXUIElementCreateSystemWide()
+        var focusedApplicationValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            systemWideElement,
+            kAXFocusedApplicationAttribute as CFString,
+            &focusedApplicationValue
+        ) == .success,
+              let focusedApplicationValue,
+              CFGetTypeID(focusedApplicationValue) == AXUIElementGetTypeID()
+        else { return nil }
+
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(
+            focusedApplicationValue as! AXUIElement,
+            &processIdentifier
+        ) == .success,
+              processIdentifier > 0
+        else { return nil }
+        return processIdentifier
     }
 
     private func editableFocus(
