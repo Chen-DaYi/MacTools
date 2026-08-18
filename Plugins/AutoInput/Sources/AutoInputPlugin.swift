@@ -208,6 +208,10 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                         "settings.hud.interactive.title",
                         defaultValue: "交互式提示"
                     ),
+                    localization.string(
+                        "settings.hud.reducedFrequency.title",
+                        defaultValue: "减少频繁提示"
+                    ),
                     "HUD",
                 ],
                 systemImage: "text.cursor"

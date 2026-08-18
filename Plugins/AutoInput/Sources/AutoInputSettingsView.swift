@@ -96,9 +96,32 @@ struct AutoInputSettingsView: View {
                 PluginSettingsListDivider()
                 hudPositionPicker
                 PluginSettingsListDivider()
+                reducedHUDFrequencyToggle
+                PluginSettingsListDivider()
                 interactiveHUDToggle
             }
         }
+    }
+
+    private var reducedHUDFrequencyToggle: some View {
+        settingToggle(
+            icon: "timer",
+            title: localization.string(
+                "settings.hud.reducedFrequency.title",
+                defaultValue: "减少频繁提示"
+            ),
+            description: localization.string(
+                "settings.hud.reducedFrequency.description",
+                defaultValue: "同一应用内快速切换输入区域时，1 秒内只显示一次；切换应用或输入法时仍立即显示。"
+            ),
+            isOn: Binding(
+                get: { store.reducesFrequentHUDPresentations },
+                set: { value in
+                    store.setReducesFrequentHUDPresentations(value)
+                    onChange()
+                }
+            )
+        )
     }
 
     private var interactiveHUDToggle: some View {

@@ -8,6 +8,7 @@ protocol InputSourceHUDPresenting: AnyObject {
     func show(
         label: InputSourceHUDLabel,
         near focusedFrame: CGRect,
+        avoiding editableFrame: CGRect,
         configuration: AutoInputHUDConfiguration,
         presentationID: AutoInputHUDPresentationID,
         onActivate: (() -> Void)?
@@ -37,6 +38,7 @@ struct InputSourceHUDPresentationGate {
     private let duplicateInterval: TimeInterval
     private var lastLabel: InputSourceHUDLabel?
     private var lastFocusedFrame: CGRect?
+    private var lastEditableFrame: CGRect?
     private var lastConfiguration: AutoInputHUDConfiguration?
     private var lastPresentationID: AutoInputHUDPresentationID?
     private var lastPresentationTime: TimeInterval?
@@ -48,6 +50,7 @@ struct InputSourceHUDPresentationGate {
     mutating func shouldPresent(
         label: InputSourceHUDLabel,
         focusedFrame: CGRect,
+        editableFrame: CGRect,
         configuration: AutoInputHUDConfiguration,
         presentationID: AutoInputHUDPresentationID,
         at presentationTime: TimeInterval
@@ -55,6 +58,7 @@ struct InputSourceHUDPresentationGate {
         if presentationID == lastPresentationID,
            label == lastLabel,
            focusedFrame == lastFocusedFrame,
+           editableFrame == lastEditableFrame,
            configuration == lastConfiguration,
            let lastPresentationTime,
            presentationTime - lastPresentationTime < duplicateInterval {
@@ -62,6 +66,7 @@ struct InputSourceHUDPresentationGate {
         }
         lastLabel = label
         lastFocusedFrame = focusedFrame
+        lastEditableFrame = editableFrame
         lastConfiguration = configuration
         lastPresentationID = presentationID
         lastPresentationTime = presentationTime
@@ -71,6 +76,7 @@ struct InputSourceHUDPresentationGate {
     mutating func reset() {
         lastLabel = nil
         lastFocusedFrame = nil
+        lastEditableFrame = nil
         lastConfiguration = nil
         lastPresentationID = nil
         lastPresentationTime = nil
@@ -108,23 +114,26 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
     func show(
         label: InputSourceHUDLabel,
         near focusedFrame: CGRect,
+        avoiding editableFrame: CGRect,
         configuration: AutoInputHUDConfiguration,
         presentationID: AutoInputHUDPresentationID,
         onActivate: (() -> Void)? = nil
     ) {
         let normalizedName = label.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedName.isEmpty, !focusedFrame.isEmpty else {
+        guard !normalizedName.isEmpty, !focusedFrame.isEmpty, !editableFrame.isEmpty else {
             dismiss()
             return
         }
 
         let integralFocusedFrame = focusedFrame.integral
+        let integralEditableFrame = editableFrame.integral
         guard presentationGate.shouldPresent(
             label: InputSourceHUDLabel(
                 title: normalizedName,
                 modeIndicator: label.modeIndicator
             ),
             focusedFrame: integralFocusedFrame,
+            editableFrame: integralEditableFrame,
             configuration: configuration,
             presentationID: presentationID,
             at: now()
@@ -150,6 +159,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         )
         let frame = Self.panelFrame(
             focusedFrame: focusedFrame,
+            avoiding: editableFrame,
             panelSize: panelSize,
             visibleFrames: displayFrames,
             position: configuration.position
@@ -345,6 +355,7 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
 
     static func panelFrame(
         focusedFrame: CGRect,
+        avoiding editableFrame: CGRect? = nil,
         panelSize: CGSize,
         visibleFrames: [CGRect],
         position: AutoInputHUDPosition = .automatic
@@ -357,15 +368,15 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
         }
 
         if position == .screenCenter {
-            return CGRect(
+            return pixelAlignedPanelFrame(
                 x: visibleFrame.midX - panelSize.width / 2,
                 y: visibleFrame.midY - panelSize.height / 2,
-                width: panelSize.width,
-                height: panelSize.height
-            ).integral
+                size: panelSize
+            )
         }
 
         let gap: CGFloat = 8
+        let avoidanceFrame = editableFrame ?? focusedFrame
         let minX = visibleFrame.minX + displayMargin
         let maxX = visibleFrame.maxX - panelSize.width - displayMargin
         let preferredX = focusedFrame.midX - panelSize.width / 2
@@ -373,8 +384,8 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             ? min(max(preferredX, minX), maxX)
             : visibleFrame.midX - panelSize.width / 2
 
-        let belowY = focusedFrame.minY - panelSize.height - gap
-        let aboveY = focusedFrame.maxY + gap
+        let belowY = avoidanceFrame.minY - panelSize.height - gap
+        let aboveY = avoidanceFrame.maxY + gap
         let minY = visibleFrame.minY + displayMargin
         let maxY = visibleFrame.maxY - panelSize.height - displayMargin
         let belowFits = belowY >= minY
@@ -392,7 +403,20 @@ final class InputSourceHUDController: InputSourceHUDPresenting {
             ? min(max(preferredY, minY), maxY)
             : visibleFrame.midY - panelSize.height / 2
 
-        return CGRect(origin: CGPoint(x: x, y: y), size: panelSize).integral
+        return pixelAlignedPanelFrame(x: x, y: y, size: panelSize)
+    }
+
+    private static func pixelAlignedPanelFrame(
+        x: CGFloat,
+        y: CGFloat,
+        size: CGSize
+    ) -> CGRect {
+        CGRect(
+            x: x.rounded(),
+            y: y.rounded(),
+            width: size.width.rounded(.up),
+            height: size.height.rounded(.up)
+        )
     }
 
     private static func preferredVerticalOrigin(
