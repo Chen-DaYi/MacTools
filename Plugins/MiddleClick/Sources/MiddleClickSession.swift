@@ -230,6 +230,8 @@ private enum MiddleClickEventPoster {
 /// - raw active contacts are filtered from MultitouchSupport frames;
 /// - a tap is recognized only after all configured fingers release within time/movement limits;
 /// - `otherMouseDown/Up` is synthesized at the current cursor location;
+/// - the matching native trackpad click is rewritten in place so the original left click does not
+///   reach the application alongside the synthesized middle click;
 ///
 /// Recovery hooks match artginzburg/MiddleClick:
 /// - `didWakeNotification`: after wake, the multitouch driver may not be ready; rebuild listeners
@@ -259,6 +261,9 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     private var devices: [MTDevice] = []
     private var touchCallbackGate: MiddleClickFrameCallbackGate?
     private var touchCallbackContext: UnsafeMutableRawPointer?
+    private var eventTap: CFMachPort?
+    private var eventTapSource: CFRunLoopSource?
+    private var eventTapCallbackPointer: UnsafeMutableRawPointer?
     private var wakeObserver: NSObjectProtocol?
     private var ioNotificationPort: IONotificationPortRef?
     private var ioArrivalIterator: io_iterator_t = 0
@@ -324,6 +329,138 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
         callbackGate.deliver(frame)
     }
 
+    // MARK: - CGEvent Tap
+
+    private func startEventTap() {
+        if let eventTap, CFMachPortIsValid(eventTap), eventTapSource != nil {
+            return
+        }
+        stopEventTap()
+
+        let mask: CGEventMask =
+            (1 << CGEventType.leftMouseDown.rawValue)
+            | (1 << CGEventType.leftMouseUp.rawValue)
+            | (1 << CGEventType.rightMouseDown.rawValue)
+            | (1 << CGEventType.rightMouseUp.rawValue)
+
+        let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
+            guard let userInfo else { return Unmanaged.passUnretained(event) }
+
+            let context = Unmanaged<CallbackContext>
+                .fromOpaque(userInfo)
+                .takeUnretainedValue()
+            let passthrough = Unmanaged.passUnretained(event)
+
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                context.withOwner { session in
+                    session.tapPipeline.reset()
+                    DispatchQueue.main.async { [weak session] in
+                        session?.reenableEventTap()
+                    }
+                }
+                return passthrough
+            }
+
+            let nativeEvent: MiddleClickNativeMouseEvent?
+            switch type {
+            case .leftMouseDown:
+                nativeEvent = .down(.left)
+            case .leftMouseUp:
+                nativeEvent = .up(.left)
+            case .rightMouseDown:
+                nativeEvent = .down(.right)
+            case .rightMouseUp:
+                nativeEvent = .up(.right)
+            default:
+                nativeEvent = nil
+            }
+
+            guard let nativeEvent else { return passthrough }
+            let decision = context.withOwner { session in
+                session.tapPipeline.handleNativeMouseEvent(
+                    nativeEvent
+                )
+            } ?? .passThrough
+
+            switch decision {
+            case .passThrough:
+                return passthrough
+            case .rewriteAsMiddle:
+                let isDown = type == .leftMouseDown || type == .rightMouseDown
+                event.type = isDown ? .otherMouseDown : .otherMouseUp
+                event.setIntegerValueField(
+                    .mouseEventButtonNumber,
+                    value: Int64(CGMouseButton.center.rawValue)
+                )
+                return passthrough
+            }
+        }
+
+        let context = CallbackContext(owner: self)
+        let callbackPointer = Unmanaged.passRetained(context).toOpaque()
+        guard let tap = CGEvent.tapCreate(
+            tap: .cghidEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: tapCallback,
+            userInfo: callbackPointer
+        ) else {
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
+            logger.error("failed to create CGEvent tap; check Accessibility permission")
+            return
+        }
+
+        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            CFMachPortInvalidate(tap)
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
+            logger.error("failed to create CGEvent tap run-loop source")
+            return
+        }
+
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        eventTap = tap
+        eventTapSource = source
+        eventTapCallbackPointer = callbackPointer
+        logger.info("CGEvent tap started")
+    }
+
+    private func reenableEventTap() {
+        guard let eventTap, CFMachPortIsValid(eventTap) else { return }
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+    }
+
+    private func stopEventTap() {
+        callbackContext(from: eventTapCallbackPointer)?.invalidate()
+        guard let eventTap else {
+            eventTapSource = nil
+            releaseEventTapCallbackContext()
+            return
+        }
+
+        if CFMachPortIsValid(eventTap) {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+        }
+        if let eventTapSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), eventTapSource, .commonModes)
+        }
+        CFMachPortInvalidate(eventTap)
+        self.eventTap = nil
+        self.eventTapSource = nil
+        releaseEventTapCallbackContext()
+        logger.info("CGEvent tap stopped")
+    }
+
+    private func releaseEventTapCallbackContext() {
+        guard let eventTapCallbackPointer else { return }
+        callbackContext(from: eventTapCallbackPointer)?.invalidate()
+        Unmanaged<CallbackContext>.fromOpaque(eventTapCallbackPointer).release()
+        self.eventTapCallbackPointer = nil
+    }
+
     // MARK: - Multitouch Listeners
 
     private func startTouchListeners() {
@@ -379,6 +516,7 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
 
     func start() {
         startTouchListeners()
+        startEventTap()
         observeSystemWake()
         observeMultitouchDeviceArrival()
         observeDisplayReconfiguration()
@@ -390,6 +528,7 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
         removeDisplayReconfigurationObserver()
         removeMultitouchDeviceObserver()
         removeSystemWakeObserver()
+        stopEventTap()
         stopTouchListeners()
         logger.info("multitouch listener stopped")
     }
@@ -412,9 +551,11 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     /// Rebuilds fragile `MTDevice` listeners while keeping the session object.
     /// Used after wake, display reconfiguration, and trackpad re-enumeration.
     private func restartListeners() {
-        logger.info("rebuilding multitouch listeners")
+        logger.info("rebuilding multitouch and CGEvent tap listeners")
+        stopEventTap()
         stopTouchListeners()
         startTouchListeners()
+        startEventTap()
         logger.info("listener rebuild completed deviceCount=\(self.devices.count, privacy: .public)")
     }
 
