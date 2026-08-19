@@ -290,17 +290,17 @@
     "settings.mode.screenTools.description": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "يبقي الشاشة نشطة ويمنع القفل التلقائي لاستخدام Codex Computer Use والأتمتة ومشاركة الشاشة والتحكم عن بُعد." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Hält das Display aktiv und verhindert automatische Sperren für Codex Computer Use, Automatisierung, Bildschirmfreigabe und Fernsteuerung." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Keeps the display active and prevents automatic locking for Codex Computer Use, automation, screen sharing, and remote control." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Mantiene la pantalla activa e impide el bloqueo automático para Codex Computer Use, automatización, pantalla compartida y control remoto." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Maintient l’écran actif et empêche le verrouillage automatique pour Codex Computer Use, l’automatisation, le partage d’écran et le contrôle à distance." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "画面をオンに保ち、Codex Computer Use、オートメーション、画面共有、リモート操作中の自動ロックを防止します。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "화면을 켜진 상태로 유지하고 Codex Computer Use, 자동화, 화면 공유 및 원격 제어 중 자동 잠금을 방지합니다." } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Mantém a tela ativa e impede o bloqueio automático para Codex Computer Use, automação, compartilhamento de tela e controle remoto." } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Сохраняет экран активным и предотвращает автоблокировку для Codex Computer Use, автоматизации, демонстрации экрана и удалённого управления." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "保持屏幕可用并防止自动锁定，适用于 Codex Computer Use、桌面自动化、屏幕共享和远程控制。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "保持螢幕可用並防止自動鎖定，適用於 Codex Computer Use、桌面自動化、螢幕共享和遠端控制。" } }
+        "ar": { "stringUnit": { "state": "translated", "value": "يمنع إيقاف الشاشة والقفل التلقائي. استخدمه فقط عندما تحتاج Codex Computer Use أو الأتمتة أو مشاركة الشاشة أو التحكم عن بُعد إلى شاشة نشطة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Verhindert den Ruhezustand des Displays und die automatische Sperre. Nur verwenden, wenn Codex Computer Use, Automatisierung, Bildschirmfreigabe oder Fernsteuerung einen aktiven Bildschirm benötigen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Prevents display sleep and automatic locking. Use only while Codex Computer Use, automation, screen sharing, or remote control needs an active screen." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Evita el reposo de la pantalla y el bloqueo automático. Úsalo solo cuando Codex Computer Use, la automatización, la pantalla compartida o el control remoto necesiten una pantalla activa." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Empêche la mise en veille de l’écran et le verrouillage automatique. À utiliser seulement lorsque Codex Computer Use, l’automatisation, le partage d’écran ou le contrôle à distance nécessitent un écran actif." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "画面のスリープと自動ロックを防ぎます。Codex Computer Use、オートメーション、画面共有、リモート操作で画面を有効に保つ必要がある場合にのみ使用してください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "화면 잠자기와 자동 잠금을 방지합니다. Codex Computer Use, 자동화, 화면 공유 또는 원격 제어에 활성 화면이 필요한 경우에만 사용하세요." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Impede o repouso da tela e o bloqueio automático. Use apenas quando Codex Computer Use, automação, compartilhamento de tela ou controle remoto precisarem de uma tela ativa." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Предотвращает переход дисплея в режим сна и автоблокировку. Используйте только когда Codex Computer Use, автоматизации, демонстрации экрана или удалённому управлению нужен активный экран." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "阻止屏幕休眠和自动锁定。仅在 Codex Computer Use、桌面自动化、屏幕共享或远程控制需要保持屏幕可用时使用。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "阻止螢幕休眠和自動鎖定。僅在 Codex Computer Use、桌面自動化、螢幕共享或遠端控制需要保持螢幕可用時使用。" } }
       }
     },
     "settings.mode.screenTools.title": {
@@ -335,6 +335,22 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "行為" } }
       }
     },
+    "settings.mode.screenTools.warning.experimental": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الشاشة البرمجية مع الغطاء المغلق تجريبية وقد تتوقف بعد تحديثات macOS." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der Softwarebildschirm bei geschlossenem Deckel ist experimentell und kann nach macOS-Updates ausfallen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The closed-lid software display is experimental and may stop working after macOS updates." } },
+        "es": { "stringUnit": { "state": "translated", "value": "La pantalla por software con tapa cerrada es experimental y puede dejar de funcionar tras actualizar macOS." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "L’écran logiciel couvercle fermé est expérimental et peut cesser de fonctionner après une mise à jour de macOS." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ディスプレイを閉じた状態のソフトウェアディスプレイは試験的機能で、macOSのアップデート後に動作しない場合があります。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "덮개를 닫은 상태의 소프트웨어 디스플레이는 실험적 기능이며 macOS 업데이트 후 작동하지 않을 수 있습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "A tela de software com a tampa fechada é experimental e pode parar após atualizações do macOS." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Программный дисплей при закрытой крышке — экспериментальная функция и может перестать работать после обновления macOS." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "合盖软件显示器为实验性功能，macOS 更新后可能失效。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "闔蓋軟體顯示器為實驗性功能，macOS 更新後可能失效。" } }
+      }
+    },
     "settings.mode.screenTools.warning.manualLock": {
       "extractionState": "manual",
       "localizations": {
@@ -349,6 +365,22 @@
         "ru": { "stringUnit": { "state": "translated", "value": "Ручная блокировка продолжает работать; заблокированный сеанс не будет разблокирован." } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "手动锁定仍然有效；不会解锁已锁定的会话。" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "手動鎖定仍然有效；不會解鎖已鎖定的工作階段。" } }
+      }
+    },
+    "settings.mode.screenTools.warning.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لا تتضمن حزمة المكوّن الحالية مكوّن الشاشة البرمجية للغطاء المغلق." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dieses Plug-in-Paket enthält keine Softwarebildschirm-Komponente für den geschlossenen Deckel." } },
+        "en": { "stringUnit": { "state": "translated", "value": "This plugin package does not include the closed-lid software display component." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Este paquete del plugin no incluye el componente de pantalla por software para tapa cerrada." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ce paquet d’extension ne contient pas le composant d’écran logiciel pour couvercle fermé." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "現在のプラグインパッケージには、ディスプレイを閉じた状態のソフトウェアディスプレイ機能が含まれていません。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "현재 플러그인 패키지에 덮개를 닫은 상태의 소프트웨어 디스플레이 구성요소가 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Este pacote do plugin não inclui o componente de tela de software para tampa fechada." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "В этом пакете плагина нет компонента программного дисплея для закрытой крышки." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前插件包不包含合盖软件显示器组件。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "目前外掛套件不包含闔蓋軟體顯示器元件。" } }
       }
     },
     "settings.mode.screenTools.warning.ventilation": {

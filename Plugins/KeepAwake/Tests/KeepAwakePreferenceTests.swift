@@ -1219,12 +1219,30 @@ final class KeepAwakePreferenceTests: XCTestCase {
         }
 
         XCTAssertEqual(rows.map(\.id), [KeepAwakeSettingsSearchEntryID.behavior])
-        guard case let .picker(_, options, style) = rows[0].control,
-              case .menu = style
+        guard case let .choiceGroup(_, options) = rows[0].control
         else {
-            return XCTFail("Expected the long behavior choices to use a menu picker")
+            return XCTFail("Expected the behavior choices to use a visible choice group")
         }
         XCTAssertEqual(options.count, KeepAwakeBehavior.allCases.count)
+        XCTAssertEqual(options.map(\.descriptionTone), [.neutral, .neutral, .caution])
+    }
+
+    func testScreenToolsSettingsExposeCautionWarningsAsSeparateItems() throws {
+        let plugin = KeepAwakeSessionFactory()
+            .makePlugin(storage: KeepAwakeMemoryStorage())
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+
+        guard case let .form(sections) = try XCTUnwrap(plugin.settingsPage).body,
+              case let .rows(rows) = try XCTUnwrap(sections.first?.content)
+        else {
+            return XCTFail("Expected declarative settings rows")
+        }
+        let row = try XCTUnwrap(rows.first)
+
+        XCTAssertNil(row.help)
+        XCTAssertEqual(row.helpTone, .caution)
+        XCTAssertEqual(row.helpItems.count, 4)
+        XCTAssertTrue(row.helpItems.allSatisfy { !$0.contains("\n") })
     }
 
     func testFeaturePanelOnlyShowsDurationControl() throws {

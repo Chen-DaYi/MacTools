@@ -427,18 +427,21 @@ final class KeepAwakePlugin:
                         PluginSettingsRow(
                             id: KeepAwakeSettingsSearchEntryID.behavior,
                             title: localization.string("settings.mode.section", defaultValue: "行为"),
-                            description: settingsBehaviorDescription(preferences.behavior),
                             systemImage: "moon.zzz",
-                            help: settingsBehaviorHelp,
-                            control: .picker(
+                            helpItems: settingsBehaviorWarnings,
+                            helpTone: .caution,
+                            control: .choiceGroup(
                                 selectionID: preferences.behavior.rawValue,
                                 options: KeepAwakeBehavior.allCases.map {
                                     PluginSettingsOption(
                                         id: $0.rawValue,
-                                        title: settingsBehaviorTitle($0)
+                                        title: settingsBehaviorTitle($0),
+                                        description: settingsBehaviorDescription($0),
+                                        descriptionTone: $0 == .keepScreenBasedToolsWorking
+                                            ? .caution
+                                            : .neutral
                                     )
-                                },
-                                style: .menu
+                                }
                             )
                         )
                     ]
@@ -782,8 +785,8 @@ final class KeepAwakePlugin:
         }
     }
 
-    private var settingsBehaviorHelp: String? {
-        guard preferences.behavior == .keepScreenBasedToolsWorking else { return nil }
+    private var settingsBehaviorWarnings: [String] {
+        guard preferences.behavior == .keepScreenBasedToolsWorking else { return [] }
 
         var messages: [String] = []
         if powerSourceState.isPortableMac {
@@ -808,7 +811,7 @@ final class KeepAwakePlugin:
             "settings.mode.screenTools.warning.manualLock",
             defaultValue: "手动锁定仍然有效；不会解锁已锁定的会话。"
         ))
-        return messages.joined(separator: "\n")
+        return messages
     }
 
     private func applyKeepAwakeConfiguration() {

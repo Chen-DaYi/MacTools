@@ -3010,6 +3010,40 @@ private struct PluginSettingsRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            rowContent
+
+            if let error = row.error {
+                Text(error)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !row.helpItems.isEmpty {
+                PluginSettingsHelpList(
+                    items: row.helpItems,
+                    tone: row.helpTone
+                )
+            } else if let help = row.help {
+                Text(help)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(statusColor(for: row.helpTone))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .disabled(!row.isEnabled)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var rowContent: some View {
+        if case let .choiceGroup(selectionID, options) = row.control {
+            PluginSettingsChoiceGroupControl(
+                selectionID: selectionID,
+                options: options,
+                onSelect: {
+                    onAction(.setSelection(controlID: row.id, optionID: $0))
+                }
+            )
+        } else {
             HStack(alignment: .center, spacing: 0) {
                 HStack(
                     alignment: .center,
@@ -3042,21 +3076,7 @@ private struct PluginSettingsRowView: View {
                 control
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let error = row.error {
-                Text(error)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if let help = row.help {
-                Text(help)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
-        .disabled(!row.isEnabled)
-        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
@@ -3081,6 +3101,8 @@ private struct PluginSettingsRowView: View {
                     onAction(.setSelection(controlID: row.id, optionID: $0))
                 }
             )
+        case .choiceGroup:
+            EmptyView()
         case let .slider(value, range, step, valueFormat):
             PluginSettingsSliderControl(
                 controlID: row.id,
@@ -3131,6 +3153,28 @@ private struct PluginSettingsRowView: View {
     }
 }
 
+private struct PluginSettingsHelpList: View {
+    let items: [String]
+    let tone: PluginStatusTone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("•")
+                        .accessibilityHidden(true)
+
+                    Text(item)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .font(PluginSettingsTheme.Typography.rowDescription)
+        .foregroundStyle(statusColor(for: tone))
+        .accessibilityElement(children: .contain)
+    }
+}
+
 private struct PluginSettingsPickerControl: View {
     let selectionID: String
     let options: [PluginSettingsOption]
@@ -3145,8 +3189,6 @@ private struct PluginSettingsPickerControl: View {
             picker.pickerStyle(.menu)
         case .segmented:
             picker.pickerStyle(.segmented)
-        case .radioGroup:
-            picker.pickerStyle(.radioGroup)
         }
     }
 
@@ -3166,6 +3208,103 @@ private struct PluginSettingsPickerControl: View {
         .frame(minWidth: 120, idealWidth: 180, maxWidth: 240)
     }
 }
+
+private struct PluginSettingsChoiceGroupControl: View {
+    let selectionID: String
+    let options: [PluginSettingsOption]
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            ViewThatFits(in: .horizontal) {
+                horizontalChoices
+                verticalChoices
+            }
+
+            if let description = selectedOption?.description {
+                Text(description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(statusColor(for: selectedOption?.descriptionTone ?? .neutral))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var horizontalChoices: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            ForEach(options) { option in
+                choiceButton(option: option)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var verticalChoices: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            ForEach(options) { option in
+                choiceButton(option: option)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var selectedOption: PluginSettingsOption? {
+        options.first { $0.id == selectionID }
+    }
+
+    @ViewBuilder
+    private func choiceButton(option: PluginSettingsOption) -> some View {
+        let isSelected = selectionID == option.id
+        Button {
+            onSelect(option.id)
+        } label: {
+            HStack(spacing: 6) {
+                Text(option.title)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity)
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.semibold))
+                        .accessibilityHidden(true)
+                }
+            }
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .frame(minWidth: 132, maxWidth: .infinity, minHeight: PluginSettingsTheme.Size.controlHeight + 8)
+            .padding(.horizontal, PluginSettingsTheme.Spacing.controlCluster)
+            .background {
+                RoundedRectangle(
+                    cornerRadius: PluginSettingsTheme.Radius.control,
+                    style: .continuous
+                )
+                .fill(
+                    isSelected
+                        ? Color.accentColor
+                        : PluginSettingsTheme.Palette.recessedControlBackground
+                )
+            }
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: PluginSettingsTheme.Radius.control,
+                    style: .continuous
+                )
+                .stroke(
+                    isSelected ? Color.accentColor : PluginSettingsTheme.Palette.separator,
+                    lineWidth: PluginSettingsTheme.Stroke.hairline
+                )
+            }
+            .contentShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 
 private struct PluginSettingsSliderControl: View {
     let controlID: String
