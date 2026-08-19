@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import MacToolsPluginKit
@@ -6,6 +7,7 @@ struct AppleShortcutsSnapshot: Equatable, Sendable {
     var discovery: AppleShortcutsDiscovery = .empty
     var isRefreshing = false
     var lastSuccessfulRefresh: Date?
+    var lastSettingsRefresh: Date?
     var errorMessage: String?
     var operationMessage: String?
 
@@ -31,9 +33,25 @@ final class AppleShortcutsController: ObservableObject {
         let task: Task<Void, Never>
     }
 
+    private struct ShortcutLibraryIdentity: Equatable {
+        let id: UUID
+        let name: String
+    }
+
+    private enum RefreshScope: Equatable {
+        case library
+        case settings(visibilityGeneration: Int)
+
+        var settingsVisibilityGeneration: Int? {
+            guard case let .settings(visibilityGeneration) = self else { return nil }
+            return visibilityGeneration
+        }
+    }
+
     static let freshnessInterval: TimeInterval = 60
     static let maximumConcurrentRuns = 4
     static let maximumConcurrentMembershipQueries = 4
+    static let maximumConcurrentIconLoads = 2
 
     @Published private(set) var snapshot = AppleShortcutsSnapshot()
 
@@ -44,15 +62,23 @@ final class AppleShortcutsController: ObservableObject {
     private let visualMetadataLoader: any AppleShortcutsVisualMetadataLoading
     private let localization: PluginLocalization
     private let now: () -> Date
-    private let automaticRefreshInterval: Duration
     private var refreshTask: Task<Void, Never>?
-    private var automaticRefreshTask: Task<Void, Never>?
     private var refreshToken: UUID?
+    private var refreshScope: RefreshScope?
+    private var applicationActivationObserver: NSObjectProtocol?
+    private var isSettingsVisible = false
+    private var settingsVisibilityGeneration = 0
+    private var pendingSettingsRefresh = false
+    private var libraryRevision = 0
+    private var settingsLibraryRevision: Int?
+    private var queuedIconIDs: [UUID] = []
+    private var queuedIconIDSet: Set<UUID> = []
+    private var loadedIconIDs: Set<UUID> = []
+    private var iconAccessOrder: [UUID] = []
+    private var activeIconTasks: [UUID: Task<Void, Never>] = [:]
     private var activeRuns: [UUID: ActiveRun] = [:]
     private var activeViews: [UUID: ActiveView] = [:]
     private var isActive = true
-    private var isAutomaticRefreshEnabled = false
-    private var visualMetadataIsUnavailable = false
     private var lifecycleGeneration = 0
 
     init(
@@ -60,15 +86,13 @@ final class AppleShortcutsController: ObservableObject {
         runner: any AppleShortcutsCommandRunning,
         visualMetadataLoader: any AppleShortcutsVisualMetadataLoading = AppleShortcutsVisualMetadataLoader(),
         localization: PluginLocalization,
-        now: @escaping () -> Date = { .now },
-        automaticRefreshInterval: Duration = .seconds(60)
+        now: @escaping () -> Date = { .now }
     ) {
         self.executionStore = executionStore
         self.runner = runner
         self.visualMetadataLoader = visualMetadataLoader
         self.localization = localization
         self.now = now
-        self.automaticRefreshInterval = automaticRefreshInterval
     }
 
     var isExecutableAvailable: Bool {
@@ -78,43 +102,106 @@ final class AppleShortcutsController: ObservableObject {
     func activate() {
         lifecycleGeneration += 1
         isActive = true
-        isAutomaticRefreshEnabled = true
-        updateAutomaticRefreshScheduling()
+        installApplicationActivationObserverIfNeeded()
         refreshIfNeeded()
     }
 
     func refreshIfNeeded() {
-        guard let refreshed = snapshot.lastSuccessfulRefresh,
-              now().timeIntervalSince(refreshed) < Self.freshnessInterval else {
-            refresh(force: false)
-            return
-        }
+        refresh(force: false)
     }
 
+    /// Refreshes shortcut names and identifiers without contacting Shortcuts.app for folders or visuals.
     func refresh(force: Bool = true) {
+        startLibraryRefresh(
+            force: force,
+            refreshFolderMemberships: false,
+            refreshVisualMetadata: false,
+            scope: .library
+        )
+    }
+
+    /// Requests folders and visual metadata only while the Apple Shortcuts settings workspace is visible.
+    func refreshForSettings(force: Bool = true) {
+        guard refreshTask == nil else {
+            pendingSettingsRefresh = true
+            return
+        }
+        guard force || !isSettingsFresh else { return }
+        startLibraryRefresh(
+            force: true,
+            refreshFolderMemberships: true,
+            refreshVisualMetadata: true,
+            scope: .settings(visibilityGeneration: settingsVisibilityGeneration)
+        )
+    }
+
+    func setSettingsVisible(_ visible: Bool) {
+        settingsVisibilityGeneration &+= 1
+        isSettingsVisible = visible
+        guard visible else {
+            pendingSettingsRefresh = false
+            cancelSettingsRefresh()
+            cancelIconLoads()
+            return
+        }
+        refreshForSettings(force: false)
+    }
+
+    private var isLibraryFresh: Bool {
+        guard let refreshed = snapshot.lastSuccessfulRefresh else { return false }
+        return now().timeIntervalSince(refreshed) < Self.freshnessInterval
+    }
+
+    private var isSettingsFresh: Bool {
+        guard let refreshed = snapshot.lastSettingsRefresh else { return false }
+        return settingsLibraryRevision == libraryRevision
+            && now().timeIntervalSince(refreshed) < Self.freshnessInterval
+    }
+
+    private func startLibraryRefresh(
+        force: Bool,
+        refreshFolderMemberships: Bool,
+        refreshVisualMetadata: Bool,
+        scope: RefreshScope
+    ) {
         guard refreshTask == nil else { return }
-        if !force,
-           let refreshed = snapshot.lastSuccessfulRefresh,
-           now().timeIntervalSince(refreshed) < Self.freshnessInterval { return }
+        guard force || !isLibraryFresh else { return }
+        if case .settings = scope {
+            cancelIconLoads()
+            loadedIconIDs.removeAll()
+            iconAccessOrder.removeAll()
+        }
         let token = UUID()
         let generation = lifecycleGeneration
         refreshToken = token
+        refreshScope = scope
         refreshTask = Task { @MainActor [weak self] in
             await self?.performRefresh(
                 expectedGeneration: generation,
                 token: token,
-                refreshVisualMetadata: force || !(self?.visualMetadataIsUnavailable ?? true)
+                refreshFolderMemberships: refreshFolderMemberships,
+                refreshVisualMetadata: refreshVisualMetadata,
+                expectedSettingsVisibilityGeneration: scope.settingsVisibilityGeneration
             )
             guard self?.refreshToken == token else { return }
+            let shouldRefreshSettings = self?.isSettingsVisible == true
+                && self?.pendingSettingsRefresh == true
+            self?.pendingSettingsRefresh = false
             self?.refreshTask = nil
             self?.refreshToken = nil
+            self?.refreshScope = nil
+            if shouldRefreshSettings {
+                self?.refreshForSettings(force: false)
+            }
         }
     }
 
     func performRefresh(
         expectedGeneration: Int? = nil,
         token: UUID? = nil,
-        refreshVisualMetadata: Bool = true
+        refreshFolderMemberships: Bool = true,
+        refreshVisualMetadata: Bool = true,
+        expectedSettingsVisibilityGeneration: Int? = nil
     ) async {
         let generation = expectedGeneration ?? lifecycleGeneration
         guard isActive else { return }
@@ -128,49 +215,76 @@ final class AppleShortcutsController: ObservableObject {
         }
 
         do {
-            async let shortcutsRequest = runner.listShortcuts()
-            async let foldersRequest = runner.listFolders()
-            async let visualMetadataRequest = refreshVisualMetadata
-                ? visualMetadataLoader.loadVisualMetadata()
-                : .success([UUID: AppleShortcutVisualMetadata]())
-            let (shortcuts, folders, visualMetadataResult) = try await (
-                shortcutsRequest,
-                foldersRequest,
-                visualMetadataRequest
-            )
+            let shortcuts = try await runner.listShortcuts()
             try Task.checkCancellation()
-            var memberships = try await loadMemberships(for: folders)
-            try Task.checkCancellation()
-            guard isActive, lifecycleGeneration == generation else { return }
-
-            for folderID in memberships.failedFolderIDs {
-                memberships.memberships[folderID] = snapshot.discovery.folderMemberships[folderID] ?? []
-            }
+            guard isCurrent(
+                lifecycleGeneration: generation,
+                settingsVisibilityGeneration: expectedSettingsVisibilityGeneration
+            ) else { return }
 
             let previousVisualMetadata = Dictionary(
                 uniqueKeysWithValues: snapshot.discovery.shortcuts.compactMap { item in
                     item.visualMetadata.map { (item.id, $0) }
                 }
             )
+            let previousFolderIDs = Dictionary(
+                uniqueKeysWithValues: snapshot.discovery.shortcuts.map { ($0.id, $0.folderIDs) }
+            )
+
+            let folders: [AppleShortcutFolder]
+            var memberships: MembershipResult
             let visualMetadata: [UUID: AppleShortcutVisualMetadata]
-            switch visualMetadataResult {
-            case let .success(metadata):
-                visualMetadataIsUnavailable = false
-                visualMetadata = metadata
-            case .failure:
-                visualMetadataIsUnavailable = true
+            if refreshFolderMemberships {
+                let loadedFolders = try await runner.listFolders()
+                try Task.checkCancellation()
+                memberships = try await loadMemberships(for: loadedFolders)
+                try Task.checkCancellation()
+                guard isCurrent(
+                    lifecycleGeneration: generation,
+                    settingsVisibilityGeneration: expectedSettingsVisibilityGeneration
+                ) else { return }
+
+                let visualMetadataResult = refreshVisualMetadata
+                    ? await visualMetadataLoader.loadVisualMetadata()
+                    : .success([UUID: AppleShortcutVisualMetadata]())
+                guard isCurrent(
+                    lifecycleGeneration: generation,
+                    settingsVisibilityGeneration: expectedSettingsVisibilityGeneration
+                ) else { return }
+
+                for folderID in memberships.failedFolderIDs {
+                    memberships.memberships[folderID] = snapshot.discovery.folderMemberships[folderID] ?? []
+                }
+
+                folders = loadedFolders
+                switch visualMetadataResult {
+                case let .success(metadata):
+                    visualMetadata = metadata
+                case .failure:
+                    visualMetadata = [:]
+                }
+            } else {
+                folders = snapshot.discovery.folders
+                memberships = MembershipResult(
+                    memberships: snapshot.discovery.folderMemberships,
+                    failedFolderIDs: snapshot.discovery.failedFolderIDs
+                )
                 visualMetadata = [:]
             }
+
             var itemsByID = Dictionary(uniqueKeysWithValues: shortcuts.map { item in
                 (item.id, AppleShortcutItem(
                     id: item.id,
                     name: item.name,
+                    folderIDs: refreshFolderMemberships ? [] : previousFolderIDs[item.id] ?? [],
                     visualMetadata: visualMetadata[item.id] ?? previousVisualMetadata[item.id]
                 ))
             })
-            for (folderID, memberIDs) in memberships.memberships {
-                for memberID in memberIDs {
-                    itemsByID[memberID]?.folderIDs.insert(folderID)
+            if refreshFolderMemberships {
+                for (folderID, memberIDs) in memberships.memberships {
+                    for memberID in memberIDs {
+                        itemsByID[memberID]?.folderIDs.insert(folderID)
+                    }
                 }
             }
             let discovery = AppleShortcutsDiscovery(
@@ -180,8 +294,15 @@ final class AppleShortcutsController: ObservableObject {
                 failedFolderIDs: memberships.failedFolderIDs
             )
 
+            if libraryIdentity(of: snapshot.discovery.shortcuts) != libraryIdentity(of: discovery.shortcuts) {
+                libraryRevision &+= 1
+            }
             snapshot.discovery = discovery
             snapshot.lastSuccessfulRefresh = now()
+            if refreshFolderMemberships {
+                snapshot.lastSettingsRefresh = now()
+                settingsLibraryRevision = libraryRevision
+            }
             snapshot.errorMessage = memberships.failedFolderIDs.isEmpty ? nil : localization.string(
                 "refresh.folder.partial",
                 defaultValue: "部分文件夹无法刷新；已保留上次的成员。"
@@ -190,7 +311,10 @@ final class AppleShortcutsController: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
-            guard isActive, lifecycleGeneration == generation else { return }
+            guard isCurrent(
+                lifecycleGeneration: generation,
+                settingsVisibilityGeneration: expectedSettingsVisibilityGeneration
+            ) else { return }
             snapshot.errorMessage = message(for: error, fallback: localization.string(
                 "refresh.failed",
                 defaultValue: "无法刷新快捷指令；已保留上次结果。"
@@ -306,15 +430,35 @@ final class AppleShortcutsController: ObservableObject {
         snapshot.errorMessage = storeMessage(for: error)
     }
 
+    func requestIcon(for shortcutID: UUID) {
+        guard isSettingsVisible,
+              let shortcut = snapshot.discovery.shortcuts.first(where: { $0.id == shortcutID }),
+              shortcut.visualMetadata != nil
+        else { return }
+        if shortcut.visualMetadata?.iconTIFFData != nil {
+            markIconAsRecentlyUsed(shortcutID)
+            return
+        }
+        guard
+              !loadedIconIDs.contains(shortcutID),
+              activeIconTasks[shortcutID] == nil,
+              queuedIconIDSet.insert(shortcutID).inserted
+        else { return }
+        queuedIconIDs.append(shortcutID)
+        startQueuedIconLoads()
+    }
+
     func deactivate() {
         lifecycleGeneration += 1
         isActive = false
-        isAutomaticRefreshEnabled = false
-        automaticRefreshTask?.cancel()
-        automaticRefreshTask = nil
+        removeApplicationActivationObserver()
         refreshTask?.cancel()
         refreshTask = nil
         refreshToken = nil
+        refreshScope = nil
+        isSettingsVisible = false
+        pendingSettingsRefresh = false
+        cancelIconLoads()
         snapshot.isRefreshing = false
         snapshot.errorMessage = nil
         snapshot.operationMessage = nil
@@ -328,26 +472,137 @@ final class AppleShortcutsController: ObservableObject {
         onStateChange?()
     }
 
-    private func updateAutomaticRefreshScheduling() {
-        guard isAutomaticRefreshEnabled, isActive else {
-            automaticRefreshTask?.cancel()
-            automaticRefreshTask = nil
-            return
-        }
-        guard automaticRefreshTask == nil else { return }
-
-        let interval = automaticRefreshInterval
-        automaticRefreshTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: interval)
-                } catch {
-                    return
-                }
-                guard let self, self.isActive else { return }
-                self.refresh(force: true)
+    private func installApplicationActivationObserverIfNeeded() {
+        guard applicationActivationObserver == nil else { return }
+        applicationActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshIfNeeded()
             }
         }
+    }
+
+    private func removeApplicationActivationObserver() {
+        guard let applicationActivationObserver else { return }
+        NotificationCenter.default.removeObserver(applicationActivationObserver)
+        self.applicationActivationObserver = nil
+    }
+
+    private func cancelSettingsRefresh() {
+        guard case .settings = refreshScope else { return }
+        refreshTask?.cancel()
+        refreshTask = nil
+        refreshToken = nil
+        refreshScope = nil
+        snapshot.isRefreshing = false
+    }
+
+    private func cancelIconLoads() {
+        let iconTasks = activeIconTasks.values
+        activeIconTasks.removeAll()
+        iconTasks.forEach { $0.cancel() }
+        queuedIconIDs.removeAll()
+        queuedIconIDSet.removeAll()
+    }
+
+    private func startQueuedIconLoads() {
+        while activeIconTasks.count < Self.maximumConcurrentIconLoads,
+              let shortcutID = dequeueIconID()
+        {
+            let visibilityGeneration = settingsVisibilityGeneration
+            let task = Task { @MainActor [weak self] in
+                guard let self else { return }
+                let result = await self.visualMetadataLoader.loadIcon(for: shortcutID)
+                self.applyIconLoadResult(
+                    result,
+                    for: shortcutID,
+                    visibilityGeneration: visibilityGeneration
+                )
+            }
+            activeIconTasks[shortcutID] = task
+        }
+    }
+
+    private func dequeueIconID() -> UUID? {
+        while !queuedIconIDs.isEmpty {
+            let shortcutID = queuedIconIDs.removeFirst()
+            queuedIconIDSet.remove(shortcutID)
+            guard snapshot.discovery.shortcuts.contains(where: { $0.id == shortcutID }),
+                  !loadedIconIDs.contains(shortcutID),
+                  activeIconTasks[shortcutID] == nil
+            else { continue }
+            return shortcutID
+        }
+        return nil
+    }
+
+    private func applyIconLoadResult(
+        _ result: Result<Data?, AppleShortcutsVisualMetadataError>,
+        for shortcutID: UUID,
+        visibilityGeneration: Int
+    ) {
+        activeIconTasks.removeValue(forKey: shortcutID)
+        defer { startQueuedIconLoads() }
+        guard isSettingsVisible,
+              settingsVisibilityGeneration == visibilityGeneration,
+              !Task.isCancelled
+        else { return }
+        loadedIconIDs.insert(shortcutID)
+        guard case let .success(iconData) = result,
+              let iconData,
+              retainIconData(iconData, for: shortcutID)
+        else { return }
+        guard let index = snapshot.discovery.shortcuts.firstIndex(where: { $0.id == shortcutID }),
+              let metadata = snapshot.discovery.shortcuts[index].visualMetadata
+        else { return }
+        snapshot.discovery.shortcuts[index].visualMetadata = AppleShortcutVisualMetadata(
+            color: metadata.color,
+            iconTIFFData: iconData
+        )
+        onStateChange?()
+    }
+
+    private func retainIconData(_ iconData: Data, for shortcutID: UUID) -> Bool {
+        guard iconData.count <= AppleShortcutsVisualMetadataLoader.maximumIconByteCount else {
+            return false
+        }
+        while retainedIconByteCount + iconData.count
+            > AppleShortcutsVisualMetadataLoader.maximumTotalIconByteCount,
+            let leastRecentlyUsedID = iconAccessOrder.first
+        {
+            removeRetainedIcon(for: leastRecentlyUsedID)
+        }
+        guard retainedIconByteCount + iconData.count
+            <= AppleShortcutsVisualMetadataLoader.maximumTotalIconByteCount
+        else { return false }
+        markIconAsRecentlyUsed(shortcutID)
+        return true
+    }
+
+    private var retainedIconByteCount: Int {
+        snapshot.discovery.shortcuts.reduce(into: 0) { total, item in
+            total += item.visualMetadata?.iconTIFFData?.count ?? 0
+        }
+    }
+
+    private func markIconAsRecentlyUsed(_ shortcutID: UUID) {
+        iconAccessOrder.removeAll { $0 == shortcutID }
+        iconAccessOrder.append(shortcutID)
+    }
+
+    private func removeRetainedIcon(for shortcutID: UUID) {
+        iconAccessOrder.removeAll { $0 == shortcutID }
+        loadedIconIDs.remove(shortcutID)
+        guard let index = snapshot.discovery.shortcuts.firstIndex(where: { $0.id == shortcutID }),
+              let metadata = snapshot.discovery.shortcuts[index].visualMetadata
+        else { return }
+        snapshot.discovery.shortcuts[index].visualMetadata = AppleShortcutVisualMetadata(
+            color: metadata.color,
+            iconTIFFData: nil
+        )
     }
 
     private func execute(
@@ -466,6 +721,25 @@ final class AppleShortcutsController: ObservableObject {
 
     private func isCurrent(_ generation: Int) -> Bool {
         isActive && lifecycleGeneration == generation
+    }
+
+    private func isCurrent(
+        lifecycleGeneration: Int,
+        settingsVisibilityGeneration: Int?
+    ) -> Bool {
+        guard isActive, self.lifecycleGeneration == lifecycleGeneration else { return false }
+        guard let settingsVisibilityGeneration else { return true }
+        return isSettingsVisible && self.settingsVisibilityGeneration == settingsVisibilityGeneration
+    }
+
+    private func libraryIdentity(
+        of shortcuts: [AppleShortcutItem]
+    ) -> [ShortcutLibraryIdentity] {
+        shortcuts
+            .map { ShortcutLibraryIdentity(id: $0.id, name: $0.name) }
+            .sorted { lhs, rhs in
+                lhs.id == rhs.id ? lhs.name < rhs.name : lhs.id.uuidString < rhs.id.uuidString
+            }
     }
 
     private struct MembershipResult: Sendable {

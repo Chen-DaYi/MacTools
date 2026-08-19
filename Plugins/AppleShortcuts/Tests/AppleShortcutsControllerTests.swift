@@ -118,26 +118,193 @@ final class AppleShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(callCount, 2)
     }
 
-    func testDiscoveryRefreshesPeriodicallyOnlyWhileActive() async throws {
+    func testActivationTriggersOnlyOneInitialRefresh() async throws {
         let runner = AppleShortcutsRunnerStub()
-        let controller = makeController(
-            runner: runner,
-            automaticRefreshInterval: .milliseconds(20)
-        )
+        let controller = makeController(runner: runner)
 
         controller.activate()
         for _ in 0 ..< 100 {
-            if await runner.observedListCallCount() >= 2 { break }
+            if await runner.observedListCallCount() == 1 { break }
             try await Task.sleep(for: .milliseconds(5))
         }
-        let periodicCallCount = await runner.observedListCallCount()
-        XCTAssertGreaterThanOrEqual(periodicCallCount, 2)
+        let initialCallCount = await runner.observedListCallCount()
+        XCTAssertEqual(initialCallCount, 1)
 
-        controller.deactivate()
-        let callCountAfterDeactivation = await runner.observedListCallCount()
         try await Task.sleep(for: .milliseconds(60))
         let finalCallCount = await runner.observedListCallCount()
-        XCTAssertEqual(finalCallCount, callCountAfterDeactivation)
+        XCTAssertEqual(finalCallCount, 1)
+        controller.deactivate()
+    }
+
+    func testBackgroundRefreshOnlyLoadsShortcutNamesAndIdentifiers() async throws {
+        let folder = AppleShortcutFolder(id: UUID(), name: "Folder")
+        let item = AppleShortcutItem(id: UUID(), name: "Background")
+        let runner = AppleShortcutsRunnerStub(
+            shortcuts: [item],
+            folders: [folder],
+            memberships: [folder.id: .success([item])]
+        )
+        let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(result: .success([:]))
+        let controller = makeController(
+            runner: runner,
+            visualMetadataLoader: visualMetadataLoader
+        )
+
+        controller.refresh(force: true)
+        for _ in 0 ..< 100 {
+            if await runner.observedListCallCount() == 1 { break }
+            await Task.yield()
+        }
+
+        let shortcutListCallCount = await runner.observedListCallCount()
+        let folderListCallCount = await runner.observedFolderListCallCount()
+        let membershipCallIDs = await runner.observedMembershipCallIDs()
+        let visualMetadataCallCount = await visualMetadataLoader.observedCallCount()
+        XCTAssertEqual(shortcutListCallCount, 1)
+        XCTAssertEqual(folderListCallCount, 0)
+        XCTAssertTrue(membershipCallIDs.isEmpty)
+        XCTAssertEqual(visualMetadataCallCount, 0)
+        XCTAssertEqual(controller.snapshot.discovery.shortcuts, [item])
+    }
+
+    func testSettingsRefreshLoadsFoldersAndVisualMetadataAfterBackgroundRefresh() async throws {
+        let item = AppleShortcutItem(id: UUID(), name: "Visual")
+        let metadata = AppleShortcutVisualMetadata(
+            color: .init(red: 0.25, green: 0.5, blue: 0.75),
+            iconTIFFData: Data([0x01])
+        )
+        let runner = AppleShortcutsRunnerStub(shortcuts: [item])
+        let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(
+            result: .success([item.id: metadata])
+        )
+        let controller = makeController(
+            runner: runner,
+            visualMetadataLoader: visualMetadataLoader
+        )
+
+        controller.refresh(force: true)
+        for _ in 0 ..< 100 {
+            if await runner.observedListCallCount() == 1 { break }
+            await Task.yield()
+        }
+        controller.setSettingsVisible(true)
+        for _ in 0 ..< 100 {
+            if controller.snapshot.discovery.shortcuts.first?.visualMetadata == metadata { break }
+            await Task.yield()
+        }
+
+        let shortcutListCallCount = await runner.observedListCallCount()
+        let folderListCallCount = await runner.observedFolderListCallCount()
+        let visualMetadataCallCount = await visualMetadataLoader.observedCallCount()
+        XCTAssertEqual(shortcutListCallCount, 2)
+        XCTAssertEqual(folderListCallCount, 1)
+        XCTAssertEqual(visualMetadataCallCount, 1)
+        XCTAssertEqual(controller.snapshot.discovery.shortcuts.first?.visualMetadata, metadata)
+    }
+
+    func testLightRefreshInvalidatesSettingsFreshnessWhenLibraryChanges() async throws {
+        var currentDate = Date(timeIntervalSince1970: 1_000)
+        let first = AppleShortcutItem(id: UUID(), name: "First")
+        let second = AppleShortcutItem(id: UUID(), name: "Second")
+        let metadata = AppleShortcutVisualMetadata(
+            color: .init(red: 0.25, green: 0.5, blue: 0.75),
+            iconTIFFData: nil
+        )
+        let runner = AppleShortcutsRunnerStub(shortcuts: [first])
+        let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(
+            result: .success([first.id: metadata, second.id: metadata])
+        )
+        let controller = makeController(
+            runner: runner,
+            visualMetadataLoader: visualMetadataLoader,
+            now: { currentDate }
+        )
+
+        controller.setSettingsVisible(true)
+        for _ in 0 ..< 100 {
+            if controller.snapshot.discovery.shortcuts.first?.visualMetadata == metadata { break }
+            await Task.yield()
+        }
+        controller.setSettingsVisible(false)
+        await runner.setShortcuts([first, second])
+        currentDate.addTimeInterval(10)
+        controller.refresh(force: true)
+        for _ in 0 ..< 100 {
+            if await runner.observedListCallCount() == 2 { break }
+            await Task.yield()
+        }
+
+        controller.setSettingsVisible(true)
+        for _ in 0 ..< 100 {
+            if controller.snapshot.discovery.shortcuts.count == 2,
+               controller.snapshot.discovery.shortcuts.last?.visualMetadata == metadata { break }
+            await Task.yield()
+        }
+
+        let visualMetadataCallCount = await visualMetadataLoader.observedCallCount()
+        XCTAssertEqual(visualMetadataCallCount, 2)
+        XCTAssertEqual(controller.snapshot.discovery.shortcuts.map(\.id), [first.id, second.id])
+        XCTAssertEqual(controller.snapshot.discovery.shortcuts.last?.visualMetadata, metadata)
+    }
+
+    func testHidingSettingsCancelsRichRefreshAndDiscardsItsResult() async throws {
+        let item = AppleShortcutItem(id: UUID(), name: "Hidden")
+        let metadata = AppleShortcutVisualMetadata(
+            color: .init(red: 0.25, green: 0.5, blue: 0.75),
+            iconTIFFData: nil
+        )
+        let visualMetadataLoader = AppleShortcutsVisualMetadataDelayedStub(
+            result: .success([item.id: metadata]),
+            delay: .milliseconds(100)
+        )
+        let controller = makeController(
+            runner: AppleShortcutsRunnerStub(shortcuts: [item]),
+            visualMetadataLoader: visualMetadataLoader
+        )
+
+        controller.setSettingsVisible(true)
+        for _ in 0 ..< 100 {
+            if await visualMetadataLoader.observedCallCount() == 1 { break }
+            await Task.yield()
+        }
+        controller.setSettingsVisible(false)
+        try await Task.sleep(for: .milliseconds(150))
+
+        XCTAssertTrue(controller.snapshot.discovery.shortcuts.isEmpty)
+        XCTAssertNil(controller.snapshot.lastSettingsRefresh)
+        XCTAssertFalse(controller.snapshot.isRefreshing)
+    }
+
+    func testVisibleSettingsLoadsIconsOnDemand() async throws {
+        let item = AppleShortcutItem(id: UUID(), name: "Icon")
+        let metadata = AppleShortcutVisualMetadata(
+            color: .init(red: 0.25, green: 0.5, blue: 0.75),
+            iconTIFFData: nil
+        )
+        let iconData = Data([0x01, 0x02])
+        let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(
+            result: .success([item.id: metadata]),
+            iconResult: .success(iconData)
+        )
+        let controller = makeController(
+            runner: AppleShortcutsRunnerStub(shortcuts: [item]),
+            visualMetadataLoader: visualMetadataLoader
+        )
+
+        controller.setSettingsVisible(true)
+        for _ in 0 ..< 100 {
+            if controller.snapshot.discovery.shortcuts.first?.visualMetadata == metadata { break }
+            await Task.yield()
+        }
+        controller.requestIcon(for: item.id)
+        for _ in 0 ..< 100 {
+            if controller.snapshot.discovery.shortcuts.first?.visualMetadata?.iconTIFFData == iconData { break }
+            await Task.yield()
+        }
+
+        let iconCallCount = await visualMetadataLoader.observedIconCallCount()
+        XCTAssertEqual(iconCallCount, 1)
+        XCTAssertEqual(controller.snapshot.discovery.shortcuts.first?.visualMetadata?.iconTIFFData, iconData)
     }
 
     func testMembershipQueriesRespectConcurrencyLimit() async throws {
@@ -169,7 +336,7 @@ final class AppleShortcutsControllerTests: XCTestCase {
             membershipDelay: .seconds(5)
         )
         let controller = makeController(runner: runner)
-        controller.refresh(force: true)
+        controller.setSettingsVisible(true)
         for _ in 0 ..< 200 {
             let callCount = (await runner.observedMembershipCallIDs()).count
             if callCount == AppleShortcutsController.maximumConcurrentMembershipQueries { break }
@@ -392,15 +559,13 @@ final class AppleShortcutsControllerTests: XCTestCase {
     private func makeController(
         runner: AppleShortcutsRunnerStub,
         visualMetadataLoader: any AppleShortcutsVisualMetadataLoading = AppleShortcutsVisualMetadataStub(),
-        now: @escaping () -> Date = { .now },
-        automaticRefreshInterval: Duration = .seconds(60)
+        now: @escaping () -> Date = { .now }
     ) -> AppleShortcutsController {
         AppleShortcutsController(
             runner: runner,
             visualMetadataLoader: visualMetadataLoader,
             localization: PluginLocalization(bundle: .main),
-            now: now,
-            automaticRefreshInterval: automaticRefreshInterval
+            now: now
         )
     }
 }

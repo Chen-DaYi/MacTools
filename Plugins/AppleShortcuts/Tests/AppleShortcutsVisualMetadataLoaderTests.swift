@@ -23,4 +23,22 @@ final class AppleShortcutsVisualMetadataLoaderTests: XCTestCase {
             blue: 0
         ))
     }
+
+    func testRetainsIconsOnlyWithinTheTotalMemoryBudget() {
+        var remainingByteCount = 2
+        let firstIcon = Data([0x01, 0x02])
+
+        XCTAssertEqual(
+            AppleShortcutsVisualMetadataLoader.retainedIconData(
+                firstIcon,
+                remainingByteCount: &remainingByteCount
+            ),
+            firstIcon
+        )
+        XCTAssertEqual(remainingByteCount, 0)
+        XCTAssertNil(AppleShortcutsVisualMetadataLoader.retainedIconData(
+            Data([0x03]),
+            remainingByteCount: &remainingByteCount
+        ))
+    }
 }

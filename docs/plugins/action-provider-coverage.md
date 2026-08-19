@@ -30,7 +30,7 @@ The maintenance providers use deliberately narrow contracts:
 - Homebrew exposes update, upgrade-all, doctor, and cleanup. Upgrade-all and cleanup retain confirmation, every command reports its real completion result, and none can be invoked through a Run Link.
 - Launch Items exposes start, stop, and restart only for user-owned items that the user has marked as favorites. Item IDs are local-only, stop/restart require confirmation, and stale or no-longer-favorite targets become unavailable.
 - IP Check exposes refreshed copy actions for local and public IPv4 addresses. Keep Awake exposes useful timed sessions, Activity Stats exposes its existing reset flow with confirmation, Display Brightness exposes guarded built-in-display disable/restore operations, and App Volume includes a 50% preset.
-- Apple Shortcuts publishes only explicitly enabled identifiers or reviewed synchronized-folder members. Local confirmation defaults on, opt-in Run Links always confirm, and safety-policy changes rebuild the host action registry synchronously.
+- Apple Shortcuts publishes every discovered shortcut. Folder membership is shown as context in MacTools, local confirmation defaults on, Run Links always confirm, and safety-policy changes rebuild the host action registry synchronously.
 
 ## Intentionally specialized or non-operational
 

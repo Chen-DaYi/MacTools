@@ -91,7 +91,7 @@ final class AppleShortcutsPlugin:
             }
         }
         .onVisibilityChange { [weak self] visible in
-            if visible { self?.controller.refreshIfNeeded() }
+            self?.controller.setSettingsVisible(visible)
         }
     }
 

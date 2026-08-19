@@ -4,4 +4,4 @@ type: added
 area: Productivity
 ---
 
-Added Apple Shortcuts discovery, opt-in actions, synchronized folders, guarded Run Links, and bounded Run/Stop controls without reading or changing private Shortcuts data.
+Added Apple Shortcuts discovery for every shortcut, folder context, guarded Run Links, and bounded Run/Stop controls without reading or changing private Shortcuts data.

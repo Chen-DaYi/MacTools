@@ -487,6 +487,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     func showUnifiedSearch() {
         launchAtLoginController.refreshStatus()
+        pluginHost.refreshActionPresentations(providerIDs: ["apple-shortcuts"])
         presentSettings(.settings)
         settingsNavigationCoordinator?.presentUnifiedSearch(origin: .keyboard)
     }
@@ -517,6 +518,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         }
 
         launchAtLoginController.refreshStatus()
+        pluginHost.refreshActionPresentations(providerIDs: ["apple-shortcuts"])
         onProgrammaticSettingsPresentation()
         let state = commandPaletteState ?? StandaloneCommandPaletteState()
         let panel = commandPalettePanel ?? makeCommandPalettePanel(state: state)

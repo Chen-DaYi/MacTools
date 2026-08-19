@@ -7,25 +7,41 @@ enum AppleShortcutsVisualMetadataError: Error, Equatable, Sendable {
 }
 
 protocol AppleShortcutsVisualMetadataLoading: Sendable {
+    /// Loads compact color metadata for the complete library. Icon bytes are fetched separately.
     func loadVisualMetadata() async -> Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError>
+    func loadIcon(for shortcutID: UUID) async -> Result<Data?, AppleShortcutsVisualMetadataError>
 }
 
 struct AppleShortcutsVisualMetadataLoader: AppleShortcutsVisualMetadataLoading {
+    static let scriptTimeoutSeconds = 10
+    static let maximumIconByteCount = 4 * 1_024 * 1_024
+    static let maximumTotalIconByteCount = 128 * 1_024 * 1_024
+
     private static let scriptSource = """
-    tell application id "com.apple.shortcuts"
-        set shortcutRows to {}
-        repeat with shortcutItem in every shortcut
-            set {redValue, greenValue, blueValue} to (color of shortcutItem)
-            set end of shortcutRows to {id of shortcutItem as text, redValue, greenValue, blueValue, icon of shortcutItem}
-        end repeat
-        return shortcutRows
-    end tell
+    with timeout of \(scriptTimeoutSeconds) seconds
+        tell application id "com.apple.shortcuts"
+            set shortcutRows to {}
+            repeat with shortcutItem in every shortcut
+                set {redValue, greenValue, blueValue} to (color of shortcutItem)
+                set end of shortcutRows to {id of shortcutItem as text, redValue, greenValue, blueValue}
+            end repeat
+            return shortcutRows
+        end tell
+    end timeout
     """
 
     func loadVisualMetadata() async -> Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: Self.loadSynchronously())
+            }
+        }
+    }
+
+    func loadIcon(for shortcutID: UUID) async -> Result<Data?, AppleShortcutsVisualMetadataError> {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: Self.loadIconSynchronously(for: shortcutID))
             }
         }
     }
@@ -58,13 +74,38 @@ struct AppleShortcutsVisualMetadataLoader: AppleShortcutsVisualMetadataLoading {
         return parse(result)
     }
 
+    private static func loadIconSynchronously(
+        for shortcutID: UUID
+    ) -> Result<Data?, AppleShortcutsVisualMetadataError> {
+        let source = """
+        with timeout of \(scriptTimeoutSeconds) seconds
+            tell application id "com.apple.shortcuts"
+                return icon of shortcut id "\(shortcutID.uuidString.lowercased())"
+            end tell
+        end timeout
+        """
+        guard let script = NSAppleScript(source: source) else {
+            return .failure(.automationUnavailable)
+        }
+        var error: NSDictionary?
+        let result = script.executeAndReturnError(&error)
+        guard error == nil else {
+            return .failure(.automationUnavailable)
+        }
+        let iconData = result.data
+        guard iconData.count <= maximumIconByteCount else {
+            return .success(nil)
+        }
+        return .success(iconData)
+    }
+
     static func parse(
         _ result: NSAppleEventDescriptor
     ) -> Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> {
         var metadataByID: [UUID: AppleShortcutVisualMetadata] = [:]
         for index in 1 ... result.numberOfItems {
             guard let row = result.atIndex(index),
-                  row.numberOfItems == 5,
+                  row.numberOfItems == 4,
                   let idString = row.atIndex(1)?.stringValue,
                   let id = UUID(uuidString: idString),
                   let red = row.atIndex(2)?.int32Value,
@@ -73,18 +114,24 @@ struct AppleShortcutsVisualMetadataLoader: AppleShortcutsVisualMetadataLoading {
                   let color = color(red: red, green: green, blue: blue) else {
                 return .failure(.malformedReply)
             }
-            let rawIconData: Data? = row.atIndex(5)?.data
-            let iconData: Data? = if let rawIconData,
-                                     rawIconData.count <= 4 * 1_024 * 1_024 {
-                rawIconData
-            } else {
-                nil
-            }
             metadataByID[id] = AppleShortcutVisualMetadata(
                 color: color,
-                iconTIFFData: iconData
+                iconTIFFData: nil
             )
         }
         return .success(metadataByID)
+    }
+
+    static func retainedIconData(
+        _ rawIconData: Data?,
+        remainingByteCount: inout Int
+    ) -> Data? {
+        guard let rawIconData,
+              rawIconData.count <= maximumIconByteCount,
+              rawIconData.count <= remainingByteCount else {
+            return nil
+        }
+        remainingByteCount -= rawIconData.count
+        return rawIconData
     }
 }

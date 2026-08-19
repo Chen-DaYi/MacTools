@@ -134,7 +134,6 @@ struct AppleShortcutsSettingsView: View {
             )
         }
         .onAppear {
-            controller.refreshIfNeeded()
             selectFirstVisibleIfNeeded()
             if searchFocusController.requestID > 0 {
                 isSearchFocused = true
@@ -169,7 +168,7 @@ struct AppleShortcutsSettingsView: View {
             .foregroundStyle(.secondary)
 
             Button {
-                controller.refresh(force: true)
+                controller.refreshForSettings(force: true)
             } label: {
                 Label(
                     controller.snapshot.isRefreshing
@@ -247,7 +246,12 @@ struct AppleShortcutsSettingsView: View {
 
     private func shortcutRow(_ row: AppleShortcutsDisplayRow) -> some View {
         HStack(spacing: 10) {
-            AppleShortcutIcon(metadata: row.item.visualMetadata, size: 30)
+            AppleShortcutIcon(
+                shortcutID: row.id,
+                metadata: row.item.visualMetadata,
+                size: 30,
+                requestIcon: controller.requestIcon
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.name)
                     .font(PluginSettingsTheme.Typography.rowTitle)
@@ -277,7 +281,12 @@ struct AppleShortcutsSettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
                     HStack(alignment: .top, spacing: 14) {
-                        AppleShortcutIcon(metadata: row.item.visualMetadata, size: 56)
+                        AppleShortcutIcon(
+                            shortcutID: row.id,
+                            metadata: row.item.visualMetadata,
+                            size: 56,
+                            requestIcon: controller.requestIcon
+                        )
                         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                             Text(row.name)
                                 .font(PluginSettingsTheme.Typography.pageTitle)
@@ -477,8 +486,10 @@ struct AppleShortcutsSettingsView: View {
 }
 
 private struct AppleShortcutIcon: View {
+    let shortcutID: UUID
     let metadata: AppleShortcutVisualMetadata?
     let size: CGFloat
+    let requestIcon: (UUID) -> Void
 
     var body: some View {
         ZStack {
@@ -499,6 +510,10 @@ private struct AppleShortcutIcon: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+        .task(id: metadata?.iconTIFFData == nil) {
+            guard metadata != nil else { return }
+            requestIcon(shortcutID)
+        }
     }
 
     private var color: Color {

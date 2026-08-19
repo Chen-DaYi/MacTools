@@ -27,16 +27,77 @@ final class AppleShortcutsTestStorage: PluginStorage {
 
 struct AppleShortcutsVisualMetadataStub: AppleShortcutsVisualMetadataLoading {
     let result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError>
+    let iconResult: Result<Data?, AppleShortcutsVisualMetadataError>
 
     init(
-        result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> = .success([:])
+        result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> = .success([:]),
+        iconResult: Result<Data?, AppleShortcutsVisualMetadataError> = .success(nil)
     ) {
         self.result = result
+        self.iconResult = iconResult
     }
 
     func loadVisualMetadata() async -> Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> {
         result
     }
+
+    func loadIcon(for _: UUID) async -> Result<Data?, AppleShortcutsVisualMetadataError> {
+        iconResult
+    }
+}
+
+actor AppleShortcutsVisualMetadataCountingStub: AppleShortcutsVisualMetadataLoading {
+    private let result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError>
+    private let iconResult: Result<Data?, AppleShortcutsVisualMetadataError>
+    private var callCount = 0
+    private var iconCallCount = 0
+
+    init(
+        result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError>,
+        iconResult: Result<Data?, AppleShortcutsVisualMetadataError> = .success(nil)
+    ) {
+        self.result = result
+        self.iconResult = iconResult
+    }
+
+    func loadVisualMetadata() async -> Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> {
+        callCount += 1
+        return result
+    }
+
+    func loadIcon(for _: UUID) async -> Result<Data?, AppleShortcutsVisualMetadataError> {
+        iconCallCount += 1
+        return iconResult
+    }
+
+    func observedCallCount() -> Int { callCount }
+    func observedIconCallCount() -> Int { iconCallCount }
+}
+
+actor AppleShortcutsVisualMetadataDelayedStub: AppleShortcutsVisualMetadataLoading {
+    private let result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError>
+    private let delay: Duration
+    private var callCount = 0
+
+    init(
+        result: Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError>,
+        delay: Duration
+    ) {
+        self.result = result
+        self.delay = delay
+    }
+
+    func loadVisualMetadata() async -> Result<[UUID: AppleShortcutVisualMetadata], AppleShortcutsVisualMetadataError> {
+        callCount += 1
+        try? await Task.sleep(for: delay)
+        return result
+    }
+
+    func loadIcon(for _: UUID) async -> Result<Data?, AppleShortcutsVisualMetadataError> {
+        .success(nil)
+    }
+
+    func observedCallCount() -> Int { callCount }
 }
 
 actor AppleShortcutsRunnerStub: AppleShortcutsCommandRunning {
@@ -53,6 +114,7 @@ actor AppleShortcutsRunnerStub: AppleShortcutsCommandRunning {
     private var maximumConcurrentMembershipCallCount = 0
     private var membershipCallIDs: [UUID] = []
     private(set) var listCallCount = 0
+    private(set) var folderListCallCount = 0
     private(set) var runIDs: [UUID] = []
     private(set) var viewNames: [String] = []
 
@@ -98,7 +160,10 @@ actor AppleShortcutsRunnerStub: AppleShortcutsCommandRunning {
         return result
     }
 
-    func listFolders() async throws -> [AppleShortcutFolder] { folders }
+    func listFolders() async throws -> [AppleShortcutFolder] {
+        folderListCallCount += 1
+        return folders
+    }
 
     func listShortcuts(inFolder id: UUID) async throws -> [AppleShortcutItem] {
         membershipCallIDs.append(id)
@@ -138,6 +203,7 @@ actor AppleShortcutsRunnerStub: AppleShortcutsCommandRunning {
     }
     func setListFails(_ value: Bool) { listFails = value }
     func observedListCallCount() -> Int { listCallCount }
+    func observedFolderListCallCount() -> Int { folderListCallCount }
     func observedRunIDs() -> [UUID] { runIDs }
     func observedViewNames() -> [String] { viewNames }
     func observedMembershipCallIDs() -> [UUID] { membershipCallIDs }
