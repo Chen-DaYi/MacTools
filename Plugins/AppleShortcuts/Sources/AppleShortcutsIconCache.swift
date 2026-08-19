@@ -15,7 +15,7 @@ final class AppleShortcutsIconCache {
 
     private let cache = NSCache<NSUUID, NSData>()
 
-    init(totalCostLimit: Int = Self.defaultTotalCostLimit) {
+    init(totalCostLimit: Int = AppleShortcutsIconCache.defaultTotalCostLimit) {
         cache.totalCostLimit = totalCostLimit
     }
 
