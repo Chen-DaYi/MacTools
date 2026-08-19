@@ -1755,6 +1755,7 @@ verify_code_session() {
         -only-testing:MacToolsTests/ActionGridPluginTests \
         -only-testing:MacToolsTests/ActivityBarPluginTests \
         -only-testing:MacToolsTests/AppearancePluginTests \
+        -only-testing:MacToolsTests/AppleShortcutsPluginTests \
         -only-testing:MacToolsTests/AppHotkeyPluginTests \
         -only-testing:MacToolsTests/AppVolumePluginTests \
         -only-testing:MacToolsTests/AutoHideDockPluginTests \

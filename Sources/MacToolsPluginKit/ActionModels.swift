@@ -658,3 +658,10 @@ public extension PluginActionProviding {
         return reference
     }
 }
+
+/// Optional signal for persisted action-safety changes that must reach the host registry
+/// synchronously rather than through the ordinary coalesced plugin-state refresh.
+@MainActor
+public protocol PluginActionSafetyStateChangeProviding: AnyObject {
+    var onActionSafetyStateChange: (() -> Void)? { get set }
+}

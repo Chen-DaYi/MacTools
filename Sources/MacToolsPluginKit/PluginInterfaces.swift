@@ -30,6 +30,13 @@ public protocol PluginPrimaryPanel: AnyObject {
     func handleAction(_ action: PluginPanelAction)
 }
 
+/// Optional capability for a plugin settings page with its own contextual search field.
+/// The Settings host invokes this when the user presses Command-F on that page.
+@MainActor
+public protocol PluginSettingsSearchFocusing: AnyObject {
+    func focusSettingsSearch()
+}
+
 public enum PluginShortcutEventPhase: Sendable {
     case pressed
     case released

@@ -62,6 +62,7 @@ NEW_API_MINIMUM_HOSTS = {
     # Shared component-panel theme surfaces introduced in host 1.2.
     "PluginComponentTheme": "1.2.0",
     "PluginComponentCardBackground": "1.2.0",
+    "PluginActionSafetyStateChangeProviding": "1.2.0",
 }
 
 

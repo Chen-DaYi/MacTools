@@ -344,6 +344,52 @@ final class PluginHostActionRegistryTests: XCTestCase {
         }
     }
 
+    func testActionSafetyStateChangeRebuildsRegistrySynchronously() async {
+        let plugin = SafetyStateActionTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+
+        XCTAssertEqual(
+            host.actionRegistry.definition(for: plugin.actionKey)?.risk,
+            .safe
+        )
+        XCTAssertEqual(
+            host.actionRegistry.definition(for: plugin.actionKey)?.externalInvocationPolicy,
+            .confirmAlways
+        )
+
+        plugin.requiresConfirmation = true
+        plugin.allowsRunLink = false
+        plugin.onActionSafetyStateChange?()
+
+        XCTAssertEqual(
+            host.actionRegistry.definition(for: plugin.actionKey)?.risk,
+            .confirmationRequired
+        )
+        XCTAssertEqual(
+            host.actionRegistry.definition(for: plugin.actionKey)?.externalInvocationPolicy,
+            .unavailable
+        )
+
+        let localOutcome = await host.actionExecutor.execute(
+            ActionInvocation(
+                reference: ActionReference(key: plugin.actionKey),
+                source: .manual,
+                mode: .background
+            ),
+            confirmationService: ActionExecutorConfirmationService { false }
+        )
+        XCTAssertEqual(localOutcome, .rejected(.confirmationDenied))
+        let runLinkOutcome = await host.actionExecutor.execute(
+            ActionInvocation(
+                reference: ActionReference(key: plugin.actionKey),
+                source: .runLink,
+                mode: .background
+            )
+        )
+        XCTAssertEqual(runLinkOutcome, .rejected(.externalInvocationUnavailable))
+        XCTAssertEqual(plugin.beginCount, 0)
+    }
+
     func testConvergedShortcutAssignmentsRemainIndividuallyVisibleAndEditable() async throws {
         let plugin = NativeActionTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
@@ -1349,4 +1395,55 @@ private final class EventHandlingActionBackedShortcutTestPlugin:
     override var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] { [] }
 
     func handleShortcutEvent(id: String, phase: PluginShortcutEventPhase) {}
+}
+
+@MainActor
+private final class SafetyStateActionTestPlugin:
+    MacToolsPlugin,
+    PluginActionProviding,
+    PluginActionSafetyStateChangeProviding
+{
+    let metadata = PluginMetadata(
+        id: "safety-state-action-provider",
+        title: "安全状态操作插件",
+        iconName: "lock.shield",
+        iconTint: .blue,
+        order: 1,
+        defaultDescription: "测试同步安全状态"
+     )
+    var onStateChange: (() -> Void)?
+    var onActionSafetyStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requiresConfirmation = false
+    var allowsRunLink = true
+    var beginCount = 0
+
+    var actionKey: ActionKey {
+        ActionKey(providerID: metadata.id, actionID: "run")
+     }
+
+    var actionDefinitions: [ActionDefinition] {
+         [
+            ActionDefinition(
+                key: actionKey,
+                title: "运行",
+                description: "运行测试操作",
+                systemImage: "lock.shield",
+                risk: requiresConfirmation ? .confirmationRequired : .safe,
+                confirmation: ActionConfirmation(
+                    title: "运行？",
+                    message: "运行测试操作。",
+                    confirmButtonTitle: "运行"
+                 ),
+                externalInvocationPolicy: allowsRunLink ? .confirmAlways : .unavailable,
+                capabilities: [.background]
+             ),
+         ]
+     }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        beginCount += 1
+        return ActionExecutionHandle { .succeeded() }
+     }
 }

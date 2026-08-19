@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import MacToolsPluginKit
 import SwiftUI
 import XCTest
 @testable import MacTools
@@ -881,6 +882,37 @@ final class AppWindowRouterTests: XCTestCase {
         router.settingsWindow?.close()
     }
 
+    func testGlobalSearchRefreshesOnlyAppleShortcutsActions() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let appleShortcuts = RefreshCountingPlugin(id: "apple-shortcuts")
+        let unrelatedPlugin = RefreshCountingPlugin(id: "unrelated")
+        let host = PluginHost(
+            plugins: [appleShortcuts, unrelatedPlugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        let router = AppWindowRouter(
+            pluginHost: host,
+            appUpdater: AppUpdater(startingUpdater: false),
+            menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
+            menuBarIconGallery: MenuBarIconGalleryLibrary(),
+            launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
+            appearanceUserDefaults: defaults
+        )
+        let appleShortcutsRefreshCount = appleShortcuts.refreshCount
+        let unrelatedRefreshCount = unrelatedPlugin.refreshCount
+
+        router.showUnifiedSearch()
+
+        XCTAssertEqual(appleShortcuts.refreshCount, appleShortcutsRefreshCount + 1)
+        XCTAssertEqual(unrelatedPlugin.refreshCount, unrelatedRefreshCount)
+        router.settingsWindow?.close()
+    }
+
     private func makeRouter(
         defaults: UserDefaults,
         appUpdater: AppUpdater? = nil,
@@ -924,6 +956,30 @@ final class AppWindowRouterTests: XCTestCase {
             isARepeat: false,
             keyCode: keyCode
         )!
+    }
+}
+
+@MainActor
+private final class RefreshCountingPlugin: MacToolsPlugin {
+    let metadata: PluginMetadata
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var refreshCount = 0
+
+    init(id: String) {
+        metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "bolt",
+            iconTint: .accentColor,
+            order: 0,
+            defaultDescription: id
+        )
+    }
+
+    func refresh() {
+        refreshCount += 1
     }
 }
 

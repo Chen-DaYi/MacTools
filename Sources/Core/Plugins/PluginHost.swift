@@ -1648,6 +1648,22 @@ final class PluginHost: ObservableObject {
         pluginSettingsItems.contains(where: { $0.id == pluginID })
     }
 
+    func hasPluginSettingsSearchField(pluginID: String) -> Bool {
+        guard hasPluginSettings(pluginID: pluginID) else { return false }
+        return corePlugin(for: pluginID) is any PluginSettingsSearchFocusing
+    }
+
+    @discardableResult
+    func focusPluginSettingsSearch(pluginID: String) -> Bool {
+        guard let plugin = corePlugin(for: pluginID),
+              let searchFocusing = plugin as? any PluginSettingsSearchFocusing else {
+            return false
+        }
+        return guardPluginCall(plugin, operation: "focus settings search") {
+            searchFocusing.focusSettingsSearch()
+        }
+    }
+
     func hasPluginSettingsSearchTarget(
         _ target: PluginSettingsSearchTarget
     ) -> Bool {
@@ -2622,6 +2638,11 @@ final class PluginHost: ObservableObject {
                     activityStateHandling.applicationActivityStateDidChange(applicationActivityState)
                 }
             }
+            if let safetyChangeProvider = plugin as? any PluginActionSafetyStateChangeProviding {
+                safetyChangeProvider.onActionSafetyStateChange = { [weak self] in
+                    self?.rebuildDerivedStateAfterActionSafetyChange(pluginID: pluginID)
+                }
+            }
             configureHostStatusItemCallbacks(for: [plugin])
         }
         configureTrackpadGestureBridge()
@@ -3213,6 +3234,17 @@ final class PluginHost: ObservableObject {
 
         dirtyPluginIDs.insert(pluginID)
         schedulePluginStateChangeRebuild()
+    }
+
+    private func rebuildDerivedStateAfterActionSafetyChange(pluginID: String) {
+        dirtyPluginIDs.remove(pluginID)
+        if dirtyPluginIDs.isEmpty {
+            pluginStateChangeRebuildTask?.cancel()
+            pluginStateChangeRebuildTask = nil
+        }
+
+        actionRegistry.invalidateAvailability()
+        rebuildDerivedState(dirtyPluginIDs: [pluginID])
     }
 
     private func schedulePluginStateChangeRebuild() {
@@ -3902,6 +3934,7 @@ final class PluginHost: ObservableObject {
         }
 
         plugin.onStateChange = nil
+        (plugin as? any PluginActionSafetyStateChangeProviding)?.onActionSafetyStateChange = nil
         plugin.requestPermissionGuidance = nil
         plugin.shortcutBindingResolver = nil
         (plugin as? any PluginSettingsPresenting)?.requestSettingsPresentation = nil
