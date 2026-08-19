@@ -3,13 +3,36 @@ import ApplicationServices
 import Foundation
 import MacToolsPluginKit
 
+struct AutoInputEditableFocusIdentity: Hashable, Sendable {
+    private let rawValue: UUID
+
+    init() {
+        rawValue = UUID()
+    }
+}
+
 struct AutoInputEditableFocus: Equatable, Sendable {
     let frame: CGRect
+    let avoidanceFrame: CGRect
     let applicationProcessIdentifier: pid_t?
+    let applicationBundleIdentifier: String?
+    let isFromAccessoryApplication: Bool
+    let identity: AutoInputEditableFocusIdentity
 
-    init(frame: CGRect, applicationProcessIdentifier: pid_t? = nil) {
+    init(
+        frame: CGRect,
+        avoidanceFrame: CGRect? = nil,
+        applicationProcessIdentifier: pid_t? = nil,
+        applicationBundleIdentifier: String? = nil,
+        isFromAccessoryApplication: Bool = false,
+        identity: AutoInputEditableFocusIdentity = AutoInputEditableFocusIdentity()
+    ) {
         self.frame = frame
+        self.avoidanceFrame = avoidanceFrame ?? frame
         self.applicationProcessIdentifier = applicationProcessIdentifier
+        self.applicationBundleIdentifier = applicationBundleIdentifier
+        self.isFromAccessoryApplication = isFromAccessoryApplication
+        self.identity = identity
     }
 }
 
@@ -51,6 +74,70 @@ struct AutoInputObservationLifecycle {
     }
 }
 
+struct AutoInputApplicationObservationRegistry {
+    private(set) var frontmostProcessIdentifier: pid_t?
+    private(set) var accessoryProcessIdentifiers: Set<pid_t> = []
+
+    mutating func activateRegularApplication(processIdentifier: pid_t) -> pid_t? {
+        defer { frontmostProcessIdentifier = processIdentifier }
+        guard frontmostProcessIdentifier != processIdentifier else { return nil }
+        return frontmostProcessIdentifier
+    }
+
+    mutating func registerAccessoryApplication(processIdentifier: pid_t) {
+        accessoryProcessIdentifiers.insert(processIdentifier)
+    }
+
+    mutating func terminateApplication(processIdentifier: pid_t) {
+        accessoryProcessIdentifiers.remove(processIdentifier)
+        if frontmostProcessIdentifier == processIdentifier {
+            frontmostProcessIdentifier = nil
+        }
+    }
+
+    func focusCandidates(
+        focusedApplicationProcessIdentifier: pid_t?,
+        preferredProcessIdentifier: pid_t?
+    ) -> [pid_t] {
+        let registeredProcessIdentifiers = accessoryProcessIdentifiers.union(
+            frontmostProcessIdentifier.map { [$0] } ?? []
+        )
+        if let focusedApplicationProcessIdentifier {
+            return registeredProcessIdentifiers.contains(focusedApplicationProcessIdentifier)
+                ? [focusedApplicationProcessIdentifier]
+                : []
+        }
+
+        if let preferredProcessIdentifier,
+           preferredProcessIdentifier == frontmostProcessIdentifier {
+            return [preferredProcessIdentifier]
+        }
+        return frontmostProcessIdentifier.map { [$0] } ?? []
+    }
+}
+
+struct AutoInputObservationRegistrationRetryPolicy {
+    private var attemptsByProcessIdentifier: [pid_t: Int] = [:]
+
+    mutating func nextDelayMilliseconds(processIdentifier: pid_t) -> Int? {
+        let attempt = attemptsByProcessIdentifier[processIdentifier, default: 0] + 1
+        guard attempt <= 3 else {
+            attemptsByProcessIdentifier.removeValue(forKey: processIdentifier)
+            return nil
+        }
+        attemptsByProcessIdentifier[processIdentifier] = attempt
+        return 100 * (1 << (attempt - 1))
+    }
+
+    mutating func reset(processIdentifier: pid_t) {
+        attemptsByProcessIdentifier.removeValue(forKey: processIdentifier)
+    }
+
+    mutating func reset() {
+        attemptsByProcessIdentifier.removeAll()
+    }
+}
+
 @MainActor
 final class SystemAutoInputAccessibilityCheck: AutoInputAccessibilityChecking {
     var isTrusted: Bool {
@@ -69,41 +156,81 @@ final class SystemAutoInputAccessibilityCheck: AutoInputAccessibilityChecking {
 final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
     typealias CallbackContext = PluginCallbackContext<AccessibilityAutoInputFocusObserver>
 
+    private final class ApplicationObservation {
+        let observer: AXObserver
+        let applicationElement: AXUIElement
+        let processIdentifier: pid_t
+        let bundleIdentifier: String?
+        let isAccessory: Bool
+        let callbackContext: CallbackContext
+        let retainedCallbackPointer: UnsafeMutableRawPointer
+        var focusedAccessibilityElement: AXUIElement?
+        var focusedElementIdentity: AutoInputEditableFocusIdentity?
+
+        init(
+            observer: AXObserver,
+            applicationElement: AXUIElement,
+            processIdentifier: pid_t,
+            bundleIdentifier: String?,
+            isAccessory: Bool,
+            callbackContext: CallbackContext,
+            retainedCallbackPointer: UnsafeMutableRawPointer
+        ) {
+            self.observer = observer
+            self.applicationElement = applicationElement
+            self.processIdentifier = processIdentifier
+            self.bundleIdentifier = bundleIdentifier
+            self.isAccessory = isAccessory
+            self.callbackContext = callbackContext
+            self.retainedCallbackPointer = retainedCallbackPointer
+        }
+
+        func resetFocusedElement() {
+            focusedAccessibilityElement = nil
+            focusedElementIdentity = nil
+        }
+    }
+
     var onEditableFocusChanged: ((AutoInputEditableFocus?) -> Void)?
     var onAccessibilityInvalidated: (() -> Void)?
 
     private let workspace: NSWorkspace
     private let notificationCenter: NotificationCenter
-    private let ignoredProcessIdentifier: pid_t
+    private let focusedApplicationProcessIdentifier: () -> pid_t?
 
     private var activationObserver: NSObjectProtocol?
-    private var accessibilityObserver: AXObserver?
-    private var observedApplication: AXUIElement?
-    private var observedApplicationProcessIdentifier: pid_t?
-    private var observedApplicationBundleIdentifier: String?
-    private var callbackContext: CallbackContext?
-    private var retainedCallbackPointer: UnsafeMutableRawPointer?
+    private var launchObserver: NSObjectProtocol?
+    private var terminationObserver: NSObjectProtocol?
+    private var applicationObservations: [pid_t: ApplicationObservation] = [:]
+    private var failedProcessIdentifiers: Set<pid_t> = []
+    private var registrationRetryPolicy = AutoInputObservationRegistrationRetryPolicy()
+    private var registrationRetryTasks: [pid_t: Task<Void, Never>] = [:]
+    private var observationRegistry = AutoInputApplicationObservationRegistry()
+    private var focusedObservationProcessIdentifier: pid_t?
     private var lifecycle = AutoInputObservationLifecycle()
 
     init(
         workspace: NSWorkspace = .shared,
         notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
-        ignoredProcessIdentifier: pid_t = ProcessInfo.processInfo.processIdentifier
+        focusedApplicationProcessIdentifier: @escaping () -> pid_t? = {
+            AccessibilityAutoInputFocusObserver.systemFocusedApplicationProcessIdentifier()
+        }
     ) {
         self.workspace = workspace
         self.notificationCenter = notificationCenter
-        self.ignoredProcessIdentifier = ignoredProcessIdentifier
+        self.focusedApplicationProcessIdentifier = focusedApplicationProcessIdentifier
     }
 
     func start() {
-        guard activationObserver == nil else {
-            if lifecycle.isRunning {
-                inspectFocusedElement()
-            }
+        guard !lifecycle.isRunning else {
+            refreshFocusedElement()
             return
         }
 
         let generation = lifecycle.start()
+        failedProcessIdentifiers.removeAll()
+        cancelRegistrationRetries()
+        observationRegistry = AutoInputApplicationObservationRegistry()
 
         activationObserver = notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -116,45 +243,128 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.lifecycle.accepts(generation) else { return }
-                self.observe(application, generation: generation)
+                self.observeActivatedApplication(application, generation: generation)
+            }
+        }
+        launchObserver = notificationCenter.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication else {
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.lifecycle.accepts(generation) else { return }
+                self.observeAccessoryApplicationIfNeeded(application)
+                self.refreshEffectiveFocusedElement()
+            }
+        }
+        terminationObserver = notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication else {
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.lifecycle.accepts(generation) else { return }
+                self.removeObservation(processIdentifier: application.processIdentifier)
+                self.failedProcessIdentifiers.remove(application.processIdentifier)
+                self.cancelRegistrationRetry(
+                    processIdentifier: application.processIdentifier
+                )
+                self.observationRegistry.terminateApplication(
+                    processIdentifier: application.processIdentifier
+                )
+                self.refreshEffectiveFocusedElement()
             }
         }
 
         if let application = workspace.frontmostApplication {
-            observe(application, generation: generation)
-        } else {
-            onEditableFocusChanged?(nil)
+            observeActivatedApplication(
+                application,
+                generation: generation,
+                refreshAfterObservation: false
+            )
         }
+        for application in workspace.runningApplications {
+            observeAccessoryApplicationIfNeeded(application)
+        }
+        refreshEffectiveFocusedElement()
     }
 
     func stop() {
         lifecycle.stop()
-        if let activationObserver {
-            notificationCenter.removeObserver(activationObserver)
-            self.activationObserver = nil
-        }
-        stopObservingApplication()
-        onEditableFocusChanged?(nil)
+        [activationObserver, launchObserver, terminationObserver]
+            .compactMap { $0 }
+            .forEach(notificationCenter.removeObserver)
+        activationObserver = nil
+        launchObserver = nil
+        terminationObserver = nil
+        failedProcessIdentifiers.removeAll()
+        cancelRegistrationRetries()
+        observationRegistry = AutoInputApplicationObservationRegistry()
+        stopObservingApplications()
+        publishNoEditableFocus()
     }
 
     func refreshFocusedElement() {
         guard lifecycle.isRunning else { return }
-        inspectFocusedElement()
+        refreshEffectiveFocusedElement()
     }
 
-    private func observe(_ application: NSRunningApplication, generation: Int) {
+    private func observeActivatedApplication(
+        _ application: NSRunningApplication,
+        generation: Int,
+        refreshAfterObservation: Bool = true
+    ) {
         guard lifecycle.accepts(generation) else { return }
-        stopObservingApplication()
+        if application.activationPolicy == .accessory {
+            observeAccessoryApplicationIfNeeded(application)
+            if refreshAfterObservation {
+                refreshEffectiveFocusedElement()
+            }
+            return
+        }
+
+        if let previousProcessIdentifier = observationRegistry.activateRegularApplication(
+            processIdentifier: application.processIdentifier
+        ) {
+            if applicationObservations[previousProcessIdentifier]?.isAccessory == false {
+                removeObservation(processIdentifier: previousProcessIdentifier)
+            }
+            cancelRegistrationRetry(processIdentifier: previousProcessIdentifier)
+        }
+        observe(application, isAccessory: false)
+        if refreshAfterObservation {
+            refreshEffectiveFocusedElement(
+                focusedApplicationProcessIdentifier: application.processIdentifier
+            )
+        }
+    }
+
+    private func observeAccessoryApplicationIfNeeded(_ application: NSRunningApplication) {
+        guard application.activationPolicy == .accessory else { return }
+        observationRegistry.registerAccessoryApplication(
+            processIdentifier: application.processIdentifier
+        )
+        observe(application, isAccessory: true)
+    }
+
+    private func observe(_ application: NSRunningApplication, isAccessory: Bool) {
+        let processIdentifier = application.processIdentifier
+        guard lifecycle.isRunning,
+              applicationObservations[processIdentifier] == nil,
+              !failedProcessIdentifiers.contains(processIdentifier) else { return }
 
         guard AXIsProcessTrusted() else {
             accessibilityWasInvalidated()
             return
         }
-        guard application.processIdentifier != ignoredProcessIdentifier else {
-            onEditableFocusChanged?(nil)
-            return
-        }
-
         var observer: AXObserver?
         let createStatus = AXObserverCreate(
             application.processIdentifier,
@@ -162,7 +372,11 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             &observer
         )
         guard createStatus == .success, let observer else {
-            handleAccessibilityFailure(createStatus)
+            handleObservationRegistrationFailure(
+                createStatus,
+                application: application,
+                isAccessory: isAccessory
+            )
             return
         }
 
@@ -177,120 +391,268 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
         )
         guard addStatus == .success else {
             Unmanaged<CallbackContext>.fromOpaque(retainedPointer).release()
-            handleAccessibilityFailure(addStatus)
+            handleObservationRegistrationFailure(
+                addStatus,
+                application: application,
+                isAccessory: isAccessory
+            )
             return
         }
 
-        accessibilityObserver = observer
-        observedApplication = applicationElement
-        observedApplicationProcessIdentifier = application.processIdentifier
-        observedApplicationBundleIdentifier = application.bundleIdentifier
-        callbackContext = context
-        retainedCallbackPointer = retainedPointer
+        registrationRetryPolicy.reset(processIdentifier: processIdentifier)
+        registrationRetryTasks.removeValue(forKey: processIdentifier)?.cancel()
+        applicationObservations[processIdentifier] = ApplicationObservation(
+            observer: observer,
+            applicationElement: applicationElement,
+            processIdentifier: processIdentifier,
+            bundleIdentifier: application.bundleIdentifier,
+            isAccessory: isAccessory,
+            callbackContext: context,
+            retainedCallbackPointer: retainedPointer
+        )
         CFRunLoopAddSource(
             CFRunLoopGetMain(),
             AXObserverGetRunLoopSource(observer),
             .commonModes
         )
-        inspectFocusedElement()
     }
 
-    private func stopObservingApplication() {
-        callbackContext?.invalidate()
-
-        if let observer = accessibilityObserver,
-           let application = observedApplication {
-            AXObserverRemoveNotification(
-                observer,
-                application,
-                kAXFocusedUIElementChangedNotification as CFString
-            )
-            CFRunLoopRemoveSource(
-                CFRunLoopGetMain(),
-                AXObserverGetRunLoopSource(observer),
-                .commonModes
-            )
-        }
-
-        accessibilityObserver = nil
-        observedApplication = nil
-        observedApplicationProcessIdentifier = nil
-        observedApplicationBundleIdentifier = nil
-        callbackContext = nil
-        if let retainedCallbackPointer {
-            Unmanaged<CallbackContext>.fromOpaque(retainedCallbackPointer).release()
-            self.retainedCallbackPointer = nil
+    private func stopObservingApplications() {
+        for processIdentifier in Array(applicationObservations.keys) {
+            removeObservation(processIdentifier: processIdentifier)
         }
     }
 
-    private func inspectFocusedElement() {
-        guard let observedApplication else {
-            onEditableFocusChanged?(nil)
-            return
+    private func removeObservation(processIdentifier: pid_t) {
+        guard let observation = applicationObservations.removeValue(
+            forKey: processIdentifier
+        ) else { return }
+        observation.callbackContext.invalidate()
+        AXObserverRemoveNotification(
+            observation.observer,
+            observation.applicationElement,
+            kAXFocusedUIElementChangedNotification as CFString
+        )
+        CFRunLoopRemoveSource(
+            CFRunLoopGetMain(),
+            AXObserverGetRunLoopSource(observation.observer),
+            .commonModes
+        )
+        Unmanaged<CallbackContext>.fromOpaque(
+            observation.retainedCallbackPointer
+        ).release()
+        if focusedObservationProcessIdentifier == processIdentifier {
+            focusedObservationProcessIdentifier = nil
         }
+    }
+
+    private func refreshEffectiveFocusedElement(
+        preferredProcessIdentifier: pid_t? = nil,
+        focusedApplicationProcessIdentifier focusedApplicationOverride: pid_t? = nil
+    ) {
+        guard lifecycle.isRunning else { return }
+        let focusedApplicationProcessIdentifier = focusedApplicationOverride
+            ?? self.focusedApplicationProcessIdentifier()
+        let candidates = observationRegistry.focusCandidates(
+            focusedApplicationProcessIdentifier: focusedApplicationProcessIdentifier,
+            preferredProcessIdentifier: preferredProcessIdentifier
+                ?? focusedObservationProcessIdentifier
+        )
+        for processIdentifier in candidates {
+            guard let observation = applicationObservations[processIdentifier] else { continue }
+            if let focus = editableFocus(
+                for: observation,
+                requiresFocusedElement: observation.isAccessory
+            ) {
+                focusedObservationProcessIdentifier = processIdentifier
+                onEditableFocusChanged?(focus)
+                return
+            }
+        }
+        publishNoEditableFocus()
+    }
+
+    private func handleFocusedElementNotification(processIdentifier: pid_t) {
+        guard lifecycle.isRunning,
+              applicationObservations[processIdentifier] != nil else { return }
+        refreshEffectiveFocusedElement(preferredProcessIdentifier: processIdentifier)
+    }
+
+    private nonisolated static func systemFocusedApplicationProcessIdentifier() -> pid_t? {
+        let systemWideElement = AXUIElementCreateSystemWide()
+        var focusedApplicationValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            systemWideElement,
+            kAXFocusedApplicationAttribute as CFString,
+            &focusedApplicationValue
+        ) == .success,
+              let focusedApplicationValue,
+              CFGetTypeID(focusedApplicationValue) == AXUIElementGetTypeID()
+        else { return nil }
+
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(
+            focusedApplicationValue as! AXUIElement,
+            &processIdentifier
+        ) == .success,
+              processIdentifier > 0
+        else { return nil }
+        return processIdentifier
+    }
+
+    private func editableFocus(
+        for observation: ApplicationObservation,
+        requiresFocusedElement: Bool
+    ) -> AutoInputEditableFocus? {
 
         var focusedValue: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(
-            observedApplication,
+            observation.applicationElement,
             kAXFocusedUIElementAttribute as CFString,
             &focusedValue
         )
         guard status == .success else {
-            if status == .noValue || status == .attributeUnsupported {
-                onEditableFocusChanged?(nil)
-            } else {
-                handleAccessibilityFailure(status)
+            observation.resetFocusedElement()
+            if status == .apiDisabled || !AXIsProcessTrusted() {
+                accessibilityWasInvalidated()
             }
-            return
+            return nil
         }
         guard let focusedValue,
               CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
-            onEditableFocusChanged?(nil)
-            return
+            observation.resetFocusedElement()
+            return nil
         }
 
         let element = focusedValue as! AXUIElement
+        if requiresFocusedElement,
+           Self.boolAttribute(kAXFocusedAttribute, from: element) != true {
+            observation.resetFocusedElement()
+            return nil
+        }
         guard Self.isEditable(
             element,
-            applicationBundleIdentifier: observedApplicationBundleIdentifier
+            applicationBundleIdentifier: observation.bundleIdentifier
         ),
-              let accessibilityFrame = Self.accessibilityFrame(of: element) else {
-            onEditableFocusChanged?(nil)
-            return
+              let elementAccessibilityFrame = Self.elementAccessibilityFrame(of: element) else {
+            observation.resetFocusedElement()
+            return nil
         }
+        let preferredAccessibilityFrame = Self.preferredAccessibilityFrame(
+            elementFrame: elementAccessibilityFrame,
+            selectionFrame: Self.selectedTextBounds(of: element)
+        )
 
-        onEditableFocusChanged?(AutoInputEditableFocus(
+        return AutoInputEditableFocus(
             frame: Self.appKitFrame(
-                fromAccessibilityFrame: accessibilityFrame,
+                fromAccessibilityFrame: preferredAccessibilityFrame,
                 primaryScreenFrame: Self.primaryScreenFrame
             ),
-            applicationProcessIdentifier: observedApplicationProcessIdentifier
-        ))
+            avoidanceFrame: Self.appKitFrame(
+                fromAccessibilityFrame: elementAccessibilityFrame,
+                primaryScreenFrame: Self.primaryScreenFrame
+            ),
+            applicationProcessIdentifier: observation.processIdentifier,
+            applicationBundleIdentifier: observation.bundleIdentifier,
+            isFromAccessoryApplication: observation.isAccessory,
+            identity: identity(for: element, observation: observation)
+        )
     }
 
-    private func handleAccessibilityFailure(_ status: AXError) {
-        if status == .apiDisabled || status == .notImplemented || !AXIsProcessTrusted() {
-            accessibilityWasInvalidated()
-        } else {
-            onEditableFocusChanged?(nil)
+    private func identity(
+        for element: AXUIElement,
+        observation: ApplicationObservation
+    ) -> AutoInputEditableFocusIdentity {
+        if let focusedAccessibilityElement = observation.focusedAccessibilityElement,
+           CFEqual(focusedAccessibilityElement, element),
+           let focusedElementIdentity = observation.focusedElementIdentity {
+            return focusedElementIdentity
         }
+
+        let identity = AutoInputEditableFocusIdentity()
+        observation.focusedAccessibilityElement = element
+        observation.focusedElementIdentity = identity
+        return identity
+    }
+
+    private func publishNoEditableFocus() {
+        focusedObservationProcessIdentifier = nil
+        onEditableFocusChanged?(nil)
+    }
+
+    private func handleObservationRegistrationFailure(
+        _ status: AXError,
+        application: NSRunningApplication,
+        isAccessory: Bool
+    ) {
+        if status == .apiDisabled || !AXIsProcessTrusted() {
+            accessibilityWasInvalidated()
+            return
+        }
+        if status == .notificationUnsupported || status == .notImplemented {
+            failedProcessIdentifiers.insert(application.processIdentifier)
+            return
+        }
+        scheduleRegistrationRetry(application: application, isAccessory: isAccessory)
+    }
+
+    private func scheduleRegistrationRetry(
+        application: NSRunningApplication,
+        isAccessory: Bool
+    ) {
+        let processIdentifier = application.processIdentifier
+        guard let delayMilliseconds = registrationRetryPolicy.nextDelayMilliseconds(
+            processIdentifier: processIdentifier
+        ) else { return }
+        registrationRetryTasks[processIdentifier]?.cancel()
+        let generation = lifecycle.generation
+        let delay = Duration.milliseconds(delayMilliseconds)
+        registrationRetryTasks[processIdentifier] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled,
+                  let self,
+                  self.lifecycle.accepts(generation) else { return }
+            self.registrationRetryTasks.removeValue(forKey: processIdentifier)
+            self.observe(application, isAccessory: isAccessory)
+            self.refreshEffectiveFocusedElement(
+                preferredProcessIdentifier: isAccessory ? processIdentifier : nil
+            )
+        }
+    }
+
+    private func cancelRegistrationRetry(processIdentifier: pid_t) {
+        registrationRetryTasks.removeValue(forKey: processIdentifier)?.cancel()
+        registrationRetryPolicy.reset(processIdentifier: processIdentifier)
+    }
+
+    private func cancelRegistrationRetries() {
+        registrationRetryTasks.values.forEach { $0.cancel() }
+        registrationRetryTasks.removeAll()
+        registrationRetryPolicy.reset()
     }
 
     private func accessibilityWasInvalidated() {
-        stopObservingApplication()
-        onEditableFocusChanged?(nil)
+        stopObservingApplications()
+        publishNoEditableFocus()
         onAccessibilityInvalidated?()
     }
 
     private nonisolated static let accessibilityCallback: AXObserverCallback = {
-        _, _, notification, reference in
+        _, element, notification, reference in
         guard notification as String == kAXFocusedUIElementChangedNotification as String,
               let reference else { return }
+
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(element, &processIdentifier) == .success,
+              processIdentifier > 0 else { return }
+        let resolvedProcessIdentifier = processIdentifier
 
         let context = Unmanaged<CallbackContext>.fromOpaque(reference).takeUnretainedValue()
         context.withOwner { owner in
             DispatchQueue.main.async { [weak owner] in
-                owner?.inspectFocusedElement()
+                owner?.handleFocusedElementNotification(
+                    processIdentifier: resolvedProcessIdentifier
+                )
             }
         }
     }
@@ -345,18 +707,14 @@ final class AccessibilityAutoInputFocusObserver: AutoInputFocusObserving {
             && applicationBundleIdentifier.map(terminalBundleIdentifiers.contains) == true
     }
 
-    private static func accessibilityFrame(of element: AXUIElement) -> CGRect? {
+    private static func elementAccessibilityFrame(of element: AXUIElement) -> CGRect? {
         guard let position = pointAttribute(kAXPositionAttribute, from: element),
               let size = sizeAttribute(kAXSizeAttribute, from: element),
               size.width > 0,
               size.height > 0 else {
             return nil
         }
-        let elementFrame = CGRect(origin: position, size: size)
-        return preferredAccessibilityFrame(
-            elementFrame: elementFrame,
-            selectionFrame: selectedTextBounds(of: element)
-        )
+        return CGRect(origin: position, size: size)
     }
 
     static func preferredAccessibilityFrame(

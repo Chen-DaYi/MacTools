@@ -417,6 +417,134 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "大" } }
       }
     },
+    "settings.hud.reducedFrequency.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تقليل تكرار عرض المؤشر" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Häufige HUD-Anzeigen reduzieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reduce Frequent HUDs" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Reducir avisos frecuentes" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Réduire les affichages fréquents" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "頻繁な表示を減らす" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "잦은 표시 줄이기" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Reduzir avisos frequentes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Реже показывать индикатор" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "减少频繁提示" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "減少頻繁提示" } }
+      }
+    },
+    "settings.hud.reducedFrequency.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يظهر فورًا عند أول تركيز وعند تغيير مصدر الإدخال. مع بقاء المصدر نفسه، يعاد التذكير عند بلوغ أحد الحدين أدناه." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beim ersten Fokus und bei Eingabequellenwechseln sofort anzeigen. Bei gleicher Quelle erneut erinnern, sobald einer der Grenzwerte erreicht ist." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show immediately on first focus and source changes. With the same source, remind again when either limit below is reached." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar de inmediato al enfocar por primera vez y al cambiar de fuente. Con la misma fuente, volver a avisar al alcanzar cualquiera de los límites." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Afficher immédiatement au premier focus et lors d’un changement de source. Avec la même source, rappeler dès que l’une des limites est atteinte." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "最初のフォーカス時と入力ソースの変更時はすぐに表示します。同じ入力ソースでは、下のいずれかの条件に達したときに再度表示します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "처음 초점을 맞출 때와 입력 소스 변경 시 즉시 표시합니다. 입력 소스가 같으면 아래 조건 중 하나에 도달할 때 다시 알립니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar imediatamente no primeiro foco e ao mudar a fonte. Com a mesma fonte, lembrar novamente quando qualquer limite abaixo for atingido." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сразу показывать при первом фокусе и смене источника. При том же источнике напоминать снова, когда достигнут любой из лимитов ниже." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "首次聚焦和输入法变化时立即提示。输入法不变时，达到下方任一条件后再次提示。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "首次聚焦和輸入法變化時立即提示。輸入法不變時，達到下方任一條件後再次提示。" } }
+      }
+    },
+    "settings.hud.reminderInterval.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الفاصل الزمني للتذكير" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Erinnerungsintervall" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reminder Interval" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Intervalo de recordatorio" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Intervalle de rappel" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "再通知の間隔" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "알림 간격" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Intervalo de lembrete" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Интервал напоминания" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提示间隔" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "提示間隔" } }
+      }
+    },
+    "settings.hud.reminderInterval.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "أظهر التذكير مجددًا عند التركيز المؤهل التالي بعد انقضاء هذه المدة." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nach Ablauf dieser Zeit beim nächsten geeigneten Fokus erneut anzeigen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show again on the next eligible focus after this much time passes." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Volver a mostrar en el siguiente foco válido una vez transcurrido este tiempo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Réafficher au prochain focus admissible après ce délai." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この時間が経過した後、次に対象の入力領域へフォーカスしたときに再表示します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 시간이 지나면 다음 유효한 초점에서 다시 표시합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar novamente no próximo foco válido após este tempo." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снова показать при следующем подходящем фокусе после этого времени." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "经过这段时间后，在下一次有效聚焦时再次提示。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "經過這段時間後，在下一次有效聚焦時再次提示。" } }
+      }
+    },
+    "settings.hud.reminderInterval.unit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "ث" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sek." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "sec" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "s" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "s" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "秒" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "초" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "s" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "с" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "秒" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "秒" } }
+      }
+    },
+    "settings.hud.appSwitchReminder.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "التذكير عند تبديل التطبيقات" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Erinnerung bei App-Wechsel" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "App-Switch Reminder" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Recordatorio al cambiar de app" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Rappel après changement d’app" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アプリ切り替え通知" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "앱 전환 알림" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Lembrete ao trocar de app" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Напоминание при смене приложений" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用切换提示" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "應用程式切換提示" } }
+      }
+    },
+    "settings.hud.appSwitchReminder.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "أظهر التذكير مجددًا بعد هذا العدد من تبديلات التطبيقات، حتى قبل انتهاء المدة." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nach dieser Anzahl von App-Wechseln erneut anzeigen, auch vor Ablauf des Zeitlimits." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show again after this many app switches, even before the time limit." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Volver a mostrar tras este número de cambios de app, incluso antes del límite de tiempo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Réafficher après ce nombre de changements d’app, même avant la limite de temps." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "時間の条件に達する前でも、この回数だけアプリを切り替えると再表示します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시간 제한 전이라도 이 횟수만큼 앱을 전환하면 다시 표시합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar novamente após este número de trocas de app, mesmo antes do limite de tempo." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снова показать после этого числа переключений приложений, даже до истечения времени." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "达到此切换次数后，即使尚未到提示间隔，也会在输入区域聚焦时提示。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "達到此切換次數後，即使尚未到提示間隔，也會在輸入區域聚焦時提示。" } }
+      }
+    },
+    "settings.hud.appSwitchReminder.unit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تبديلات" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wechsel" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "switches" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "cambios" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "changements" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "回" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "회" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "trocas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "переключения" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "次" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "次" } }
+      }
+    },
     "settings.hud.interactive.title" : {
       "extractionState" : "manual",
       "localizations" : {

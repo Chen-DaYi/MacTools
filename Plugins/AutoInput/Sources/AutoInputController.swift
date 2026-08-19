@@ -2,10 +2,30 @@ import AppKit
 import Foundation
 import OSLog
 
+struct AutoInputHUDPresentationID: Hashable, Sendable {
+    private let rawValue: UUID
+
+    init() {
+        rawValue = UUID()
+    }
+}
+
+enum AutoInputHUDTriggerReason: Int, Sendable {
+    case editableFocus
+    case applicationActivation
+    case inputSourceChange
+}
+
+struct AutoInputHUDPresentationRequest: Sendable {
+    let id: AutoInputHUDPresentationID
+    let reason: AutoInputHUDTriggerReason
+}
+
 struct AutoInputHUDTriggerPolicy {
     private var applicationID: String?
     private var sourceID: String?
-    private var hasPendingPresentation = false
+    private var focusedElementID: AutoInputEditableFocusIdentity?
+    private var pendingPresentation: AutoInputHUDPresentationRequest?
 
     init(currentSourceID: String?) {
         sourceID = currentSourceID
@@ -14,28 +34,134 @@ struct AutoInputHUDTriggerPolicy {
     mutating func applicationDidActivate(_ applicationID: String) -> Bool {
         guard self.applicationID != applicationID else { return false }
         self.applicationID = applicationID
-        hasPendingPresentation = true
+        schedulePresentation(reason: .applicationActivation)
         return true
     }
 
     mutating func inputSourceDidChange(to sourceID: String?) -> Bool {
         guard self.sourceID != sourceID else { return false }
         self.sourceID = sourceID
-        hasPendingPresentation = true
+        schedulePresentation(reason: .inputSourceChange)
         return true
     }
 
-    mutating func consumePresentation() -> Bool {
-        guard hasPendingPresentation else { return false }
-        hasPendingPresentation = false
-        return true
+    mutating func editableFocusDidChange(
+        to focusedElementID: AutoInputEditableFocusIdentity?
+    ) {
+        guard let focusedElementID else {
+            self.focusedElementID = nil
+            if pendingPresentation?.reason == .editableFocus {
+                pendingPresentation = nil
+            }
+            return
+        }
+        guard self.focusedElementID != focusedElementID else { return }
+        self.focusedElementID = focusedElementID
+        schedulePresentation(reason: .editableFocus)
+    }
+
+    mutating func consumePresentation() -> AutoInputHUDPresentationRequest? {
+        defer { pendingPresentation = nil }
+        return pendingPresentation
     }
 
     mutating func reset(currentSourceID: String?) {
         applicationID = nil
         sourceID = currentSourceID
-        hasPendingPresentation = false
+        focusedElementID = nil
+        pendingPresentation = nil
     }
+
+    private mutating func schedulePresentation(reason: AutoInputHUDTriggerReason) {
+        if let pendingPresentation,
+           pendingPresentation.reason.rawValue > reason.rawValue {
+            return
+        }
+        pendingPresentation = AutoInputHUDPresentationRequest(
+            id: AutoInputHUDPresentationID(),
+            reason: reason
+        )
+    }
+}
+
+struct AutoInputHUDFrequencyPolicy {
+    private var wasReducingFrequentPresentations = false
+    private var lastPresentedSourceID: String?
+    private var lastPresentationTime: TimeInterval?
+    private var lastObservedApplicationID: String?
+    private var appSwitchCount = 0
+
+    mutating func applicationDidChange(to applicationID: String) {
+        guard let lastObservedApplicationID else {
+            self.lastObservedApplicationID = applicationID
+            return
+        }
+        guard lastObservedApplicationID != applicationID else { return }
+        self.lastObservedApplicationID = applicationID
+        appSwitchCount += 1
+    }
+
+    mutating func shouldPresent(
+        sourceID: String,
+        reducesFrequentPresentations: Bool,
+        reminderInterval: TimeInterval,
+        appSwitchThreshold: Int,
+        at presentationTime: TimeInterval
+    ) -> Bool {
+        guard reducesFrequentPresentations else {
+            wasReducingFrequentPresentations = false
+            recordPresentation(sourceID: sourceID, at: presentationTime)
+            return true
+        }
+
+        if !wasReducingFrequentPresentations {
+            wasReducingFrequentPresentations = true
+            recordPresentation(sourceID: sourceID, at: presentationTime)
+            return true
+        }
+
+        if lastPresentedSourceID != sourceID {
+            recordPresentation(sourceID: sourceID, at: presentationTime)
+            return true
+        }
+
+        if appSwitchCount >= max(appSwitchThreshold, 1) {
+            recordPresentation(sourceID: sourceID, at: presentationTime)
+            return true
+        }
+
+        if let lastPresentationTime,
+           presentationTime >= lastPresentationTime,
+           presentationTime - lastPresentationTime < reminderInterval {
+            return false
+        }
+
+        recordPresentation(sourceID: sourceID, at: presentationTime)
+        return true
+    }
+
+    mutating func reset(currentApplicationID: String? = nil) {
+        wasReducingFrequentPresentations = false
+        lastPresentedSourceID = nil
+        lastPresentationTime = nil
+        lastObservedApplicationID = currentApplicationID
+        appSwitchCount = 0
+    }
+
+    private mutating func recordPresentation(
+        sourceID: String,
+        at presentationTime: TimeInterval
+    ) {
+        lastPresentedSourceID = sourceID
+        lastPresentationTime = presentationTime
+        appSwitchCount = 0
+    }
+}
+
+private struct AutoInputHUDReminderPreferences: Equatable {
+    let reducesFrequency: Bool
+    let intervalSeconds: Int
+    let appSwitchCount: Int
 }
 
 @MainActor
@@ -55,6 +181,7 @@ final class AutoInputController: ObservableObject {
     private let accessibilityCheck: AutoInputAccessibilityChecking
     private let applicationNotificationCenter: NotificationCenter
     private let switchErrorMessage: () -> String
+    private let now: () -> TimeInterval
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "AutoInputPlugin"
@@ -69,7 +196,10 @@ final class AutoInputController: ObservableObject {
     private var isFocusMonitoringActive = false
     private var applicationActivationObserver: NSObjectProtocol?
     private var operationGeneration = 0
+    private var inputSourceOwnerBundleIdentifier: String?
     private var hudTriggerPolicy: AutoInputHUDTriggerPolicy
+    private var hudFrequencyPolicy = AutoInputHUDFrequencyPolicy()
+    private var appliedHUDReminderPreferences: AutoInputHUDReminderPreferences
 
     var currentSourceID: String? {
         sourceController.currentSourceID
@@ -84,6 +214,7 @@ final class AutoInputController: ObservableObject {
         hudLabelResolver: InputSourceHUDLabelResolving = StandardInputSourceHUDLabelResolver(),
         accessibilityCheck: AutoInputAccessibilityChecking = SystemAutoInputAccessibilityCheck(),
         applicationNotificationCenter: NotificationCenter = .default,
+        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         switchErrorMessage: @escaping () -> String = { "无法切换输入法" }
     ) {
         self.store = store
@@ -94,9 +225,15 @@ final class AutoInputController: ObservableObject {
         self.hudLabelResolver = hudLabelResolver
         self.accessibilityCheck = accessibilityCheck
         self.applicationNotificationCenter = applicationNotificationCenter
+        self.now = now
         self.switchErrorMessage = switchErrorMessage
         self.sources = sourceController.sources
         self.isAccessibilityGranted = accessibilityCheck.isTrusted
+        self.appliedHUDReminderPreferences = AutoInputHUDReminderPreferences(
+            reducesFrequency: store.reducesFrequentHUDPresentations,
+            intervalSeconds: store.inputHUDReminderIntervalSeconds,
+            appSwitchCount: store.inputHUDAppSwitchReminderCount
+        )
         self.hudTriggerPolicy = AutoInputHUDTriggerPolicy(
             currentSourceID: sourceController.currentSourceID
         )
@@ -117,6 +254,7 @@ final class AutoInputController: ObservableObject {
         focusObserver.onAccessibilityInvalidated = { [weak self] in
             self?.handleAccessibilityInvalidated()
         }
+        synchronizeHUDReminderPreferences()
         refreshAccessibilityPermission(prompt: false)
         reconcilePermissionObservation()
         reconcileActiveServices()
@@ -130,6 +268,8 @@ final class AutoInputController: ObservableObject {
         stopSourceMonitoring()
         hudPresenter.dismiss()
         hudTriggerPolicy.reset(currentSourceID: sourceController.currentSourceID)
+        hudFrequencyPolicy.reset()
+        inputSourceOwnerBundleIdentifier = nil
         sourceController.onSourcesChanged = nil
         applicationMonitor.onApplicationActivated = nil
         focusObserver.onEditableFocusChanged = nil
@@ -156,6 +296,7 @@ final class AutoInputController: ObservableObject {
             errorMessage = nil
         }
 
+        synchronizeHUDReminderPreferences()
         refreshAccessibilityPermission(prompt: promptForAccessibility && store.isInputHUDEnabled)
         reconcilePermissionObservation()
         reconcileActiveServices()
@@ -230,9 +371,15 @@ final class AutoInputController: ObservableObject {
     }
 
     private func handleApplicationActivated(_ application: AutoInputApplication) {
-        let applicationChanged = hudTriggerPolicy.applicationDidActivate(
-            application.bundleIdentifier
+        let applicationIdentifier = hudApplicationIdentifier(
+            processIdentifier: application.processIdentifier,
+            fallback: application.bundleIdentifier
         )
+        let inputSourceOwnerBeforeActivation = inputSourceOwnerBundleIdentifier
+        let applicationChanged = hudTriggerPolicy.applicationDidActivate(applicationIdentifier)
+        if applicationChanged {
+            hudFrequencyPolicy.applicationDidChange(to: applicationIdentifier)
+        }
         if hudPermissionObservationActive && !isAccessibilityGranted {
             let wasGranted = isAccessibilityGranted
             refreshAccessibilityPermission(prompt: false)
@@ -241,15 +388,23 @@ final class AutoInputController: ObservableObject {
                 setFocusMonitoring(active: hudActive)
             }
         }
-        if applicationChanged && hudActive && !focusBelongs(to: application) {
-            focusedElement = nil
+        if applicationChanged && hudActive {
             hudPresenter.dismiss()
+            if !focusBelongs(to: application) {
+                focusedElement = nil
+                hudTriggerPolicy.editableFocusDidChange(to: nil)
+            }
         }
-        if let previousApplication = currentApplication,
-           previousApplication.bundleIdentifier != application.bundleIdentifier {
+        if let inputSourceOwnerBeforeActivation,
+           inputSourceOwnerBeforeActivation != application.bundleIdentifier {
+            rememberCurrentSourceIfNeeded(for: inputSourceOwnerBeforeActivation)
+        } else if inputSourceOwnerBeforeActivation == nil,
+                  let previousApplication = currentApplication,
+                  previousApplication.bundleIdentifier != application.bundleIdentifier {
             rememberCurrentSourceIfNeeded(for: previousApplication.bundleIdentifier)
         }
         currentApplication = application
+        inputSourceOwnerBundleIdentifier = application.bundleIdentifier
         operationGeneration += 1
         let generation = operationGeneration
         var shouldRefreshHUD = applicationChanged
@@ -292,7 +447,9 @@ final class AutoInputController: ObservableObject {
 
     private func rememberCurrentSourceIfNeeded() {
         guard autoSwitchActive, store.remembersLastInputSource,
-              let bundleIdentifier = currentApplication?.bundleIdentifier
+              let bundleIdentifier = inputSourceOwnerBundleIdentifier
+                ?? focusedApplicationBundleIdentifier
+                ?? currentApplication?.bundleIdentifier
                 ?? applicationMonitor.frontmostApplication?.bundleIdentifier,
               let sourceID = validCurrentSourceID
         else { return }
@@ -350,6 +507,7 @@ final class AutoInputController: ObservableObject {
             focusedElement = nil
             hudPresenter.dismiss()
             hudTriggerPolicy.reset(currentSourceID: sourceController.currentSourceID)
+            hudFrequencyPolicy.reset()
         }
     }
 
@@ -373,6 +531,7 @@ final class AutoInputController: ObservableObject {
         } else {
             applicationMonitor.stop()
             currentApplication = nil
+            inputSourceOwnerBundleIdentifier = nil
         }
     }
 
@@ -418,34 +577,94 @@ final class AutoInputController: ObservableObject {
             return
         }
 
-        focusedElement = focus
-        guard focus != nil else {
+        guard let focus else {
+            focusedElement = nil
+            hudTriggerPolicy.editableFocusDidChange(to: nil)
             hudPresenter.dismiss()
             return
         }
+        guard focus.isFromAccessoryApplication || focusBelongsToCurrentApplication(focus) else {
+            focusedElement = focus
+            return
+        }
+
+        focusedElement = focus
+        if let bundleIdentifier = focus.applicationBundleIdentifier
+            ?? (focus.isFromAccessoryApplication ? nil : currentApplication?.bundleIdentifier) {
+            transitionInputSourceOwnerIfNeeded(to: bundleIdentifier)
+        }
+        let applicationIdentifier = hudApplicationIdentifier(for: focus)
+        if hudTriggerPolicy.applicationDidActivate(applicationIdentifier) {
+            hudFrequencyPolicy.applicationDidChange(to: applicationIdentifier)
+            hudPresenter.dismiss()
+        }
+        hudTriggerPolicy.editableFocusDidChange(to: focus.identity)
         showPendingHUDForCurrentFocus()
+    }
+
+    private func transitionInputSourceOwnerIfNeeded(to bundleIdentifier: String) {
+        guard inputSourceOwnerBundleIdentifier != bundleIdentifier else { return }
+        if let previousBundleIdentifier = inputSourceOwnerBundleIdentifier {
+            rememberCurrentSourceIfNeeded(for: previousBundleIdentifier)
+        }
+        inputSourceOwnerBundleIdentifier = bundleIdentifier
+
+        guard autoSwitchActive,
+              let target = target(for: bundleIdentifier),
+              target.source.id != sourceController.currentSourceID else {
+            clearErrorIfNeeded()
+            return
+        }
+
+        do {
+            try sourceController.selectSource(id: target.source.id)
+            _ = hudTriggerPolicy.inputSourceDidChange(to: target.source.id)
+            errorMessage = nil
+            if store.remembersLastInputSource {
+                store.remember(inputSourceID: target.source.id, for: bundleIdentifier)
+            }
+            onStateChange?()
+        } catch {
+            logger.error(
+                "Failed to select input source for focused application: \(error.localizedDescription, privacy: .public)"
+            )
+            errorMessage = switchErrorMessage()
+            onStateChange?()
+        }
     }
 
     private func showPendingHUDForCurrentFocus() {
         guard hudActive,
               let focusedElement,
-              focusBelongsToCurrentApplication(focusedElement),
               let sourceID = sourceController.currentSourceID,
               let source = sources.first(where: { $0.id == sourceID }),
-              hudTriggerPolicy.consumePresentation()
+              let presentation = hudTriggerPolicy.consumePresentation()
         else { return }
-        presentHUD(for: source, near: focusedElement)
+        guard hudFrequencyPolicy.shouldPresent(
+            sourceID: source.id,
+            reducesFrequentPresentations: store.reducesFrequentHUDPresentations,
+            reminderInterval: TimeInterval(store.inputHUDReminderIntervalSeconds),
+            appSwitchThreshold: store.inputHUDAppSwitchReminderCount,
+            at: now()
+        ) else { return }
+        presentHUD(for: source, near: focusedElement, presentationID: presentation.id)
     }
 
-    private func presentHUD(for source: AutoInputSource, near focus: AutoInputEditableFocus) {
+    private func presentHUD(
+        for source: AutoInputSource,
+        near focus: AutoInputEditableFocus,
+        presentationID: AutoInputHUDPresentationID
+    ) {
         hudPresenter.show(
             label: hudLabelResolver.displayLabel(for: source),
             near: focus.frame,
+            avoiding: focus.avoidanceFrame,
             configuration: AutoInputHUDConfiguration(
                 size: store.inputHUDSize,
                 position: store.inputHUDPosition,
                 isInteractive: store.isInteractiveHUDEnabled
             ),
+            presentationID: presentationID,
             onActivate: store.isInteractiveHUDEnabled ? { [weak self] in
                 self?.cycleToNextInputSourceFromHUD()
             } : nil
@@ -465,14 +684,25 @@ final class AutoInputController: ObservableObject {
         do {
             try sourceController.selectSource(id: target.id)
             _ = hudTriggerPolicy.inputSourceDidChange(to: target.id)
-            _ = hudTriggerPolicy.consumePresentation()
+            let presentationID = hudTriggerPolicy.consumePresentation()?.id
+                ?? AutoInputHUDPresentationID()
             rememberCurrentSourceIfNeeded()
             errorMessage = nil
             onStateChange?()
             if hudActive,
                let focusedElement,
-               focusBelongsToCurrentApplication(focusedElement) {
-                presentHUD(for: target, near: focusedElement)
+               hudFrequencyPolicy.shouldPresent(
+                   sourceID: target.id,
+                   reducesFrequentPresentations: store.reducesFrequentHUDPresentations,
+                   reminderInterval: TimeInterval(store.inputHUDReminderIntervalSeconds),
+                   appSwitchThreshold: store.inputHUDAppSwitchReminderCount,
+                   at: now()
+               ) {
+                presentHUD(
+                    for: target,
+                    near: focusedElement,
+                    presentationID: presentationID
+                )
             }
         } catch {
             logger.error("Failed to select input source from HUD: \(error.localizedDescription, privacy: .public)")
@@ -504,6 +734,31 @@ final class AutoInputController: ObservableObject {
         return focusProcessIdentifier == applicationProcessIdentifier
     }
 
+    private func hudApplicationIdentifier(for focus: AutoInputEditableFocus) -> String {
+        hudApplicationIdentifier(
+            processIdentifier: focus.applicationProcessIdentifier,
+            fallback: focus.applicationBundleIdentifier
+                ?? currentApplication?.bundleIdentifier
+                ?? "unknown"
+        )
+    }
+
+    private var focusedApplicationBundleIdentifier: String? {
+        guard let focusedElement,
+              let bundleIdentifier = focusedElement.applicationBundleIdentifier,
+              focusedElement.isFromAccessoryApplication
+                || focusBelongsToCurrentApplication(focusedElement)
+        else { return nil }
+        return bundleIdentifier
+    }
+
+    private func hudApplicationIdentifier(
+        processIdentifier: pid_t?,
+        fallback: String
+    ) -> String {
+        processIdentifier.map { "pid:\($0)" } ?? fallback
+    }
+
     private func refreshAccessibilityPermission(prompt: Bool) {
         let previous = isAccessibilityGranted
         isAccessibilityGranted = prompt
@@ -518,6 +773,7 @@ final class AutoInputController: ObservableObject {
         isAccessibilityGranted = false
         hudPresenter.dismiss()
         hudTriggerPolicy.reset(currentSourceID: sourceController.currentSourceID)
+        hudFrequencyPolicy.reset()
         reconcileActiveServices()
         onStateChange?()
     }
@@ -549,5 +805,27 @@ final class AutoInputController: ObservableObject {
         guard let applicationActivationObserver else { return }
         applicationNotificationCenter.removeObserver(applicationActivationObserver)
         self.applicationActivationObserver = nil
+    }
+
+    private func synchronizeHUDReminderPreferences() {
+        let preferences = AutoInputHUDReminderPreferences(
+            reducesFrequency: store.reducesFrequentHUDPresentations,
+            intervalSeconds: store.inputHUDReminderIntervalSeconds,
+            appSwitchCount: store.inputHUDAppSwitchReminderCount
+        )
+        guard preferences != appliedHUDReminderPreferences else { return }
+        appliedHUDReminderPreferences = preferences
+        hudFrequencyPolicy.reset(currentApplicationID: currentHUDApplicationIdentifier)
+    }
+
+    private var currentHUDApplicationIdentifier: String? {
+        if let focusedElement {
+            return hudApplicationIdentifier(for: focusedElement)
+        }
+        guard let currentApplication else { return nil }
+        return hudApplicationIdentifier(
+            processIdentifier: currentApplication.processIdentifier,
+            fallback: currentApplication.bundleIdentifier
+        )
     }
 }
