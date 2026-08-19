@@ -1,6 +1,6 @@
 import Foundation
 
-/// A bounded, memory-pressure-aware cache for Apple Shortcuts icon bitmaps.
+/// A memory-pressure-aware cache for Apple Shortcuts icon bitmaps.
 ///
 /// Icon bytes are intentionally kept out of `AppleShortcutItem`/`AppleShortcutVisualMetadata`
 /// because they are only needed while the settings workspace is visible; storing them in the
@@ -9,8 +9,9 @@ import Foundation
 @MainActor
 final class AppleShortcutsIconCache {
     /// Icons are downscaled and re-encoded before being cached (see
-    /// `AppleShortcutsVisualMetadataLoader`), so this budget only needs to comfortably cover the
-    /// settings list without letting a pathological icon inflate the app's resident memory.
+    /// `AppleShortcutsVisualMetadataLoader`), so this advisory budget should comfortably cover the
+    /// settings list. `NSCache` may temporarily exceed its total-cost limit; cached icons are
+    /// removed explicitly when the settings workspace closes.
     static let defaultTotalCostLimit = 16 * 1_024 * 1_024
 
     private let cache = NSCache<NSUUID, NSData>()
