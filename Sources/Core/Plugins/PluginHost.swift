@@ -2638,8 +2638,18 @@ final class PluginHost: ObservableObject {
     private func handleApplicationActivityStateChange(
         _ state: PluginApplicationActivityState
     ) {
-        guard applicationActivityState != state else { return }
+        let previousState = applicationActivityState
+        guard previousState != state else { return }
         applicationActivityState = state
+
+        if previousState == .waking {
+            switch state {
+            case .interactive, .sessionInactive, .displayAsleep:
+                scheduleDisplayTopologyRefresh()
+            case .systemSleeping, .waking:
+                break
+            }
+        }
 
         for plugin in activePlugins {
             guard let activityStateHandling = plugin as? any PluginApplicationActivityStateHandling else {
