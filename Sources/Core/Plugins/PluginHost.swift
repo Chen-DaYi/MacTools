@@ -1500,6 +1500,12 @@ final class PluginHost: ObservableObject {
         actionRegistry.availability(for: reference)
     }
 
+    var appIntentEligibleActionCount: Int {
+        MacToolsAppIntentActionCatalog(registry: actionRegistry)
+            .actions(includeUnavailable: false)
+            .count
+    }
+
     func actionExposurePolicy(
         for reference: ActionReference,
         on surface: ActionExposureSurface
