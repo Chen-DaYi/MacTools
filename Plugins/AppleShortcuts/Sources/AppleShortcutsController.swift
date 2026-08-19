@@ -77,6 +77,10 @@ final class AppleShortcutsController: ObservableObject {
     private var settingsLibraryRevision: Int?
     private var queuedIconIDs: [UUID] = []
     private var queuedIconIDSet: Set<UUID> = []
+    /// Shortcuts whose icon failed to load (or decoded to nothing) during the current settings
+    /// session, so they aren't retried on every re-appearance (e.g. list scrolling) until the
+    /// next settings-scope refresh. Holds only identifiers, not icon bytes.
+    private var failedIconIDs: Set<UUID> = []
     private var activeIconTasks: [UUID: Task<Void, Never>] = [:]
     private var activeRuns: [UUID: ActiveRun] = [:]
     private var activeViews: [UUID: ActiveView] = [:]
@@ -180,6 +184,7 @@ final class AppleShortcutsController: ObservableObject {
         if case .settings = scope {
             cancelIconLoads()
             discardCachedIcons()
+            failedIconIDs.removeAll()
         }
         let token = UUID()
         let generation = lifecycleGeneration
@@ -444,6 +449,7 @@ final class AppleShortcutsController: ObservableObject {
         guard isSettingsVisible,
               snapshot.discovery.shortcuts.contains(where: { $0.id == shortcutID && $0.visualMetadata != nil }),
               iconCache.data(for: shortcutID) == nil,
+              !failedIconIDs.contains(shortcutID),
               activeIconTasks[shortcutID] == nil,
               queuedIconIDSet.insert(shortcutID).inserted
         else { return }
@@ -536,6 +542,7 @@ final class AppleShortcutsController: ObservableObject {
             queuedIconIDSet.remove(shortcutID)
             guard snapshot.discovery.shortcuts.contains(where: { $0.id == shortcutID }),
                   iconCache.data(for: shortcutID) == nil,
+                  !failedIconIDs.contains(shortcutID),
                   activeIconTasks[shortcutID] == nil
             else { continue }
             return shortcutID
@@ -552,10 +559,14 @@ final class AppleShortcutsController: ObservableObject {
         defer { startQueuedIconLoads() }
         guard isSettingsVisible,
               settingsVisibilityGeneration == visibilityGeneration,
-              !Task.isCancelled,
-              case let .success(iconData) = result,
-              let iconData
+              !Task.isCancelled
         else { return }
+        guard case let .success(iconData) = result, let iconData else {
+            // Remember the failure so a permanently broken icon isn't retried every time its
+            // row reappears (e.g. list scrolling); a settings-scope refresh gives it another try.
+            failedIconIDs.insert(shortcutID)
+            return
+        }
         iconCache.store(iconData, for: shortcutID)
         iconCacheRevision &+= 1
         onStateChange?()
