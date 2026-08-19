@@ -14,8 +14,13 @@ protocol AppleShortcutsVisualMetadataLoading: Sendable {
 
 struct AppleShortcutsVisualMetadataLoader: AppleShortcutsVisualMetadataLoading {
     static let scriptTimeoutSeconds = 10
+    /// Safety net on the raw AppleScript reply, before it is decoded and downscaled.
     static let maximumIconByteCount = 4 * 1_024 * 1_024
-    static let maximumTotalIconByteCount = 128 * 1_024 * 1_024
+    /// Icons only ever render at small sizes in the settings list/detail panes, so downscaling
+    /// them before caching avoids retaining full-resolution artwork for no visual benefit.
+    static let maximumIconDimension: CGFloat = 128
+    /// Safety net on the re-encoded bitmap actually handed to the cache.
+    static let maximumEncodedIconByteCount = 512 * 1_024
 
     private static let scriptSource = """
     with timeout of \(scriptTimeoutSeconds) seconds
@@ -92,11 +97,44 @@ struct AppleShortcutsVisualMetadataLoader: AppleShortcutsVisualMetadataLoading {
         guard error == nil else {
             return .failure(.automationUnavailable)
         }
-        let iconData = result.data
-        guard iconData.count <= maximumIconByteCount else {
+        let rawIconData = result.data
+        guard rawIconData.count <= maximumIconByteCount else {
             return .success(nil)
         }
-        return .success(iconData)
+        return .success(downscaledIconData(rawIconData, maximumDimension: maximumIconDimension))
+    }
+
+    /// Re-encodes an icon bitmap as a small, bounded-size PNG so cached icons stay cheap in memory.
+    /// Returns `nil` when the source data cannot be decoded or the result still exceeds the budget.
+    static func downscaledIconData(_ data: Data, maximumDimension: CGFloat) -> Data? {
+        guard let image = NSImage(data: data) else { return nil }
+        let sourceSize = image.size
+        guard sourceSize.width > 0, sourceSize.height > 0 else { return nil }
+
+        let scale = min(1, maximumDimension / max(sourceSize.width, sourceSize.height))
+        let targetSize = NSSize(
+            width: max(1, sourceSize.width * scale),
+            height: max(1, sourceSize.height * scale)
+        )
+
+        let resized = NSImage(size: targetSize)
+        resized.lockFocus()
+        image.draw(
+            in: NSRect(origin: .zero, size: targetSize),
+            from: NSRect(origin: .zero, size: sourceSize),
+            operation: .copy,
+            fraction: 1
+        )
+        resized.unlockFocus()
+
+        guard let tiffData = resized.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:]),
+              pngData.count <= maximumEncodedIconByteCount
+        else {
+            return nil
+        }
+        return pngData
     }
 
     static func parse(
@@ -114,24 +152,8 @@ struct AppleShortcutsVisualMetadataLoader: AppleShortcutsVisualMetadataLoading {
                   let color = color(red: red, green: green, blue: blue) else {
                 return .failure(.malformedReply)
             }
-            metadataByID[id] = AppleShortcutVisualMetadata(
-                color: color,
-                iconTIFFData: nil
-            )
+            metadataByID[id] = AppleShortcutVisualMetadata(color: color)
         }
         return .success(metadataByID)
-    }
-
-    static func retainedIconData(
-        _ rawIconData: Data?,
-        remainingByteCount: inout Int
-    ) -> Data? {
-        guard let rawIconData,
-              rawIconData.count <= maximumIconByteCount,
-              rawIconData.count <= remainingByteCount else {
-            return nil
-        }
-        remainingByteCount -= rawIconData.count
-        return rawIconData
     }
 }

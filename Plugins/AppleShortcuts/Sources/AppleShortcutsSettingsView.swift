@@ -248,7 +248,8 @@ struct AppleShortcutsSettingsView: View {
         HStack(spacing: 10) {
             AppleShortcutIcon(
                 shortcutID: row.id,
-                metadata: row.item.visualMetadata,
+                color: row.item.visualMetadata?.color,
+                iconData: controller.cachedIconData(for: row.id),
                 size: 30,
                 requestIcon: controller.requestIcon
             )
@@ -283,7 +284,8 @@ struct AppleShortcutsSettingsView: View {
                     HStack(alignment: .top, spacing: 14) {
                         AppleShortcutIcon(
                             shortcutID: row.id,
-                            metadata: row.item.visualMetadata,
+                            color: row.item.visualMetadata?.color,
+                            iconData: controller.cachedIconData(for: row.id),
                             size: 56,
                             requestIcon: controller.requestIcon
                         )
@@ -487,16 +489,16 @@ struct AppleShortcutsSettingsView: View {
 
 private struct AppleShortcutIcon: View {
     let shortcutID: UUID
-    let metadata: AppleShortcutVisualMetadata?
+    let color: AppleShortcutVisualMetadata.Color?
+    let iconData: Data?
     let size: CGFloat
     let requestIcon: (UUID) -> Void
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
-                .fill(color)
-            if let iconData = metadata?.iconTIFFData,
-               let icon = NSImage(data: iconData) {
+                .fill(fillColor)
+            if let iconData, let icon = NSImage(data: iconData) {
                 Image(nsImage: icon)
                     .resizable()
                     .interpolation(.high)
@@ -510,14 +512,14 @@ private struct AppleShortcutIcon: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
-        .task(id: metadata?.iconTIFFData == nil) {
-            guard metadata != nil else { return }
+        .task(id: iconData == nil) {
+            guard color != nil else { return }
             requestIcon(shortcutID)
         }
     }
 
-    private var color: Color {
-        guard let color = metadata?.color else { return .purple }
+    private var fillColor: Color {
+        guard let color else { return .purple }
         return Color(
             red: color.red.clamped(to: 0 ... 1),
             green: color.green.clamped(to: 0 ... 1),

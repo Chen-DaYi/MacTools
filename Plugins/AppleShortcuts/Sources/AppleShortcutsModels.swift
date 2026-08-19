@@ -37,7 +37,6 @@ struct AppleShortcutVisualMetadata: Codable, Equatable, Hashable, Sendable {
     }
 
     let color: Color
-    let iconTIFFData: Data?
 }
 
 struct AppleShortcutFolder: Codable, Equatable, Hashable, Identifiable, Sendable {
