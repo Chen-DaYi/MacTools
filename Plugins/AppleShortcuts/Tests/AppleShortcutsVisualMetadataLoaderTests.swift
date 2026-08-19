@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 @testable import AppleShortcutsPlugin
@@ -24,21 +25,40 @@ final class AppleShortcutsVisualMetadataLoaderTests: XCTestCase {
         ))
     }
 
-    func testRetainsIconsOnlyWithinTheTotalMemoryBudget() {
-        var remainingByteCount = 2
-        let firstIcon = Data([0x01, 0x02])
+    func testDownscalesLargeIconsBelowTheEncodedByteBudget() throws {
+        let largeIcon = try XCTUnwrap(Self.makePNGData(size: NSSize(width: 1_024, height: 1_024)))
 
-        XCTAssertEqual(
-            AppleShortcutsVisualMetadataLoader.retainedIconData(
-                firstIcon,
-                remainingByteCount: &remainingByteCount
-            ),
-            firstIcon
-        )
-        XCTAssertEqual(remainingByteCount, 0)
-        XCTAssertNil(AppleShortcutsVisualMetadataLoader.retainedIconData(
-            Data([0x03]),
-            remainingByteCount: &remainingByteCount
+        let downscaled = try XCTUnwrap(AppleShortcutsVisualMetadataLoader.downscaledIconData(
+            largeIcon,
+            maximumDimension: AppleShortcutsVisualMetadataLoader.maximumIconDimension
         ))
+        let image = try XCTUnwrap(NSImage(data: downscaled))
+
+        XCTAssertLessThanOrEqual(
+            downscaled.count,
+            AppleShortcutsVisualMetadataLoader.maximumEncodedIconByteCount
+        )
+        XCTAssertLessThanOrEqual(image.size.width, AppleShortcutsVisualMetadataLoader.maximumIconDimension)
+        XCTAssertLessThanOrEqual(image.size.height, AppleShortcutsVisualMetadataLoader.maximumIconDimension)
+    }
+
+    func testDownscalingReturnsNilForUndecodableData() {
+        XCTAssertNil(AppleShortcutsVisualMetadataLoader.downscaledIconData(
+            Data([0x00, 0x01, 0x02]),
+            maximumDimension: AppleShortcutsVisualMetadataLoader.maximumIconDimension
+        ))
+    }
+
+    private static func makePNGData(size: NSSize) -> Data? {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.systemBlue.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        image.unlockFocus()
+        guard let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData) else {
+            return nil
+        }
+        return bitmap.representation(using: .png, properties: [:])
     }
 }

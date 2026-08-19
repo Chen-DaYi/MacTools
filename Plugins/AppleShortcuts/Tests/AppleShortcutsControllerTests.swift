@@ -28,10 +28,7 @@ final class AppleShortcutsControllerTests: XCTestCase {
 
     func testRefreshAppliesVisualMetadataToDiscoveredShortcut() async throws {
         let item = AppleShortcutItem(id: UUID(), name: "Colored")
-        let metadata = AppleShortcutVisualMetadata(
-            color: .init(red: 0.25, green: 0.5, blue: 0.75),
-            iconTIFFData: Data([0x01])
-        )
+        let metadata = AppleShortcutVisualMetadata(color: .init(red: 0.25, green: 0.5, blue: 0.75))
         let controller = makeController(
             runner: AppleShortcutsRunnerStub(shortcuts: [item]),
             visualMetadataLoader: AppleShortcutsVisualMetadataStub(result: .success([item.id: metadata]))
@@ -169,10 +166,7 @@ final class AppleShortcutsControllerTests: XCTestCase {
 
     func testSettingsRefreshLoadsFoldersAndVisualMetadataAfterBackgroundRefresh() async throws {
         let item = AppleShortcutItem(id: UUID(), name: "Visual")
-        let metadata = AppleShortcutVisualMetadata(
-            color: .init(red: 0.25, green: 0.5, blue: 0.75),
-            iconTIFFData: Data([0x01])
-        )
+        let metadata = AppleShortcutVisualMetadata(color: .init(red: 0.25, green: 0.5, blue: 0.75))
         let runner = AppleShortcutsRunnerStub(shortcuts: [item])
         let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(
             result: .success([item.id: metadata])
@@ -206,10 +200,7 @@ final class AppleShortcutsControllerTests: XCTestCase {
         var currentDate = Date(timeIntervalSince1970: 1_000)
         let first = AppleShortcutItem(id: UUID(), name: "First")
         let second = AppleShortcutItem(id: UUID(), name: "Second")
-        let metadata = AppleShortcutVisualMetadata(
-            color: .init(red: 0.25, green: 0.5, blue: 0.75),
-            iconTIFFData: nil
-        )
+        let metadata = AppleShortcutVisualMetadata(color: .init(red: 0.25, green: 0.5, blue: 0.75))
         let runner = AppleShortcutsRunnerStub(shortcuts: [first])
         let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(
             result: .success([first.id: metadata, second.id: metadata])
@@ -249,10 +240,7 @@ final class AppleShortcutsControllerTests: XCTestCase {
 
     func testHidingSettingsCancelsRichRefreshAndDiscardsItsResult() async throws {
         let item = AppleShortcutItem(id: UUID(), name: "Hidden")
-        let metadata = AppleShortcutVisualMetadata(
-            color: .init(red: 0.25, green: 0.5, blue: 0.75),
-            iconTIFFData: nil
-        )
+        let metadata = AppleShortcutVisualMetadata(color: .init(red: 0.25, green: 0.5, blue: 0.75))
         let visualMetadataLoader = AppleShortcutsVisualMetadataDelayedStub(
             result: .success([item.id: metadata]),
             delay: .milliseconds(100)
@@ -277,10 +265,7 @@ final class AppleShortcutsControllerTests: XCTestCase {
 
     func testVisibleSettingsLoadsIconsOnDemand() async throws {
         let item = AppleShortcutItem(id: UUID(), name: "Icon")
-        let metadata = AppleShortcutVisualMetadata(
-            color: .init(red: 0.25, green: 0.5, blue: 0.75),
-            iconTIFFData: nil
-        )
+        let metadata = AppleShortcutVisualMetadata(color: .init(red: 0.25, green: 0.5, blue: 0.75))
         let iconData = Data([0x01, 0x02])
         let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(
             result: .success([item.id: metadata]),
@@ -298,13 +283,77 @@ final class AppleShortcutsControllerTests: XCTestCase {
         }
         controller.requestIcon(for: item.id)
         for _ in 0 ..< 100 {
-            if controller.snapshot.discovery.shortcuts.first?.visualMetadata?.iconTIFFData == iconData { break }
+            if controller.cachedIconData(for: item.id) == iconData { break }
             await Task.yield()
         }
 
         let iconCallCount = await visualMetadataLoader.observedIconCallCount()
         XCTAssertEqual(iconCallCount, 1)
-        XCTAssertEqual(controller.snapshot.discovery.shortcuts.first?.visualMetadata?.iconTIFFData, iconData)
+        XCTAssertEqual(controller.cachedIconData(for: item.id), iconData)
+    }
+
+    func testHidingSettingsDiscardsCachedIcons() async throws {
+        let item = AppleShortcutItem(id: UUID(), name: "Icon")
+        let metadata = AppleShortcutVisualMetadata(color: .init(red: 0.25, green: 0.5, blue: 0.75))
+        let iconData = Data([0x01, 0x02])
+        let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(
+            result: .success([item.id: metadata]),
+            iconResult: .success(iconData)
+        )
+        let controller = makeController(
+            runner: AppleShortcutsRunnerStub(shortcuts: [item]),
+            visualMetadataLoader: visualMetadataLoader
+        )
+
+        controller.setSettingsVisible(true)
+        for _ in 0 ..< 100 {
+            if controller.snapshot.discovery.shortcuts.first?.visualMetadata == metadata { break }
+            await Task.yield()
+        }
+        controller.requestIcon(for: item.id)
+        for _ in 0 ..< 100 {
+            if controller.cachedIconData(for: item.id) == iconData { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.cachedIconData(for: item.id), iconData)
+
+        controller.setSettingsVisible(false)
+
+        XCTAssertNil(controller.cachedIconData(for: item.id))
+    }
+
+    func testFailedIconLoadIsNotRetriedUntilSettingsRefresh() async throws {
+        let item = AppleShortcutItem(id: UUID(), name: "Broken")
+        let metadata = AppleShortcutVisualMetadata(color: .init(red: 0.25, green: 0.5, blue: 0.75))
+        let visualMetadataLoader = AppleShortcutsVisualMetadataCountingStub(
+            result: .success([item.id: metadata]),
+            iconResult: .failure(.automationUnavailable)
+        )
+        let controller = makeController(
+            runner: AppleShortcutsRunnerStub(shortcuts: [item]),
+            visualMetadataLoader: visualMetadataLoader
+        )
+
+        controller.setSettingsVisible(true)
+        for _ in 0 ..< 100 {
+            if controller.snapshot.discovery.shortcuts.first?.visualMetadata == metadata { break }
+            await Task.yield()
+        }
+        controller.requestIcon(for: item.id)
+        for _ in 0 ..< 100 {
+            if await visualMetadataLoader.observedIconCallCount() == 1 { break }
+            await Task.yield()
+        }
+
+        // Simulates a list row disappearing and reappearing (e.g. scrolling), which recreates the
+        // icon view and re-triggers its `.task`.
+        controller.requestIcon(for: item.id)
+        controller.requestIcon(for: item.id)
+        for _ in 0 ..< 20 { await Task.yield() }
+
+        let iconCallCount = await visualMetadataLoader.observedIconCallCount()
+        XCTAssertEqual(iconCallCount, 1)
+        XCTAssertNil(controller.cachedIconData(for: item.id))
     }
 
     func testMembershipQueriesRespectConcurrencyLimit() async throws {

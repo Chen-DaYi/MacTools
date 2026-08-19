@@ -54,12 +54,16 @@ final class AppleShortcutsController: ObservableObject {
     static let maximumConcurrentIconLoads = 2
 
     @Published private(set) var snapshot = AppleShortcutsSnapshot()
+    /// Bumped whenever the icon cache changes so observers (e.g. the settings list) can react
+    /// without icon bytes needing to live in `snapshot` itself.
+    @Published private(set) var iconCacheRevision = 0
 
     let executionStore: AppleShortcutsExecutionStore
     var onStateChange: (() -> Void)?
 
     private let runner: any AppleShortcutsCommandRunning
     private let visualMetadataLoader: any AppleShortcutsVisualMetadataLoading
+    private let iconCache: AppleShortcutsIconCache
     private let localization: PluginLocalization
     private let now: () -> Date
     private var refreshTask: Task<Void, Never>?
@@ -73,8 +77,10 @@ final class AppleShortcutsController: ObservableObject {
     private var settingsLibraryRevision: Int?
     private var queuedIconIDs: [UUID] = []
     private var queuedIconIDSet: Set<UUID> = []
-    private var loadedIconIDs: Set<UUID> = []
-    private var iconAccessOrder: [UUID] = []
+    /// Shortcuts whose icon failed to load (or decoded to nothing) during the current settings
+    /// session, so they aren't retried on every re-appearance (e.g. list scrolling) until the
+    /// next settings-scope refresh. Holds only identifiers, not icon bytes.
+    private var failedIconIDs: Set<UUID> = []
     private var activeIconTasks: [UUID: Task<Void, Never>] = [:]
     private var activeRuns: [UUID: ActiveRun] = [:]
     private var activeViews: [UUID: ActiveView] = [:]
@@ -85,12 +91,14 @@ final class AppleShortcutsController: ObservableObject {
         executionStore: AppleShortcutsExecutionStore = AppleShortcutsExecutionStore(),
         runner: any AppleShortcutsCommandRunning,
         visualMetadataLoader: any AppleShortcutsVisualMetadataLoading = AppleShortcutsVisualMetadataLoader(),
+        iconCache: AppleShortcutsIconCache = AppleShortcutsIconCache(),
         localization: PluginLocalization,
         now: @escaping () -> Date = { .now }
     ) {
         self.executionStore = executionStore
         self.runner = runner
         self.visualMetadataLoader = visualMetadataLoader
+        self.iconCache = iconCache
         self.localization = localization
         self.now = now
     }
@@ -142,9 +150,16 @@ final class AppleShortcutsController: ObservableObject {
             pendingSettingsRefresh = false
             cancelSettingsRefresh()
             cancelIconLoads()
+            discardCachedIcons()
             return
         }
         refreshForSettings(force: false)
+    }
+
+    /// Returns the cached icon bitmap for a shortcut, if one has been loaded, without triggering
+    /// a fetch. Views should pair this with `requestIcon(for:)` in a `.task` to load on demand.
+    func cachedIconData(for shortcutID: UUID) -> Data? {
+        iconCache.data(for: shortcutID)
     }
 
     private var isLibraryFresh: Bool {
@@ -168,8 +183,8 @@ final class AppleShortcutsController: ObservableObject {
         guard force || !isLibraryFresh else { return }
         if case .settings = scope {
             cancelIconLoads()
-            loadedIconIDs.removeAll()
-            iconAccessOrder.removeAll()
+            discardCachedIcons()
+            failedIconIDs.removeAll()
         }
         let token = UUID()
         let generation = lifecycleGeneration
@@ -432,15 +447,9 @@ final class AppleShortcutsController: ObservableObject {
 
     func requestIcon(for shortcutID: UUID) {
         guard isSettingsVisible,
-              let shortcut = snapshot.discovery.shortcuts.first(where: { $0.id == shortcutID }),
-              shortcut.visualMetadata != nil
-        else { return }
-        if shortcut.visualMetadata?.iconTIFFData != nil {
-            markIconAsRecentlyUsed(shortcutID)
-            return
-        }
-        guard
-              !loadedIconIDs.contains(shortcutID),
+              snapshot.discovery.shortcuts.contains(where: { $0.id == shortcutID && $0.visualMetadata != nil }),
+              iconCache.data(for: shortcutID) == nil,
+              !failedIconIDs.contains(shortcutID),
               activeIconTasks[shortcutID] == nil,
               queuedIconIDSet.insert(shortcutID).inserted
         else { return }
@@ -459,6 +468,7 @@ final class AppleShortcutsController: ObservableObject {
         isSettingsVisible = false
         pendingSettingsRefresh = false
         cancelIconLoads()
+        discardCachedIcons()
         snapshot.isRefreshing = false
         snapshot.errorMessage = nil
         snapshot.operationMessage = nil
@@ -531,7 +541,8 @@ final class AppleShortcutsController: ObservableObject {
             let shortcutID = queuedIconIDs.removeFirst()
             queuedIconIDSet.remove(shortcutID)
             guard snapshot.discovery.shortcuts.contains(where: { $0.id == shortcutID }),
-                  !loadedIconIDs.contains(shortcutID),
+                  iconCache.data(for: shortcutID) == nil,
+                  !failedIconIDs.contains(shortcutID),
                   activeIconTasks[shortcutID] == nil
             else { continue }
             return shortcutID
@@ -550,59 +561,21 @@ final class AppleShortcutsController: ObservableObject {
               settingsVisibilityGeneration == visibilityGeneration,
               !Task.isCancelled
         else { return }
-        loadedIconIDs.insert(shortcutID)
-        guard case let .success(iconData) = result,
-              let iconData,
-              retainIconData(iconData, for: shortcutID)
-        else { return }
-        guard let index = snapshot.discovery.shortcuts.firstIndex(where: { $0.id == shortcutID }),
-              let metadata = snapshot.discovery.shortcuts[index].visualMetadata
-        else { return }
-        snapshot.discovery.shortcuts[index].visualMetadata = AppleShortcutVisualMetadata(
-            color: metadata.color,
-            iconTIFFData: iconData
-        )
+        guard case let .success(iconData) = result, let iconData else {
+            // Remember the failure so a permanently broken icon isn't retried every time its
+            // row reappears (e.g. list scrolling); a settings-scope refresh gives it another try.
+            failedIconIDs.insert(shortcutID)
+            return
+        }
+        iconCache.store(iconData, for: shortcutID)
+        iconCacheRevision &+= 1
         onStateChange?()
     }
 
-    private func retainIconData(_ iconData: Data, for shortcutID: UUID) -> Bool {
-        guard iconData.count <= AppleShortcutsVisualMetadataLoader.maximumIconByteCount else {
-            return false
-        }
-        while retainedIconByteCount + iconData.count
-            > AppleShortcutsVisualMetadataLoader.maximumTotalIconByteCount,
-            let leastRecentlyUsedID = iconAccessOrder.first
-        {
-            removeRetainedIcon(for: leastRecentlyUsedID)
-        }
-        guard retainedIconByteCount + iconData.count
-            <= AppleShortcutsVisualMetadataLoader.maximumTotalIconByteCount
-        else { return false }
-        markIconAsRecentlyUsed(shortcutID)
-        return true
-    }
-
-    private var retainedIconByteCount: Int {
-        snapshot.discovery.shortcuts.reduce(into: 0) { total, item in
-            total += item.visualMetadata?.iconTIFFData?.count ?? 0
-        }
-    }
-
-    private func markIconAsRecentlyUsed(_ shortcutID: UUID) {
-        iconAccessOrder.removeAll { $0 == shortcutID }
-        iconAccessOrder.append(shortcutID)
-    }
-
-    private func removeRetainedIcon(for shortcutID: UUID) {
-        iconAccessOrder.removeAll { $0 == shortcutID }
-        loadedIconIDs.remove(shortcutID)
-        guard let index = snapshot.discovery.shortcuts.firstIndex(where: { $0.id == shortcutID }),
-              let metadata = snapshot.discovery.shortcuts[index].visualMetadata
-        else { return }
-        snapshot.discovery.shortcuts[index].visualMetadata = AppleShortcutVisualMetadata(
-            color: metadata.color,
-            iconTIFFData: nil
-        )
+    /// Frees every cached icon bitmap. Safe to call even when nothing is cached.
+    private func discardCachedIcons() {
+        iconCache.removeAll()
+        iconCacheRevision &+= 1
     }
 
     private func execute(
