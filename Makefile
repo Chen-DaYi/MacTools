@@ -44,7 +44,7 @@ E2E_SESSION ?=
 E2E_DURATION ?= 90
 E2E_PACK ?=
 
-.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release stop-debug-app install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
+.PHONY: setup generate-plugin-config generate build script-tests ci sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release stop-debug-app install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -66,6 +66,25 @@ generate: generate-plugin-config
 build: generate
 	@echo "Building Debug app and plugins..."
 	@$(XCODEBUILD) -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -destination "$(BUILD_DESTINATION)" -derivedDataPath $(DERIVED_DATA) build -quiet
+
+script-tests:
+	@$(PYTHON3) -m unittest discover -s scripts/tests -p 'test_*.py'
+
+ci: generate
+	@$(MAKE) script-tests
+	@$(PYTHON3) scripts/changelog.py validate
+	@$(XCODEBUILD) \
+		-project $(PROJECT_FILE) \
+		-scheme $(PROJECT_NAME) \
+		-configuration Debug \
+		-destination "$(BUILD_DESTINATION)" \
+		-derivedDataPath $(DERIVED_DATA) \
+		CODE_SIGNING_ALLOWED=NO \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGN_IDENTITY= \
+		test \
+		-quiet
+	@./scripts/plugins/verify-plugin-kit-v5-binary-compatibility.sh
 
 sync-debug-plugins: build
 	@if [ -n "$(PLUGIN)" ]; then \
