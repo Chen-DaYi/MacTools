@@ -683,6 +683,11 @@ private struct PendingPreferencesImport: Identifiable {
 }
 
 private struct PreferencesBackupSettingsRow: View {
+    private enum ManualBackupFeedback {
+        case created
+        case unchanged
+    }
+
     @ObservedObject var pluginHost: PluginHost
     @State private var pendingImport: PendingPreferencesImport?
     @State private var isChoosingExport = false
@@ -693,6 +698,7 @@ private struct PreferencesBackupSettingsRow: View {
     @State private var isPreparingImport = false
     @State private var isImporting = false
     @State private var isBackingUp = false
+    @State private var manualBackupFeedback: ManualBackupFeedback?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -734,13 +740,20 @@ private struct PreferencesBackupSettingsRow: View {
                     }
                 )
             ) {
-                Text(
-                    AppL10n.preferencesBackup(
-                        "preferencesBackup.automatic.enabled",
-                        defaultValue: "自动备份设置"
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(
+                        AppL10n.preferencesBackup(
+                            "preferencesBackup.automatic.enabled",
+                            defaultValue: "自动备份设置"
+                        )
                     )
-                )
-                .font(PluginSettingsTheme.Typography.rowTitle)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+
+                    Text(automaticBackupSummaryText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .toggleStyle(.switch)
             .controlSize(.small)
@@ -750,11 +763,20 @@ private struct PreferencesBackupSettingsRow: View {
             backupRowDivider
 
             HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Text(AppL10n.preferencesBackup(
-                    "preferencesBackup.manual.title",
-                    defaultValue: "手动备份"
-                ))
-                .font(PluginSettingsTheme.Typography.rowTitle)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.manual.title",
+                        defaultValue: "手动备份"
+                    ))
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+
+                    if let manualBackupFeedback {
+                        Text(manualBackupFeedbackText(manualBackupFeedback))
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
 
                 Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
 
@@ -863,6 +885,57 @@ private struct PreferencesBackupSettingsRow: View {
         )
     }
 
+    private var automaticBackupSummaryText: String {
+        let summary = pluginHost.automaticPreferencesBackupSummary
+        guard let latestBackupDate = summary.latestBackupDate else {
+            return AppL10n.preferencesBackup(
+                "preferencesBackup.automatic.noBackups",
+                defaultValue: "还没有备份"
+            )
+        }
+
+        let locale = PluginRuntimeLocalization.locale
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = locale
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .short
+        let date = dateFormatter.string(from: latestBackupDate)
+        let lastBackup = String(
+            format: AppL10n.preferencesBackup(
+                "preferencesBackup.automatic.lastBackup",
+                defaultValue: "上次备份：%@"
+            ),
+            locale: locale,
+            date
+        )
+        let size = PreferencesBackupStatusFormatter.byteCount(
+            summary.totalSize,
+            locale: locale
+        )
+        let history = AppL10n.preferencesBackupPluralFormat(
+            "preferencesBackup.automatic.history",
+            defaultValue: "%d 个备份 · %@",
+            count: summary.snapshotCount,
+            size
+        )
+        return "\(lastBackup) · \(history)"
+    }
+
+    private func manualBackupFeedbackText(_ feedback: ManualBackupFeedback) -> String {
+        switch feedback {
+        case .created:
+            AppL10n.preferencesBackup(
+                "preferencesBackup.manual.created",
+                defaultValue: "刚刚已备份"
+            )
+        case .unchanged:
+            AppL10n.preferencesBackup(
+                "preferencesBackup.manual.unchanged",
+                defaultValue: "与上次备份相比没有变化"
+            )
+        }
+    }
+
     private func backUpNow() {
         Task { @MainActor in
             isBackingUp = true
@@ -871,15 +944,9 @@ private struct PreferencesBackupSettingsRow: View {
                 let result = try await pluginHost.createAutomaticPreferencesBackupNow()
                 switch result {
                 case .created:
-                    alertMessage = AppL10n.preferencesBackup(
-                        "preferencesBackup.automatic.created",
-                        defaultValue: "偏好设置已备份。"
-                    )
+                    manualBackupFeedback = .created
                 case .unchanged:
-                    alertMessage = AppL10n.preferencesBackup(
-                        "preferencesBackup.automatic.unchanged",
-                        defaultValue: "偏好设置没有变化，无需创建新备份。"
-                    )
+                    manualBackupFeedback = .unchanged
                 }
             } catch {
                 alertMessage = preferencesBackupErrorMessage(error)
@@ -1043,6 +1110,14 @@ private struct PreferencesBackupSettingsRow: View {
 private struct PreferencesPluginOption: Identifiable, Equatable {
     let id: String
     let title: String
+}
+
+enum PreferencesBackupStatusFormatter {
+    static func byteCount(_ count: Int, locale: Locale) -> String {
+        Int64(count).formatted(
+            ByteCountFormatStyle(style: .file).locale(locale)
+        )
+    }
 }
 
 private struct PreferencesExportSelectionSheet: View {

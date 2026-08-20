@@ -30,6 +30,53 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         )
     }
 
+    func testStatusFormattingUsesAppLocaleForPluralCountsAndSizes() {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer {
+            PluginRuntimeLocalization.source.setPreference(originalPreference)
+        }
+
+        let englishSize = PreferencesBackupStatusFormatter.byteCount(
+            159_000,
+            locale: Locale(identifier: "en")
+        )
+        let frenchSize = PreferencesBackupStatusFormatter.byteCount(
+            159_000,
+            locale: Locale(identifier: "fr")
+        )
+        XCTAssertTrue(englishSize.lowercased().contains("kb"))
+        XCTAssertTrue(frenchSize.contains("ko"))
+
+        PluginRuntimeLocalization.source.setPreference("ru")
+        let russian = AppL10n.preferencesBackupPluralFormat(
+            "preferencesBackup.automatic.history",
+            defaultValue: "%d backups · %@",
+            count: 21,
+            englishSize
+        )
+        XCTAssertTrue(russian.contains("21 копия"))
+
+        PluginRuntimeLocalization.source.setPreference("ar")
+        let arabic = AppL10n.preferencesBackupPluralFormat(
+            "preferencesBackup.automatic.history",
+            defaultValue: "%d backups · %@",
+            count: 2,
+            englishSize
+        )
+        XCTAssertTrue(arabic.contains("نسختان احتياطيتان"))
+
+        PluginRuntimeLocalization.source.setPreference("zh-Hans")
+        let simplifiedChinese = AppL10n.preferencesBackupPluralFormat(
+            "preferencesBackup.automatic.history",
+            defaultValue: "%d backups · %@",
+            count: 14,
+            englishSize
+        )
+        XCTAssertTrue(simplifiedChinese.contains("14 个备份"))
+    }
+
     func testStoreDeduplicatesSnapshotsThatOnlyDifferByExportDate() throws {
         let directory = makeTemporaryDirectoryURL()
         let store = AutomaticPreferencesBackupStore(directoryURL: directory)
@@ -42,6 +89,66 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         let files = try backupFiles(in: directory)
         XCTAssertEqual(files.count, 1)
         _ = try PreferencesBackup.decodeJSON(Data(contentsOf: files[0]))
+    }
+
+    func testStoreDeduplicatesPluginJSONThatOnlyDiffersByEncodingOrder() throws {
+        let directory = makeTemporaryDirectoryURL()
+        let store = AutomaticPreferencesBackupStore(directoryURL: directory)
+        let firstDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let secondDate = firstDate.addingTimeInterval(30)
+        let firstPluginData = Data(#"{"enabled":true,"items":[{"b":2,"a":1}]}"#.utf8)
+        let secondPluginData = Data(#"{"items":[{"a":1,"b":2}],"enabled":true}"#.utf8)
+
+        XCTAssertCreated(
+            try store.write(
+                makeBackup(
+                    marker: "same",
+                    date: firstDate,
+                    pluginPreferences: ["test-plugin": firstPluginData]
+                ),
+                now: firstDate
+            )
+        )
+        XCTAssertUnchanged(
+            try store.write(
+                makeBackup(
+                    marker: "same",
+                    date: secondDate,
+                    pluginPreferences: ["test-plugin": secondPluginData]
+                ),
+                now: secondDate
+            )
+        )
+
+        XCTAssertEqual(try backupFiles(in: directory).count, 1)
+    }
+
+    func testStoreKeepsSemanticallyChangedPluginJSON() throws {
+        let directory = makeTemporaryDirectoryURL()
+        let store = AutomaticPreferencesBackupStore(directoryURL: directory)
+        let firstDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let secondDate = firstDate.addingTimeInterval(30)
+
+        XCTAssertCreated(
+            try store.write(
+                makeBackup(
+                    marker: "same",
+                    pluginPreferences: ["test-plugin": Data(#"{"enabled":true}"#.utf8)]
+                ),
+                now: firstDate
+            )
+        )
+        XCTAssertCreated(
+            try store.write(
+                makeBackup(
+                    marker: "same",
+                    pluginPreferences: ["test-plugin": Data(#"{"enabled":false}"#.utf8)]
+                ),
+                now: secondDate
+            )
+        )
+
+        XCTAssertEqual(try backupFiles(in: directory).count, 2)
     }
 
     func testStoreWritesChangedSnapshotsAtomicallyAndKeepsThemImportable() throws {
@@ -60,6 +167,26 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
             XCTAssertLessThanOrEqual(data.count, PreferencesBackup.maximumFileSize)
             _ = try PreferencesBackup.decodeJSON(data)
         }
+    }
+
+    func testStoreSummaryReportsLatestBackupAndHistorySize() throws {
+        let directory = makeTemporaryDirectoryURL()
+        let store = AutomaticPreferencesBackupStore(directoryURL: directory)
+        let firstDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let secondDate = firstDate.addingTimeInterval(10)
+
+        XCTAssertCreated(try store.write(makeBackup(marker: "first"), now: firstDate))
+        XCTAssertCreated(try store.write(makeBackup(marker: "second"), now: secondDate))
+
+        let summary = try store.summary()
+        let files = try backupFiles(in: directory)
+        let expectedSize = try files.reduce(0) { total, url in
+            let values = try url.resourceValues(forKeys: [.fileSizeKey])
+            return total + (values.fileSize ?? 0)
+        }
+        XCTAssertEqual(summary.latestBackupDate, secondDate)
+        XCTAssertEqual(summary.snapshotCount, 2)
+        XCTAssertEqual(summary.totalSize, expectedSize)
     }
 
     func testAutomaticBackupFileNameUsesReadableLocalDateAndTime() {
@@ -181,9 +308,11 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
             debounceDelay: .milliseconds(30)
         )
         var marker = "first"
+        var publishedSummary: AutomaticPreferencesBackupSummary?
         coordinator.snapshotProvider = { [unowned self] in
             self.makeBackup(marker: marker)
         }
+        coordinator.summaryHandler = { publishedSummary = $0 }
 
         coordinator.persistentPreferencesDidChange()
         marker = "second"
@@ -197,6 +326,62 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         XCTAssertEqual(files.count, 1)
         let backup = try await PreferencesBackup.decodeJSON(contentsOf: files[0])
         XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["second"])
+        XCTAssertEqual(publishedSummary?.snapshotCount, 1)
+    }
+
+    func testCoordinatorPublishesSummaryAfterCreatedUnchangedAndSafetyWrites() async throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory)
+        )
+        var marker = "first"
+        var summaries: [AutomaticPreferencesBackupSummary] = []
+        coordinator.snapshotProvider = { [unowned self] in
+            self.makeBackup(marker: marker)
+        }
+        coordinator.summaryHandler = { summaries.append($0) }
+
+        XCTAssertCreated(try await coordinator.createBackupNow())
+        XCTAssertEqual(summaries.last?.snapshotCount, 1)
+
+        XCTAssertUnchanged(try await coordinator.createBackupNow())
+        XCTAssertEqual(summaries.count, 2)
+        XCTAssertEqual(summaries.last?.snapshotCount, 1)
+
+        marker = "second"
+        try coordinator.createSafetySnapshotBeforeImport()
+        XCTAssertEqual(summaries.count, 3)
+        XCTAssertEqual(summaries.last?.snapshotCount, 2)
+    }
+
+    func testCoordinatorBuildsOneSnapshotAfterAChangeBurst() async throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory),
+            debounceDelay: .milliseconds(40)
+        )
+        var snapshotCount = 0
+        coordinator.snapshotProvider = { [unowned self] in
+            snapshotCount += 1
+            return self.makeBackup(marker: "burst")
+        }
+
+        for _ in 0 ..< 10 {
+            coordinator.persistentPreferencesDidChange()
+        }
+        XCTAssertEqual(snapshotCount, 0)
+
+        for _ in 0 ..< 50 {
+            if (try? backupFiles(in: directory).count) == 1 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(snapshotCount, 1)
+        XCTAssertEqual(try backupFiles(in: directory).count, 1)
     }
 
     func testTerminationFlushesPendingSnapshot() throws {
@@ -242,6 +427,21 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: file))
         XCTAssertEqual(backup.pluginPreferences[plugin.metadata.id], Data("changed".utf8))
         XCTAssertTrue(host.automaticPreferencesBackupEnabled)
+    }
+
+    func testPluginHostCollectsEachPortablePreferencePayloadOncePerBackup() {
+        let defaults = makeDefaults()
+        let coordinator = AutomaticPreferencesBackupCoordinator(userDefaults: defaults)
+        let plugin = CountingPortablePreferencesTestPlugin()
+        let host = makeHost(
+            defaults: defaults,
+            coordinator: coordinator,
+            plugins: [plugin]
+        )
+
+        _ = host.makePreferencesBackup()
+
+        XCTAssertEqual(plugin.backupRequestCount, 1)
     }
 
     func testApplicationPreferencePersistenceSchedulesBackup() async throws {
@@ -359,7 +559,8 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
     private func makeBackup(
         marker: String,
         date: Date = .now,
-        appearance: AppAppearancePreference = .system
+        appearance: AppAppearancePreference = .system,
+        pluginPreferences: [String: Data] = [:]
     ) -> PreferencesBackup {
         PreferencesBackup(
             application: PreferencesBackup.ApplicationPreferences(
@@ -372,6 +573,7 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
                 hiddenPluginIDs: []
             ),
             shortcutCustomizations: [:],
+            pluginPreferences: pluginPreferences,
             exportedAt: date
         )
     }
@@ -480,4 +682,31 @@ private final class PersistentPreferenceSignalTestPlugin:
         portablePreference = Data(value.utf8)
         onPersistentPreferencesChange?()
     }
+}
+
+@MainActor
+private final class CountingPortablePreferencesTestPlugin:
+    MacToolsPlugin,
+    PluginPortablePreferencesProviding
+{
+    let metadata = PluginMetadata(
+        id: "counting-portable-preferences-test",
+        title: "Counting Portable Preferences Test",
+        iconName: "gearshape",
+        iconTint: .blue,
+        order: 0,
+        defaultDescription: "Counting Portable Preferences Test"
+    )
+
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var backupRequestCount = 0
+
+    func makePortablePreferencesBackup() -> Data? {
+        backupRequestCount += 1
+        return Data(#"{"enabled":true}"#.utf8)
+    }
+
+    func restorePortablePreferences(from data: Data) {}
 }

@@ -206,12 +206,38 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
             && shortcutCustomizations == other.shortcutCustomizations
             && actionShortcutAssignments == other.actionShortcutAssignments
             && actionShortcutAssignmentsWereEncoded == other.actionShortcutAssignmentsWereEncoded
-            && pluginPreferences == other.pluginPreferences
+            && pluginPreferencesHaveSameMeaningfulContent(as: other.pluginPreferences)
             && pluginPreferenceActionReferences == other.pluginPreferenceActionReferences
             && actionInvocationPresets == other.actionInvocationPresets
             && workflows == other.workflows
             && automationRules == other.automationRules
             && selection == other.selection
+    }
+
+    private func pluginPreferencesHaveSameMeaningfulContent(
+        as other: [String: Data]
+    ) -> Bool {
+        guard pluginPreferences.count == other.count else { return false }
+        return pluginPreferences.allSatisfy { pluginID, data in
+            guard let otherData = other[pluginID] else { return false }
+            if data == otherData { return true }
+            guard let value = try? JSONSerialization.jsonObject(with: data),
+                  let otherValue = try? JSONSerialization.jsonObject(with: otherData),
+                  JSONSerialization.isValidJSONObject(value),
+                  JSONSerialization.isValidJSONObject(otherValue),
+                  let canonicalData = try? JSONSerialization.data(
+                      withJSONObject: value,
+                      options: [.sortedKeys]
+                  ),
+                  let canonicalOtherData = try? JSONSerialization.data(
+                      withJSONObject: otherValue,
+                      options: [.sortedKeys]
+                  )
+            else {
+                return false
+            }
+            return canonicalData == canonicalOtherData
+        }
     }
 
     static func decodeJSON(_ data: Data) throws -> PreferencesBackup {

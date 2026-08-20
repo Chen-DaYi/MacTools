@@ -486,6 +486,8 @@ final class PluginHost: ObservableObject {
     @Published private(set) var hasActivePlugin = false
     @Published private(set) var localizationRevision = 0
     @Published private(set) var automaticPreferencesBackupEnabled = false
+    @Published private(set) var automaticPreferencesBackupSummary =
+        AutomaticPreferencesBackupSummary.empty
 
     /// The app shell installs this while the application is running. The host
     /// emits typed requests but never manipulates windows or popovers directly.
@@ -691,13 +693,19 @@ final class PluginHost: ObservableObject {
                     "Automatic preferences backup failed: \(error.localizedDescription, privacy: .public)"
                 )
             }
+            automaticPreferencesBackupCoordinator.summaryHandler = { [weak self] summary in
+                self?.automaticPreferencesBackupSummary = summary
+            }
+            Task { [weak automaticPreferencesBackupCoordinator] in
+                await automaticPreferencesBackupCoordinator?.refreshSummary()
+            }
             persistentPreferencesCancellable = NotificationCenter.default.publisher(
                 for: UserDefaults.didChangeNotification,
                 object: shortcutStore.userDefaults
             )
             .receive(on: RunLoop.main)
             .sink { [weak automaticPreferencesBackupCoordinator] _ in
-                automaticPreferencesBackupCoordinator?.persistentPreferencesDidChange()
+                automaticPreferencesBackupCoordinator?.observedUserDefaultsDidChange()
             }
         }
 
@@ -814,8 +822,7 @@ final class PluginHost: ObservableObject {
         let portableWorkflows = automationSnapshot.workflows.filter {
             portableWorkflowIDs.contains($0.id)
         }
-        let portablePreferences = portablePluginPreferences()
-        let selectedPortablePreferences = portablePreferences.filter {
+        let selectedPortablePreferences = proposedPortablePreferences.filter {
             selection.pluginPreferenceIDs.contains($0.key)
         }
         let referenceIsPortable: (ActionReference) -> Bool = { [weak self] reference in

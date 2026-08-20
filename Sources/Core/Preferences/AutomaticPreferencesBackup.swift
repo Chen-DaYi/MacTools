@@ -11,6 +11,18 @@ struct AutomaticPreferencesBackupRecord: Equatable, Sendable {
     let size: Int
 }
 
+struct AutomaticPreferencesBackupSummary: Equatable, Sendable {
+    static let empty = AutomaticPreferencesBackupSummary(
+        latestBackupDate: nil,
+        snapshotCount: 0,
+        totalSize: 0
+    )
+
+    let latestBackupDate: Date?
+    let snapshotCount: Int
+    let totalSize: Int
+}
+
 /// Thread-safe filesystem store used from detached tasks during normal app use
 /// and synchronously for the narrow pre-import and termination safety paths.
 final class AutomaticPreferencesBackupStore: @unchecked Sendable {
@@ -87,6 +99,17 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
             )
             try rotate(updatedRecords, now: now)
             return .created(url)
+        }
+    }
+
+    func summary() throws -> AutomaticPreferencesBackupSummary {
+        try withLock {
+            let records = try records()
+            return AutomaticPreferencesBackupSummary(
+                latestBackupDate: records.map(\.date).max(),
+                snapshotCount: records.count,
+                totalSize: records.reduce(0) { $0 + max(0, $1.size) }
+            )
         }
     }
 
@@ -219,14 +242,10 @@ final class AutomaticPreferencesBackupCoordinator {
     private let store: AutomaticPreferencesBackupStore
     private let debounceDelay: Duration
     private var pendingTask: Task<Void, Never>?
-    private var lastObservedSnapshot: PreferencesBackup?
 
-    var snapshotProvider: (() -> PreferencesBackup?)? {
-        didSet {
-            lastObservedSnapshot = snapshotProvider?()
-        }
-    }
+    var snapshotProvider: (() -> PreferencesBackup?)?
     var failureHandler: ((Error) -> Void)?
+    var summaryHandler: ((AutomaticPreferencesBackupSummary) -> Void)?
     private(set) var isEnabled: Bool
 
     init(
@@ -259,18 +278,28 @@ final class AutomaticPreferencesBackupCoordinator {
     }
 
     func persistentPreferencesDidChange() {
-        guard isEnabled, let snapshot = snapshotProvider?() else { return }
-        guard lastObservedSnapshot?.hasSameMeaningfulContent(as: snapshot) != true else {
-            return
+        scheduleBackup(resetDebounce: true)
+    }
+
+    /// UserDefaults notifications do not identify the changed key. Coalesce
+    /// the whole burst without letting unrelated writes postpone a backup.
+    func observedUserDefaultsDidChange() {
+        scheduleBackup(resetDebounce: false)
+    }
+
+    private func scheduleBackup(resetDebounce: Bool) {
+        guard isEnabled else { return }
+        if pendingTask != nil {
+            guard resetDebounce else { return }
+            pendingTask?.cancel()
         }
-        lastObservedSnapshot = snapshot
-        pendingTask?.cancel()
         pendingTask = Task { [weak self] in
             guard let self else { return }
             do {
                 try await Task.sleep(for: debounceDelay)
                 guard !Task.isCancelled else { return }
-                _ = try await createBackupNow()
+                pendingTask = nil
+                _ = try await performBackupNow()
             } catch is CancellationError {
                 return
             } catch {
@@ -285,10 +314,33 @@ final class AutomaticPreferencesBackupCoordinator {
         guard let backup = snapshotProvider?() else {
             throw CocoaError(.fileNoSuchFile)
         }
-        lastObservedSnapshot = backup
-        let result = try await Task.detached(priority: .utility) { [store] in
-            try store.write(backup)
+        return try await performBackupNow(backup: backup)
+    }
+
+    func refreshSummary() async {
+        do {
+            let summary = try await Task.detached(priority: .utility) { [store] in
+                try store.summary()
+            }.value
+            summaryHandler?(summary)
+        } catch {
+            failureHandler?(error)
+        }
+    }
+
+    private func performBackupNow(
+        backup providedBackup: PreferencesBackup? = nil
+    ) async throws -> AutomaticPreferencesBackupWriteResult {
+        guard let backup = providedBackup ?? snapshotProvider?() else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let (result, summary) = try await Task.detached(priority: .utility) { [store] in
+            let result = try store.write(backup)
+            return (result, try? store.summary())
         }.value
+        if let summary {
+            summaryHandler?(summary)
+        }
         return result
     }
 
@@ -302,8 +354,10 @@ final class AutomaticPreferencesBackupCoordinator {
         pendingTask?.cancel()
         pendingTask = nil
         guard let backup = snapshotProvider?() else { return }
-        lastObservedSnapshot = backup
         _ = try store.write(backup)
+        if let summary = try? store.summary() {
+            summaryHandler?(summary)
+        }
     }
 
     /// AppKit termination does not await asynchronous work. This is the one
@@ -313,9 +367,11 @@ final class AutomaticPreferencesBackupCoordinator {
         pendingTask?.cancel()
         pendingTask = nil
         guard let backup = snapshotProvider?() else { return }
-        lastObservedSnapshot = backup
         do {
             _ = try store.write(backup)
+            if let summary = try? store.summary() {
+                summaryHandler?(summary)
+            }
         } catch {
             failureHandler?(error)
         }

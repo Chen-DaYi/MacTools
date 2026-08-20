@@ -72,6 +72,89 @@
         }
       }
     },
+    "preferencesBackup.automatic.noBackups": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لا توجد نسخ احتياطية بعد" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Noch keine Backups" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No backups yet" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Aún no hay copias" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucune sauvegarde" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "バックアップはまだありません" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "아직 백업 없음" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Nenhum backup ainda" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Резервных копий пока нет" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "还没有备份" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "尚無備份" } }
+      }
+    },
+    "preferencesBackup.automatic.lastBackup": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "آخر نسخة احتياطية: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Letztes Backup: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Last backup: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Última copia: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Dernière sauvegarde : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "前回のバックアップ：%@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "최근 백업: %@" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Último backup: %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Последняя копия: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "上次备份：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "上次備份：%@" } }
+      }
+    },
+    "preferencesBackup.automatic.history": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "variations": { "plural": {
+          "zero": { "stringUnit": { "state": "translated", "value": "%d نسخ احتياطية · %@" } },
+          "one": { "stringUnit": { "state": "translated", "value": "%d نسخة احتياطية · %@" } },
+          "two": { "stringUnit": { "state": "translated", "value": "%d نسختان احتياطيتان · %@" } },
+          "few": { "stringUnit": { "state": "translated", "value": "%d نسخ احتياطية · %@" } },
+          "many": { "stringUnit": { "state": "translated", "value": "%d نسخة احتياطية · %@" } },
+          "other": { "stringUnit": { "state": "translated", "value": "%d نسخة احتياطية · %@" } }
+        } } },
+        "de": { "variations": { "plural": {
+          "one": { "stringUnit": { "state": "translated", "value": "%d Backup · %@" } },
+          "other": { "stringUnit": { "state": "translated", "value": "%d Backups · %@" } }
+        } } },
+        "en": { "variations": { "plural": {
+          "one": { "stringUnit": { "state": "translated", "value": "%d snapshot · %@" } },
+          "other": { "stringUnit": { "state": "translated", "value": "%d snapshots · %@" } }
+        } } },
+        "es": { "variations": { "plural": {
+          "one": { "stringUnit": { "state": "translated", "value": "%d copia · %@" } },
+          "other": { "stringUnit": { "state": "translated", "value": "%d copias · %@" } }
+        } } },
+        "fr": { "variations": { "plural": {
+          "one": { "stringUnit": { "state": "translated", "value": "%d sauvegarde · %@" } },
+          "other": { "stringUnit": { "state": "translated", "value": "%d sauvegardes · %@" } }
+        } } },
+        "ja": { "variations": { "plural": {
+          "other": { "stringUnit": { "state": "translated", "value": "%d件 · %@" } }
+        } } },
+        "ko": { "variations": { "plural": {
+          "other": { "stringUnit": { "state": "translated", "value": "백업 %d개 · %@" } }
+        } } },
+        "pt": { "variations": { "plural": {
+          "one": { "stringUnit": { "state": "translated", "value": "%d backup · %@" } },
+          "other": { "stringUnit": { "state": "translated", "value": "%d backups · %@" } }
+        } } },
+        "ru": { "variations": { "plural": {
+          "one": { "stringUnit": { "state": "translated", "value": "%d копия · %@" } },
+          "few": { "stringUnit": { "state": "translated", "value": "%d копии · %@" } },
+          "many": { "stringUnit": { "state": "translated", "value": "%d копий · %@" } },
+          "other": { "stringUnit": { "state": "translated", "value": "%d копии · %@" } }
+        } } },
+        "zh-Hans": { "variations": { "plural": {
+          "other": { "stringUnit": { "state": "translated", "value": "%d 个备份 · %@" } }
+        } } },
+        "zh-Hant": { "variations": { "plural": {
+          "other": { "stringUnit": { "state": "translated", "value": "%d 個備份 · %@" } }
+        } } }
+      }
+    },
     "preferencesBackup.automatic.enabled": {
       "extractionState": "manual",
       "localizations": {
@@ -134,6 +217,38 @@
         "ru": { "stringUnit": { "state": "translated", "value": "Резервное копирование вручную" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "手动备份" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "手動備份" } }
+      }
+    },
+    "preferencesBackup.manual.created": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تم النسخ الاحتياطي للتو" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Gerade gesichert" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Backed up just now" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Copia creada ahora" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Sauvegarde effectuée à l’instant" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "たった今バックアップしました" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "방금 백업함" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Backup criado agora" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Копия только что создана" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刚刚已备份" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "剛剛已備份" } }
+      }
+    },
+    "preferencesBackup.manual.unchanged": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لا تغييرات منذ آخر نسخة احتياطية" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Keine Änderungen seit dem letzten Backup" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No changes since the last backup" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Sin cambios desde la última copia" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun changement depuis la dernière sauvegarde" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "前回のバックアップから変更はありません" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "최근 백업 이후 변경 사항 없음" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Sem alterações desde o último backup" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Изменений с последней копии нет" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "与上次备份相比没有变化" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "與上次備份相比沒有變更" } }
       }
     },
     "preferencesBackup.transfer.title": {
