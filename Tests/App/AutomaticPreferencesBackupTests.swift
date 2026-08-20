@@ -49,6 +49,38 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         XCTAssertTrue(englishSize.lowercased().contains("kb"))
         XCTAssertTrue(frenchSize.contains("ko"))
 
+        let referenceDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let englishRelativeDate = PreferencesBackupStatusFormatter.relativeDate(
+            referenceDate.addingTimeInterval(-10 * 60),
+            relativeTo: referenceDate,
+            locale: Locale(identifier: "en"),
+            justNow: "just now"
+        )
+        let englishJustNow = PreferencesBackupStatusFormatter.relativeDate(
+            referenceDate.addingTimeInterval(-30),
+            relativeTo: referenceDate,
+            locale: Locale(identifier: "en"),
+            justNow: "just now"
+        )
+        let futureDate = PreferencesBackupStatusFormatter.relativeDate(
+            referenceDate.addingTimeInterval(10 * 60),
+            relativeTo: referenceDate,
+            locale: Locale(identifier: "en"),
+            justNow: "just now"
+        )
+        let simplifiedChineseRelativeDate = PreferencesBackupStatusFormatter.relativeDate(
+            referenceDate.addingTimeInterval(-2 * 24 * 60 * 60),
+            relativeTo: referenceDate,
+            locale: Locale(identifier: "zh-Hans"),
+            justNow: "刚刚"
+        )
+        XCTAssertTrue(englishRelativeDate.contains("10 min"))
+        XCTAssertTrue(englishRelativeDate.lowercased().contains("ago"))
+        XCTAssertTrue(englishJustNow.lowercased().contains("now"))
+        XCTAssertEqual(futureDate, "just now")
+        XCTAssertTrue(simplifiedChineseRelativeDate.contains("2"))
+        XCTAssertTrue(simplifiedChineseRelativeDate.contains("天前"))
+
         PluginRuntimeLocalization.source.setPreference("ru")
         let russian = AppL10n.preferencesBackupPluralFormat(
             "preferencesBackup.automatic.history",

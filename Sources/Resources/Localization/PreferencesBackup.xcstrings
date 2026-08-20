@@ -155,6 +155,22 @@
         } } }
       }
     },
+    "preferencesBackup.automatic.justNow": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الآن" } },
+        "de": { "stringUnit": { "state": "translated", "value": "gerade eben" } },
+        "en": { "stringUnit": { "state": "translated", "value": "just now" } },
+        "es": { "stringUnit": { "state": "translated", "value": "ahora mismo" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "à l’instant" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "たった今" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "방금" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "agora mesmo" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "только что" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刚刚" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "剛剛" } }
+      }
+    },
     "preferencesBackup.automatic.enabled": {
       "extractionState": "manual",
       "localizations": {

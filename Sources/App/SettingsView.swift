@@ -749,7 +749,7 @@ private struct PreferencesBackupSettingsRow: View {
                     )
                     .font(PluginSettingsTheme.Typography.rowTitle)
 
-                    Text(automaticBackupSummaryText)
+                    automaticBackupSummaryView
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -885,28 +885,63 @@ private struct PreferencesBackupSettingsRow: View {
         )
     }
 
-    private var automaticBackupSummaryText: String {
+    @ViewBuilder
+    private var automaticBackupSummaryView: some View {
         let summary = pluginHost.automaticPreferencesBackupSummary
-        guard let latestBackupDate = summary.latestBackupDate else {
-            return AppL10n.preferencesBackup(
+        if let latestBackupDate = summary.latestBackupDate {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(automaticBackupRelativeText(
+                        latestBackupDate,
+                        relativeTo: context.date
+                    ))
+                    Text(automaticBackupDetailsText(
+                        summary,
+                        latestBackupDate: latestBackupDate
+                    ))
+                }
+                .accessibilityElement(children: .combine)
+            }
+        } else {
+            Text(AppL10n.preferencesBackup(
                 "preferencesBackup.automatic.noBackups",
                 defaultValue: "还没有备份"
-            )
+            ))
         }
+    }
 
+    private func automaticBackupRelativeText(
+        _ latestBackupDate: Date,
+        relativeTo referenceDate: Date
+    ) -> String {
         let locale = PluginRuntimeLocalization.locale
-        let dateFormatter = DateFormatter()
-        dateFormatter.locale = locale
-        dateFormatter.dateStyle = .medium
-        dateFormatter.timeStyle = .short
-        let date = dateFormatter.string(from: latestBackupDate)
-        let lastBackup = String(
+        let relativeDate = PreferencesBackupStatusFormatter.relativeDate(
+            latestBackupDate,
+            relativeTo: referenceDate,
+            locale: locale,
+            justNow: AppL10n.preferencesBackup(
+                "preferencesBackup.automatic.justNow",
+                defaultValue: "刚刚"
+            )
+        )
+        return String(
             format: AppL10n.preferencesBackup(
                 "preferencesBackup.automatic.lastBackup",
                 defaultValue: "上次备份：%@"
             ),
             locale: locale,
-            date
+            relativeDate
+        )
+    }
+
+    private func automaticBackupDetailsText(
+        _ summary: AutomaticPreferencesBackupSummary,
+        latestBackupDate: Date
+    ) -> String {
+        let locale = PluginRuntimeLocalization.locale
+        let date = PreferencesBackupStatusFormatter.absoluteDate(
+            latestBackupDate,
+            locale: locale
         )
         let size = PreferencesBackupStatusFormatter.byteCount(
             summary.totalSize,
@@ -918,7 +953,7 @@ private struct PreferencesBackupSettingsRow: View {
             count: summary.snapshotCount,
             size
         )
-        return "\(lastBackup) · \(history)"
+        return "\(date) · \(history)"
     }
 
     private func manualBackupFeedbackText(_ feedback: ManualBackupFeedback) -> String {
@@ -1113,6 +1148,31 @@ private struct PreferencesPluginOption: Identifiable, Equatable {
 }
 
 enum PreferencesBackupStatusFormatter {
+    static func relativeDate(
+        _ date: Date,
+        relativeTo referenceDate: Date,
+        locale: Locale,
+        justNow: String
+    ) -> String {
+        guard referenceDate.timeIntervalSince(date) >= 60 else {
+            return justNow
+        }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.dateTimeStyle = .numeric
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: referenceDate)
+    }
+
+    static func absoluteDate(_ date: Date, locale: Locale) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
     static func byteCount(_ count: Int, locale: Locale) -> String {
         Int64(count).formatted(
             ByteCountFormatStyle(style: .file).locale(locale)
