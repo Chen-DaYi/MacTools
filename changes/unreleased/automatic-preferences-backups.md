@@ -4,4 +4,4 @@ type: added
 area: Preferences
 ---
 
-Added local automatic preferences backups with deduplication, pre-import safety snapshots, human-readable date-time filenames, 16 MiB snapshots, 128 MiB bounded retention, and separate controls for automatic backup, manual backup, and preference transfer.
+Added local automatic preferences backups with deduplication, safety snapshots, readable date-time filenames, 16 MiB snapshot and 128 MiB history limits, plus separate automatic, manual, and transfer controls.
