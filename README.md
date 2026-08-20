@@ -65,7 +65,7 @@
 | Launch Items | Browse LaunchAgent/LaunchDaemon entries with search, field explanations, and user-level enable/disable controls. |
 | Calendar Widget | View a monthly calendar, lunar calendar data, holidays, and today's events, with any weekday as the start of the week and compact localized navigation controls. |
 | System Status | Show 1-hour charts for CPU, GPU, memory, disk, network, battery, and high-usage processes. |
-| Activity Stats | Track keyboard, mouse, scroll, and foreground app usage, with install/update and uninstall actions for Claude Code, Cursor, and Codex activity hooks. |
+| Activity Stats | Track keyboard, mouse, scroll, and foreground app usage in an adaptive-height dashboard card, with hook management for Claude Code, Cursor, and Codex kept in the Feature Panel and Settings. |
 | Device Battery | Aggregate battery levels for the Mac, trusted iPhone/iPad/Apple Watch devices over USB or Wi-Fi, Bluetooth peripherals, AirPods/Beats split batteries and charging state, and Rapoo VT series mice, with multiple widget layouts and optional low-battery notifications. Background sampling pauses when the widget is hidden unless notifications are enabled. |
 | Fan Control | Manage fan speed presets with automatic, full-speed, and custom fixed-RPM modes; installs the bundled helper on first control and verifies privileged SMC writes before reporting success. |
 | Battery Charge Limit | Limit battery charging to a chosen cap, defaulting to 80%; charging stops at the cap and does not automatically resume below it unless the user chooses to continue or force discharge. |
