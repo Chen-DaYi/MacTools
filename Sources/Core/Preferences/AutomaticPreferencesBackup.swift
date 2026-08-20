@@ -17,7 +17,8 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
     static let maximumSnapshotCount = 100
     static let maximumTotalSize = 128 * 1024 * 1024
 
-    private static let filePrefix = "MacTools-Automatic-Backup-"
+    private static let filePrefix = "MacTools Backup "
+    private static let legacyFilePrefix = "MacTools-Automatic-Backup-"
     private let directoryURL: URL
     private let fileManager: FileManager
     private let lock = NSLock()
@@ -154,7 +155,7 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
             options: [.skipsHiddenFiles]
         ).compactMap { url in
             guard url.pathExtension.lowercased() == "json",
-                  url.lastPathComponent.hasPrefix(Self.filePrefix),
+                  Self.isAutomaticBackupFileName(url.lastPathComponent),
                   let values = try? url.resourceValues(forKeys: [
                       .contentModificationDateKey,
                       .fileSizeKey,
@@ -186,11 +187,21 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
         return try Data(contentsOf: url, options: .mappedIfSafe)
     }
 
-    private static func makeFileName(date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let timestamp = formatter.string(from: date).replacingOccurrences(of: ":", with: "-")
-        return "\(filePrefix)\(timestamp)-\(UUID().uuidString).json"
+    static func makeFileName(
+        date: Date,
+        timeZone: TimeZone = .current,
+        uniqueIdentifier: String = UUID().uuidString
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss.SSS"
+        return "\(filePrefix)\(formatter.string(from: date)) - \(uniqueIdentifier).json"
+    }
+
+    private static func isAutomaticBackupFileName(_ fileName: String) -> Bool {
+        fileName.hasPrefix(filePrefix) || fileName.hasPrefix(legacyFilePrefix)
     }
 
     private func withLock<T>(_ operation: () throws -> T) rethrows -> T {

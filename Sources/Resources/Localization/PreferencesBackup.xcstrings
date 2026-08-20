@@ -120,6 +120,38 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開備份檔案夾" } }
       }
     },
+    "preferencesBackup.manual.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "نسخ احتياطي يدوي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Manuelles Backup" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Manual Backup" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Copia manual" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Sauvegarde manuelle" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "手動バックアップ" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "수동 백업" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Backup manual" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Резервное копирование вручную" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "手动备份" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "手動備份" } }
+      }
+    },
+    "preferencesBackup.transfer.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "نقل التفضيلات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Einstellungen übertragen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Transfer Preferences" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Transferir preferencias" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Transférer les préférences" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "環境設定を転送" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "환경설정 전송" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Transferir preferências" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Перенос настроек" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "迁移偏好设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "移轉偏好設定" } }
+      }
+    },
     "preferencesBackup.automatic.created": {
       "extractionState": "manual",
       "localizations": {

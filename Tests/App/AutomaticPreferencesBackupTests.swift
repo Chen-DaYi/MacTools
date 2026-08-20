@@ -62,6 +62,48 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         }
     }
 
+    func testAutomaticBackupFileNameUsesReadableLocalDateAndTime() {
+        let name = AutomaticPreferencesBackupStore.makeFileName(
+            date: Date(timeIntervalSince1970: 0),
+            timeZone: TimeZone(secondsFromGMT: -5 * 60 * 60)!,
+            uniqueIdentifier: "UNIQUE"
+        )
+
+        XCTAssertEqual(
+            name,
+            "MacTools Backup 1969-12-31 19-00-00.000 - UNIQUE.json"
+        )
+    }
+
+    func testStoreContinuesToRecognizeLegacyAutomaticBackupFileNames() throws {
+        let directory = makeTemporaryDirectoryURL()
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let store = AutomaticPreferencesBackupStore(directoryURL: directory)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let backup = makeBackup(marker: "legacy", date: date)
+        let legacyURL = directory.appendingPathComponent(
+            "MacTools-Automatic-Backup-2023-11-14T22-13-20.000Z-LEGACY.json"
+        )
+        try backup.encodedJSON().write(to: legacyURL)
+        try FileManager.default.setAttributes(
+            [.modificationDate: date],
+            ofItemAtPath: legacyURL.path
+        )
+
+        XCTAssertUnchanged(
+            try store.write(
+                makeBackup(marker: "legacy", date: date.addingTimeInterval(30)),
+                now: date.addingTimeInterval(30)
+            )
+        )
+        let files = try backupFiles(in: directory)
+        XCTAssertEqual(files.count, 1)
+        XCTAssertEqual(files.first?.lastPathComponent, legacyURL.lastPathComponent)
+    }
+
     func testGFSRetentionKeepsOneSnapshotPerOlderBucket() {
         let now = Date(timeIntervalSince1970: 1_704_110_400)
         let records = [

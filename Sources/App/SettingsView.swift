@@ -695,7 +695,7 @@ private struct PreferencesBackupSettingsRow: View {
     @State private var isBackingUp = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
                 ZStack {
                     RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
@@ -720,26 +720,43 @@ private struct PreferencesBackupSettingsRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+            .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
 
-                Toggle(
+            backupRowDivider
+
+            Toggle(
+                isOn: Binding(
+                    get: { pluginHost.automaticPreferencesBackupEnabled },
+                    set: { enabled in
+                        pluginHost.setAutomaticPreferencesBackupEnabled(enabled)
+                    }
+                )
+            ) {
+                Text(
                     AppL10n.preferencesBackup(
                         "preferencesBackup.automatic.enabled",
                         defaultValue: "自动备份设置"
-                    ),
-                    isOn: Binding(
-                        get: { pluginHost.automaticPreferencesBackupEnabled },
-                        set: { enabled in
-                            pluginHost.setAutomaticPreferencesBackupEnabled(enabled)
-                        }
                     )
                 )
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .fixedSize()
+                .font(PluginSettingsTheme.Typography.rowTitle)
             }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+            .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
 
-            HStack(spacing: 8) {
-                Spacer()
+            backupRowDivider
+
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Text(AppL10n.preferencesBackup(
+                    "preferencesBackup.manual.title",
+                    defaultValue: "手动备份"
+                ))
+                .font(PluginSettingsTheme.Typography.rowTitle)
+
+                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
 
                 Button(
                     AppL10n.preferencesBackup(
@@ -760,6 +777,21 @@ private struct PreferencesBackupSettingsRow: View {
                 )
                     .buttonStyle(.bordered)
                     .disabled(isPreparingImport || isImporting)
+            }
+            .controlSize(.small)
+            .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+            .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+
+            backupRowDivider
+
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Text(AppL10n.preferencesBackup(
+                    "preferencesBackup.transfer.title",
+                    defaultValue: "迁移偏好设置"
+                ))
+                .font(PluginSettingsTheme.Typography.rowTitle)
+
+                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
 
                 Button(AppL10n.preferencesBackup("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
                     .buttonStyle(.bordered)
@@ -770,10 +802,10 @@ private struct PreferencesBackupSettingsRow: View {
                     .disabled(isPreparingImport || isImporting || isBackingUp)
             }
             .controlSize(.small)
+            .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+            .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
-        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
-        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .sheet(item: $pendingImport) { pending in
             PreferencesImportPreviewSheet(
                 preview: pending.preview,
@@ -822,6 +854,13 @@ private struct PreferencesBackupSettingsRow: View {
         } message: {
             Text(alertMessage ?? "")
         }
+    }
+
+    private var backupRowDivider: some View {
+        PluginSettingsListDivider(
+            leadingInset: GeneralSettingsCardLayout.horizontalPadding,
+            trailingInset: GeneralSettingsCardLayout.horizontalPadding
+        )
     }
 
     private func backUpNow() {
