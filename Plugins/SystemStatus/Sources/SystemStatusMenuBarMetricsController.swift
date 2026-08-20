@@ -2,18 +2,43 @@ import AppKit
 import Combine
 import MacToolsPluginKit
 
+enum SystemStatusMenuBarMetricBlockLayout: Equatable {
+    case standard
+    case verticalNetwork(upload: String, download: String)
+}
+
 struct SystemStatusMenuBarMetricBlock: Equatable {
     let kind: SystemStatusMetricKind
     let label: String
     let value: String
+    let layout: SystemStatusMenuBarMetricBlockLayout
+
+    init(
+        kind: SystemStatusMetricKind,
+        label: String,
+        value: String,
+        layout: SystemStatusMenuBarMetricBlockLayout = .standard
+    ) {
+        self.kind = kind
+        self.label = label
+        self.value = value
+        self.layout = layout
+    }
 }
 
 enum SystemStatusMenuBarMetricsFormatter {
     static func blocks(
         snapshot: SystemStatusSnapshot,
-        kinds: [SystemStatusMetricKind]
+        kinds: [SystemStatusMetricKind],
+        networkMenuBarLayout: SystemStatusNetworkMenuBarLayout = .horizontal
     ) -> [SystemStatusMenuBarMetricBlock] {
-        kinds.compactMap { block(for: $0, snapshot: snapshot) }
+        kinds.compactMap {
+            block(
+                for: $0,
+                snapshot: snapshot,
+                networkMenuBarLayout: networkMenuBarLayout
+            )
+        }
     }
 
     static func text(
@@ -40,7 +65,8 @@ enum SystemStatusMenuBarMetricsFormatter {
 
     private static func block(
         for kind: SystemStatusMetricKind,
-        snapshot: SystemStatusSnapshot
+        snapshot: SystemStatusSnapshot,
+        networkMenuBarLayout: SystemStatusNetworkMenuBarLayout
     ) -> SystemStatusMenuBarMetricBlock? {
         switch kind {
         case .cpu:
@@ -87,10 +113,15 @@ enum SystemStatusMenuBarMetricsFormatter {
                     : "—"
             )
         case .network:
+            let download = "↓\(compactSpeed(snapshot.network.downloadBytesPerSecond))"
+            let upload = "↑\(compactSpeed(snapshot.network.uploadBytesPerSecond))"
             return SystemStatusMenuBarMetricBlock(
                 kind: kind,
                 label: "NET",
-                value: "↓\(compactSpeed(snapshot.network.downloadBytesPerSecond)) ↑\(compactSpeed(snapshot.network.uploadBytesPerSecond))"
+                value: "\(download) \(upload)",
+                layout: networkMenuBarLayout == .vertical
+                    ? .verticalNetwork(upload: upload, download: download)
+                    : .standard
             )
         case .topProcesses:
             return nil
@@ -210,7 +241,20 @@ final class SystemStatusMenuBarMetricsView: NSView {
         NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
     }
 
+    private var verticalValueFont: NSFont {
+        NSFont.monospacedDigitSystemFont(ofSize: 8.5, weight: .regular)
+    }
+
     private func draw(_ block: SystemStatusMenuBarMetricBlock, in rect: NSRect) {
+        switch block.layout {
+        case .standard:
+            drawStandard(block, in: rect)
+        case let .verticalNetwork(upload, download):
+            drawVerticalNetwork(upload: upload, download: download, in: rect)
+        }
+    }
+
+    private func drawStandard(_ block: SystemStatusMenuBarMetricBlock, in rect: NSRect) {
         let label = attributedText(
             block.label,
             font: labelFont,
@@ -242,7 +286,35 @@ final class SystemStatusMenuBarMetricsView: NSView {
         value.draw(in: valueRect)
     }
 
+    private func drawVerticalNetwork(upload: String, download: String, in rect: NSRect) {
+        let lines = [upload, download].map {
+            attributedText($0, font: verticalValueFont, color: .labelColor)
+        }
+        let lineHeights = lines.map { $0.size().height }
+        let totalHeight = lineHeights.reduce(0, +)
+        var y = rect.midY - totalHeight / 2
+
+        for (line, lineHeight) in zip(lines, lineHeights) {
+            let lineSize = line.size()
+            line.draw(in: NSRect(
+                x: rect.minX + (rect.width - lineSize.width) / 2,
+                y: y,
+                width: lineSize.width,
+                height: lineHeight
+            ))
+            y += lineHeight
+        }
+    }
+
     private func metricWidth(_ block: SystemStatusMenuBarMetricBlock) -> CGFloat {
+        if case let .verticalNetwork(upload, download) = block.layout {
+            return ceil(max(
+                Layout.minimumMetricWidth,
+                attributedText(upload, font: verticalValueFont, color: .labelColor).size().width,
+                attributedText(download, font: verticalValueFont, color: .labelColor).size().width
+            ))
+        }
+
         let labelWidth = attributedText(
             block.label,
             font: labelFont,
@@ -351,7 +423,8 @@ final class SystemStatusMenuBarMetricsController: NSObject {
         viewModel.startMenuBar(requiresSlowSampling: kinds.requiresMenuBarSlowSampling)
         let blocks = SystemStatusMenuBarMetricsFormatter.blocks(
             snapshot: snapshot,
-            kinds: kinds
+            kinds: kinds,
+            networkMenuBarLayout: configuration.networkMenuBarLayout
         )
         guard !blocks.isEmpty else {
             viewModel.stopMenuBar()
