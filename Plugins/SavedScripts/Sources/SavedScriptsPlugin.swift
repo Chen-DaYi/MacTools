@@ -28,6 +28,7 @@ final class SavedScriptsPlugin:
     PluginSettingsPresenting,
     PluginPrimaryPanelIndicatorProviding,
     PluginPortablePreferencesProviding,
+    PluginPersistentPreferencesChangeSignaling,
     PluginPortablePreferencesRestorationReporting,
     PluginPortablePreferencesActionReferencesProviding,
     PluginActionReferenceBackupProviding
@@ -46,6 +47,7 @@ final class SavedScriptsPlugin:
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
+    var onPersistentPreferencesChange: (() -> Void)?
 
     private let localization: PluginLocalization
     private let runner: any SavedScriptRunning
@@ -97,6 +99,7 @@ final class SavedScriptsPlugin:
         )
         self.store.onMutation = { [weak self] in
             self?.onStateChange?()
+            self?.onPersistentPreferencesChange?()
         }
     }
 

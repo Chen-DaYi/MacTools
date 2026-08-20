@@ -457,6 +457,10 @@ final class SidecarPluginTests: XCTestCase {
         store.updateConnectFirstAvailableShortcut(connectBinding)
         store.updateShortcut(deviceBinding, for: "ipad-1")
         let plugin = makePlugin(service: service, preferences: store)
+        var persistentPreferenceNotifications = 0
+        plugin.onPersistentPreferencesChange = {
+            persistentPreferenceNotifications += 1
+        }
         plugin.shortcutBindingResolver = { definitionID in
             switch definitionID {
             case "connect-first-available": connectBinding
@@ -480,6 +484,7 @@ final class SidecarPluginTests: XCTestCase {
         plugin.legacyActionShortcutsDidMigrate()
         XCTAssertNil(store.connectFirstAvailableShortcut)
         XCTAssertNil(store.preference(for: "ipad-1")?.shortcut)
+        XCTAssertEqual(persistentPreferenceNotifications, 1)
     }
 
     func testSidecarDeviceIdentifierAcceptsUUIDAndStringValues() {

@@ -3,7 +3,7 @@ import MacToolsPluginKit
 
 struct PreferencesBackup: Codable, Equatable, Sendable {
     static let currentFormatVersion = 6
-    static let maximumFileSize = 4 * 1024 * 1024
+    static let maximumFileSize = 16 * 1024 * 1024
 
     struct ApplicationPreferences: Codable, Equatable, Sendable {
         let appearancePreference: String
@@ -196,6 +196,22 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
             throw PreferencesBackupError.fileTooLarge(maximumBytes: Self.maximumFileSize)
         }
         return data
+    }
+
+    /// Export timestamps describe a snapshot file, not a restorable preference.
+    func hasSameMeaningfulContent(as other: PreferencesBackup) -> Bool {
+        formatVersion == other.formatVersion
+            && application == other.application
+            && pluginDisplay == other.pluginDisplay
+            && shortcutCustomizations == other.shortcutCustomizations
+            && actionShortcutAssignments == other.actionShortcutAssignments
+            && actionShortcutAssignmentsWereEncoded == other.actionShortcutAssignmentsWereEncoded
+            && pluginPreferences == other.pluginPreferences
+            && pluginPreferenceActionReferences == other.pluginPreferenceActionReferences
+            && actionInvocationPresets == other.actionInvocationPresets
+            && workflows == other.workflows
+            && automationRules == other.automationRules
+            && selection == other.selection
     }
 
     static func decodeJSON(_ data: Data) throws -> PreferencesBackup {

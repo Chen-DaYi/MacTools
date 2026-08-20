@@ -258,6 +258,18 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertEqual(notifications, 3)
     }
 
+    func testPortablePresetMutationsEmitPersistentPreferenceSignal() throws {
+        let plugin = makePlugin()
+        let preset = try XCTUnwrap(plugin.presetStore.addCustomPreset())
+        var notifications = 0
+        plugin.onPersistentPreferencesChange = { notifications += 1 }
+
+        XCTAssertTrue(plugin.presetStore.setActivePreset(id: preset.id))
+        XCTAssertTrue(plugin.presetStore.updateCustomPresetRPM(id: preset.id, rpm: 3_800))
+
+        XCTAssertEqual(notifications, 2)
+    }
+
     func testPresetMutationsPublishOnlyAfterDurablePersistence() throws {
         let storage = FanControlMemoryStorage()
         let plugin = makePlugin(storage: storage)

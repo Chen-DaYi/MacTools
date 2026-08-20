@@ -54,6 +54,7 @@ final class FanControlPresetStore: ObservableObject {
     @Published private(set) var customPresets: [FanPreset] = []
     @Published private(set) var activePresetID: String = FanPresetBuiltInID.auto
     var onCatalogChange: (() -> Void)?
+    var onPersistentPreferencesChange: (() -> Void)?
 
     var allPresets: [FanPreset] {
         Self.builtInPresets + customPresets
@@ -276,6 +277,7 @@ final class FanControlPresetStore: ObservableObject {
             saveActivePresetID()
             return false
         }
+        onPersistentPreferencesChange?()
         return true
     }
 
@@ -306,6 +308,7 @@ final class FanControlPresetStore: ObservableObject {
             _ = saveCustomPresets()
             return false
         }
+        onPersistentPreferencesChange?()
         return true
     }
 

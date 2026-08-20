@@ -692,42 +692,84 @@ private struct PreferencesBackupSettingsRow: View {
     @State private var alertMessage: String?
     @State private var isPreparingImport = false
     @State private var isImporting = false
+    @State private var isBackingUp = false
 
     var body: some View {
-        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
-            ZStack {
-                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.12))
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.12))
 
-                Image(systemName: "externaldrive.badge.checkmark")
-                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+                    Image(systemName: "externaldrive.badge.checkmark")
+                        .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(AppL10n.preferencesBackup("preferencesBackup.title", defaultValue: "偏好设置备份"))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.description",
+                        defaultValue: "自动备份保存在本机，包含可移植的应用与插件设置；不包含权限、缓存、凭证或其他私密数据。"
+                    ))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Toggle(
+                    AppL10n.preferencesBackup(
+                        "preferencesBackup.automatic.enabled",
+                        defaultValue: "自动备份设置"
+                    ),
+                    isOn: Binding(
+                        get: { pluginHost.automaticPreferencesBackupEnabled },
+                        set: { enabled in
+                            pluginHost.setAutomaticPreferencesBackupEnabled(enabled)
+                        }
+                    )
+                )
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .fixedSize()
             }
-            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(AppL10n.preferencesBackup("preferencesBackup.title", defaultValue: "导出与导入偏好设置"))
-                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-
-                Text(AppL10n.preferencesBackup(
-                    "preferencesBackup.description",
-                    defaultValue: "包含应用偏好、插件布局、快捷键、工作流、自动化规则、已保存的运行链接和支持导出的插件设置；不包含权限、缓存、凭证或运行历史。"
-                ))
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 8) {
-                Button(AppL10n.preferencesBackup("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
+                Spacer()
+
+                Button(
+                    AppL10n.preferencesBackup(
+                        "preferencesBackup.automatic.backUpNow",
+                        defaultValue: "立即备份"
+                    ),
+                    action: backUpNow
+                )
+                    .buttonStyle(.bordered)
+                    .disabled(isPreparingImport || isImporting || isBackingUp)
+
+                Button(
+                    AppL10n.preferencesBackup(
+                        "preferencesBackup.automatic.openFolder",
+                        defaultValue: "打开备份文件夹"
+                    ),
+                    action: openBackupFolder
+                )
                     .buttonStyle(.bordered)
                     .disabled(isPreparingImport || isImporting)
+
+                Button(AppL10n.preferencesBackup("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
+                    .buttonStyle(.bordered)
+                    .disabled(isPreparingImport || isImporting || isBackingUp)
 
                 Button(AppL10n.preferencesBackup("preferencesBackup.import", defaultValue: "导入偏好设置…"), action: choosePreferencesImport)
                     .buttonStyle(.bordered)
-                    .disabled(isPreparingImport || isImporting)
+                    .disabled(isPreparingImport || isImporting || isBackingUp)
             }
+            .controlSize(.small)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
@@ -779,6 +821,40 @@ private struct PreferencesBackupSettingsRow: View {
             Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
         } message: {
             Text(alertMessage ?? "")
+        }
+    }
+
+    private func backUpNow() {
+        Task { @MainActor in
+            isBackingUp = true
+            defer { isBackingUp = false }
+            do {
+                let result = try await pluginHost.createAutomaticPreferencesBackupNow()
+                switch result {
+                case .created:
+                    alertMessage = AppL10n.preferencesBackup(
+                        "preferencesBackup.automatic.created",
+                        defaultValue: "偏好设置已备份。"
+                    )
+                case .unchanged:
+                    alertMessage = AppL10n.preferencesBackup(
+                        "preferencesBackup.automatic.unchanged",
+                        defaultValue: "偏好设置没有变化，无需创建新备份。"
+                    )
+                }
+            } catch {
+                alertMessage = preferencesBackupErrorMessage(error)
+            }
+        }
+    }
+
+    private func openBackupFolder() {
+        do {
+            NSWorkspace.shared.open(
+                try pluginHost.prepareAutomaticPreferencesBackupDirectory()
+            )
+        } catch {
+            alertMessage = preferencesBackupErrorMessage(error)
         }
     }
 

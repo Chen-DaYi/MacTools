@@ -34,6 +34,7 @@ private enum ControlID {
 @MainActor
 final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
     PluginActionProviding, PluginPortablePreferencesProviding,
+    PluginPersistentPreferencesChangeSignaling,
     PluginPortablePreferencesRestorationReporting,
     PluginPortablePreferencesActionReferencesProviding, PluginActionReferenceBackupProviding
 {
@@ -59,6 +60,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var onPersistentPreferencesChange: (() -> Void)?
 
     // MARK: Private State
 
@@ -109,6 +111,10 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         )
         presetStore.onCatalogChange = { [weak self] in
             self?.onStateChange?()
+            self?.onPersistentPreferencesChange?()
+        }
+        presetStore.onPersistentPreferencesChange = { [weak self] in
+            self?.onPersistentPreferencesChange?()
         }
     }
 

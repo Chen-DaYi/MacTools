@@ -23,6 +23,7 @@ final class AppleShortcutsPlugin:
     MacToolsPlugin,
     PluginActionProviding,
     PluginPortablePreferencesProviding,
+    PluginPersistentPreferencesChangeSignaling,
     PluginPortablePreferencesRestorationReporting,
     PluginPortablePreferencesActionReferencesProviding,
     PluginActionReferenceBackupProviding,
@@ -37,6 +38,7 @@ final class AppleShortcutsPlugin:
 
     var onStateChange: (() -> Void)?
     var onActionSafetyStateChange: (() -> Void)?
+    var onPersistentPreferencesChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
@@ -74,6 +76,7 @@ final class AppleShortcutsPlugin:
             )
         )
         controller.onStateChange = { [weak self] in self?.onStateChange?() }
+        store.onMutation = { [weak self] in self?.onPersistentPreferencesChange?() }
         store.onSafetyPolicyMutation = { [weak self] in self?.onActionSafetyStateChange?() }
     }
 

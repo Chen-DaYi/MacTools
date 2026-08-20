@@ -30,6 +30,7 @@ final class ActionGridPlugin:
     ActionGridHostContextConsuming,
     ActionSurfaceAssignmentSummarizing,
     PluginPortablePreferencesProviding,
+    PluginPersistentPreferencesChangeSignaling,
     PluginPortablePreferencesRestorationReporting,
     PluginPortablePreferencesActionReferencesProviding
 {
@@ -41,10 +42,13 @@ final class ActionGridPlugin:
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
+    var onPersistentPreferencesChange: (() -> Void)?
     var actionGridHostContext: ActionGridHostContext? {
         didSet {
-            if let actionGridHostContext {
-                _ = store.migrate(using: actionGridHostContext)
+            if let actionGridHostContext,
+               store.migrate(using: actionGridHostContext) {
+                onStateChange?()
+                onPersistentPreferencesChange?()
             }
         }
     }
@@ -149,6 +153,7 @@ final class ActionGridPlugin:
         guard let actionGridHostContext else { return }
         if store.migrate(using: actionGridHostContext) {
             onStateChange?()
+            onPersistentPreferencesChange?()
         }
     }
 
@@ -159,12 +164,16 @@ final class ActionGridPlugin:
     func restorePortablePreferences(from data: Data) {
         if store.restorePortableBackup(data, using: actionGridHostContext) {
             onStateChange?()
+            onPersistentPreferencesChange?()
         }
     }
 
     func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
         let restored = store.restorePortableBackup(data, using: actionGridHostContext)
-        if restored { onStateChange?() }
+        if restored {
+            onStateChange?()
+            onPersistentPreferencesChange?()
+        }
         return restored
     }
 
@@ -284,5 +293,6 @@ final class ActionGridPlugin:
 
     func notifyMutation() {
         onStateChange?()
+        onPersistentPreferencesChange?()
     }
 }

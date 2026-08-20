@@ -8,7 +8,8 @@ import SwiftUI
 final class MacToolsAppRuntime {
     private let pluginHost = PluginHost(
         loadDynamicPluginsOnInit: false,
-        preferencesBackupStore: PreferencesBackupStore()
+        preferencesBackupStore: PreferencesBackupStore(),
+        enablesAutomaticPreferencesBackups: true
     )
     private let appUpdater = AppUpdater()
     private let menuBarIconSettings = MenuBarIconSettings()
@@ -107,6 +108,7 @@ final class MacToolsAppRuntime {
 
     func terminate() {
         settingsRecoveryScheduler.cancel()
+        pluginHost.flushAutomaticPreferencesBackupBeforeTermination()
         pluginHost.automationController.stopAutomaticRules()
         actionGridOverlayController?.close(restoringFocus: false)
         statusItemController?.dismissPanels()

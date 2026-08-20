@@ -40,6 +40,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     AccessibilityPermissionRefreshing, PluginSettingsPresenting,
     PluginFeatureExtractionReadinessProviding, TrackpadActionHostContextConsuming,
     PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
+    PluginPersistentPreferencesChangeSignaling,
     PluginPortablePreferencesActionReferencesProviding, PluginInputGestureClaimProviding,
     TrackpadGestureEventProviding {
     private enum PermissionID {
@@ -56,13 +57,16 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var requestSettingsPresentation: (() -> Void)?
     var trackpadActionHostContext: TrackpadActionHostContext? {
         didSet {
-            if let trackpadActionHostContext {
-                _ = store.migrateActions(using: trackpadActionHostContext)
+            if let trackpadActionHostContext,
+               store.migrateActions(using: trackpadActionHostContext) {
+                onStateChange?()
+                onPersistentPreferencesChange?()
             }
         }
     }
     var requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
     var onTrackpadGestureRequestsChange: (() -> Void)?
+    var onPersistentPreferencesChange: (() -> Void)?
 
     let store: TrackpadGestureStore
 
@@ -358,7 +362,10 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         }
     }
 
-    func configurationDidChange() {
+    func configurationDidChange(persistent: Bool = true) {
+        if persistent {
+            onPersistentPreferencesChange?()
+        }
         let enabledLocalGestures = store.enabledGestures
         let newlyEnabledGestures = enabledLocalGestures.subtracting(lastKnownEnabledLocalGestures)
         lastKnownEnabledLocalGestures = enabledLocalGestures
@@ -376,7 +383,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
 
     private func setTesting(_ enabled: Bool) {
         store.setTesting(enabled)
-        configurationDidChange()
+        configurationDidChange(persistent: false)
     }
 
     private func handleRecognizedGesture(_ gesture: TrackpadGesture, deviceID: UInt64) {
@@ -621,6 +628,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         guard let trackpadActionHostContext else { return }
         if store.migrateActions(using: trackpadActionHostContext) {
             onStateChange?()
+            onPersistentPreferencesChange?()
         }
     }
 
