@@ -53,7 +53,10 @@ struct RightClickMenuSettingsView: View {
             PluginSettingsListDivider()
             toggleRow(
                 title: localization.string("settings.newFile.title", defaultValue: "新建文件"),
-                description: localization.string("settings.newFile.description", defaultValue: "支持 .txt / .md / .json"),
+                description: localization.string(
+                    "settings.newFile.description",
+                    defaultValue: "支持 .txt、.md、.json、.html 等常见扩展名"
+                ),
                 isOn: $session.configuration.newFile
             )
             PluginSettingsListDivider()
