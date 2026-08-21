@@ -4467,6 +4467,70 @@
         }
       }
     },
+    "settings.networkLayout.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تخطيط سرعة الشبكة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Netzwerkraten-Layout" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Network rate layout" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Diseño de velocidad de red" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Disposition du débit réseau" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ネットワーク速度のレイアウト" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "네트워크 속도 레이아웃" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Layout da velocidade de rede" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Макет сетевой скорости" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "网络速率布局" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "網路速率佈局" } }
+      }
+    },
+    "settings.networkLayout.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "يُستخدم فقط لمؤشر الشبكة في شريط القائمة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Gilt nur für die Netzwerkanzeige in der Menüleiste." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Only applies to the menu-bar network metric." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Solo se aplica al indicador de red de la barra de menús." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "S’applique uniquement à l’indicateur réseau de la barre des menus." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "メニューバーのネットワーク指標にのみ適用されます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "메뉴 막대의 네트워크 지표에만 적용됩니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Aplica-se apenas ao indicador de rede da barra de menus." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Применяется только к сетевому индикатору в строке меню." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅用于菜单栏中的网络指标。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "僅用於選單列中的網路指標。" } }
+      }
+    },
+    "settings.networkLayout.horizontal": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "أفقي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Horizontal" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Horizontal" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Horizontal" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Horizontal" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "横" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "가로" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Horizontal" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Горизонтально" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "横向" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "橫向" } }
+      }
+    },
+    "settings.networkLayout.vertical": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "عمودي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Vertikal" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Vertical" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Vertical" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Vertical" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "縦" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "세로" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Vertical" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Вертикально" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "上下" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "上下" } }
+      }
+    },
     "component.empty.title": {
       "extractionState": "manual",
       "localizations": {

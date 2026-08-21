@@ -42,6 +42,7 @@ final class SystemStatusPluginTests: XCTestCase {
         controller.setMenuBarMetric(.cpu, visible: true)
         controller.setMenuBarMetric(.memory, visible: true)
         controller.moveMenuBarMetric(.memory, toOffset: 0)
+        controller.setNetworkMenuBarLayout(.vertical)
 
         let restoredController = SystemStatusSettingsController(
             store: SystemStatusPluginStorageConfigurationStore(storage: storage)
@@ -50,6 +51,7 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(restoredController.configuration.panelItems.map(\.kind).first, .battery)
         XCTAssertFalse(restoredController.configuration.panelItems.first { $0.kind == .gpu }?.isVisible ?? true)
         XCTAssertEqual(restoredController.configuration.visibleMenuBarMetricKinds, [.memory, .cpu])
+        XCTAssertEqual(restoredController.configuration.networkMenuBarLayout, .vertical)
     }
 
     func testPluginDescriptorShrinksWhenPanelMetricsAreHidden() {
@@ -102,6 +104,35 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(
             SystemStatusMenuBarMetricsFormatter.text(snapshot: snapshot, kinds: [.memory, .cpu, .network]),
             "RAM 60% | CPU 13% 42° | NET ↓1K ↑2K"
+        )
+    }
+
+    func testMenuBarFormatterUsesVerticalNetworkLayoutWhenSelected() {
+        var snapshot = SystemStatusSnapshot.empty
+        snapshot.network = SystemStatusNetworkSnapshot(
+            interfaceName: "en0",
+            ipAddress: nil,
+            publicIPAddress: nil,
+            downloadBytesPerSecond: 1_024,
+            uploadBytesPerSecond: 2_048,
+            isConnected: true,
+            isCollecting: false
+        )
+
+        XCTAssertEqual(
+            SystemStatusMenuBarMetricsFormatter.blocks(
+                snapshot: snapshot,
+                kinds: [.network],
+                networkMenuBarLayout: .vertical
+            ),
+            [
+                SystemStatusMenuBarMetricBlock(
+                    kind: .network,
+                    label: "NET",
+                    value: "↓1K ↑2K",
+                    layout: .verticalNetwork(upload: "↑2K", download: "↓1K")
+                )
+            ]
         )
     }
 
