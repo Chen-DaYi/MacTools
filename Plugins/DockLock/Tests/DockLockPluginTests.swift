@@ -178,7 +178,10 @@ final class DockLockPluginTests: XCTestCase {
             return XCTFail("Expected a Dock Lock settings toggle")
         }
 
-        XCTAssertEqual(row.title, plugin.metadata.title)
+        XCTAssertEqual(row.title, "启用")
+        XCTAssertNotEqual(row.title, plugin.metadata.title)
+        XCTAssertEqual(row.description, "开启后防止程序坞在多显示器之间意外移动。")
+        XCTAssertNotEqual(row.description, plugin.metadata.defaultDescription)
         XCTAssertTrue(isOn)
     }
 

@@ -468,8 +468,14 @@ final class DockLockPlugin:
                     rows: [
                         PluginSettingsRow(
                             id: SettingsID.isEnabled,
-                            title: metadata.title,
-                            description: metadata.defaultDescription,
+                            title: localization.string(
+                                "settings.enable.title",
+                                defaultValue: "启用"
+                            ),
+                            description: localization.string(
+                                "settings.enable.description",
+                                defaultValue: "开启后防止程序坞在多显示器之间意外移动。"
+                            ),
                             systemImage: "power",
                             error: lastErrorMessage,
                             control: .toggle(isOn: isEnabled)
@@ -478,7 +484,8 @@ final class DockLockPlugin:
                 ),
             ]
         )
-}
+    }
+
     func handleAction(_ action: PluginPanelAction) {
         guard case let .setSwitch(isEnabled) = action else {
             return
