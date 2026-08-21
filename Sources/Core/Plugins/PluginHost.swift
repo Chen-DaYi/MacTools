@@ -2666,12 +2666,18 @@ final class PluginHost: ObservableObject {
                     guard let self else {
                         return FeatureL10n.string("无法应用快捷键预设。")
                     }
+                    let previousBindings = self.actionBackedShortcutBindings()
                     switch self.shortcutAssignmentService.replaceAssignments(
                         providerID: pluginID,
                         managedActionIDs: actionIDs,
                         bindingsByActionID: bindings
                     ) {
                     case .success:
+                        self.rebuildDerivedState()
+                        self.syncGlobalShortcuts()
+                        self.notifyChangedActionBackedShortcutBindings(
+                            previous: previousBindings
+                        )
                         return nil
                     case let .failure(error):
                         return error.localizedDescription
@@ -5132,6 +5138,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func syncGlobalShortcuts() {
+        let previousShortcutBindingRevision = shortcutBindingRevision
         let descriptors = shortcutDescriptors()
         let registrations = descriptors.compactMap { descriptor -> GlobalShortcutManager.Registration? in
             guard descriptor.definition.scope == .global,
@@ -5166,6 +5173,20 @@ final class PluginHost: ObservableObject {
         actionShortcutItems = shortcutAssignmentService.settingsItems
         shortcutBindingRevision = shortcutAssignmentService.revision
         actionShortcutCatalogItems = buildActionShortcutCatalogItems()
+        if shortcutBindingRevision != previousShortcutBindingRevision {
+            notifyActionShortcutAssignmentChanges()
+        }
+    }
+
+    private func notifyActionShortcutAssignmentChanges() {
+        for plugin in activePlugins {
+            guard let handling = plugin as? any PluginActionShortcutAssignmentChangeHandling else {
+                continue
+            }
+            guardPluginCall(plugin, operation: "update action shortcut assignments") {
+                handling.actionShortcutAssignmentsDidChange()
+            }
+        }
     }
 
     private func buildActionShortcutCatalogItems() -> [ActionShortcutCatalogItem] {

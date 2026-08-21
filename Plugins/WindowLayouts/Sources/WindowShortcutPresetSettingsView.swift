@@ -24,7 +24,7 @@ struct WindowShortcutPresetPreviewState {
 
 @MainActor
 struct WindowShortcutPresetSettingsView: View {
-    let plugin: WindowLayoutsPlugin
+    @ObservedObject var plugin: WindowLayoutsPlugin
 
     @State private var editorRequest: WindowShortcutPresetEditorRequest?
 
@@ -88,7 +88,7 @@ struct WindowShortcutPresetSettingsView: View {
 private struct WindowShortcutPresetEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let plugin: WindowLayoutsPlugin
+    @ObservedObject var plugin: WindowLayoutsPlugin
     @State private var selectedPreset: WindowShortcutPreset
     @State private var proposedBindings: [String: ShortcutBinding]
     @State private var applyError: String?

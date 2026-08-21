@@ -26,6 +26,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     PluginActionExposureProviding, PluginActionExecutionRevisionProviding,
     PluginActionShortcutSettingsProviding, PluginRetiredActionShortcutProviding,
     PluginActionShortcutPresetApplying,
+    PluginActionShortcutAssignmentChangeHandling, ObservableObject,
     PluginFocusedWindowTargetConsuming
 {
     private enum PermissionID { static let accessibility = "accessibility" }
@@ -60,6 +61,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         [String: ShortcutBinding]
     ) -> PluginActionShortcutPresetPreview)?
     var applyActionShortcutPreset: ((Set<String>, [String: ShortcutBinding]) -> String?)?
+    @Published private(set) var actionShortcutAssignmentRevision: UInt64 = 0
     var focusedWindowTargetProvider: (() -> PluginFocusedWindowTarget?)? {
         didSet {
             applicationTarget.targetProvider = focusedWindowTargetProvider
@@ -75,6 +77,10 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     private var isAccessibilityGranted: Bool
 
     var actionExecutionRevision: UInt64 { store.revision }
+
+    func actionShortcutAssignmentsDidChange() {
+        actionShortcutAssignmentRevision &+= 1
+    }
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "window-layouts"),

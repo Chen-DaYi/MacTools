@@ -205,6 +205,15 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertFalse(state.canApply)
     }
 
+    func testActionShortcutAssignmentChangePublishesPresetSummaryRefresh() {
+        let plugin = makePlugin()
+        let initialRevision = plugin.actionShortcutAssignmentRevision
+
+        plugin.actionShortcutAssignmentsDidChange()
+
+        XCTAssertEqual(plugin.actionShortcutAssignmentRevision, initialRevision + 1)
+    }
+
     func testActionExecutionUsesCommittedGapAndReset() async throws {
         let executor = MockWindowLayoutExecutor()
         let plugin = makePlugin(executor: executor)

@@ -646,6 +646,14 @@ public protocol PluginActionShortcutPresetApplying: AnyObject {
     ) -> String?)? { get set }
 }
 
+/// Optional hook for plugins whose custom settings UI summarizes action shortcut assignments.
+/// The host invokes it after the shared action-shortcut state changes so cached plugin views can
+/// publish fresh derived state without polling or owning a parallel shortcut store.
+@MainActor
+public protocol PluginActionShortcutAssignmentChangeHandling: AnyObject {
+    func actionShortcutAssignmentsDidChange()
+}
+
 /// Optional live revision for provider-owned execution state that is not represented by an
 /// `ActionDefinition` or `ActionCatalogEntry`. The host revalidates this value after confirmation
 /// and immediately before execution so mutable payloads cannot be substituted after approval.
