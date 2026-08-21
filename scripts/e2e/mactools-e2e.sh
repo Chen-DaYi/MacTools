@@ -1790,7 +1790,9 @@ verify_code_session() {
         -only-testing:MacToolsTests/SidecarPluginTests \
         -only-testing:MacToolsTests/StageManagerPluginTests \
         -only-testing:MacToolsTests/SystemMutePluginTests \
+        -only-testing:MacToolsTests/SystemSoftRestartPluginTests \
         -only-testing:MacToolsTests/TranslatorPluginTests \
+        -only-testing:MacToolsTests/WindowLayoutsPluginTests \
         -only-testing:MacToolsTests/WindowSwitcherPluginTests \
         -only-testing:MacToolsTests/XcodeCleanPluginTests \
         2>&1 | tee "$session_dir/code-verification.action-registry.log"; then
