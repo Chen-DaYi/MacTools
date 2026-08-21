@@ -398,6 +398,7 @@ final class PluginHost: ObservableObject {
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
     private let preferencesBackupStore: any PreferencesBackupApplicationStoring
     private let automaticPreferencesBackupCoordinator: AutomaticPreferencesBackupCoordinator?
+    let preferencesBackupChangeReporter: PreferencesBackupChangeReporter
     private let globalShortcutManager: GlobalShortcutManager
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
@@ -440,7 +441,6 @@ final class PluginHost: ObservableObject {
     private var displayTopologyRefreshTask: Task<Void, Never>?
     private var pluginStateChangeRebuildTask: Task<Void, Never>?
     private var runtimeLocaleCancellable: AnyCancellable?
-    private var persistentPreferencesCancellable: AnyCancellable?
     private var applicationActivityState: PluginApplicationActivityState
     private var dirtyPluginIDs: Set<String> = []
     private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
@@ -512,14 +512,20 @@ final class PluginHost: ObservableObject {
     ) {
         let dynamicPluginManager = DynamicPluginManager()
         let pluginCatalogManager = PluginCatalogManager.live(dynamicPluginManager: dynamicPluginManager)
-        let shortcutStore = ShortcutStore()
+        let preferencesBackupChangeReporter = PreferencesBackupChangeReporter()
+        let shortcutStore = ShortcutStore(
+            preferencesBackupChangeReporter: preferencesBackupChangeReporter
+        )
         self.init(
             plugins: BuiltInPluginRegistry().makePlugins(),
             dynamicPluginManager: dynamicPluginManager,
             pluginCatalogManager: pluginCatalogManager,
             shortcutStore: shortcutStore,
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(
+                preferencesBackupChangeReporter: preferencesBackupChangeReporter
+            ),
             preferencesBackupStore: preferencesBackupStore,
+            preferencesBackupChangeReporter: preferencesBackupChangeReporter,
             automaticPreferencesBackupCoordinator: enablesAutomaticPreferencesBackups
                 ? AutomaticPreferencesBackupCoordinator(userDefaults: shortcutStore.userDefaults)
                 : nil,
@@ -538,6 +544,8 @@ final class PluginHost: ObservableObject {
         shortcutStore: ShortcutStore,
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
         preferencesBackupStore: any PreferencesBackupApplicationStoring,
+        preferencesBackupChangeReporter providedPreferencesBackupChangeReporter:
+            PreferencesBackupChangeReporter? = nil,
         automaticPreferencesBackupCoordinator: AutomaticPreferencesBackupCoordinator? = nil,
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
@@ -548,6 +556,13 @@ final class PluginHost: ObservableObject {
         loadDynamicPluginsOnInit: Bool = true,
         actionURLScheme: String = RightClickURLRouter.bundleURLSchemes().sorted().first ?? "mactools"
     ) {
+        let preferencesBackupChangeReporter = providedPreferencesBackupChangeReporter
+            ?? PreferencesBackupChangeReporter()
+        shortcutStore.preferencesBackupChangeReporter = preferencesBackupChangeReporter
+        pluginDisplayPreferencesStore.preferencesBackupChangeReporter =
+            preferencesBackupChangeReporter
+        preferencesBackupStore.preferencesBackupChangeReporter = preferencesBackupChangeReporter
+
         self.builtInPlugins = plugins.sorted {
             if $0.metadata.order == $1.metadata.order {
                 return $0.metadata.title.localizedCompare($1.metadata.title) == .orderedAscending
@@ -559,6 +574,7 @@ final class PluginHost: ObservableObject {
         self.pluginDisplayPreferencesStore = pluginDisplayPreferencesStore
         self.preferencesBackupStore = preferencesBackupStore
         self.automaticPreferencesBackupCoordinator = automaticPreferencesBackupCoordinator
+        self.preferencesBackupChangeReporter = preferencesBackupChangeReporter
         self.globalShortcutManager = globalShortcutManager
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
@@ -570,10 +586,12 @@ final class PluginHost: ObservableObject {
         self.pluginCatalogManager = pluginCatalogManager
         let actionRegistry = ActionRegistry()
         let actionShortcutStore = ActionShortcutAssignmentStore(
-            userDefaults: shortcutStore.userDefaults
+            userDefaults: shortcutStore.userDefaults,
+            preferencesBackupChangeReporter: preferencesBackupChangeReporter
         )
         let actionPresetStore = ActionInvocationPresetStore(
-            userDefaults: shortcutStore.userDefaults
+            userDefaults: shortcutStore.userDefaults,
+            preferencesBackupChangeReporter: preferencesBackupChangeReporter
         )
         let actionConfirmationService = ActionConfirmationRouter()
         let actionExecutor = ActionExecutor(
@@ -595,14 +613,25 @@ final class PluginHost: ObservableObject {
             presetStore: actionPresetStore,
             scheme: actionURLScheme
         )
-        let workflowStore = WorkflowStore(userDefaults: shortcutStore.userDefaults)
+        let workflowStore = WorkflowStore(
+            userDefaults: shortcutStore.userDefaults,
+            preferencesBackupChangeReporter: preferencesBackupChangeReporter
+        )
         self.automationController = AutomationController(
             store: workflowStore,
-            ruleStore: AutomationRuleStore(userDefaults: shortcutStore.userDefaults),
+            ruleStore: AutomationRuleStore(
+                userDefaults: shortcutStore.userDefaults,
+                preferencesBackupChangeReporter: preferencesBackupChangeReporter
+            ),
             registry: actionRegistry,
             executor: actionExecutor,
             systemServices: SystemAutomationServices.make()
         )
+
+        preferencesBackupChangeReporter.onCommittedChange = {
+            [weak automaticPreferencesBackupCoordinator] _ in
+            automaticPreferencesBackupCoordinator?.committedPreferencesDidChange()
+        }
 
         self.automationController.onCatalogChange = { [weak self] in
             self?.rebuildDerivedState()
@@ -699,14 +728,6 @@ final class PluginHost: ObservableObject {
             Task { [weak automaticPreferencesBackupCoordinator] in
                 await automaticPreferencesBackupCoordinator?.refreshSummary()
             }
-            persistentPreferencesCancellable = NotificationCenter.default.publisher(
-                for: UserDefaults.didChangeNotification,
-                object: shortcutStore.userDefaults
-            )
-            .receive(on: RunLoop.main)
-            .sink { [weak automaticPreferencesBackupCoordinator] _ in
-                automaticPreferencesBackupCoordinator?.observedUserDefaultsDidChange()
-            }
         }
 
         refreshAll()
@@ -716,12 +737,26 @@ final class PluginHost: ObservableObject {
         displayTopologyRefreshTask?.cancel()
         pluginStateChangeRebuildTask?.cancel()
         runtimeLocaleCancellable?.cancel()
-        persistentPreferencesCancellable?.cancel()
     }
 
     func setAutomaticPreferencesBackupEnabled(_ enabled: Bool) {
         automaticPreferencesBackupCoordinator?.setEnabled(enabled)
         automaticPreferencesBackupEnabled = automaticPreferencesBackupCoordinator?.isEnabled ?? false
+    }
+
+    @discardableResult
+    func setApplicationAppearancePreference(rawValue: String) -> Bool {
+        preferencesBackupStore.setAppearancePreference(rawValue: rawValue)
+    }
+
+    @discardableResult
+    func setApplicationLanguagePreference(rawValue: String) -> Bool {
+        preferencesBackupStore.setLanguagePreference(rawValue: rawValue)
+    }
+
+    @discardableResult
+    func setMenuBarClickBehaviorPreference(rawValue: String) -> Bool {
+        preferencesBackupStore.setMenuBarClickBehavior(rawValue: rawValue)
     }
 
     func createAutomaticPreferencesBackupNow() async throws -> AutomaticPreferencesBackupWriteResult {
@@ -2687,7 +2722,7 @@ final class PluginHost: ObservableObject {
             }
             if let persistentPreferencesSignaling = plugin as? any PluginPersistentPreferencesChangeSignaling {
                 persistentPreferencesSignaling.onPersistentPreferencesChange = { [weak self] in
-                    self?.automaticPreferencesBackupCoordinator?.persistentPreferencesDidChange()
+                    self?.preferencesBackupChangeReporter.didPersist(.plugin(pluginID))
                 }
             }
             if let anchorable = plugin as? any DropZoneAnchorProviding {

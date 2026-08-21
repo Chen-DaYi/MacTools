@@ -42,19 +42,23 @@ final class ActionGridPlugin:
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
-    var onPersistentPreferencesChange: (() -> Void)?
+    var onPersistentPreferencesChange: (() -> Void)? {
+        get { persistentPreferencesChanges.onChange }
+        set { persistentPreferencesChanges.onChange = newValue }
+    }
     var actionGridHostContext: ActionGridHostContext? {
         didSet {
             if let actionGridHostContext,
-               store.migrate(using: actionGridHostContext) {
+                store.migrate(using: actionGridHostContext) {
                 onStateChange?()
-                onPersistentPreferencesChange?()
+                persistentPreferencesChanges.didPersist()
             }
         }
     }
 
     let store: ActionGridStore
     private let localization: PluginLocalization
+    private let persistentPreferencesChanges = PluginPersistentPreferencesChangeEmitter()
 
     init(
         context: PluginRuntimeContext,
@@ -74,6 +78,9 @@ final class ActionGridPlugin:
                 defaultValue: "在指针附近打开常用操作网格"
             )
         )
+        if store.didPersistPortablePreferencesDuringInitialization {
+            persistentPreferencesChanges.didPersist()
+        }
     }
 
     var settingsPage: PluginSettingsPage? {
@@ -153,7 +160,7 @@ final class ActionGridPlugin:
         guard let actionGridHostContext else { return }
         if store.migrate(using: actionGridHostContext) {
             onStateChange?()
-            onPersistentPreferencesChange?()
+            persistentPreferencesChanges.didPersist()
         }
     }
 
@@ -162,17 +169,21 @@ final class ActionGridPlugin:
     }
 
     func restorePortablePreferences(from data: Data) {
+        let previousEntries = store.entries
         if store.restorePortableBackup(data, using: actionGridHostContext) {
-            onStateChange?()
-            onPersistentPreferencesChange?()
+            if store.entries != previousEntries {
+                onStateChange?()
+                persistentPreferencesChanges.didPersist()
+            }
         }
     }
 
     func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        let previousEntries = store.entries
         let restored = store.restorePortableBackup(data, using: actionGridHostContext)
-        if restored {
+        if restored, store.entries != previousEntries {
             onStateChange?()
-            onPersistentPreferencesChange?()
+            persistentPreferencesChanges.didPersist()
         }
         return restored
     }
@@ -293,6 +304,6 @@ final class ActionGridPlugin:
 
     func notifyMutation() {
         onStateChange?()
-        onPersistentPreferencesChange?()
+        persistentPreferencesChanges.didPersist()
     }
 }

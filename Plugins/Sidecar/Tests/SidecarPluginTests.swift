@@ -767,6 +767,31 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertNil(reloaded.connectFirstAvailableShortcut)
     }
 
+    func testFailedMutationAndIdenticalRestoreDoNotEmitPersistentPreferenceSignal() throws {
+        let storage = InMemoryPluginStorage()
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let preferences = SidecarPreferencesStore(storage: storage)
+        XCTAssertTrue(preferences.reconcile(with: service.reachableDevices()))
+        let plugin = makePlugin(service: service, preferences: preferences)
+        let backup = try XCTUnwrap(plugin.makePortablePreferencesBackup())
+        var notifications = 0
+        plugin.onPersistentPreferencesChange = { notifications += 1 }
+        notifications = 0
+
+        storage.blockedSetKeys = ["savedDevices"]
+        plugin.shortcutBindingDidChange(
+            id: "device.ipad-1",
+            binding: ShortcutBinding(keyCode: 0, modifiers: [.command])
+        )
+        storage.blockedSetKeys = []
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: backup))
+
+        XCTAssertFalse(preferences.preference(for: "ipad-1")?.hasShortcutConfiguration == true)
+        XCTAssertEqual(notifications, 0)
+    }
+
     func testPortablePreferencesRejectWrongTypedRawDeviceValueWithoutRemovingIt() throws {
         let source = SidecarPreferencesStore(storage: InMemoryPluginStorage())
         source.reconcile(with: [SidecarDevice(id: "new-ipad", name: "New iPad")])

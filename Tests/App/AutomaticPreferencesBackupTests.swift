@@ -201,6 +201,128 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         }
     }
 
+    func testStoreRejectsOlderRevisionThatArrivesAfterNewerSnapshot() async throws {
+        let directory = makeTemporaryDirectoryURL()
+        let oldWriteEntered = DispatchSemaphore(value: 0)
+        let releaseOldWrite = DispatchSemaphore(value: 0)
+        let store = AutomaticPreferencesBackupStore(
+            directoryURL: directory,
+            beforeVersionedWrite: { revision in
+                guard revision == 1 else { return }
+                oldWriteEntered.signal()
+                releaseOldWrite.wait()
+            }
+        )
+        let baseDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let oldBackup = makeBackup(marker: "old")
+        let newBackup = makeBackup(marker: "new")
+        let oldTask = Task.detached {
+            try store.writeIfCurrent(
+                oldBackup,
+                relevantRevision: 1,
+                now: baseDate.addingTimeInterval(60)
+            )
+        }
+        var didReleaseOldWrite = false
+        defer {
+            if !didReleaseOldWrite {
+                releaseOldWrite.signal()
+            }
+        }
+
+        let oldWriteDidEnter = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(
+                    returning: oldWriteEntered.wait(timeout: .now() + 1) == .success
+                )
+            }
+        }
+        guard oldWriteDidEnter else {
+            releaseOldWrite.signal()
+            _ = try? await oldTask.value
+            return XCTFail("Older write did not reach the controlled admission point")
+        }
+        let newerOutcome = try store.writeIfCurrent(
+            newBackup,
+            relevantRevision: 2,
+            now: baseDate
+        )
+        releaseOldWrite.signal()
+        didReleaseOldWrite = true
+        let olderOutcome = try await oldTask.value
+
+        guard case .accepted(.created) = newerOutcome else {
+            return XCTFail("Expected the newer revision to be accepted")
+        }
+        guard case .superseded = olderOutcome else {
+            return XCTFail("Expected the delayed older revision to be superseded")
+        }
+        let file = try XCTUnwrap(backupFiles(in: directory).first)
+        let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: file))
+        XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["new"])
+        XCTAssertEqual(try backupFiles(in: directory).count, 1)
+    }
+
+    func testStoreRejectsOlderRevisionAfterNewerWriteFailsPastAdmission() async throws {
+        let directory = makeTemporaryDirectoryURL()
+        let oldWriteEntered = DispatchSemaphore(value: 0)
+        let releaseOldWrite = DispatchSemaphore(value: 0)
+        let store = AutomaticPreferencesBackupStore(
+            directoryURL: directory,
+            beforeVersionedWrite: { revision in
+                guard revision == 1 else { return }
+                oldWriteEntered.signal()
+                releaseOldWrite.wait()
+            },
+            afterVersionedFileWrite: { revision in
+                guard revision == 2 else { return }
+                throw CocoaError(.fileWriteUnknown)
+            }
+        )
+        let oldBackup = makeBackup(marker: "old")
+        let oldTask = Task.detached {
+            try store.writeIfCurrent(
+                oldBackup,
+                relevantRevision: 1
+            )
+        }
+        var didReleaseOldWrite = false
+        defer {
+            if !didReleaseOldWrite {
+                releaseOldWrite.signal()
+            }
+        }
+
+        let oldWriteDidEnter = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(
+                    returning: oldWriteEntered.wait(timeout: .now() + 1) == .success
+                )
+            }
+        }
+        guard oldWriteDidEnter else {
+            releaseOldWrite.signal()
+            _ = try? await oldTask.value
+            return XCTFail("Older write did not reach the controlled admission point")
+        }
+        XCTAssertThrowsError(
+            try store.writeIfCurrent(
+                makeBackup(marker: "new"),
+                relevantRevision: 2
+            )
+        )
+        releaseOldWrite.signal()
+        didReleaseOldWrite = true
+
+        guard case .superseded = try await oldTask.value else {
+            return XCTFail("Expected the delayed older revision to remain superseded")
+        }
+        let file = try XCTUnwrap(backupFiles(in: directory).first)
+        let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: file))
+        XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["new"])
+        XCTAssertEqual(try backupFiles(in: directory).count, 1)
+    }
+
     func testStoreSummaryReportsLatestBackupAndHistorySize() throws {
         let directory = makeTemporaryDirectoryURL()
         let store = AutomaticPreferencesBackupStore(directoryURL: directory)
@@ -346,9 +468,9 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         }
         coordinator.summaryHandler = { publishedSummary = $0 }
 
-        coordinator.persistentPreferencesDidChange()
+        coordinator.committedPreferencesDidChange()
         marker = "second"
-        coordinator.persistentPreferencesDidChange()
+        coordinator.committedPreferencesDidChange()
         for _ in 0 ..< 50 {
             if (try? backupFiles(in: directory).count) == 1 { break }
             try await Task.sleep(for: .milliseconds(20))
@@ -359,6 +481,37 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         let backup = try await PreferencesBackup.decodeJSON(contentsOf: files[0])
         XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["second"])
         XCTAssertEqual(publishedSummary?.snapshotCount, 1)
+    }
+
+    func testFailedAutomaticAttemptRearmsDirtyRevisionWithoutAnotherChange() async throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory),
+            debounceDelay: .milliseconds(30)
+        )
+        var snapshotAttempts = 0
+        var failureCount = 0
+        coordinator.snapshotProvider = { [unowned self] in
+            snapshotAttempts += 1
+            guard snapshotAttempts > 1 else { return nil }
+            return self.makeBackup(marker: "automatic-retry")
+        }
+        coordinator.failureHandler = { _ in failureCount += 1 }
+
+        coordinator.committedPreferencesDidChange()
+        for _ in 0 ..< 50 {
+            if snapshotAttempts >= 2,
+               (try? backupFiles(in: directory).count) == 1 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(snapshotAttempts, 2)
+        XCTAssertEqual(failureCount, 1)
+        let file = try XCTUnwrap(backupFiles(in: directory).first)
+        let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: file))
+        XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["automatic-retry"])
     }
 
     func testCoordinatorPublishesSummaryAfterCreatedUnchangedAndSafetyWrites() async throws {
@@ -403,7 +556,7 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         }
 
         for _ in 0 ..< 10 {
-            coordinator.persistentPreferencesDidChange()
+            coordinator.committedPreferencesDidChange()
         }
         XCTAssertEqual(snapshotCount, 0)
 
@@ -428,10 +581,106 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
             self.makeBackup(marker: "termination")
         }
 
-        coordinator.persistentPreferencesDidChange()
+        coordinator.committedPreferencesDidChange()
         coordinator.flushPendingBackupBeforeTermination()
 
         XCTAssertEqual(try backupFiles(in: directory).count, 1)
+    }
+
+    func testTerminationWithoutRelevantPendingChangeDoesNotBuildSnapshot() throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory),
+            debounceDelay: .seconds(60)
+        )
+        var snapshotCount = 0
+        coordinator.snapshotProvider = { [unowned self] in
+            snapshotCount += 1
+            return self.makeBackup(marker: "termination")
+        }
+
+        coordinator.flushPendingBackupBeforeTermination()
+
+        XCTAssertEqual(snapshotCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testManualBackupCompletesPendingRelevantRevision() async throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory),
+            debounceDelay: .seconds(60)
+        )
+        var snapshotCount = 0
+        coordinator.snapshotProvider = { [unowned self] in
+            snapshotCount += 1
+            return self.makeBackup(marker: "manual")
+        }
+
+        coordinator.committedPreferencesDidChange()
+        XCTAssertCreated(try await coordinator.createBackupNow())
+        coordinator.flushPendingBackupBeforeTermination()
+
+        XCTAssertEqual(snapshotCount, 1)
+        XCTAssertEqual(try backupFiles(in: directory).count, 1)
+    }
+
+    func testFailedManualBackupRearmsPendingAutomaticBackup() async throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory),
+            debounceDelay: .milliseconds(30)
+        )
+        coordinator.committedPreferencesDidChange()
+
+        do {
+            _ = try await coordinator.createBackupNow()
+            XCTFail("Expected a missing snapshot provider to fail")
+        } catch {}
+
+        coordinator.snapshotProvider = { [unowned self] in
+            self.makeBackup(marker: "automatic-retry")
+        }
+        for _ in 0 ..< 50 {
+            if (try? backupFiles(in: directory).count) == 1 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let file = try XCTUnwrap(backupFiles(in: directory).first)
+        let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: file))
+        XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["automatic-retry"])
+    }
+
+    func testFailedSafetySnapshotRearmsPendingAutomaticBackup() async throws {
+        let defaults = makeDefaults()
+        let invalidDirectory = makeTemporaryDirectoryURL()
+        try Data("not a directory".utf8).write(to: invalidDirectory)
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: invalidDirectory),
+            debounceDelay: .milliseconds(30)
+        )
+        coordinator.snapshotProvider = { [unowned self] in
+            self.makeBackup(marker: "safety-retry")
+        }
+        coordinator.committedPreferencesDidChange()
+
+        XCTAssertThrowsError(try coordinator.createSafetySnapshotBeforeImport())
+        try FileManager.default.removeItem(at: invalidDirectory)
+        for _ in 0 ..< 50 {
+            if (try? backupFiles(in: invalidDirectory).count) == 1 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let file = try XCTUnwrap(backupFiles(in: invalidDirectory).first)
+        let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: file))
+        XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["safety-retry"])
     }
 
     func testPluginPersistentPreferenceSignalSchedulesBackup() async throws {
@@ -461,6 +710,35 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         XCTAssertTrue(host.automaticPreferencesBackupEnabled)
     }
 
+    func testPluginInitializationPersistenceSchedulesBackupWhenCallbackIsAttached() async throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory),
+            debounceDelay: .milliseconds(30)
+        )
+        let plugin = PersistentPreferenceSignalTestPlugin(
+            initialValue: "migrated",
+            persistedDuringInitialization: true
+        )
+        let host = makeHost(
+            defaults: defaults,
+            coordinator: coordinator,
+            plugins: [plugin]
+        )
+
+        for _ in 0 ..< 50 {
+            if (try? backupFiles(in: directory).count) == 1 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let file = try XCTUnwrap(backupFiles(in: directory).first)
+        let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: file))
+        XCTAssertEqual(backup.pluginPreferences[plugin.metadata.id], Data("migrated".utf8))
+        XCTAssertTrue(host.automaticPreferencesBackupEnabled)
+    }
+
     func testPluginHostCollectsEachPortablePreferencePayloadOncePerBackup() {
         let defaults = makeDefaults()
         let coordinator = AutomaticPreferencesBackupCoordinator(userDefaults: defaults)
@@ -486,9 +764,10 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         )
         let host = makeHost(defaults: defaults, coordinator: coordinator)
 
-        defaults.set(
-            AppAppearancePreference.dark.rawValue,
-            forKey: AppAppearancePreference.userDefaultsKey
+        XCTAssertTrue(
+            host.setApplicationAppearancePreference(
+                rawValue: AppAppearancePreference.dark.rawValue
+            )
         )
         for _ in 0 ..< 50 {
             if (try? backupFiles(in: directory).count) == 1 { break }
@@ -514,9 +793,10 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         )
         let host = makeHost(defaults: defaults, coordinator: coordinator)
 
-        defaults.set(
-            AppAppearancePreference.dark.rawValue,
-            forKey: AppAppearancePreference.userDefaultsKey
+        XCTAssertTrue(
+            host.setApplicationAppearancePreference(
+                rawValue: AppAppearancePreference.dark.rawValue
+            )
         )
         for index in 0 ..< 8 {
             try await Task.sleep(for: .milliseconds(10))
@@ -532,6 +812,78 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
             AppAppearancePreference.dark.rawValue
         )
         XCTAssertTrue(host.automaticPreferencesBackupEnabled)
+    }
+
+    func testExcludedDefaultsChangesDoNotScheduleBackup() async throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory),
+            debounceDelay: .milliseconds(30)
+        )
+        var snapshotCount = 0
+        coordinator.snapshotProvider = { [unowned self] in
+            snapshotCount += 1
+            return self.makeBackup(marker: "excluded")
+        }
+        let host = makeHost(defaults: defaults, coordinator: coordinator)
+
+        // Host startup can durably initialize empty store payloads. Establish a
+        // settled baseline before proving unrelated runtime writes are ignored.
+        try await Task.sleep(for: .milliseconds(100))
+        try? FileManager.default.removeItem(at: directory)
+        snapshotCount = 0
+
+        for index in 0 ..< 8 {
+            defaults.set(index, forKey: "excluded.runtime.history")
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        coordinator.flushPendingBackupBeforeTermination()
+
+        XCTAssertEqual(snapshotCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+        XCTAssertTrue(host.automaticPreferencesBackupEnabled)
+    }
+
+    func testNoOpApplicationPersistenceDoesNotScheduleBackup() async throws {
+        let defaults = makeDefaults()
+        let directory = makeTemporaryDirectoryURL()
+        let coordinator = AutomaticPreferencesBackupCoordinator(
+            userDefaults: defaults,
+            store: AutomaticPreferencesBackupStore(directoryURL: directory),
+            debounceDelay: .milliseconds(30)
+        )
+        var snapshotCount = 0
+        coordinator.snapshotProvider = { [unowned self] in
+            snapshotCount += 1
+            return self.makeBackup(marker: "no-op")
+        }
+        let host = makeHost(defaults: defaults, coordinator: coordinator)
+
+        try await Task.sleep(for: .milliseconds(100))
+        try? FileManager.default.removeItem(at: directory)
+        snapshotCount = 0
+
+        XCTAssertTrue(
+            host.setApplicationAppearancePreference(
+                rawValue: AppAppearancePreference.system.rawValue
+            )
+        )
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(snapshotCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testEveryBuiltInPortablePreferencesPluginSignalsCommittedChanges() {
+        for plugin in BuiltInPluginRegistry().makePlugins()
+        where plugin is any PluginPortablePreferencesProviding {
+            XCTAssertTrue(
+                plugin is any PluginPersistentPreferencesChangeSignaling,
+                "\(plugin.metadata.id) exports portable preferences but cannot signal persistence"
+            )
+        }
     }
 
     func testImportCreatesImmediateSafetySnapshotBeforeOverwritingPreferences() throws {
@@ -699,8 +1051,22 @@ private final class PersistentPreferenceSignalTestPlugin:
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var onPersistentPreferencesChange: (() -> Void)?
-    private var portablePreference = Data("initial".utf8)
+    var onPersistentPreferencesChange: (() -> Void)? {
+        get { persistentPreferencesChanges.onChange }
+        set { persistentPreferencesChanges.onChange = newValue }
+    }
+    private let persistentPreferencesChanges = PluginPersistentPreferencesChangeEmitter()
+    private var portablePreference: Data
+
+    init(
+        initialValue: String = "initial",
+        persistedDuringInitialization: Bool = false
+    ) {
+        portablePreference = Data(initialValue.utf8)
+        if persistedDuringInitialization {
+            persistentPreferencesChanges.didPersist()
+        }
+    }
 
     func makePortablePreferencesBackup() -> Data? {
         portablePreference
@@ -712,7 +1078,7 @@ private final class PersistentPreferenceSignalTestPlugin:
 
     func updatePortablePreference(_ value: String) {
         portablePreference = Data(value.utf8)
-        onPersistentPreferencesChange?()
+        persistentPreferencesChanges.didPersist()
     }
 }
 

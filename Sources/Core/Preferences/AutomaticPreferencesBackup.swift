@@ -5,6 +5,11 @@ enum AutomaticPreferencesBackupWriteResult: Equatable, Sendable {
     case unchanged(URL?)
 }
 
+enum AutomaticPreferencesBackupStoreWriteOutcome: Equatable, Sendable {
+    case accepted(AutomaticPreferencesBackupWriteResult)
+    case superseded(URL?)
+}
+
 struct AutomaticPreferencesBackupRecord: Equatable, Sendable {
     let url: URL
     let date: Date
@@ -33,14 +38,23 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
     private static let legacyFilePrefix = "MacTools-Automatic-Backup-"
     private let directoryURL: URL
     private let fileManager: FileManager
+    private let beforeVersionedWrite: (@Sendable (UInt64) -> Void)?
+    private let afterVersionedFileWrite: (@Sendable (UInt64) throws -> Void)?
     private let lock = NSLock()
+    // Admission happens under the same lock as the filesystem write so a
+    // delayed older task cannot become the newest snapshot after a newer flush.
+    private var highestAdmittedRelevantRevision: UInt64 = 0
 
     init(
         directoryURL: URL = AutomaticPreferencesBackupStore.defaultDirectoryURL(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        beforeVersionedWrite: (@Sendable (UInt64) -> Void)? = nil,
+        afterVersionedFileWrite: (@Sendable (UInt64) throws -> Void)? = nil
     ) {
         self.directoryURL = directoryURL
         self.fileManager = fileManager
+        self.beforeVersionedWrite = beforeVersionedWrite
+        self.afterVersionedFileWrite = afterVersionedFileWrite
     }
 
     static func defaultDirectoryURL(fileManager: FileManager = .default) -> URL {
@@ -65,10 +79,48 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
     }
 
     func write(_ backup: PreferencesBackup, now: Date = .now) throws -> AutomaticPreferencesBackupWriteResult {
+        let outcome = try write(
+            backup,
+            relevantRevision: nil,
+            now: now
+        )
+        guard case let .accepted(result) = outcome else {
+            preconditionFailure("Unversioned automatic backup writes cannot be superseded")
+        }
+        return result
+    }
+
+    func writeIfCurrent(
+        _ backup: PreferencesBackup,
+        relevantRevision: UInt64,
+        now: Date = .now
+    ) throws -> AutomaticPreferencesBackupStoreWriteOutcome {
+        beforeVersionedWrite?(relevantRevision)
+        return try write(backup, relevantRevision: relevantRevision, now: now)
+    }
+
+    private func write(
+        _ backup: PreferencesBackup,
+        relevantRevision: UInt64?,
+        now: Date
+    ) throws -> AutomaticPreferencesBackupStoreWriteOutcome {
         let data = try backup.encodedJSON()
         _ = try PreferencesBackup.decodeJSON(data)
 
         return try withLock {
+            if let relevantRevision {
+                if relevantRevision < highestAdmittedRelevantRevision {
+                    let latestURL = (try? records().max(by: { $0.date < $1.date }))?.url
+                    return .superseded(latestURL)
+                }
+                // Once admitted, a newer revision remains the ordering
+                // watermark even if a later metadata or rotation step fails.
+                // Equal revisions may retry the same snapshot.
+                highestAdmittedRelevantRevision = max(
+                    highestAdmittedRelevantRevision,
+                    relevantRevision
+                )
+            }
             try fileManager.createDirectory(
                 at: directoryURL,
                 withIntermediateDirectories: true
@@ -80,7 +132,7 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
                let latestBackup = try? PreferencesBackup.decodeJSON(latestData),
                latestBackup.hasSameMeaningfulContent(as: backup) {
                 try rotate(existingRecords, now: now)
-                return .unchanged(latest.url)
+                return .accepted(.unchanged(latest.url))
             }
 
             let url = directoryURL.appendingPathComponent(
@@ -88,6 +140,9 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
                 isDirectory: false
             )
             try data.write(to: url, options: .atomic)
+            if let relevantRevision {
+                try afterVersionedFileWrite?(relevantRevision)
+            }
             try fileManager.setAttributes(
                 [.modificationDate: now],
                 ofItemAtPath: url.path
@@ -98,7 +153,7 @@ final class AutomaticPreferencesBackupStore: @unchecked Sendable {
                 AutomaticPreferencesBackupRecord(url: url, date: now, size: data.count)
             )
             try rotate(updatedRecords, now: now)
-            return .created(url)
+            return .accepted(.created(url))
         }
     }
 
@@ -242,6 +297,8 @@ final class AutomaticPreferencesBackupCoordinator {
     private let store: AutomaticPreferencesBackupStore
     private let debounceDelay: Duration
     private var pendingTask: Task<Void, Never>?
+    private var latestRelevantRevision: UInt64 = 0
+    private var completedRelevantRevision: UInt64 = 0
 
     var snapshotProvider: (() -> PreferencesBackup?)?
     var failureHandler: ((Error) -> Void)?
@@ -270,51 +327,83 @@ final class AutomaticPreferencesBackupCoordinator {
         isEnabled = enabled
         userDefaults.set(enabled, forKey: Self.enabledUserDefaultsKey)
         if enabled {
-            persistentPreferencesDidChange()
+            committedPreferencesDidChange()
         } else {
             pendingTask?.cancel()
             pendingTask = nil
         }
     }
 
-    func persistentPreferencesDidChange() {
-        scheduleBackup(resetDebounce: true)
-    }
-
-    /// UserDefaults notifications do not identify the changed key. Coalesce
-    /// the whole burst without letting unrelated writes postpone a backup.
-    func observedUserDefaultsDidChange() {
-        scheduleBackup(resetDebounce: false)
-    }
-
-    private func scheduleBackup(resetDebounce: Bool) {
+    func committedPreferencesDidChange() {
         guard isEnabled else { return }
-        if pendingTask != nil {
-            guard resetDebounce else { return }
-            pendingTask?.cancel()
-        }
+        latestRelevantRevision &+= 1
+        pendingTask?.cancel()
+        pendingTask = nil
+        ensurePendingBackupScheduled()
+    }
+
+    private func ensurePendingBackupScheduled() {
+        guard isEnabled,
+              pendingTask == nil,
+              latestRelevantRevision > completedRelevantRevision else { return }
         pendingTask = Task { [weak self] in
             guard let self else { return }
             do {
                 try await Task.sleep(for: debounceDelay)
                 guard !Task.isCancelled else { return }
                 pendingTask = nil
-                _ = try await performBackupNow()
+                let revision = latestRelevantRevision
+                guard let backup = snapshotProvider?() else {
+                    throw CocoaError(.fileNoSuchFile)
+                }
+                let attempt = try await performBackupNow(
+                    backup: backup,
+                    revision: revision
+                )
+                if attempt.wasAccepted {
+                    completedRelevantRevision = max(completedRelevantRevision, revision)
+                }
+                reconcilePendingBackup()
             } catch is CancellationError {
                 return
             } catch {
                 failureHandler?(error)
+                reconcilePendingBackup()
             }
         }
+    }
+
+    private func reconcilePendingBackup() {
+        guard isEnabled,
+              latestRelevantRevision > completedRelevantRevision else {
+            pendingTask?.cancel()
+            pendingTask = nil
+            return
+        }
+        ensurePendingBackupScheduled()
     }
 
     func createBackupNow() async throws -> AutomaticPreferencesBackupWriteResult {
         pendingTask?.cancel()
         pendingTask = nil
-        guard let backup = snapshotProvider?() else {
-            throw CocoaError(.fileNoSuchFile)
+        let revision = latestRelevantRevision
+        do {
+            guard let backup = snapshotProvider?() else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            let attempt = try await performBackupNow(
+                backup: backup,
+                revision: revision
+            )
+            if attempt.wasAccepted {
+                completedRelevantRevision = max(completedRelevantRevision, revision)
+            }
+            reconcilePendingBackup()
+            return attempt.result
+        } catch {
+            reconcilePendingBackup()
+            throw error
         }
-        return try await performBackupNow(backup: backup)
     }
 
     func refreshSummary() async {
@@ -329,19 +418,28 @@ final class AutomaticPreferencesBackupCoordinator {
     }
 
     private func performBackupNow(
-        backup providedBackup: PreferencesBackup? = nil
-    ) async throws -> AutomaticPreferencesBackupWriteResult {
+        backup providedBackup: PreferencesBackup? = nil,
+        revision: UInt64
+    ) async throws -> (result: AutomaticPreferencesBackupWriteResult, wasAccepted: Bool) {
         guard let backup = providedBackup ?? snapshotProvider?() else {
             throw CocoaError(.fileNoSuchFile)
         }
-        let (result, summary) = try await Task.detached(priority: .utility) { [store] in
-            let result = try store.write(backup)
-            return (result, try? store.summary())
+        let (outcome, summary) = try await Task.detached(priority: .utility) { [store] in
+            let outcome = try store.writeIfCurrent(
+                backup,
+                relevantRevision: revision
+            )
+            return (outcome, try? store.summary())
         }.value
         if let summary {
             summaryHandler?(summary)
         }
-        return result
+        switch outcome {
+        case let .accepted(result):
+            return (result, true)
+        case let .superseded(latestURL):
+            return (.unchanged(latestURL), false)
+        }
     }
 
     func prepareBackupDirectory() throws -> URL {
@@ -353,22 +451,46 @@ final class AutomaticPreferencesBackupCoordinator {
     func createSafetySnapshotBeforeImport() throws {
         pendingTask?.cancel()
         pendingTask = nil
-        guard let backup = snapshotProvider?() else { return }
-        _ = try store.write(backup)
-        if let summary = try? store.summary() {
-            summaryHandler?(summary)
+        let revision = latestRelevantRevision
+        do {
+            guard let backup = snapshotProvider?() else {
+                reconcilePendingBackup()
+                return
+            }
+            let outcome = try store.writeIfCurrent(
+                backup,
+                relevantRevision: revision
+            )
+            if case .accepted = outcome {
+                completedRelevantRevision = max(completedRelevantRevision, revision)
+            }
+            if let summary = try? store.summary() {
+                summaryHandler?(summary)
+            }
+            reconcilePendingBackup()
+        } catch {
+            reconcilePendingBackup()
+            throw error
         }
     }
 
     /// AppKit termination does not await asynchronous work. This is the one
     /// shutdown path where the pending snapshot is intentionally flushed inline.
     func flushPendingBackupBeforeTermination() {
-        guard isEnabled else { return }
+        guard isEnabled,
+              latestRelevantRevision > completedRelevantRevision else { return }
         pendingTask?.cancel()
         pendingTask = nil
+        let revision = latestRelevantRevision
         guard let backup = snapshotProvider?() else { return }
         do {
-            _ = try store.write(backup)
+            let outcome = try store.writeIfCurrent(
+                backup,
+                relevantRevision: revision
+            )
+            if case .accepted = outcome {
+                completedRelevantRevision = max(completedRelevantRevision, revision)
+            }
             if let summary = try? store.summary() {
                 summaryHandler?(summary)
             }

@@ -497,7 +497,12 @@ enum PreferencesBackupError: Error, Equatable {
 
 @MainActor
 protocol PreferencesBackupApplicationStoring: AnyObject {
+    var preferencesBackupChangeReporter: PreferencesBackupChangeReporter? { get set }
+
     func applicationPreferences() -> PreferencesBackup.ApplicationPreferences
     func validates(_ preferences: PreferencesBackup.ApplicationPreferences) -> Bool
     func apply(_ preferences: PreferencesBackup.ApplicationPreferences)
+    func setAppearancePreference(rawValue: String) -> Bool
+    func setLanguagePreference(rawValue: String) -> Bool
+    func setMenuBarClickBehavior(rawValue: String) -> Bool
 }

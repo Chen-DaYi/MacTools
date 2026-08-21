@@ -296,7 +296,6 @@ struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
-    private let appearanceUserDefaults: UserDefaults
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
     @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
@@ -318,10 +317,19 @@ struct GeneralSettingsView: View {
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
         self.menuBarPanelThemeStore = menuBarPanelThemeStore
-        self.appearanceUserDefaults = appearanceUserDefaults
         _appearancePreferenceRawValue = AppStorage(
             wrappedValue: AppAppearancePreference.system.rawValue,
             AppAppearancePreference.userDefaultsKey,
+            store: appearanceUserDefaults
+        )
+        _languagePreferenceRawValue = AppStorage(
+            wrappedValue: AppLanguagePreference.system.rawValue,
+            AppLanguagePreference.userDefaultsKey,
+            store: appearanceUserDefaults
+        )
+        _clickBehaviorRawValue = AppStorage(
+            wrappedValue: MenuBarClickBehaviorPreference.standard.rawValue,
+            MenuBarClickBehaviorPreference.userDefaultsKey,
             store: appearanceUserDefaults
         )
     }
@@ -344,8 +352,7 @@ struct GeneralSettingsView: View {
                 }
                 Section {
                     AppearanceSettingsRow(
-                        selectionRawValue: $appearancePreferenceRawValue,
-                        userDefaults: appearanceUserDefaults
+                        selectionRawValue: appearancePreferenceBinding
                     )
                         .generalSettingsSearchAnchor(
                             target: .appearance,
@@ -359,7 +366,7 @@ struct GeneralSettingsView: View {
                         ) ?? .system
                     )
                     .settingsGroupedFormRowWidth(widths.sectionLayout)
-                    LanguageSettingsRow(selectionRawValue: $languagePreferenceRawValue)
+                    LanguageSettingsRow(selectionRawValue: languagePreferenceBinding)
                         .generalSettingsSearchAnchor(
                             target: .language,
                             activeTarget: activeSearchTarget
@@ -381,7 +388,7 @@ struct GeneralSettingsView: View {
                         activeTarget: activeSearchTarget
                     )
                     .settingsGroupedFormRowWidth(widths.sectionLayout)
-                    MenuBarClickBehaviorSettingsRow(selectionRawValue: $clickBehaviorRawValue)
+                    MenuBarClickBehaviorSettingsRow(selectionRawValue: clickBehaviorPreferenceBinding)
                         .generalSettingsSearchAnchor(
                             target: .menuBarClickBehavior,
                             activeTarget: activeSearchTarget
@@ -475,6 +482,42 @@ struct GeneralSettingsView: View {
             activeSearchTarget = nil
             navigationCoordinator.clearSearchRevealRequest(request)
         }
+    }
+
+    private var appearancePreferenceBinding: Binding<String> {
+        Binding(
+            get: { appearancePreferenceRawValue },
+            set: { rawValue in
+                guard pluginHost.setApplicationAppearancePreference(rawValue: rawValue) else {
+                    return
+                }
+                appearancePreferenceRawValue = rawValue
+            }
+        )
+    }
+
+    private var languagePreferenceBinding: Binding<String> {
+        Binding(
+            get: { languagePreferenceRawValue },
+            set: { rawValue in
+                guard pluginHost.setApplicationLanguagePreference(rawValue: rawValue) else {
+                    return
+                }
+                languagePreferenceRawValue = rawValue
+            }
+        )
+    }
+
+    private var clickBehaviorPreferenceBinding: Binding<String> {
+        Binding(
+            get: { clickBehaviorRawValue },
+            set: { rawValue in
+                guard pluginHost.setMenuBarClickBehaviorPreference(rawValue: rawValue) else {
+                    return
+                }
+                clickBehaviorRawValue = rawValue
+            }
+        )
     }
 }
 
@@ -1658,7 +1701,6 @@ private struct MenuBarClickBehaviorSettingsRow: View {
 
 private struct AppearanceSettingsRow: View {
     @Binding var selectionRawValue: String
-    let userDefaults: UserDefaults
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -1696,13 +1738,6 @@ private struct AppearanceSettingsRow: View {
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help(AppL10n.settings("appearance.help", defaultValue: "设置应用外观"))
-        .onChange(of: selectionRawValue) { _, rawValue in
-            guard let preference = AppAppearancePreference(rawValue: rawValue) else {
-                selectionRawValue = AppAppearancePreference.system.rawValue
-                return
-            }
-            preference.storeAndApply(in: userDefaults)
-        }
     }
 }
 
@@ -1747,13 +1782,6 @@ private struct LanguageSettingsRow: View {
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help(AppL10n.settings("language.help", defaultValue: "设置应用语言"))
-        .onChange(of: selectionRawValue) { _, rawValue in
-            guard let preference = AppLanguagePreference(rawValue: rawValue) else {
-                selectionRawValue = AppLanguagePreference.system.rawValue
-                return
-            }
-            preference.store()
-        }
     }
 }
 
