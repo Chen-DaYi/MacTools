@@ -4,4 +4,4 @@ type: changed
 area: Productivity
 ---
 
-Window Layouts shortcut presets are named by their modifier keys, include an Option–Command mapping, and use a modal assistant that keeps selections pending, previews every change, marks only conflicting shortcuts, and requires an explicit Apply.
+Window Layouts shortcut presets use modifier-key names, include Option–Command, and open a modal assistant that keeps selections pending, previews each change, marks only conflicts, and requires Apply.
