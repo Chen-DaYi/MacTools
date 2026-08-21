@@ -38,6 +38,7 @@
 | Auto Hide Menu Bar | Automatically hide the menu bar to make more screen space available. |
 | Auto Hide Dock | Automatically hide the Dock for a cleaner desktop. |
 | Dock Lock | Prevent the Dock from moving between displays accidentally, with an on/off switch in its settings. |
+| Hide Active App on Dock Click | Hide the active app by clicking its Dock icon (like on Windows). |
 | Stage Manager | Toggle Stage Manager to focus the current window and place other windows on the side. |
 | System Mute | Mute or restore system audio output through CoreAudio on the default output device, with automatic restoration when the plugin is disabled. |
 | Microphone Mute | Mute or restore the default microphone input through CoreAudio without requesting recording permission. |
