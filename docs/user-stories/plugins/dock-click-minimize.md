@@ -11,11 +11,12 @@ Last verified: 2026-08-20
 
 ## User Story
 
-> As a macOS user, when I plain-click the Dock icon of the already frontmost application, I want the application hidden as with the native Hide command, controlled by a visible switch enabled by default, so that no window is minimized into the Dock.
+> As a macOS user, when I complete a short, plain click on the Dock icon of the already frontmost application, I want the application hidden as with the native Hide command, controlled by a visible switch enabled by default, so that no window is minimized into the Dock.
 
 ## Acceptance
 
-- Given the plugin is enabled and Accessibility plus Input Monitoring permissions are granted, when the user plain-clicks the frontmost application's Dock item, then the whole application is hidden after the Dock handles the click.
+- Given the plugin is enabled and Accessibility plus Input Monitoring permissions are granted, when the user completes a plain click on the frontmost application's Dock item, then the whole application is hidden after the Dock handles the click.
+- Given the pointer is dragged or held for more than 350 ms after the left mouse down, when the user releases the pointer, then MacTools does nothing.
 - Given the clicked Dock item belongs to another application, when it is clicked, then MacTools does nothing and the native Dock activation behavior remains unchanged.
 - Given the target application has no visible, non-minimized focused window, when its Dock item is clicked, then MacTools does nothing so macOS can restore or activate it normally.
 - Given the click uses Command, Option, Control, or Shift, or targets Trash, a folder, a file, a minimized-window thumbnail, or another special Dock item, then MacTools does nothing.
@@ -39,3 +40,4 @@ Last verified: 2026-08-20
 | 2026-08-20 | updated | Click behavior only | Visible enable switch and first-use default enabled | User request |
 | 2026-08-20 | updated | Minimize one focused window | Hide the active application without minimizing windows | User request |
 | 2026-08-20 | updated | Dock Click Hide | Hide Active App on Dock Click with a Windows-style subtitle | User request |
+| 2026-08-21 | updated | Left mouse down triggered hide evaluation | Confirm a short, stationary click on mouse up before evaluation | PR review |

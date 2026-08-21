@@ -8,15 +8,16 @@ Source of truth: yes
 ## Summary
 
 - Add the `dock-click-minimize` productivity plugin.
-- A plain click on the Dock item for the already frontmost application hides the application.
+- A short, stationary plain click on the Dock item for the already frontmost application hides the application.
 - All other Dock interactions keep native macOS behavior.
 
 ## User flow
 
 - User enables the plugin in its primary panel.
 - MacTools requests or displays normal Accessibility and Input Monitoring permission guidance.
-- A listen-only event tap observes a plain left mouse down.
-- Accessibility hit testing resolves the clicked Dock item by bundle identifier.
+- A listen-only event tap records a plain left mouse down and confirms it on mouse up.
+- Dragged gestures and holds longer than 350 ms are ignored.
+- A serial background queue resolves the clicked Dock item through Accessibility by bundle identifier.
 - MacTools waits briefly for macOS to handle the click, revalidates the target, and hides the application.
 
 ## Business rules
@@ -33,6 +34,9 @@ Source of truth: yes
 | 2026-08-20 | Resolve applications by AX URL and bundle identifier. | Avoid localized app-title matching. | Dock folders, files, Trash, and unknown items fail open. |
 | 2026-08-20 | Hide the active application with `NSRunningApplication.hide()`. | Match the native Dock contextual Hide command. | No windows are minimized into the Dock. |
 | 2026-08-20 | Show an enable switch in the settings page and default it to enabled on first use. | Make the feature immediately usable and controllable from the shown UI. | Existing persisted preferences remain unchanged. |
+| 2026-08-21 | Confirm a click on mouse up, with a 350 ms and 4 pt gesture limit. | Avoid hiding an app after a Dock drag or long press. | Only short, stationary plain clicks are eligible. |
+| 2026-08-21 | Resolve Dock Accessibility elements on a serial background queue. | Avoid blocking the event-tap callback on an unresponsive application. | Main-thread delivery only performs final plugin handling. |
+| 2026-08-21 | Invalidate the Dock PID cache only on Dock lifecycle notifications. | Non-Dock clicks must not cause Dock process lookups. | The next lookup after a Dock restart refreshes the cache. |
 
 ## Plan
 
@@ -48,6 +52,7 @@ Source of truth: yes
 - [x] P010 — Centralize plugin log categories.
 - [x] P011 — Rename the visible plugin and localize its Windows-style subtitle.
 - [x] P012 — Record the plugin's intentional action-provider exclusion.
+- [x] P013 — Confirm completed clicks and move Dock Accessibility resolution off the event callback.
 
 ## TODO
 
@@ -63,6 +68,7 @@ Source of truth: yes
 - [x] F010 — Centralize the Hide Active App on Dock Click log categories — files: `Plugins/DockClickMinimize/Sources/DockClickLog.swift` — status: done
 - [x] F011 — Rename the visible plugin and localize its Windows-style subtitle — files: `Plugins/DockClickMinimize/plugin.json`, `Plugins/DockClickMinimize/Resources/Localizable.xcstrings` — status: done
 - [x] F012 — Record the intentional action-provider exclusion — files: `docs/plugins/action-provider-coverage.md` — status: done
+- [x] F013 — Confirm completed clicks, preserve the Dock PID cache, and avoid mismatched-app Accessibility queries — files: `Plugins/DockClickMinimize/` — status: done
 
 ## Implementation journal
 
@@ -80,6 +86,7 @@ Source of truth: yes
 - 2026-08-20 — P010/F010 complete. Centralized Hide Active App on Dock Click OSLog categories in the plugin-private `DockClickLog`; dynamic plugins cannot depend on the host App target’s `AppLog`.
 - 2026-08-20 — P011/F011 complete. Renamed the user-visible plugin to Hide Active App on Dock Click and added the localized “like on Windows” explanation to its subtitle.
 - 2026-08-20 — P012/F012 complete. Added the intentional action-provider exclusion required by the CI coverage inventory; Dock click observation is configuration and lifecycle behavior, not a canonical user-invoked action.
+- 2026-08-21 — P013/F013 complete. `DockClickMonitor.swift` confirms mouse up after a short, stationary gesture and resolves Dock AX elements on a serial queue. `DockClickResolver.swift` retains its PID cache until Dock launch or termination. `DockClickMinimizePlugin.swift` checks the bundle before querying window visibility. Focused tests cover held/dragged gestures and the mismatch fast path. `make build-plugin PLUGIN=DockClickMinimize`, the targeted XCTest class, and `make script-tests` pass.
 
 ## Current files
 

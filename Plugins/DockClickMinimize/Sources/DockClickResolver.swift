@@ -38,15 +38,49 @@ enum DockClickResolver {
     }
 }
 
-final class DockAccessibilityResolver: DockApplicationResolving {
+// Accessibility resolution is confined to DockClickMonitor's serial queue; the process cache is locked for lifecycle notifications.
+final class DockAccessibilityResolver: DockApplicationResolving, @unchecked Sendable {
+    private final class DockProcessCache {
+        private let lock = NSLock()
+        private var processIdentifier: pid_t?
+
+        func cachedOrResolve(_ resolve: () -> pid_t?) -> pid_t? {
+            lock.lock()
+            defer { lock.unlock() }
+            if let processIdentifier {
+                return processIdentifier
+            }
+            let resolvedProcessIdentifier = resolve()
+            processIdentifier = resolvedProcessIdentifier
+            return resolvedProcessIdentifier
+        }
+
+        func invalidate() {
+            lock.lock()
+            processIdentifier = nil
+            lock.unlock()
+        }
+    }
+
     private static let dockBundleIdentifier = "com.apple.dock"
     private static let maximumParentDepth = 4
 
     private let bundleIdentifierForURL: (URL) -> String?
-    private var cachedDockProcessIdentifier: pid_t?
+    private let dockProcessCache = DockProcessCache()
+    private let workspaceNotificationCenter: NotificationCenter
+    private var dockLifecycleObservers: [NSObjectProtocol] = []
 
-    init(bundleIdentifierForURL: @escaping (URL) -> String? = { Bundle(url: $0)?.bundleIdentifier }) {
+    init(
+        bundleIdentifierForURL: @escaping (URL) -> String? = { Bundle(url: $0)?.bundleIdentifier },
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
+    ) {
         self.bundleIdentifierForURL = bundleIdentifierForURL
+        self.workspaceNotificationCenter = workspaceNotificationCenter
+        observeDockLifecycle()
+    }
+
+    deinit {
+        dockLifecycleObservers.forEach(workspaceNotificationCenter.removeObserver)
     }
 
     func resolveApplication(at location: CGPoint) -> DockApplicationTarget? {
@@ -54,22 +88,11 @@ final class DockAccessibilityResolver: DockApplicationResolving {
             return nil
         }
 
-        guard let cachedOrResolvedDockProcessIdentifier = cachedDockProcessIdentifier ?? resolveDockProcessIdentifier() else {
+        guard let dockProcessIdentifier = dockProcessCache.cachedOrResolve(resolveDockProcessIdentifier) else {
             return nil
         }
-        let hitProcessIdentifier = processIdentifier(of: element)
-        let dockProcessIdentifier: pid_t
-        if hitProcessIdentifier == cachedOrResolvedDockProcessIdentifier {
-            dockProcessIdentifier = cachedOrResolvedDockProcessIdentifier
-        } else {
-            // A Dock restart changes its PID. Re-resolve only after the cached PID no longer matches.
-            cachedDockProcessIdentifier = nil
-            guard let refreshedDockProcessIdentifier = resolveDockProcessIdentifier(),
-                  hitProcessIdentifier == refreshedDockProcessIdentifier
-            else {
-                return nil
-            }
-            dockProcessIdentifier = refreshedDockProcessIdentifier
+        guard processIdentifier(of: element) == dockProcessIdentifier else {
+            return nil
         }
         return applicationTarget(from: element, dockProcessIdentifier: dockProcessIdentifier)
     }
@@ -79,8 +102,25 @@ final class DockAccessibilityResolver: DockApplicationResolving {
             .runningApplications(withBundleIdentifier: Self.dockBundleIdentifier)
             .first?
             .processIdentifier
-        cachedDockProcessIdentifier = processIdentifier
         return processIdentifier
+    }
+
+    private func observeDockLifecycle() {
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            let observer = workspaceNotificationCenter.addObserver(
+                forName: name,
+                object: nil,
+                queue: nil
+            ) { [weak self] notification in
+                guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      application.bundleIdentifier == Self.dockBundleIdentifier
+                else {
+                    return
+                }
+                self?.dockProcessCache.invalidate()
+            }
+            dockLifecycleObservers.append(observer)
+        }
     }
 
     private func applicationTarget(

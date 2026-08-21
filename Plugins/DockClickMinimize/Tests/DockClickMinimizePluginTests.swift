@@ -150,6 +150,30 @@ final class DockClickMinimizePluginTests: XCTestCase {
         XCTAssertFalse(DockClickModifierPolicy.isPlainClick(flags: .maskShift))
     }
 
+    func testGesturePolicyRejectsDraggingAndLongPresses() {
+        XCTAssertTrue(
+            DockClickGesturePolicy.isCompletedClick(
+                downLocation: .zero,
+                upLocation: CGPoint(x: DockClickGesturePolicy.maximumDistance, y: 0),
+                duration: DockClickGesturePolicy.maximumDuration
+            )
+        )
+        XCTAssertFalse(
+            DockClickGesturePolicy.isCompletedClick(
+                downLocation: .zero,
+                upLocation: CGPoint(x: DockClickGesturePolicy.maximumDistance + 1, y: 0),
+                duration: 0
+            )
+        )
+        XCTAssertFalse(
+            DockClickGesturePolicy.isCompletedClick(
+                downLocation: .zero,
+                upLocation: .zero,
+                duration: DockClickGesturePolicy.maximumDuration + 0.01
+            )
+        )
+    }
+
     func testClickDecisionOnlySchedulesActiveApplicationWithVisibleWindow() {
         let safari = DockApplicationTarget(bundleIdentifier: "com.apple.Safari")
         let activeSafari = DockFrontmostApplication(bundleIdentifier: "com.apple.Safari", processIdentifier: 123)
@@ -217,6 +241,21 @@ final class DockClickMinimizePluginTests: XCTestCase {
 
         XCTAssertTrue(scheduler.actions.isEmpty)
         XCTAssertTrue(applicationHider.hiddenProcessIdentifiers.isEmpty)
+    }
+
+    func testDifferentDockTargetDoesNotQueryVisibleWindow() {
+        let monitor = MockDockClickMonitor()
+        let applicationHider = MockDockApplicationHider(hasVisibleWindow: true)
+        let context = makeContext(isEnabled: true)
+        let plugin = makePlugin(context: context, monitor: monitor, applicationHider: applicationHider)
+        plugin.activate(context: context)
+
+        monitor.emit(
+            target: DockApplicationTarget(bundleIdentifier: "com.apple.Terminal"),
+            frontmostApplication: safariApplication
+        )
+
+        XCTAssertEqual(applicationHider.hasVisibleWindowCallCount, 0)
     }
 
     func testFrontmostApplicationChangeBeforeDelayDoesNotHide() {
@@ -354,6 +393,7 @@ private final class MockDockClickMonitor: @preconcurrency DockClickMonitoring {
 @MainActor
 private final class MockDockApplicationHider: @preconcurrency DockApplicationHiding {
     var hasVisibleWindowResult: Bool
+    private(set) var hasVisibleWindowCallCount = 0
     private(set) var hiddenProcessIdentifiers: [pid_t] = []
 
     init(hasVisibleWindow: Bool) {
@@ -361,7 +401,8 @@ private final class MockDockApplicationHider: @preconcurrency DockApplicationHid
     }
 
     func hasVisibleWindow(for processIdentifier: pid_t) -> Bool {
-        hasVisibleWindowResult
+        hasVisibleWindowCallCount += 1
+        return hasVisibleWindowResult
     }
 
     func hideApplication(bundleIdentifier: String, processIdentifier: pid_t) -> Bool {

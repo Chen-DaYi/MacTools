@@ -45,12 +45,41 @@ enum DockClickModifierPolicy {
     }
 }
 
-final class DockClickMonitor: DockClickMonitoring {
+enum DockClickGesturePolicy {
+    static let maximumDuration: TimeInterval = 0.35
+    static let maximumDistance: CGFloat = 4
+
+    static func isCompletedClick(
+        downLocation: CGPoint,
+        upLocation: CGPoint,
+        duration: TimeInterval
+    ) -> Bool {
+        guard duration <= maximumDuration else {
+            return false
+        }
+        return hypot(upLocation.x - downLocation.x, upLocation.y - downLocation.y) <= maximumDistance
+    }
+}
+
+// Event-tap state stays on the main run loop; Accessibility resolution is confined to accessibilityQueue.
+final class DockClickMonitor: DockClickMonitoring, @unchecked Sendable {
+    private struct PendingClick {
+        let location: CGPoint
+        let startedAt: TimeInterval
+        let frontmostApplication: DockFrontmostApplication
+        let generation: Int
+    }
+
     private let logger = DockClickLog.monitor
     private let resolver: any DockApplicationResolving
     private let frontmostApplicationProvider: any DockFrontmostApplicationProviding
+    private let accessibilityQueue = DispatchQueue(
+        label: "cc.ggbond.mactools.dock-click-minimize.accessibility"
+    )
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var pendingClick: PendingClick?
+    private var monitoringGeneration = 0
 
     var onApplicationClick: ((DockApplicationTarget, DockFrontmostApplication) -> Void)?
 
@@ -69,6 +98,8 @@ final class DockClickMonitor: DockClickMonitoring {
         }
 
         let events = CGEventMask(1) << CGEventType.leftMouseDown.rawValue
+            | CGEventMask(1) << CGEventType.leftMouseUp.rawValue
+            | CGEventMask(1) << CGEventType.leftMouseDragged.rawValue
         guard let eventTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -94,6 +125,8 @@ final class DockClickMonitor: DockClickMonitoring {
     }
 
     func stop() {
+        monitoringGeneration &+= 1
+        pendingClick = nil
         guard let eventTap else {
             return
         }
@@ -123,15 +156,68 @@ final class DockClickMonitor: DockClickMonitoring {
             return Unmanaged.passUnretained(event)
         }
 
-        guard type == .leftMouseDown,
-              DockClickModifierPolicy.isPlainClick(flags: event.flags),
-              let frontmostApplication = frontmostApplicationProvider.frontmostApplication(),
-              let target = resolver.resolveApplication(at: event.location)
+        switch type {
+        case .leftMouseDown:
+            beginClick(event)
+        case .leftMouseDragged:
+            pendingClick = nil
+        case .leftMouseUp:
+            completeClick(event)
+        default:
+            break
+        }
+        return Unmanaged.passUnretained(event)
+    }
+
+    private func beginClick(_ event: CGEvent) {
+        guard DockClickModifierPolicy.isPlainClick(flags: event.flags),
+              let frontmostApplication = frontmostApplicationProvider.frontmostApplication()
         else {
-            return Unmanaged.passUnretained(event)
+            pendingClick = nil
+            return
         }
 
-        onApplicationClick?(target, frontmostApplication)
-        return Unmanaged.passUnretained(event)
+        pendingClick = PendingClick(
+            location: event.location,
+            startedAt: ProcessInfo.processInfo.systemUptime,
+            frontmostApplication: frontmostApplication,
+            generation: monitoringGeneration
+        )
+    }
+
+    private func completeClick(_ event: CGEvent) {
+        guard let pendingClick else {
+            return
+        }
+        self.pendingClick = nil
+
+        guard pendingClick.generation == monitoringGeneration,
+              DockClickModifierPolicy.isPlainClick(flags: event.flags),
+              DockClickGesturePolicy.isCompletedClick(
+                  downLocation: pendingClick.location,
+                  upLocation: event.location,
+                  duration: ProcessInfo.processInfo.systemUptime - pendingClick.startedAt
+              )
+        else {
+            return
+        }
+
+        let location = event.location
+        accessibilityQueue.async { [weak self] in
+            guard let self,
+                  let target = self.resolver.resolveApplication(at: location)
+            else {
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      pendingClick.generation == self.monitoringGeneration,
+                      self.eventTap != nil
+                else {
+                    return
+                }
+                self.onApplicationClick?(target, pendingClick.frontmostApplication)
+            }
+        }
     }
 }

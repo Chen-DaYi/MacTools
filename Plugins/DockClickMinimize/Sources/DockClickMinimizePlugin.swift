@@ -311,16 +311,15 @@ final class DockClickMinimizePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         _ target: DockApplicationTarget,
         frontmostApplication: DockFrontmostApplication
     ) {
-        let hasVisibleWindow = applicationHider.hasVisibleWindow(
-            for: frontmostApplication.processIdentifier
-        )
         guard isEnabled,
               isAccessibilityGranted,
               isInputMonitoringGranted,
+              target.bundleIdentifier == frontmostApplication.bundleIdentifier,
+              applicationHider.hasVisibleWindow(for: frontmostApplication.processIdentifier),
               DockClickDecision.shouldScheduleHide(
-                target: target,
-                frontmostApplication: frontmostApplication,
-                hasVisibleWindow: hasVisibleWindow
+                  target: target,
+                  frontmostApplication: frontmostApplication,
+                  hasVisibleWindow: true
               )
         else {
             return
