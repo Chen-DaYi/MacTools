@@ -38,55 +38,18 @@ struct SystemStatusSettingsView: View {
     }
 
     private var menuBarSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            metricSection(
-                systemName: "menubar.rectangle",
-                title: localization.string("settings.menuBar.title", defaultValue: "菜单栏指标"),
-                description: localization.string(
-                    "settings.menuBar.description",
-                    defaultValue: "选择要显示在菜单栏里的指标。"
-                ),
-                items: menuBarItems,
-                listID: "menu-bar",
-                onVisibilityChange: controller.setMenuBarMetric(_:visible:),
-                onMove: controller.moveMenuBarMetric(_:toOffset:)
-            )
-
-            networkLayoutPicker
-                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                .padding(.bottom, PluginSettingsTheme.Spacing.rowVertical)
-        }
-    }
-
-    private var networkLayoutPicker: some View {
-        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                Text(localization.string("settings.networkLayout.title", defaultValue: "网络速率布局"))
-                    .font(PluginSettingsTheme.Typography.rowTitle)
-                Text(localization.string("settings.networkLayout.description", defaultValue: "仅用于菜单栏中的网络指标。"))
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 12)
-
-            Picker(String(), selection: Binding(
-                get: { controller.configuration.networkMenuBarLayout },
-                set: { layout in
-                    controller.setNetworkMenuBarLayout(layout)
-                }
-            )) {
-                Text(localization.string("settings.networkLayout.horizontal", defaultValue: "横向"))
-                    .tag(SystemStatusNetworkMenuBarLayout.horizontal)
-                Text(localization.string("settings.networkLayout.vertical", defaultValue: "上下"))
-                    .tag(SystemStatusNetworkMenuBarLayout.vertical)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .frame(width: 118)
-            .accessibilityLabel(localization.string("settings.networkLayout.title", defaultValue: "网络速率布局"))
-        }
+        metricSection(
+            systemName: "menubar.rectangle",
+            title: localization.string("settings.menuBar.title", defaultValue: "菜单栏指标"),
+            description: localization.string(
+                "settings.menuBar.description",
+                defaultValue: "选择要显示在菜单栏里的指标。"
+            ),
+            items: menuBarItems,
+            listID: "menu-bar",
+            onVisibilityChange: controller.setMenuBarMetric(_:visible:),
+            onMove: controller.moveMenuBarMetric(_:toOffset:)
+        )
     }
 
     private func metricSection(

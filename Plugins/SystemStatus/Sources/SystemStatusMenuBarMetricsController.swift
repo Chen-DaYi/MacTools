@@ -2,42 +2,36 @@ import AppKit
 import Combine
 import MacToolsPluginKit
 
-enum SystemStatusMenuBarMetricBlockLayout: Equatable {
-    case standard
-    case verticalNetwork(upload: String, download: String)
-}
-
 struct SystemStatusMenuBarMetricBlock: Equatable {
     let kind: SystemStatusMetricKind
     let label: String
-    let value: String
-    let layout: SystemStatusMenuBarMetricBlockLayout
+    let values: [String]
+    let horizontalValue: String
 
     init(
         kind: SystemStatusMetricKind,
         label: String,
-        value: String,
-        layout: SystemStatusMenuBarMetricBlockLayout = .standard
+        values: [String],
+        horizontalValue: String? = nil
     ) {
         self.kind = kind
         self.label = label
-        self.value = value
-        self.layout = layout
+        self.values = values
+        self.horizontalValue = horizontalValue ?? values.joined(separator: " ")
+    }
+
+    var verticalLabelLines: [String] {
+        label.map(String.init)
     }
 }
 
 enum SystemStatusMenuBarMetricsFormatter {
     static func blocks(
         snapshot: SystemStatusSnapshot,
-        kinds: [SystemStatusMetricKind],
-        networkMenuBarLayout: SystemStatusNetworkMenuBarLayout = .horizontal
+        kinds: [SystemStatusMetricKind]
     ) -> [SystemStatusMenuBarMetricBlock] {
         kinds.compactMap {
-            block(
-                for: $0,
-                snapshot: snapshot,
-                networkMenuBarLayout: networkMenuBarLayout
-            )
+            block(for: $0, snapshot: snapshot)
         }
     }
 
@@ -46,7 +40,7 @@ enum SystemStatusMenuBarMetricsFormatter {
         kinds: [SystemStatusMetricKind]
     ) -> String {
         blocks(snapshot: snapshot, kinds: kinds)
-            .map { "\($0.label) \($0.value)" }
+            .map { "\($0.label) \($0.horizontalValue)" }
             .joined(separator: " | ")
     }
 
@@ -55,7 +49,7 @@ enum SystemStatusMenuBarMetricsFormatter {
         kinds: [SystemStatusMetricKind]
     ) -> String {
         let details = blocks(snapshot: snapshot, kinds: kinds)
-            .map { "\($0.label) \($0.value)" }
+            .map { "\($0.label) \($0.horizontalValue)" }
         guard !details.isEmpty else {
             return "System Status"
         }
@@ -65,79 +59,91 @@ enum SystemStatusMenuBarMetricsFormatter {
 
     private static func block(
         for kind: SystemStatusMetricKind,
-        snapshot: SystemStatusSnapshot,
-        networkMenuBarLayout: SystemStatusNetworkMenuBarLayout
+        snapshot: SystemStatusSnapshot
     ) -> SystemStatusMenuBarMetricBlock? {
         switch kind {
         case .cpu:
+            let percent = compactPercent(snapshot.cpu.usage)
+            let temperature = compactTemperature(snapshot.cpu.temperatureCelsius)
             return SystemStatusMenuBarMetricBlock(
                 kind: kind,
                 label: "CPU",
-                value: percentAndTemperature(
-                    percent: snapshot.cpu.usage,
-                    temperatureCelsius: snapshot.cpu.temperatureCelsius
-                )
+                values: [percent, temperature ?? "—"],
+                horizontalValue: horizontalValue(percent: percent, secondary: temperature)
             )
         case .gpu:
+            guard snapshot.gpu.isAvailable else {
+                return SystemStatusMenuBarMetricBlock(
+                    kind: kind,
+                    label: "GPU",
+                    values: ["—", "—"],
+                    horizontalValue: "—"
+                )
+            }
+
+            let percent = compactPercent(snapshot.gpu.usage)
+            let temperature = compactTemperature(snapshot.gpu.temperatureCelsius)
             return SystemStatusMenuBarMetricBlock(
                 kind: kind,
                 label: "GPU",
-                value: snapshot.gpu.isAvailable
-                    ? percentAndTemperature(
-                        percent: snapshot.gpu.usage,
-                        temperatureCelsius: snapshot.gpu.temperatureCelsius
-                    )
-                    : "—"
+                values: [percent, temperature ?? "—"],
+                horizontalValue: horizontalValue(percent: percent, secondary: temperature)
             )
         case .memory:
+            let percent = compactPercent(snapshot.memory.usage)
+            let values = [percent, compactAmount(snapshot.memory.usedBytes)]
             return SystemStatusMenuBarMetricBlock(
                 kind: kind,
                 label: "RAM",
-                value: compactPercent(snapshot.memory.usage)
+                values: values
             )
         case .disk:
+            let percent = compactPercent(snapshot.disk.usage)
+            let activity = combinedDiskBytesPerSecond(snapshot.disk).map {
+                "↕\(compactAmount($0))"
+            } ?? "—"
+            let values = [percent, activity]
             return SystemStatusMenuBarMetricBlock(
                 kind: kind,
                 label: "DSK",
-                value: compactPercent(snapshot.disk.usage)
+                values: values
             )
         case .battery:
+            guard snapshot.battery.isAvailable else {
+                return SystemStatusMenuBarMetricBlock(
+                    kind: kind,
+                    label: "BAT",
+                    values: ["—", "—"],
+                    horizontalValue: "—"
+                )
+            }
+
+            let percent = compactPercent(snapshot.battery.level)
+            let values = [percent, batterySecondaryValue(snapshot.battery)]
             return SystemStatusMenuBarMetricBlock(
                 kind: kind,
                 label: "BAT",
-                value: snapshot.battery.isAvailable
-                    ? percentAndTemperature(
-                        percent: snapshot.battery.level,
-                        temperatureCelsius: snapshot.battery.temperatureCelsius
-                    )
-                    : "—"
+                values: values
             )
         case .network:
-            let download = "↓\(compactSpeed(snapshot.network.downloadBytesPerSecond))"
-            let upload = "↑\(compactSpeed(snapshot.network.uploadBytesPerSecond))"
+            let download = "↓\(compactAmount(snapshot.network.downloadBytesPerSecond))"
+            let upload = "↑\(compactAmount(snapshot.network.uploadBytesPerSecond))"
             return SystemStatusMenuBarMetricBlock(
                 kind: kind,
                 label: "NET",
-                value: "\(download) \(upload)",
-                layout: networkMenuBarLayout == .vertical
-                    ? .verticalNetwork(upload: upload, download: download)
-                    : .standard
+                values: [download, upload]
             )
         case .topProcesses:
             return nil
         }
     }
 
-    private static func percentAndTemperature(
-        percent: Double?,
-        temperatureCelsius: Double?
-    ) -> String {
-        let percentText = compactPercent(percent)
-        guard let temperatureText = compactTemperature(temperatureCelsius) else {
-            return percentText
+    private static func horizontalValue(percent: String, secondary: String?) -> String {
+        guard let secondary else {
+            return percent
         }
 
-        return "\(percentText) \(temperatureText)"
+        return "\(percent) \(secondary)"
     }
 
     private static func compactPercent(_ value: Double?) -> String {
@@ -156,13 +162,13 @@ enum SystemStatusMenuBarMetricsFormatter {
         return "\(Int(celsius.rounded()))°"
     }
 
-    private static func compactSpeed(_ bytesPerSecond: UInt64?) -> String {
-        guard let bytesPerSecond else {
+    private static func compactAmount(_ bytes: UInt64?) -> String {
+        guard let bytes else {
             return "—"
         }
 
-        let units = ["B", "K", "M", "G", "T", "P"]
-        var value = Double(bytesPerSecond)
+        let units = ["B", "K", "M", "G", "T", "P", "E"]
+        var value = Double(bytes)
         var unitIndex = 0
 
         while value >= 1024, unitIndex < units.count - 1 {
@@ -170,19 +176,59 @@ enum SystemStatusMenuBarMetricsFormatter {
             unitIndex += 1
         }
 
-        if unitIndex == 0 {
-            return "\(Int(value.rounded()))B"
-        }
-
-        if value < 10 {
-            let rounded = (value * 10).rounded() / 10
-            if rounded >= 10 || rounded.rounded() == rounded {
-                return "\(Int(rounded.rounded()))\(units[unitIndex])"
+        while true {
+            if value < 10, unitIndex > 0 {
+                let rounded = (value * 10).rounded() / 10
+                if rounded.rounded() == rounded {
+                    return "\(Int(rounded))\(units[unitIndex])"
+                }
+                return String(format: "%.1f%@", rounded, units[unitIndex])
             }
-            return String(format: "%.1f%@", rounded, units[unitIndex])
+
+            let rounded = value.rounded()
+            if rounded >= 100, unitIndex < units.count - 1 {
+                value /= 1024
+                unitIndex += 1
+                continue
+            }
+
+            return "\(Int(rounded))\(units[unitIndex])"
+        }
+    }
+
+    private static func combinedDiskBytesPerSecond(_ disk: SystemStatusDiskSnapshot) -> UInt64? {
+        guard disk.readBytesPerSecond != nil || disk.writeBytesPerSecond != nil else {
+            return nil
         }
 
-        return "\(Int(value.rounded()))\(units[unitIndex])"
+        let (total, overflow) = (disk.readBytesPerSecond ?? 0).addingReportingOverflow(
+            disk.writeBytesPerSecond ?? 0
+        )
+        return overflow ? UInt64.max : total
+    }
+
+    private static func batterySecondaryValue(_ battery: SystemStatusBatterySnapshot) -> String {
+        if let power = compactBatteryPower(battery.batteryPowerWatts) {
+            return power
+        }
+        if let temperature = compactTemperature(battery.temperatureCelsius) {
+            return temperature
+        }
+        return "—"
+    }
+
+    private static func compactBatteryPower(_ watts: Double?) -> String? {
+        guard let watts, watts.isFinite else {
+            return nil
+        }
+
+        let magnitude = abs(watts)
+        if magnitude < 0.05 {
+            return "0W"
+        }
+
+        let value = Int(magnitude.rounded())
+        return "\(value)W"
     }
 }
 
@@ -190,9 +236,21 @@ final class SystemStatusMenuBarMetricsView: NSView {
     private enum Layout {
         static let topInset: CGFloat = 1
         static let bottomInset: CGFloat = 1
-        static let horizontalInset: CGFloat = 5
-        static let interMetricSpacing: CGFloat = 7
+        static let horizontalInset: CGFloat = 4
+        static let interMetricSpacing: CGFloat = 4
         static let minimumMetricWidth: CGFloat = 24
+        static let verticalLabelValueSpacing: CGFloat = 2
+    }
+
+    var menuBarLayout: SystemStatusMenuBarLayout = .horizontal {
+        didSet {
+            guard menuBarLayout != oldValue else {
+                return
+            }
+
+            invalidateIntrinsicContentSize()
+            needsDisplay = true
+        }
     }
 
     var blocks: [SystemStatusMenuBarMetricBlock] = [] {
@@ -238,19 +296,23 @@ final class SystemStatusMenuBarMetricsView: NSView {
     }
 
     private var valueFont: NSFont {
-        NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
+        NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    }
+
+    private var verticalLabelFont: NSFont {
+        NSFont.systemFont(ofSize: 5.5, weight: .semibold)
     }
 
     private var verticalValueFont: NSFont {
-        NSFont.monospacedDigitSystemFont(ofSize: 8.5, weight: .regular)
+        NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
     }
 
     private func draw(_ block: SystemStatusMenuBarMetricBlock, in rect: NSRect) {
-        switch block.layout {
-        case .standard:
+        switch menuBarLayout {
+        case .horizontal:
             drawStandard(block, in: rect)
-        case let .verticalNetwork(upload, download):
-            drawVerticalNetwork(upload: upload, download: download, in: rect)
+        case .vertical:
+            drawVertical(block, in: rect)
         }
     }
 
@@ -262,7 +324,7 @@ final class SystemStatusMenuBarMetricsView: NSView {
             kern: 0.2
         )
         let value = attributedText(
-            block.value,
+            block.horizontalValue,
             font: valueFont,
             color: .labelColor
         )
@@ -286,46 +348,112 @@ final class SystemStatusMenuBarMetricsView: NSView {
         value.draw(in: valueRect)
     }
 
-    private func drawVerticalNetwork(upload: String, download: String, in rect: NSRect) {
-        let lines = [upload, download].map {
+    private func drawVertical(_ block: SystemStatusMenuBarMetricBlock, in rect: NSRect) {
+        let labelLines = block.verticalLabelLines.map {
+            attributedText($0, font: verticalLabelFont, color: .labelColor)
+        }
+        let lines = verticalValues(for: block).map {
             attributedText($0, font: verticalValueFont, color: .labelColor)
         }
+        let labelLineSizes = labelLines.map { $0.size() }
+        let labelHeight = labelLineSizes.reduce(CGFloat(0)) { $0 + $1.height }
+        let lineSizes = lines.map { $0.size() }
         let lineHeights = lines.map { $0.size().height }
         let totalHeight = lineHeights.reduce(0, +)
+        let labelWidth = verticalLabelColumnWidth
+        let contentWidth = labelWidth + Layout.verticalLabelValueSpacing + verticalValueColumnWidth
+        let contentX = rect.midX - contentWidth / 2
+
+        var labelY = rect.midY - labelHeight / 2
+        for (line, size) in zip(labelLines, labelLineSizes) {
+            line.draw(in: NSRect(
+                x: contentX + (labelWidth - size.width) / 2,
+                y: labelY,
+                width: size.width,
+                height: size.height
+            ))
+            labelY += size.height
+        }
+
         var y = rect.midY - totalHeight / 2
 
-        for (line, lineHeight) in zip(lines, lineHeights) {
-            let lineSize = line.size()
+        for (line, lineSize) in zip(lines, lineSizes) {
             line.draw(in: NSRect(
-                x: rect.minX + (rect.width - lineSize.width) / 2,
+                x: contentX + labelWidth + Layout.verticalLabelValueSpacing,
                 y: y,
                 width: lineSize.width,
-                height: lineHeight
+                height: lineSize.height
             ))
-            y += lineHeight
+            y += lineSize.height
         }
     }
 
     private func metricWidth(_ block: SystemStatusMenuBarMetricBlock) -> CGFloat {
-        if case let .verticalNetwork(upload, download) = block.layout {
-            return ceil(max(
-                Layout.minimumMetricWidth,
-                attributedText(upload, font: verticalValueFont, color: .labelColor).size().width,
-                attributedText(download, font: verticalValueFont, color: .labelColor).size().width
-            ))
+        switch menuBarLayout {
+        case .horizontal:
+            return horizontalMetricWidth(block)
+        case .vertical:
+            return verticalMetricWidth(block)
         }
+    }
 
+    private func horizontalMetricWidth(_ block: SystemStatusMenuBarMetricBlock) -> CGFloat {
         let labelWidth = attributedText(
             block.label,
             font: labelFont,
             color: .labelColor
         ).size().width
         let valueWidth = attributedText(
-            block.value,
+            widthReservationValues(for: block.kind).joined(separator: " "),
             font: valueFont,
             color: .labelColor
         ).size().width
         return ceil(max(Layout.minimumMetricWidth, labelWidth, valueWidth))
+    }
+
+    private func verticalMetricWidth(_: SystemStatusMenuBarMetricBlock) -> CGFloat {
+        return ceil(max(
+            Layout.minimumMetricWidth,
+            verticalLabelColumnWidth + Layout.verticalLabelValueSpacing + verticalValueColumnWidth
+        ))
+    }
+
+    private var verticalLabelColumnWidth: CGFloat {
+        attributedText("M", font: verticalLabelFont, color: .labelColor).size().width
+    }
+
+    private var verticalValueColumnWidth: CGFloat {
+        ["100%", "999°", "↓9.9M", "↑9.9M", "↕9.9M", "999W"].reduce(CGFloat(0)) { width, value in
+            max(
+                width,
+                attributedText(value, font: verticalValueFont, color: .labelColor).size().width
+            )
+        }
+    }
+
+    private func widthReservationValues(for kind: SystemStatusMetricKind) -> [String] {
+        switch kind {
+        case .cpu, .gpu:
+            return ["100%", "999°"]
+        case .memory:
+            return ["100%", "9.9M"]
+        case .disk:
+            return ["100%", "↕9.9M"]
+        case .battery:
+            return ["100%", "999W"]
+        case .network:
+            return ["↓9.9M", "↑9.9M"]
+        case .topProcesses:
+            return []
+        }
+    }
+
+    private func verticalValues(for block: SystemStatusMenuBarMetricBlock) -> [String] {
+        var values = Array(block.values.prefix(2))
+        while values.count < 2 {
+            values.append("—")
+        }
+        return values
     }
 
     private func preferredWidth(for blocks: [SystemStatusMenuBarMetricBlock]) -> CGFloat {
@@ -423,8 +551,7 @@ final class SystemStatusMenuBarMetricsController: NSObject {
         viewModel.startMenuBar(requiresSlowSampling: kinds.requiresMenuBarSlowSampling)
         let blocks = SystemStatusMenuBarMetricsFormatter.blocks(
             snapshot: snapshot,
-            kinds: kinds,
-            networkMenuBarLayout: configuration.networkMenuBarLayout
+            kinds: kinds
         )
         guard !blocks.isEmpty else {
             viewModel.stopMenuBar()
@@ -439,6 +566,7 @@ final class SystemStatusMenuBarMetricsController: NSObject {
         }
 
         let metricsView = ensureMetricsView(in: button)
+        metricsView.menuBarLayout = configuration.menuBarLayout
         metricsView.blocks = blocks
         statusItem.length = metricsView.intrinsicContentSize.width
         metricsView.frame = button.bounds

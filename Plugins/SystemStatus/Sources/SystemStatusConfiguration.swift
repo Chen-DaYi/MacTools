@@ -8,7 +8,7 @@ struct SystemStatusMetricPreference: Codable, Equatable, Identifiable, Sendable 
     var id: String { kind.rawValue }
 }
 
-enum SystemStatusNetworkMenuBarLayout: String, Codable, CaseIterable, Sendable {
+enum SystemStatusMenuBarLayout: String, Codable, Sendable {
     case horizontal
     case vertical
 }
@@ -16,7 +16,7 @@ enum SystemStatusNetworkMenuBarLayout: String, Codable, CaseIterable, Sendable {
 struct SystemStatusConfiguration: Equatable, Sendable {
     var panelItems: [SystemStatusMetricPreference]
     var menuBarItems: [SystemStatusMetricPreference]
-    var networkMenuBarLayout: SystemStatusNetworkMenuBarLayout
+    var menuBarLayout: SystemStatusMenuBarLayout
 
     static let `default` = SystemStatusConfiguration(
         panelItems: SystemStatusComponentLayout.defaultPanelMetricKinds.map {
@@ -25,7 +25,7 @@ struct SystemStatusConfiguration: Equatable, Sendable {
         menuBarItems: SystemStatusComponentLayout.defaultMenuBarMetricKinds.map {
             SystemStatusMetricPreference(kind: $0, isVisible: false)
         },
-        networkMenuBarLayout: .horizontal
+        menuBarLayout: .horizontal
     )
 
     var visiblePanelMetricKinds: [SystemStatusMetricKind] {
@@ -50,7 +50,8 @@ final class SystemStatusPluginStorageConfigurationStore: SystemStatusConfigurati
         static let panelHidden = "settings.panel.hidden"
         static let menuBarOrder = "settings.menuBar.order"
         static let menuBarVisible = "settings.menuBar.visible"
-        static let networkMenuBarLayout = "settings.menuBar.network.layout"
+        static let menuBarLayout = "settings.menuBar.layout"
+        static let legacyNetworkMenuBarLayout = "settings.menuBar.network.layout"
     }
 
     private let storage: PluginStorage
@@ -60,12 +61,17 @@ final class SystemStatusPluginStorageConfigurationStore: SystemStatusConfigurati
     }
 
     func load() -> SystemStatusConfiguration {
+        storage.migrateValueIfNeeded(
+            fromLegacyKey: Key.legacyNetworkMenuBarLayout,
+            to: Key.menuBarLayout
+        )
+
         let panelOrder = storage.stringArray(forKey: Key.panelOrder)
         let panelHidden = storage.stringArray(forKey: Key.panelHidden)
         let menuBarOrder = storage.stringArray(forKey: Key.menuBarOrder)
         let menuBarVisible = storage.stringArray(forKey: Key.menuBarVisible)
-        let networkMenuBarLayout = storage.string(forKey: Key.networkMenuBarLayout)
-            .flatMap(SystemStatusNetworkMenuBarLayout.init(rawValue:))
+        let menuBarLayout = storage.string(forKey: Key.menuBarLayout)
+            .flatMap(SystemStatusMenuBarLayout.init(rawValue:))
             ?? .horizontal
 
         return SystemStatusConfiguration(
@@ -85,7 +91,7 @@ final class SystemStatusPluginStorageConfigurationStore: SystemStatusConfigurati
                 visibilityMode: .visibleSet,
                 usesDefaultVisibility: menuBarVisible == nil
             ),
-            networkMenuBarLayout: networkMenuBarLayout
+            menuBarLayout: menuBarLayout
         )
     }
 
@@ -105,7 +111,7 @@ final class SystemStatusPluginStorageConfigurationStore: SystemStatusConfigurati
         storage.set(panelItems.filter { !$0.isVisible }.map { $0.kind.rawValue }, forKey: Key.panelHidden)
         storage.set(menuBarItems.map { $0.kind.rawValue }, forKey: Key.menuBarOrder)
         storage.set(menuBarItems.filter(\.isVisible).map { $0.kind.rawValue }, forKey: Key.menuBarVisible)
-        storage.set(configuration.networkMenuBarLayout.rawValue, forKey: Key.networkMenuBarLayout)
+        storage.set(configuration.menuBarLayout.rawValue, forKey: Key.menuBarLayout)
     }
 
     private enum VisibilityMode {
@@ -210,9 +216,9 @@ final class SystemStatusSettingsController: ObservableObject {
         }
     }
 
-    func setNetworkMenuBarLayout(_ layout: SystemStatusNetworkMenuBarLayout) {
+    func setMenuBarLayout(_ layout: SystemStatusMenuBarLayout) {
         update { configuration in
-            configuration.networkMenuBarLayout = layout
+            configuration.menuBarLayout = layout
         }
     }
 
