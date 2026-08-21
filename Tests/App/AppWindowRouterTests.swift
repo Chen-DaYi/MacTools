@@ -882,23 +882,35 @@ final class AppWindowRouterTests: XCTestCase {
         router.settingsWindow?.close()
     }
 
-    func testSettingsWindowIsEligibleExceptWhileUnifiedSearchIsPresented() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-
-        router.presentSettings(.settings)
-        let window = try XCTUnwrap(router.settingsWindow)
-        window.makeKeyAndOrderFront(nil)
-        XCTAssertTrue(router.focusedWindowLayoutTarget === window)
-
-        router.showUnifiedSearch()
-        XCTAssertNil(router.focusedWindowLayoutTarget)
-
-        router.settingsNavigationCoordinator?.dismissUnifiedSearch()
-        XCTAssertTrue(router.focusedWindowLayoutTarget === window)
-        window.close()
+    func testSettingsWindowLayoutTargetRequiresVisibleKeyWindowWithoutUnifiedSearch() {
+        XCTAssertTrue(
+            AppWindowRouter.isEligibleFocusedWindowLayoutTarget(
+                isKeyWindow: true,
+                isVisible: true,
+                isUnifiedSearchPresented: false
+            )
+        )
+        XCTAssertFalse(
+            AppWindowRouter.isEligibleFocusedWindowLayoutTarget(
+                isKeyWindow: false,
+                isVisible: true,
+                isUnifiedSearchPresented: false
+            )
+        )
+        XCTAssertFalse(
+            AppWindowRouter.isEligibleFocusedWindowLayoutTarget(
+                isKeyWindow: true,
+                isVisible: false,
+                isUnifiedSearchPresented: false
+            )
+        )
+        XCTAssertFalse(
+            AppWindowRouter.isEligibleFocusedWindowLayoutTarget(
+                isKeyWindow: true,
+                isVisible: true,
+                isUnifiedSearchPresented: true
+            )
+        )
     }
 
     func testGlobalSearchRefreshesOnlyAppleShortcutsActions() throws {
