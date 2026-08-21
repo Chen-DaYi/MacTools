@@ -34,10 +34,6 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         static let cyclesHalves = "cycles-halves"
         static let respectsStageManager = "respects-stage-manager"
         static let showsCommandFeedback = "shows-command-feedback"
-        static let shortcutPreset = "shortcut-preset"
-        static let shortcutPresetCurrent = "shortcut-preset-current"
-        static let shortcutPresetPreview = "shortcut-preset-preview"
-        static let shortcutPresetApply = "shortcut-preset-apply"
         static let reset = "reset"
         static let addCustom = "add-custom"
     }
@@ -77,8 +73,6 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     private let accessibilityTrusted: @MainActor @Sendable () -> Bool
     private let requestAccessibilityTrust: @MainActor @Sendable (Bool) -> Bool
     private var isAccessibilityGranted: Bool
-    private var shortcutPresetError: String?
-    private var pendingShortcutPreset: WindowShortcutPreset
 
     var actionExecutionRevision: UInt64 { store.revision }
 
@@ -92,7 +86,6 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         self.localization = localization
         let store = WindowLayoutsStore(storage: context.storage)
         self.store = store
-        self.pendingShortcutPreset = store.shortcutPreset
         self.accessibilityTrusted = accessibilityTrusted
         self.requestAccessibilityTrust = requestAccessibilityTrust
         self.isAccessibilityGranted = accessibilityTrusted()
@@ -314,14 +307,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
                 updateBoolean(controlID: controlID, value: value)
             }
         case let .setSelection(controlID, optionID):
-            if controlID == SettingsID.shortcutPreset,
-               let preset = WindowShortcutPreset(rawValue: optionID) {
-                pendingShortcutPreset = preset
-                shortcutPresetError = nil
-                onStateChange?()
-            } else {
-                updateCustomSelection(controlID: controlID, optionID: optionID)
-            }
+            updateCustomSelection(controlID: controlID, optionID: optionID)
         case let .setText(controlID, value, phase):
             guard phase == .committed else { return }
             updateText(controlID: controlID, value: value)
@@ -456,139 +442,15 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     }
 
     private var shortcutPresetSection: PluginSettingsSection {
-        let preview = shortcutPresetPreview(for: pendingShortcutPreset)
-        let previewItems = Dictionary(
-            uniqueKeysWithValues: (preview?.items ?? []).map { ($0.actionID, $0) }
-        )
-        let standardPreviewLines = shortcutPresetActionIDOrder.compactMap { actionID in
-            previewItems[actionID].map(shortcutPresetPreviewLine)
-        }
-        let retiredPreviewLines = (preview?.items ?? [])
-            .filter { RetiredActionID.all.contains($0.actionID) && $0.changesBinding }
-            .sorted { $0.actionID < $1.actionID }
-            .map(shortcutPresetPreviewLine)
-        let previewLines = standardPreviewLines + retiredPreviewLines
-        let conflictCount = preview?.items.filter {
-            $0.conflictOwnerDescription != nil
-        }.count ?? 0
-        let changedCount = preview?.items.filter(\.changesBinding).count ?? 0
-        let previewSummary: String
-        let previewTone: PluginStatusTone
-        if preview == nil {
-            previewSummary = localizedKey(
-                "settings.preset.previewUnavailable",
-                "当前无法预览。"
-            )
-            previewTone = .caution
-        } else if conflictCount > 0 {
-            previewSummary = localization.format(
-                "settings.preset.conflictCount",
-                defaultValue: "%d 个快捷键冲突",
-                conflictCount
-            )
-            previewTone = .caution
-        } else if changedCount == 0 {
-            previewSummary = localizedKey(
-                "settings.preset.alreadyApplied",
-                "当前快捷键已与此预设一致。"
-            )
-            previewTone = .positive
-        } else {
-            previewSummary = localization.format(
-                "settings.preset.changeCount",
-                defaultValue: "%d 项更改",
-                changedCount
-            )
-            previewTone = .neutral
-        }
-        let canApply = preview?.canApply == true && preview?.hasChanges == true
-        let presetTitle = shortcutPresetTitle(pendingShortcutPreset)
-
-        return PluginSettingsSection(
+        PluginSettingsSection(
             id: "shortcut-presets",
             title: localizedKey("settings.preset.sectionTitle", "快捷键预设"),
-            systemImage: "keyboard",
-            footer: shortcutPresetError,
-            rows: [
-                PluginSettingsRow(
-                    id: SettingsID.shortcutPresetCurrent,
-                    title: localizedKey("settings.preset.current", "当前快捷键方案"),
-                    control: .status(
-                        text: currentShortcutPresetTitle,
-                        systemImage: currentShortcutPreset == nil
-                            ? "slider.horizontal.3"
-                            : "checkmark.circle.fill",
-                        tone: currentShortcutPreset == nil ? .neutral : .positive,
-                        actionTitle: nil
-                    )
-                ),
-                PluginSettingsRow(
-                    id: SettingsID.shortcutPreset,
-                    title: localizedKey("settings.preset.title", "要应用的预设"),
-                    description: localizedKey(
-                        "settings.preset.selectionDescription",
-                        "选择预设只会更新下方预览。"
-                    ),
-                    control: .picker(
-                        selectionID: pendingShortcutPreset.rawValue,
-                        options: WindowShortcutPreset.allCases.map {
-                            PluginSettingsOption(
-                                id: $0.rawValue,
-                                title: shortcutPresetTitle($0)
-                            )
-                        },
-                        style: .menu
-                    )
-                ),
-                PluginSettingsRow(
-                    id: SettingsID.shortcutPresetPreview,
-                    title: localizedKey("settings.preset.preview", "更改预览"),
-                    helpItems: previewLines,
-                    helpTone: conflictCount > 0 ? .caution : .neutral,
-                    error: preview?.errorMessage,
-                    control: .status(
-                        text: previewSummary,
-                        systemImage: conflictCount > 0
-                            ? "exclamationmark.triangle.fill"
-                            : "list.bullet.rectangle",
-                        tone: previewTone,
-                        actionTitle: nil
-                    )
-                ),
-                PluginSettingsRow(
-                    id: SettingsID.shortcutPresetApply,
-                    title: localizedKey("settings.preset.applyTitle", "应用快捷键预设"),
-                    description: localizedKey(
-                        "settings.preset.applyDescription",
-                        "仅在确认后替换预览中列出的窗口布局快捷键。"
-                    ),
-                    isEnabled: canApply,
-                    control: .confirmationAction(
-                        title: localizedKey("settings.preset.applyButton", "应用预设"),
-                        role: .prominent,
-                        confirmation: PluginSettingsConfirmation(
-                            title: localization.format(
-                                "settings.preset.confirmTitle",
-                                defaultValue: "应用“%@”？",
-                                presetTitle
-                            ),
-                            message: localizedKey(
-                                "settings.preset.confirmMessage",
-                                "预览中有变化的窗口布局快捷键将被替换。"
-                            ),
-                            confirmButtonTitle: localizedKey(
-                                "settings.preset.confirmButton",
-                                "应用"
-                            ),
-                            cancelButtonTitle: localizedKey(
-                                "settings.preset.cancelButton",
-                                "取消"
-                            )
-                        )
-                    )
-                ),
-            ]
-        )
+            systemImage: "keyboard"
+        ) { [weak self] _ in
+            if let self {
+                WindowShortcutPresetSettingsView(plugin: self)
+            }
+        }
     }
 
     private var customCommandOverviewSection: PluginSettingsSection {
@@ -733,8 +595,6 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
 
     private func handleInvoke(_ controlID: String) {
         switch controlID {
-        case SettingsID.shortcutPresetApply:
-            applyShortcutPreset(pendingShortcutPreset)
         case SettingsID.reset:
             store.reset()
         case SettingsID.addCustom:
@@ -798,28 +658,25 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         }
     }
 
-    private func applyShortcutPreset(_ preset: WindowShortcutPreset) {
+    @discardableResult
+    func applyShortcutPreset(_ preset: WindowShortcutPreset) -> String? {
         guard let applyActionShortcutPreset else {
-            shortcutPresetError = localizedKey(
+            return localizedKey(
                 "settings.preset.unavailable",
                 "当前无法应用快捷键预设。"
             )
-            onStateChange?()
-            return
         }
         if let error = applyActionShortcutPreset(
             shortcutPresetActionIDs,
             shortcutBindings(for: preset)
         ) {
-            shortcutPresetError = error
-            onStateChange?()
-            return
+            return error
         }
-        shortcutPresetError = nil
         store.setShortcutPreset(preset)
+        return nil
     }
 
-    private func shortcutPresetPreview(
+    func shortcutPresetPreview(
         for preset: WindowShortcutPreset
     ) -> PluginActionShortcutPresetPreview? {
         previewActionShortcutPreset?(
@@ -828,21 +685,25 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         )
     }
 
-    private var currentShortcutPreset: WindowShortcutPreset? {
+    var currentShortcutPreset: WindowShortcutPreset? {
         WindowShortcutPreset.allCases.first { preset in
             guard let preview = shortcutPresetPreview(for: preset) else { return false }
             return preview.errorMessage == nil && !preview.hasChanges
         }
     }
 
-    private var currentShortcutPresetTitle: String {
+    var currentShortcutPresetTitle: String {
         currentShortcutPreset.map(shortcutPresetTitle) ?? localizedKey(
             "settings.preset.custom",
             "自定义"
         )
     }
 
-    private func shortcutPresetTitle(_ preset: WindowShortcutPreset) -> String {
+    var initialShortcutPreset: WindowShortcutPreset {
+        currentShortcutPreset ?? store.shortcutPreset
+    }
+
+    func shortcutPresetTitle(_ preset: WindowShortcutPreset) -> String {
         switch preset {
         case .none:
             localizedKey("settings.preset.none", "无")
@@ -858,48 +719,45 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         }
     }
 
-    private func shortcutPresetPreviewLine(
-        _ item: PluginActionShortcutPresetPreviewItem
-    ) -> String {
-        let actionTitle: String
-        switch item.actionID {
+    func shortcutPresetActionTitle(_ actionID: String) -> String {
+        switch actionID {
         case RetiredActionID.nextDesktop:
-            actionTitle = localizedKey(
+            return localizedKey(
                 "settings.preset.retiredNextDesktop",
                 "已移除：移到下一个桌面"
             )
         case RetiredActionID.previousDesktop:
-            actionTitle = localizedKey(
+            return localizedKey(
                 "settings.preset.retiredPreviousDesktop",
                 "已移除：移到上一个桌面"
             )
         default:
-            actionTitle = actionDefinitions.first(where: {
-                $0.key.actionID == item.actionID
-            })?.title ?? item.actionID
+            return actionDefinitions.first(where: {
+                $0.key.actionID == actionID
+            })?.title ?? actionID
         }
-        var line = localization.format(
-            "settings.preset.previewLine",
-            defaultValue: "%@: %@ → %@",
-            actionTitle,
-            shortcutBindingTitle(item.currentBinding),
-            shortcutBindingTitle(item.proposedBinding)
-        )
-        if let conflictOwnerDescription = item.conflictOwnerDescription {
-            line += localization.format(
-                "settings.preset.previewConflict",
-                defaultValue: " — 与“%@”冲突",
-                conflictOwnerDescription
-            )
-        }
-        return line
     }
 
-    private func shortcutBindingTitle(_ binding: ShortcutBinding?) -> String {
+    func shortcutBindingTitle(_ binding: ShortcutBinding?) -> String {
         guard let binding else {
             return localizedKey("settings.preset.unassigned", "未分配")
         }
         return ShortcutFormatter.displayString(for: binding)
+    }
+
+    func orderedShortcutPresetPreviewItems(
+        _ preview: PluginActionShortcutPresetPreview
+    ) -> [PluginActionShortcutPresetPreviewItem] {
+        let itemsByActionID = Dictionary(
+            uniqueKeysWithValues: preview.items.map { ($0.actionID, $0) }
+        )
+        let standardItems = shortcutPresetActionIDOrder.compactMap {
+            itemsByActionID[$0]
+        }
+        let retiredItems = preview.items
+            .filter { RetiredActionID.all.contains($0.actionID) && $0.changesBinding }
+            .sorted { $0.actionID < $1.actionID }
+        return standardItems + retiredItems
     }
 
     private var shortcutPresetActionIDOrder: [String] {
@@ -973,7 +831,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         }
     }
 
-    private func localizedKey(_ key: String, _ fallback: String) -> String {
+    func localizedKey(_ key: String, _ fallback: String) -> String {
         localization.string(key, defaultValue: fallback)
     }
 

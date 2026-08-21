@@ -59,7 +59,7 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertEqual(executor.validationCallCount, 0)
     }
 
-    func testShortcutPresetRequiresPreviewAndExplicitApply() throws {
+    func testShortcutPresetAssistantRequiresPreviewAndExplicitApply() throws {
         let plugin = makePlugin()
         var managedActionIDs: Set<String> = []
         var bindingsByActionID: [String: ShortcutBinding] = [:]
@@ -80,28 +80,22 @@ final class WindowLayoutsPluginTests: XCTestCase {
             return nil
         }
 
-        plugin.handleSettingsAction(.setSelection(
-            controlID: "shortcut-preset",
-            optionID: "control-option"
-        ))
+        let controlOptionPreview = try XCTUnwrap(
+            plugin.shortcutPresetPreview(for: .controlOption)
+        )
 
+        XCTAssertTrue(controlOptionPreview.hasChanges)
         XCTAssertTrue(managedActionIDs.isEmpty)
         XCTAssertTrue(bindingsByActionID.isEmpty)
 
         guard case let .form(sections) = try XCTUnwrap(plugin.settingsPage).body,
-              let applyRow = sections.flatMap({ section -> [PluginSettingsRow] in
-                  guard case let .rows(rows) = section.content else { return [] }
-                  return rows
-              }).first(where: {
-                  $0.id == "shortcut-preset-apply"
-              }),
-              case .confirmationAction = applyRow.control
+              let presetSection = sections.first(where: { $0.id == "shortcut-presets" }),
+              case .custom = presetSection.content
         else {
-            return XCTFail("Expected an explicit preset confirmation action")
+            return XCTFail("Expected the shortcut preset assistant section")
         }
-        XCTAssertTrue(applyRow.isEnabled)
 
-        plugin.handleSettingsAction(.invoke(controlID: "shortcut-preset-apply"))
+        XCTAssertNil(plugin.applyShortcutPreset(.controlOption))
 
         XCTAssertEqual(managedActionIDs.count, 8)
         XCTAssertEqual(bindingsByActionID.count, 6)
@@ -126,17 +120,17 @@ final class WindowLayoutsPluginTests: XCTestCase {
             UInt16(kVK_DownArrow)
         )
 
-        plugin.handleSettingsAction(.setSelection(
-            controlID: "shortcut-preset",
-            optionID: "option-command"
-        ))
+        let optionCommandPreview = try XCTUnwrap(
+            plugin.shortcutPresetPreview(for: .optionCommand)
+        )
 
+        XCTAssertTrue(optionCommandPreview.hasChanges)
         XCTAssertEqual(
             bindingsByActionID[WindowLayoutOperation.leftHalf.rawValue]?.modifiers,
             [.control, .option]
         )
 
-        plugin.handleSettingsAction(.invoke(controlID: "shortcut-preset-apply"))
+        XCTAssertNil(plugin.applyShortcutPreset(.optionCommand))
 
         XCTAssertEqual(managedActionIDs.count, 8)
         XCTAssertEqual(bindingsByActionID.count, 6)
@@ -159,15 +153,34 @@ final class WindowLayoutsPluginTests: XCTestCase {
             keyCode: UInt16(kVK_ANSI_A),
             modifiers: [.control, .shift]
         )
-        guard case let .form(updatedSections) = try XCTUnwrap(plugin.settingsPage).body,
-              let updatedApplyRow = updatedSections.flatMap({ section -> [PluginSettingsRow] in
-                  guard case let .rows(rows) = section.content else { return [] }
-                  return rows
-              }).first(where: { $0.id == "shortcut-preset-apply" })
-        else {
-            return XCTFail("Expected the preset Apply row after a shortcut edit")
-        }
-        XCTAssertTrue(updatedApplyRow.isEnabled)
+        XCTAssertNil(plugin.currentShortcutPreset)
+        XCTAssertEqual(plugin.initialShortcutPreset, .optionCommand)
+    }
+
+    func testShortcutPresetAssistantCountsConflictRowsIndividuallyAndBlocksApply() {
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_LeftArrow),
+            modifiers: [.control, .option]
+        )
+        let state = WindowShortcutPresetPreviewState(
+            preview: PluginActionShortcutPresetPreview(items: [
+                PluginActionShortcutPresetPreviewItem(
+                    actionID: WindowLayoutOperation.leftHalf.rawValue,
+                    currentBinding: nil,
+                    proposedBinding: binding,
+                    conflictOwnerDescription: "Existing Action"
+                ),
+                PluginActionShortcutPresetPreviewItem(
+                    actionID: WindowLayoutOperation.rightHalf.rawValue,
+                    currentBinding: nil,
+                    proposedBinding: binding
+                ),
+            ])
+        )
+
+        XCTAssertEqual(state.changedCount, 2)
+        XCTAssertEqual(state.conflictCount, 1)
+        XCTAssertFalse(state.canApply)
     }
 
     func testActionExecutionUsesCommittedGapAndReset() async throws {

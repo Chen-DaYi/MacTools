@@ -24,7 +24,7 @@ The parity follow-up ships in the same plugin version:
 
 - Native full-screen toggle
 - Previous/next display movement
-- Shortcut presets with an explicit preview and confirmed apply step, plus per-command overrides
+- A modal shortcut-preset assistant with pending selection, per-command preview and conflict feedback, and an explicit Apply step, plus per-command overrides
 - Stable dynamic action IDs and action-catalog revision updates
 - Optional brief success feedback for global shortcuts and Trackpad Gestures, with failures always visible
 
