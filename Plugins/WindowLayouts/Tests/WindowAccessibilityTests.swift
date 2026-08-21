@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import MacToolsPluginKit
 import XCTest
+@testable import MacTools
 @testable import WindowLayoutsPlugin
 
 @MainActor
@@ -95,6 +96,7 @@ final class SystemFocusedWindowResolverTests: XCTestCase {
             defer: false
         )
         window.isReleasedWhenClosed = false
+        PluginPresentationSafety.prepareForWindowOrdering(window)
         window.orderFront(nil)
         return window
     }
