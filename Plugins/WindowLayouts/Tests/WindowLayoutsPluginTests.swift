@@ -149,6 +149,28 @@ final class WindowLayoutsPluginTests: XCTestCase {
             )
         )
 
+        var customizedBindings = plugin.shortcutPresetBindings(for: .optionCommand)
+        customizedBindings[WindowLayoutOperation.center.rawValue] = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_M),
+            modifiers: [.option, .command]
+        )
+        let customizedPreview = try XCTUnwrap(
+            plugin.shortcutPresetPreview(bindingsByActionID: customizedBindings)
+        )
+        XCTAssertTrue(customizedPreview.hasChanges)
+
+        XCTAssertNil(plugin.applyShortcutPreset(
+            .optionCommand,
+            bindingsByActionID: customizedBindings
+        ))
+        XCTAssertEqual(
+            bindingsByActionID[WindowLayoutOperation.center.rawValue],
+            ShortcutBinding(
+                keyCode: UInt16(kVK_ANSI_M),
+                modifiers: [.option, .command]
+            )
+        )
+
         currentBindings[WindowLayoutOperation.leftHalf.rawValue] = ShortcutBinding(
             keyCode: UInt16(kVK_ANSI_A),
             modifiers: [.control, .shift]

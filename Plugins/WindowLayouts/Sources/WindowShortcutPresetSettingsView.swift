@@ -90,6 +90,7 @@ private struct WindowShortcutPresetEditorSheet: View {
 
     let plugin: WindowLayoutsPlugin
     @State private var selectedPreset: WindowShortcutPreset
+    @State private var proposedBindings: [String: ShortcutBinding]
     @State private var applyError: String?
 
     init(
@@ -98,6 +99,9 @@ private struct WindowShortcutPresetEditorSheet: View {
     ) {
         self.plugin = plugin
         _selectedPreset = State(initialValue: initialPreset)
+        _proposedBindings = State(
+            initialValue: plugin.shortcutPresetBindings(for: initialPreset)
+        )
     }
 
     var body: some View {
@@ -131,6 +135,7 @@ private struct WindowShortcutPresetEditorSheet: View {
         .frame(minWidth: 620, idealWidth: 680, minHeight: 500, idealHeight: 560)
         .onChange(of: selectedPreset) { _, _ in
             applyError = nil
+            proposedBindings = plugin.shortcutPresetBindings(for: selectedPreset)
         }
     }
 
@@ -240,57 +245,43 @@ private struct WindowShortcutPresetEditorSheet: View {
     private func previewRow(
         _ item: PluginActionShortcutPresetPreviewItem
     ) -> some View {
-        HStack(
-            alignment: .center,
-            spacing: PluginSettingsTheme.Spacing.rowContentControl
+        VStack(
+            alignment: .leading,
+            spacing: PluginSettingsTheme.Spacing.rowVertical
         ) {
-            VStack(
-                alignment: .leading,
-                spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+            HStack(
+                alignment: .firstTextBaseline,
+                spacing: PluginSettingsTheme.Spacing.rowContentControl
             ) {
                 Text(plugin.shortcutPresetActionTitle(item.actionID))
                     .font(PluginSettingsTheme.Typography.rowTitle)
 
-                Text(
-                    "\(plugin.shortcutBindingTitle(item.currentBinding)) → "
-                        + plugin.shortcutBindingTitle(item.proposedBinding)
-                )
-                .font(PluginSettingsTheme.Typography.monospacedValue)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                previewStatus(item)
             }
 
-            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-
-            if let conflictOwnerDescription = item.conflictOwnerDescription {
-                Label(
-                    String(
-                        format: plugin.localizedKey(
-                            "settings.preset.conflictOwner",
-                            "与“%@”冲突"
-                        ),
-                        conflictOwnerDescription
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                currentBindingBlock(
+                    label: plugin.localizedKey(
+                        "settings.preset.currentBinding",
+                        "当前"
                     ),
-                    systemImage: "exclamationmark.triangle.fill"
+                    binding: item.currentBinding
                 )
-                .font(PluginSettingsTheme.Typography.statusBadge)
-                .foregroundStyle(.red)
-                .lineLimit(2)
-                .multilineTextAlignment(.trailing)
-            } else if item.changesBinding {
-                Label(
-                    plugin.localizedKey("settings.preset.willChange", "将更改"),
-                    systemImage: "arrow.right.circle"
+
+                Image(systemName: "arrow.right")
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+
+                proposedBindingRecorder(
+                    label: plugin.localizedKey(
+                        "settings.preset.proposedBinding",
+                        "建议"
+                    ),
+                    item: item
                 )
-                .font(PluginSettingsTheme.Typography.statusBadge)
-                .foregroundStyle(.secondary)
-            } else {
-                Label(
-                    plugin.localizedKey("settings.preset.unchanged", "无更改"),
-                    systemImage: "checkmark.circle"
-                )
-                .font(PluginSettingsTheme.Typography.statusBadge)
-                .foregroundStyle(.tertiary)
             }
         }
         .pluginSettingsListRowPadding()
@@ -299,6 +290,99 @@ private struct WindowShortcutPresetEditorSheet: View {
                 ? Color.clear
                 : Color.red.opacity(0.08)
         )
+    }
+
+    @ViewBuilder
+    private func previewStatus(
+        _ item: PluginActionShortcutPresetPreviewItem
+    ) -> some View {
+        if let conflictOwnerDescription = item.conflictOwnerDescription {
+            Label(
+                String(
+                    format: plugin.localizedKey(
+                        "settings.preset.conflictOwner",
+                        "与“%@”冲突"
+                    ),
+                    conflictOwnerDescription
+                ),
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(PluginSettingsTheme.Typography.statusBadge)
+            .foregroundStyle(.red)
+            .lineLimit(2)
+            .multilineTextAlignment(.trailing)
+        } else if item.changesBinding {
+            Label(
+                plugin.localizedKey("settings.preset.willChange", "将更改"),
+                systemImage: "arrow.right.circle"
+            )
+            .font(PluginSettingsTheme.Typography.statusBadge)
+            .foregroundStyle(.secondary)
+        } else {
+            Label(
+                plugin.localizedKey("settings.preset.unchanged", "无更改"),
+                systemImage: "checkmark.circle"
+            )
+            .font(PluginSettingsTheme.Typography.statusBadge)
+            .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func currentBindingBlock(
+        label: String,
+        binding: ShortcutBinding?
+    ) -> some View {
+        VStack(
+            alignment: .leading,
+            spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+        ) {
+            Text(label)
+                .font(PluginSettingsTheme.Typography.statusBadge)
+                .foregroundStyle(.secondary)
+
+            PluginShortcutRecorderField(
+                displayText: plugin.shortcutBindingTitle(binding),
+                isRecording: false,
+                minWidth: 0
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func proposedBindingRecorder(
+        label: String,
+        item: PluginActionShortcutPresetPreviewItem
+    ) -> some View {
+        VStack(
+            alignment: .leading,
+            spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+        ) {
+            Text(label)
+                .font(PluginSettingsTheme.Typography.statusBadge)
+                .foregroundStyle(item.conflictOwnerDescription == nil ? Color.accentColor : Color.red)
+
+            PluginShortcutRecorder(
+                title: plugin.shortcutPresetActionTitle(item.actionID),
+                displayText: plugin.shortcutBindingTitle(item.proposedBinding),
+                minWidth: 0,
+                onRecord: { binding in
+                    record(binding, for: item.actionID)
+                }
+            )
+            .frame(maxWidth: .infinity)
+            .overlay {
+                if item.conflictOwnerDescription != nil {
+                    RoundedRectangle(
+                        cornerRadius: PluginSettingsTheme.Radius.field,
+                        style: .continuous
+                    )
+                    .stroke(Color.red.opacity(0.65), lineWidth: 1.5)
+                    .allowsHitTesting(false)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var footer: some View {
@@ -334,7 +418,7 @@ private struct WindowShortcutPresetEditorSheet: View {
     }
 
     private var preview: PluginActionShortcutPresetPreview? {
-        plugin.shortcutPresetPreview(for: selectedPreset)
+        plugin.shortcutPresetPreview(bindingsByActionID: proposedBindings)
     }
 
     private var changedCount: Int {
@@ -455,10 +539,48 @@ private struct WindowShortcutPresetEditorSheet: View {
 
     private func applyPreset() {
         guard canApply else { return }
-        if let error = plugin.applyShortcutPreset(selectedPreset) {
+        if let error = plugin.applyShortcutPreset(
+            selectedPreset,
+            bindingsByActionID: proposedBindings
+        ) {
             applyError = error
             return
         }
         dismiss()
+    }
+
+    private func record(
+        _ binding: ShortcutBinding,
+        for actionID: String
+    ) -> PluginShortcutRecordingResult {
+        var candidateBindings = proposedBindings
+        candidateBindings[actionID] = binding
+
+        guard let candidatePreview = plugin.shortcutPresetPreview(
+            bindingsByActionID: candidateBindings
+        ) else {
+            return .rejected(plugin.localizedKey(
+                "settings.preset.previewUnavailable",
+                "当前无法预览。"
+            ))
+        }
+        if let errorMessage = candidatePreview.errorMessage {
+            return .rejected(errorMessage)
+        }
+        if let conflict = candidatePreview.items.first(where: {
+            $0.proposedBinding == binding && $0.conflictOwnerDescription != nil
+        }), let conflictOwnerDescription = conflict.conflictOwnerDescription {
+            return .rejected(String(
+                format: plugin.localizedKey(
+                    "settings.preset.conflictOwner",
+                    "与“%@”冲突"
+                ),
+                conflictOwnerDescription
+            ))
+        }
+
+        proposedBindings = candidateBindings
+        applyError = nil
+        return .accepted
     }
 }

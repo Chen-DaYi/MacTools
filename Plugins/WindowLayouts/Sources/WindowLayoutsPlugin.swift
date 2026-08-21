@@ -660,6 +660,17 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
 
     @discardableResult
     func applyShortcutPreset(_ preset: WindowShortcutPreset) -> String? {
+        applyShortcutPreset(
+            preset,
+            bindingsByActionID: shortcutPresetBindings(for: preset)
+        )
+    }
+
+    @discardableResult
+    func applyShortcutPreset(
+        _ preset: WindowShortcutPreset,
+        bindingsByActionID: [String: ShortcutBinding]
+    ) -> String? {
         guard let applyActionShortcutPreset else {
             return localizedKey(
                 "settings.preset.unavailable",
@@ -668,7 +679,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         }
         if let error = applyActionShortcutPreset(
             shortcutPresetActionIDs,
-            shortcutBindings(for: preset)
+            bindingsByActionID
         ) {
             return error
         }
@@ -679,9 +690,17 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     func shortcutPresetPreview(
         for preset: WindowShortcutPreset
     ) -> PluginActionShortcutPresetPreview? {
+        shortcutPresetPreview(
+            bindingsByActionID: shortcutPresetBindings(for: preset)
+        )
+    }
+
+    func shortcutPresetPreview(
+        bindingsByActionID: [String: ShortcutBinding]
+    ) -> PluginActionShortcutPresetPreview? {
         previewActionShortcutPreset?(
             shortcutPresetActionIDs,
-            shortcutBindings(for: preset)
+            bindingsByActionID
         )
     }
 
@@ -775,7 +794,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         Set(shortcutPresetActionIDOrder).union(RetiredActionID.all)
     }
 
-    private func shortcutBindings(
+    func shortcutPresetBindings(
         for preset: WindowShortcutPreset
     ) -> [String: ShortcutBinding] {
         guard preset != .none else { return [:] }
