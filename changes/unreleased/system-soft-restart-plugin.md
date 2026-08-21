@@ -4,4 +4,4 @@ type: added
 area: System Soft Restart
 ---
 
-Added a guarded System Soft Restart plugin that restarts macOS user services, preserves the Dock layout, reopens regular apps and standalone third-party menu-bar apps without racing background helpers, and shows compact copyable diagnostics when recovery reports an issue.
+Added a System Soft Restart plugin that restarts macOS user services, can preserve Dock layout and reopen apps, and shows copyable diagnostics if recovery reports an issue.
