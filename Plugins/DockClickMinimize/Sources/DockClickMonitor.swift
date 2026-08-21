@@ -77,12 +77,12 @@ final class DockClickMonitor: DockClickMonitoring {
             callback: Self.eventTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            logger.error("Failed to create Dock Click Hide event tap")
+            logger.error("Failed to create Hide Active App on Dock Click event tap")
             return false
         }
         guard let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0) else {
             CFMachPortInvalidate(eventTap)
-            logger.error("Failed to create Dock Click Hide run loop source")
+            logger.error("Failed to create Hide Active App on Dock Click run loop source")
             return false
         }
 

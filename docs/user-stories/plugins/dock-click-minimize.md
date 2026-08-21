@@ -1,4 +1,4 @@
-# US-plugins-dock-click-minimize — Hide the active Dock application
+# US-plugins-dock-click-minimize — Hide Active App on Dock Click
 
 Last verified: 2026-08-20
 
@@ -38,3 +38,4 @@ Last verified: 2026-08-20
 | 2026-08-20 | created | — | Initial acceptance contract | User brief |
 | 2026-08-20 | updated | Click behavior only | Visible enable switch and first-use default enabled | User request |
 | 2026-08-20 | updated | Minimize one focused window | Hide the active application without minimizing windows | User request |
+| 2026-08-20 | updated | Dock Click Hide | Hide Active App on Dock Click with a Windows-style subtitle | User request |

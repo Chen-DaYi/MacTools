@@ -1,7 +1,7 @@
 ---
 release: plugin
 type: added
-area: Dock Click Hide
+area: Hide Active App on Dock Click
 ---
 
-Dock Click Hide can hide the active app from its Dock icon while preserving native behavior for other Dock clicks.
+Hide Active App on Dock Click hides the active app from its Dock icon (like on Windows), while preserving native behavior for other Dock clicks.

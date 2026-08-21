@@ -48,7 +48,7 @@ final class DockClickMinimizePluginTests: XCTestCase {
               let row = rows.first,
               case let .toggle(isOn) = row.control
         else {
-            return XCTFail("Expected a Dock Click Hide settings toggle")
+            return XCTFail("Expected a Hide Active App on Dock Click settings toggle")
         }
 
         XCTAssertEqual(row.title, plugin.metadata.title)

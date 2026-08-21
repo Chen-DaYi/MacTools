@@ -140,13 +140,13 @@ final class DockClickMinimizePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         self.isInputMonitoringGranted = inputMonitoringStatus() == .granted
         self.metadata = PluginMetadata(
             id: "dock-click-minimize",
-            title: localization.string("metadata.title", defaultValue: "点击程序坞以隐藏"),
+            title: localization.string("metadata.title", defaultValue: "点击程序坞隐藏活跃 App"),
             iconName: "dock.rectangle",
             iconTint: Color(nsColor: .systemIndigo),
             order: 47,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "点击活跃应用的程序坞图标即可隐藏该应用"
+                defaultValue: "点击活跃 App 的程序坞图标即可将其隐藏（如 Windows）。"
             )
         )
 
@@ -390,7 +390,7 @@ final class DockClickMinimizePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
             monitor.stop()
             lastErrorMessage = localization.string(
                 "error.accessibilityRequired",
-                defaultValue: "Dock Click Hide needs Accessibility permission."
+                defaultValue: "Hide Active App on Dock Click needs Accessibility permission."
             )
             requestPermissionGuidance?(PermissionID.accessibility)
             return
@@ -399,7 +399,7 @@ final class DockClickMinimizePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
             monitor.stop()
             lastErrorMessage = localization.string(
                 "error.inputMonitoringRequired",
-                defaultValue: "Dock Click Hide needs Input Monitoring permission."
+                defaultValue: "Hide Active App on Dock Click needs Input Monitoring permission."
             )
             requestPermissionGuidance?(PermissionID.inputMonitoring)
             return
@@ -407,7 +407,7 @@ final class DockClickMinimizePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         guard monitor.start() else {
             lastErrorMessage = localization.string(
                 "error.startFailed",
-                defaultValue: "Dock Click Hide could not start. Check its permissions."
+                defaultValue: "Hide Active App on Dock Click could not start. Check its permissions."
             )
             return
         }

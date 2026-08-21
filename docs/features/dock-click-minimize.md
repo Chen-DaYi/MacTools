@@ -1,6 +1,6 @@
-# Feature — Dock Click Hide
+# Feature — Hide Active App on Dock Click
 
-Last verified: 2026-08-20
+Last verified: 2026-08-21
 
 Status: implemented
 Source of truth: yes
@@ -46,6 +46,8 @@ Source of truth: yes
 - [x] P008 — Replace window minimization with application hiding.
 - [x] P009 — Complete UI localizations and align user-story headings with repository language rules.
 - [x] P010 — Centralize plugin log categories.
+- [x] P011 — Rename the visible plugin and localize its Windows-style subtitle.
+- [x] P012 — Record the plugin's intentional action-provider exclusion.
 
 ## TODO
 
@@ -58,7 +60,9 @@ Source of truth: yes
 - [x] F007 — Expose persisted enable state in settings and update first-use default — files: `Plugins/DockClickMinimize/` — status: done
 - [x] F008 — Hide the active application rather than minimize a window — files: `Plugins/DockClickMinimize/` — status: done
 - [x] F009 — Complete localized UI strings and normalize user-story headings — files: `Plugins/DockClickMinimize/Resources/Localizable.xcstrings`, `docs/user-stories/plugins/dock-click-minimize.md` — status: done
-- [x] F010 — Centralize the Dock Click Hide log categories — files: `Plugins/DockClickMinimize/Sources/DockClickLog.swift` — status: done
+- [x] F010 — Centralize the Hide Active App on Dock Click log categories — files: `Plugins/DockClickMinimize/Sources/DockClickLog.swift` — status: done
+- [x] F011 — Rename the visible plugin and localize its Windows-style subtitle — files: `Plugins/DockClickMinimize/plugin.json`, `Plugins/DockClickMinimize/Resources/Localizable.xcstrings` — status: done
+- [x] F012 — Record the intentional action-provider exclusion — files: `docs/plugins/action-provider-coverage.md` — status: done
 
 ## Implementation journal
 
@@ -72,8 +76,10 @@ Source of truth: yes
 - 2026-08-20 — P008/F008 started. Replace the visible behavior with macOS Hide: retain Dock target resolution, permission gating, event observation, delayed frontmost-app revalidation, and all-minimized restore protection; remove all window-minimization calls.
 - 2026-08-20 — P008/F008 complete. `DockApplicationHider.swift` now validates a visible focused or main window, then uses `NSRunningApplication.hide()` for the resolved target process. The plugin keeps the delayed frontmost-app revalidation and no-op restore guard. Localized user copy now says Hide. Swift parsing, JSON validation, `make build-plugin PLUGIN=DockClickMinimize`, and `MacToolsTests/DockClickMinimizePluginTests` pass.
 - 2026-08-20 — P008 review complete. Reviewed the application identity, visibility guard, delayed-action race checks, and user-facing copy; no new issue found. `make run` rebuilt and installed the Debug app with the refreshed local plugin catalog.
-- 2026-08-20 — P009/F009 complete. Replaced French user-story structural headings with English to match repository documentation rules. Completed all Dock Click Hide UI string translations for every locale already declared by the plugin manifest.
-- 2026-08-20 — P010/F010 complete. Centralized Dock Click Hide OSLog categories in the plugin-private `DockClickLog`; dynamic plugins cannot depend on the host App target’s `AppLog`.
+- 2026-08-20 — P009/F009 complete. Replaced French user-story structural headings with English to match repository documentation rules. Completed all Hide Active App on Dock Click UI string translations for every locale already declared by the plugin manifest.
+- 2026-08-20 — P010/F010 complete. Centralized Hide Active App on Dock Click OSLog categories in the plugin-private `DockClickLog`; dynamic plugins cannot depend on the host App target’s `AppLog`.
+- 2026-08-20 — P011/F011 complete. Renamed the user-visible plugin to Hide Active App on Dock Click and added the localized “like on Windows” explanation to its subtitle.
+- 2026-08-20 — P012/F012 complete. Added the intentional action-provider exclusion required by the CI coverage inventory; Dock click observation is configuration and lifecycle behavior, not a canonical user-invoked action.
 
 ## Current files
 
