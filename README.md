@@ -37,7 +37,7 @@
 | Hide Notch | Mask the top notch area on built-in notch displays without modifying the original wallpaper. |
 | Auto Hide Menu Bar | Automatically hide the menu bar to make more screen space available. |
 | Auto Hide Dock | Automatically hide the Dock for a cleaner desktop. |
-| Dock Lock | Prevent the Dock from moving between displays accidentally. |
+| Dock Lock | Prevent the Dock from moving between displays accidentally, with an on/off switch in its settings. |
 | Stage Manager | Toggle Stage Manager to focus the current window and place other windows on the side. |
 | System Mute | Mute or restore system audio output through CoreAudio on the default output device, with automatic restoration when the plugin is disabled. |
 | Microphone Mute | Mute or restore the default microphone input through CoreAudio without requesting recording permission. |
