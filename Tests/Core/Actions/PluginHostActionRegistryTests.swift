@@ -250,6 +250,50 @@ final class PluginHostActionRegistryTests: XCTestCase {
         }
     }
 
+    func testHostRemovesOnlyShortcutsExplicitlyRetiredByLoadedPlugin() throws {
+        let suiteName = "PluginHostActionRegistryTests.retired-shortcut.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let plugin = NativeActionTestPlugin()
+        plugin.retiredActionShortcutIDs = ["retired-action"]
+        let activeReference = ActionReference(key: plugin.definition.key)
+        let retiredReference = ActionReference(
+            key: ActionKey(providerID: plugin.metadata.id, actionID: "retired-action")
+        )
+        XCTAssertEqual(
+            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([
+                ActionShortcutAssignmentRecord(
+                    reference: activeReference,
+                    binding: ShortcutBinding(
+                        keyCode: UInt16(kVK_ANSI_A),
+                        modifiers: [.command, .option]
+                    )
+                ),
+                ActionShortcutAssignmentRecord(
+                    reference: retiredReference,
+                    binding: ShortcutBinding(
+                        keyCode: UInt16(kVK_ANSI_R),
+                        modifiers: [.command, .option]
+                    )
+                ),
+            ]),
+            .committed
+        )
+
+        _ = makeIsolatedHost(
+            plugin: plugin,
+            defaults: defaults,
+            shortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        )
+
+        XCTAssertEqual(
+            ActionShortcutAssignmentStore(userDefaults: defaults)
+                .assignments().map(\.reference),
+            [activeReference]
+        )
+    }
+
     func testPluginStateChangeRegistersPersistedShortcutWhenDynamicActionAppears() async throws {
         let suiteName = "PluginHostActionRegistryTests.dynamic-reappearance.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -1103,6 +1147,7 @@ private final class NativeActionTestPlugin:
     PluginActionProviding,
     PluginActionExposureProviding,
     PluginActionPermissionProviding,
+    PluginRetiredActionShortcutProviding,
     ActionSurfaceAssignmentSummarizing
 {
     let metadata = PluginMetadata(
@@ -1122,6 +1167,7 @@ private final class NativeActionTestPlugin:
     var summarizedReference: ActionReference?
     var permissionTitles = ["测试权限"]
     var additionalDefinitions: [ActionDefinition] = []
+    var retiredActionShortcutIDs: Set<String> = []
     var operation: @MainActor @Sendable () async -> ActionExecutionResult = {
         .succeeded(message: "native")
     }

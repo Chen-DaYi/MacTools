@@ -578,6 +578,74 @@ public protocol PluginActionShortcutSettingsProviding: AnyObject {
     var actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration { get }
 }
 
+/// Declares action IDs that this plugin intentionally removed. The host discards only matching
+/// shortcut assignments while retaining assignments for actions that are merely unavailable.
+@MainActor
+public protocol PluginRetiredActionShortcutProviding: AnyObject {
+    var retiredActionShortcutIDs: Set<String> { get }
+}
+
+/// Optional host bridge for plugins that offer named shortcut presets.
+///
+/// The host validates and persists the complete preset atomically. `managedActionIDs` identifies
+/// assignments replaced by the preset; an empty bindings dictionary therefore clears that set.
+/// The callback returns a localized error message when the preset cannot be applied.
+public struct PluginActionShortcutPresetPreviewItem: Equatable, Sendable {
+    public let actionID: String
+    public let currentBinding: ShortcutBinding?
+    public let proposedBinding: ShortcutBinding?
+    public let conflictOwnerDescription: String?
+
+    public init(
+        actionID: String,
+        currentBinding: ShortcutBinding?,
+        proposedBinding: ShortcutBinding?,
+        conflictOwnerDescription: String? = nil
+    ) {
+        self.actionID = actionID
+        self.currentBinding = currentBinding
+        self.proposedBinding = proposedBinding
+        self.conflictOwnerDescription = conflictOwnerDescription
+    }
+
+    public var changesBinding: Bool {
+        currentBinding != proposedBinding
+    }
+}
+
+public struct PluginActionShortcutPresetPreview: Equatable, Sendable {
+    public let items: [PluginActionShortcutPresetPreviewItem]
+    public let errorMessage: String?
+
+    public init(
+        items: [PluginActionShortcutPresetPreviewItem],
+        errorMessage: String? = nil
+    ) {
+        self.items = items
+        self.errorMessage = errorMessage
+    }
+
+    public var hasChanges: Bool {
+        items.contains(where: \.changesBinding)
+    }
+
+    public var canApply: Bool {
+        errorMessage == nil && !items.contains(where: { $0.conflictOwnerDescription != nil })
+    }
+}
+
+@MainActor
+public protocol PluginActionShortcutPresetApplying: AnyObject {
+    var previewActionShortcutPreset: ((
+        _ managedActionIDs: Set<String>,
+        _ bindingsByActionID: [String: ShortcutBinding]
+    ) -> PluginActionShortcutPresetPreview)? { get set }
+    var applyActionShortcutPreset: ((
+        _ managedActionIDs: Set<String>,
+        _ bindingsByActionID: [String: ShortcutBinding]
+    ) -> String?)? { get set }
+}
+
 /// Optional live revision for provider-owned execution state that is not represented by an
 /// `ActionDefinition` or `ActionCatalogEntry`. The host revalidates this value after confirmation
 /// and immediately before execution so mutable payloads cannot be substituted after approval.
