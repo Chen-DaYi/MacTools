@@ -73,8 +73,8 @@ targets:
         RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH: Library/Application Support/MacTools/right-click-menu.json
         SPARKLE_PUBLIC_ED_KEY: YS4ioWunyQC5rP/YQdDbG9panyqCKNyBd0iPTUqIFY0=
         SWIFT_OBJC_BRIDGING_HEADER: Sources/MacTools-Bridging-Header.h
-        SWIFT_INCLUDE_PATHS: "$(SRCROOT)/Sources/Core/MultitouchSupport $(SRCROOT)/Sources/Core/CoreBrightness"
-        OTHER_LDFLAGS: "-framework MultitouchSupport -framework CoreBrightness -framework IOKit -framework EventKit -framework Network -F
+        SWIFT_INCLUDE_PATHS: "$(SRCROOT)/Sources/Core/MultitouchSupport"
+        OTHER_LDFLAGS: "-framework MultitouchSupport -framework IOKit -framework EventKit -framework Network -F
           /System/Library/PrivateFrameworks"
       configs:
         Debug:
