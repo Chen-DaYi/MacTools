@@ -40,6 +40,7 @@ NEW_API_MINIMUM_HOSTS = {
     "PluginActionShortcutPresetPreviewItem": "1.2.0",
     "PluginActionShortcutPresetPreview": "1.2.0",
     "PluginActionShortcutPresetApplying": "1.2.0",
+    "PluginActionShortcutAssignmentChangeHandling": "1.2.0",
     "PluginActionExecutionRevisionProviding": "1.2.0",
     "PluginActionExposureProviding": "1.2.0",
     "PluginActionPermissionProviding": "1.2.0",

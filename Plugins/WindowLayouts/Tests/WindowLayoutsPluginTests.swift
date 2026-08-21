@@ -214,6 +214,122 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertEqual(plugin.actionShortcutAssignmentRevision, initialRevision + 1)
     }
 
+    func testCustomCommandEditorPublishesPreviewShortcutAndHeaderActions() throws {
+        let plugin = makePlugin()
+        plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
+        let command = try XCTUnwrap(plugin.actionDefinitions.first(where: {
+            $0.key.actionID.hasPrefix("custom.")
+        }))
+
+        guard case let .form(sections) = try XCTUnwrap(plugin.settingsPage).body,
+              let section = sections.first(where: { $0.id == command.key.actionID }),
+              case .custom = section.content
+        else {
+            return XCTFail("Expected a custom command editor section")
+        }
+
+        guard case .edgeToEdge = section.presentation else {
+            return XCTFail("Expected edge-to-edge custom editor content")
+        }
+        XCTAssertNotNil(section.headerAccessory)
+        XCTAssertNil(
+            plugin.actionShortcutSettingsConfiguration.placementAfterSectionID,
+            "The shortcut list should follow every custom layout editor"
+        )
+    }
+
+    func testCustomCommandShortcutCanBeRecordedAndClearedInline() throws {
+        let plugin = makePlugin()
+        plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first(where: {
+            $0.key.actionID.hasPrefix("custom.")
+        }))
+        let id = try XCTUnwrap(UUID(uuidString: String(
+            definition.key.actionID.dropFirst("custom.".count)
+        )))
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_L),
+            modifiers: [.control, .option]
+        )
+        var currentBindings: [String: ShortcutBinding] = [:]
+        plugin.previewActionShortcutPreset = { actionIDs, proposedBindings in
+            PluginActionShortcutPresetPreview(items: actionIDs.sorted().map { actionID in
+                PluginActionShortcutPresetPreviewItem(
+                    actionID: actionID,
+                    currentBinding: currentBindings[actionID],
+                    proposedBinding: proposedBindings[actionID]
+                )
+            })
+        }
+        plugin.applyActionShortcutPreset = { actionIDs, bindings in
+            for actionID in actionIDs {
+                currentBindings[actionID] = bindings[actionID]
+            }
+            return nil
+        }
+
+        XCTAssertNil(plugin.customCommandShortcutBinding(for: id))
+        XCTAssertEqual(
+            plugin.recordCustomCommandShortcut(binding, for: id),
+            .accepted
+        )
+        XCTAssertEqual(plugin.customCommandShortcutBinding(for: id), binding)
+
+        plugin.clearCustomCommandShortcut(for: id)
+
+        XCTAssertNil(plugin.customCommandShortcutBinding(for: id))
+    }
+
+    func testCustomCommandShortcutReportsHostValidationConflict() throws {
+        let plugin = makePlugin()
+        plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first(where: {
+            $0.key.actionID.hasPrefix("custom.")
+        }))
+        let id = try XCTUnwrap(UUID(uuidString: String(
+            definition.key.actionID.dropFirst("custom.".count)
+        )))
+        plugin.applyActionShortcutPreset = { _, _ in "Already assigned" }
+
+        let result = plugin.recordCustomCommandShortcut(
+            ShortcutBinding(
+                keyCode: UInt16(kVK_ANSI_L),
+                modifiers: [.control, .option]
+            ),
+            for: id
+        )
+
+        XCTAssertEqual(result, .rejected("Already assigned"))
+    }
+
+    func testCustomCommandPreviewLayoutUsesDimensionsAnchorAndOffsets() {
+        let centered = WindowCustomCommand(
+            name: "Centered",
+            width: .fraction(0.6),
+            height: .fraction(0.5),
+            anchor: .center
+        )
+        XCTAssertEqual(
+            WindowCustomCommandPreviewLayout(command: centered)
+                .windowFrame(in: CGSize(width: 160, height: 100)),
+            CGRect(x: 32, y: 25, width: 96, height: 50)
+        )
+
+        let offsetTopRight = WindowCustomCommand(
+            name: "Offset",
+            width: .fraction(0.5),
+            height: .fraction(0.4),
+            anchor: .topRight,
+            offsetX: -144,
+            offsetY: 90
+        )
+        XCTAssertEqual(
+            WindowCustomCommandPreviewLayout(command: offsetTopRight)
+                .windowFrame(in: CGSize(width: 200, height: 100)),
+            CGRect(x: 80, y: 10, width: 100, height: 40)
+        )
+    }
+
     func testActionExecutionUsesCommittedGapAndReset() async throws {
         let executor = MockWindowLayoutExecutor()
         let plugin = makePlugin(executor: executor)

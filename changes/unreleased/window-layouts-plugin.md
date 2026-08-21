@@ -4,4 +4,4 @@ type: added
 area: Productivity
 ---
 
-Added command-first focused-window placement with complete grids, gaps, cycling, display movement, custom commands, previewed shortcut presets, and Run Links while leaving edge snapping to macOS.
+Added focused-window placement with grids, gaps, cycling, display movement, previewed custom commands with direct shortcuts, shortcut presets, and Run Links while leaving edge snapping to macOS.

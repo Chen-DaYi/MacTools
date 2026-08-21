@@ -62,6 +62,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     ) -> PluginActionShortcutPresetPreview)?
     var applyActionShortcutPreset: ((Set<String>, [String: ShortcutBinding]) -> String?)?
     @Published private(set) var actionShortcutAssignmentRevision: UInt64 = 0
+    @Published private(set) var customCommandSettingsRevision: UInt64 = 0
     var focusedWindowTargetProvider: (() -> PluginFocusedWindowTarget?)? {
         didSet {
             applicationTarget.targetProvider = focusedWindowTargetProvider
@@ -111,10 +112,13 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
             order: 65,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "排列聚焦窗口并创建自定义命令"
+                defaultValue: "排列聚焦窗口并创建自定义布局"
             )
         )
-        self.store.onMutation = { [weak self] in self?.onStateChange?() }
+        self.store.onMutation = { [weak self] in
+            self?.customCommandSettingsRevision &+= 1
+            self?.onStateChange?()
+        }
     }
 
     var permissionRequirements: [PluginPermissionRequirement] {
@@ -142,8 +146,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
                 "settings.shortcuts.description",
                 "可使用预设，也可逐项录制自己的全局快捷键。"
             ),
-            actionIDs: Set(actionDefinitions.map(\.key.actionID)),
-            placementAfterSectionID: "custom-commands"
+            actionIDs: Set(actionDefinitions.map(\.key.actionID))
         )
     }
 
@@ -462,7 +465,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     private var customCommandOverviewSection: PluginSettingsSection {
         PluginSettingsSection(
             id: "custom-commands",
-            title: localizedKey("settings.custom.title", "自定义窗口命令"),
+            title: localizedKey("settings.custom.title", "自定义布局"),
             systemImage: "macwindow.on.rectangle",
             footer: localizedKey(
                 "settings.custom.description",
@@ -471,9 +474,9 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
             rows: [
                 PluginSettingsRow(
                     id: SettingsID.addCustom,
-                    title: localizedKey("settings.custom.add.title", "新建自定义命令"),
+                    title: localizedKey("settings.custom.add.title", "创建自定义布局"),
                     control: .action(
-                        title: localizedKey("settings.custom.add.button", "添加"),
+                        title: localizedKey("settings.custom.add.button", "创建"),
                         role: .normal
                     )
                 )
@@ -487,71 +490,80 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
             id: prefix,
             title: command.name,
             systemImage: "macwindow",
-            rows: [
-                PluginSettingsRow(id: "\(prefix).name", title: localizedKey("settings.custom.name", "名称"), control: .textField(value: command.name, prompt: nil, isRequired: true)),
-                dimensionModeRow(prefix: prefix, axis: "width", value: command.width, title: localizedKey("settings.custom.widthMode", "宽度模式")),
-                dimensionValueRow(prefix: prefix, axis: "width", value: command.width, title: localizedKey("settings.custom.width", "宽度")),
-                dimensionModeRow(prefix: prefix, axis: "height", value: command.height, title: localizedKey("settings.custom.heightMode", "高度模式")),
-                dimensionValueRow(prefix: prefix, axis: "height", value: command.height, title: localizedKey("settings.custom.height", "高度")),
-                PluginSettingsRow(
-                    id: "\(prefix).anchor",
-                    title: localizedKey("settings.custom.anchor", "固定位置"),
-                    control: .picker(
-                        selectionID: command.anchor.rawValue,
-                        options: WindowLayoutAnchor.allCases.map {
-                            PluginSettingsOption(id: $0.rawValue, title: anchorTitle($0))
-                        },
-                        style: .menu
-                    )
-                ),
-                PluginSettingsRow(id: "\(prefix).offset-x", title: localizedKey("settings.custom.offsetX", "水平偏移"), control: .slider(value: command.offsetX, range: -500...500, step: 1, valueFormat: PluginSettingsSliderValueFormat(suffix: " pt"))),
-                PluginSettingsRow(id: "\(prefix).offset-y", title: localizedKey("settings.custom.offsetY", "垂直偏移"), control: .slider(value: command.offsetY, range: -500...500, step: 1, valueFormat: PluginSettingsSliderValueFormat(suffix: " pt"))),
-                PluginSettingsRow(id: "\(prefix).external", title: localizedKey("settings.custom.external", "允许 Run Link"), control: .toggle(isOn: command.allowExternalInvocation)),
-                PluginSettingsRow(id: "\(prefix).duplicate", title: localizedKey("settings.custom.duplicate", "复制命令"), control: .action(title: localizedKey("settings.custom.duplicate.button", "复制"), role: .normal)),
-                PluginSettingsRow(id: "\(prefix).delete", title: localizedKey("settings.custom.delete", "删除命令"), control: .action(title: localizedKey("settings.custom.delete.button", "删除"), role: .destructive))
-            ]
-        )
-    }
-
-    private func dimensionModeRow(
-        prefix: String,
-        axis: String,
-        value: WindowLayoutDimension,
-        title: String
-    ) -> PluginSettingsRow {
-        PluginSettingsRow(
-            id: "\(prefix).\(axis)-mode",
-            title: title,
-            control: .picker(
-                selectionID: dimensionMode(value),
-                options: [
-                    PluginSettingsOption(id: "current", title: localizedKey("settings.dimension.current", "保持当前")),
-                    PluginSettingsOption(id: "fraction", title: localizedKey("settings.dimension.fraction", "屏幕比例")),
-                    PluginSettingsOption(id: "points", title: localizedKey("settings.dimension.points", "固定点数"))
-                ],
-                style: .menu
-            )
-        )
-    }
-
-    private func dimensionValueRow(
-        prefix: String,
-        axis: String,
-        value: WindowLayoutDimension,
-        title: String
-    ) -> PluginSettingsRow {
-        let (number, range, suffix): (Double, ClosedRange<Double>, String)
-        switch value {
-        case .current: (number, range, suffix) = (60, 5...100, "%")
-        case let .fraction(fraction): (number, range, suffix) = (fraction * 100, 5...100, "%")
-        case let .points(points): (number, range, suffix) = (points, 100...3_000, " pt")
+            presentation: .edgeToEdge
+        ) { [weak self] _ in
+            if let self {
+                WindowCustomCommandSettingsView(plugin: self, command: command)
+            }
         }
-        return PluginSettingsRow(
-            id: "\(prefix).\(axis)-value",
-            title: title,
-            isEnabled: dimensionMode(value) != "current",
-            control: .slider(value: number, range: range, step: 1, valueFormat: PluginSettingsSliderValueFormat(suffix: suffix))
+        .headerAccessory { [weak self] _ in
+            if let self {
+                WindowCustomCommandHeaderActions(
+                    commandID: command.id,
+                    duplicateTitle: localizedKey(
+                        "settings.custom.duplicate",
+                        "复制命令"
+                    ),
+                    deleteTitle: localizedKey(
+                        "settings.custom.delete",
+                        "删除命令"
+                    ),
+                    onDuplicate: { self.duplicateCustomCommand(command.id) },
+                    onDelete: { self.deleteCustomCommand(command.id) }
+                )
+            }
+        }
+    }
+
+    func customCommand(id: UUID) -> WindowCustomCommand? {
+        store.customCommand(id: id)
+    }
+
+    @discardableResult
+    func updateCustomCommand(_ command: WindowCustomCommand) -> Bool {
+        store.updateCustomCommand(command)
+    }
+
+    func duplicateCustomCommand(_ id: UUID) {
+        _ = store.duplicateCustomCommand(
+            id: id,
+            copySuffix: localizedKey("settings.custom.copySuffix", "副本")
         )
+    }
+
+    func deleteCustomCommand(_ id: UUID) {
+        _ = store.removeCustomCommand(id: id)
+    }
+
+    func customCommandShortcutBinding(for id: UUID) -> ShortcutBinding? {
+        guard let command = store.customCommand(id: id),
+              let preview = previewActionShortcutPreset?([command.actionID], [:])
+        else { return nil }
+        return preview.items.first(where: { $0.actionID == command.actionID })?
+            .currentBinding
+    }
+
+    func recordCustomCommandShortcut(
+        _ binding: ShortcutBinding,
+        for id: UUID
+    ) -> PluginShortcutRecordingResult {
+        guard let command = store.customCommand(id: id),
+              let applyActionShortcutPreset
+        else {
+            return .rejected(localizedKey(
+                "settings.preset.unavailable",
+                "当前无法应用快捷键预设。"
+            ))
+        }
+        return .from(errorMessage: applyActionShortcutPreset(
+            [command.actionID],
+            [command.actionID: binding]
+        ))
+    }
+
+    func clearCustomCommandShortcut(for id: UUID) {
+        guard let command = store.customCommand(id: id) else { return }
+        _ = applyActionShortcutPreset?([command.actionID], [:])
     }
 
     private func updateCustomNumber(controlID: String, value: Double) {
@@ -860,7 +872,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         localization.string(key, defaultValue: fallback)
     }
 
-    private func anchorTitle(_ anchor: WindowLayoutAnchor) -> String {
+    func anchorTitle(_ anchor: WindowLayoutAnchor) -> String {
         switch anchor {
         case .topLeft: localizedKey("settings.anchor.topLeft", "左上")
         case .top: localizedKey("settings.anchor.top", "上方")
