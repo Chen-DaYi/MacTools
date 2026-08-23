@@ -162,6 +162,28 @@ final class AutoInputStoreTests: XCTestCase {
         XCTAssertEqual(store.inputHUDReminderIntervalSeconds, 60)
         XCTAssertEqual(store.inputHUDAppSwitchReminderCount, 3)
     }
+
+    func testAtPointerPositionRequiresInteractiveHUD() {
+        XCTAssertFalse(AutoInputHUDPosition.atPointer.isAvailable(isInteractive: false))
+        XCTAssertTrue(AutoInputHUDPosition.atPointer.isAvailable(isInteractive: true))
+        XCTAssertTrue(AutoInputHUDPosition.automatic.isAvailable(isInteractive: false))
+        XCTAssertEqual(
+            AutoInputHUDConfiguration(
+                size: .standard,
+                position: .atPointer,
+                isInteractive: false
+            ).effectivePosition,
+            .automatic
+        )
+        XCTAssertEqual(
+            AutoInputHUDConfiguration(
+                size: .standard,
+                position: .atPointer,
+                isInteractive: true
+            ).effectivePosition,
+            .atPointer
+        )
+    }
 }
 
 @MainActor
@@ -266,27 +288,6 @@ final class AutoInputHUDFrequencyPolicyTests: XCTestCase {
         )
     }
 
-    func testAtPointerPositionRequiresInteractiveHUD() {
-        XCTAssertFalse(AutoInputHUDPosition.atPointer.isAvailable(isInteractive: false))
-        XCTAssertTrue(AutoInputHUDPosition.atPointer.isAvailable(isInteractive: true))
-        XCTAssertTrue(AutoInputHUDPosition.automatic.isAvailable(isInteractive: false))
-        XCTAssertEqual(
-            AutoInputHUDConfiguration(
-                size: .standard,
-                position: .atPointer,
-                isInteractive: false
-            ).effectivePosition,
-            .automatic
-        )
-        XCTAssertEqual(
-            AutoInputHUDConfiguration(
-                size: .standard,
-                position: .atPointer,
-                isInteractive: true
-            ).effectivePosition,
-            .atPointer
-        )
-    }
 }
 
 @MainActor
