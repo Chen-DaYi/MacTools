@@ -777,6 +777,36 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertEqual(focusAttempts, 3)
     }
 
+    func testUnifiedSearchSelectionResetsToTopResultWhenNormalizedQueryChanges() {
+        XCTAssertTrue(UnifiedSearchSelectionPolicy.shouldResetForQueryChange(
+            from: "",
+            to: "IP Check"
+        ))
+        XCTAssertEqual(
+            UnifiedSearchSelectionPolicy.selection(
+                currentID: "recent.copy-public-ip",
+                availableIDs: ["navigation.ip-check", "recent.copy-public-ip"],
+                resetToFirst: true
+            ),
+            "navigation.ip-check"
+        )
+    }
+
+    func testUnifiedSearchSelectionPreservesDeliberateSelectionForEquivalentQuery() {
+        XCTAssertFalse(UnifiedSearchSelectionPolicy.shouldResetForQueryChange(
+            from: " IP CHECK ",
+            to: "ip check"
+        ))
+        XCTAssertEqual(
+            UnifiedSearchSelectionPolicy.selection(
+                currentID: "command.copy-public-ip",
+                availableIDs: ["navigation.ip-check", "command.copy-public-ip"],
+                resetToFirst: false
+            ),
+            "command.copy-public-ip"
+        )
+    }
+
     func testUnifiedSearchShowsCommandAccessoriesOnlyForSelectedActionRows() {
         let action = MacToolsSearchAction.executeAction(
             ActionReference(key: ActionKey(providerID: "sidecar", actionID: "connect"))

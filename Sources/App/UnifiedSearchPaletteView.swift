@@ -42,6 +42,25 @@ enum UnifiedSearchResultRowLayout {
     }
 }
 
+enum UnifiedSearchSelectionPolicy {
+    static func shouldResetForQueryChange(from oldQuery: String, to newQuery: String) -> Bool {
+        MacToolsSearchResult.normalize(oldQuery) != MacToolsSearchResult.normalize(newQuery)
+    }
+
+    static func selection(
+        currentID: String?,
+        availableIDs: [String],
+        resetToFirst: Bool
+    ) -> String? {
+        guard !resetToFirst,
+              let currentID,
+              availableIDs.contains(currentID) else {
+            return availableIDs.first
+        }
+        return currentID
+    }
+}
+
 @MainActor
 final class UnifiedSearchPaletteModel: ObservableObject {
     @Published private(set) var results: [MacToolsSearchResult]
@@ -601,10 +620,15 @@ struct UnifiedSearchPaletteView: View {
             syncSelection()
             handleQuickSelectionRequest(quickSelectionRequest)
         }
-        .onChange(of: query) {
+        .onChange(of: query) { oldQuery, newQuery in
             executionFeedback = nil
-            model.updateQuery(query)
-            syncSelection()
+            model.updateQuery(newQuery)
+            syncSelection(
+                resetToFirst: UnifiedSearchSelectionPolicy.shouldResetForQueryChange(
+                    from: oldQuery,
+                    to: newQuery
+                )
+            )
         }
         .onChange(of: resultIDs) {
             syncSelection()
@@ -1181,14 +1205,12 @@ struct UnifiedSearchPaletteView: View {
         return "⌘\(number). \(result.detail)"
     }
 
-    private func syncSelection() {
-        let availableResults = results
-        if let selectedResultID,
-           availableResults.contains(where: { $0.id == selectedResultID }) {
-            return
-        }
-
-        selectedResultID = availableResults.first?.id
+    private func syncSelection(resetToFirst: Bool = false) {
+        selectedResultID = UnifiedSearchSelectionPolicy.selection(
+            currentID: selectedResultID,
+            availableIDs: resultIDs,
+            resetToFirst: resetToFirst
+        )
     }
 
     private func moveSelection(by offset: Int) {

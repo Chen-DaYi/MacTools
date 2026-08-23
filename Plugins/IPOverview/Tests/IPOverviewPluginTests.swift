@@ -4,7 +4,7 @@ import MacToolsPluginKit
 
 @MainActor
 final class IPOverviewPluginTests: XCTestCase {
-    func testCanonicalCopyActionsRefreshOnlyWhenAnAddressIsMissing() async throws {
+    func testCanonicalCopyActionsRefreshBeforeCopyingCurrentAddresses() async throws {
         let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
         let snapshot = IPOverviewSnapshot(
             publicIPv4: IPOverviewPublicIPResult(
@@ -47,13 +47,48 @@ final class IPOverviewPluginTests: XCTestCase {
             XCTAssertEqual(pasteboard.string(forType: .string), expected)
         }
         let callCounts = await provider.callCounts()
-        XCTAssertEqual(callCounts.addresses, 1)
+        XCTAssertEqual(callCounts.addresses, 2)
     }
 
-    func testCopyPublicIPUsesAnAvailableSnapshotWithoutAnotherExternalRefresh() async throws {
+    func testCopyPublicIPPrefersRefreshedAddressOverCachedSnapshot() async throws {
         let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
         let provider = IPOverviewProviderSpy(
-            publicSnapshot: testSnapshot(ip: "203.0.113.8", lastUpdated: Date())
+            publicSnapshots: [
+                testSnapshot(ip: "203.0.113.8", lastUpdated: Date()),
+                testSnapshot(ip: "198.51.100.24", lastUpdated: Date()),
+            ]
+        )
+        let viewModel = IPOverviewViewModel(
+            provider: provider,
+            storage: IPOverviewPluginTestStorage(),
+            pasteboard: pasteboard
+        )
+        let initialRefresh = try XCTUnwrap(viewModel.refreshAddresses())
+        await initialRefresh.value
+        let plugin = IPOverviewPlugin(viewModel: viewModel)
+        let publicReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.map(\.reference).first {
+                $0.key.actionID == "copy-public-ipv4"
+            }
+        )
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: publicReference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(pasteboard.string(forType: .string), "198.51.100.24")
+        let callCounts = await provider.callCounts()
+        XCTAssertEqual(callCounts.addresses, 2)
+    }
+
+    func testCopyPublicIPFallsBackToCachedAddressWhenRefreshFails() async throws {
+        let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
+        let provider = IPOverviewProviderSpy(
+            publicSnapshots: [
+                testSnapshot(ip: "203.0.113.8", lastUpdated: Date()),
+                .empty,
+            ]
         )
         let viewModel = IPOverviewViewModel(
             provider: provider,
@@ -76,7 +111,48 @@ final class IPOverviewPluginTests: XCTestCase {
         XCTAssertEqual(result, .succeeded())
         XCTAssertEqual(pasteboard.string(forType: .string), "203.0.113.8")
         let callCounts = await provider.callCounts()
-        XCTAssertEqual(callCounts.addresses, 1)
+        XCTAssertEqual(callCounts.addresses, 2)
+    }
+
+    func testCopyPublicIPWaitsForAnInFlightRefresh() async throws {
+        let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
+        let provider = IPOverviewProviderSpy(
+            publicSnapshots: [
+                testSnapshot(ip: "203.0.113.8", lastUpdated: Date()),
+                testSnapshot(ip: "198.51.100.24", lastUpdated: Date()),
+            ],
+            blockedAddressCallNumber: 2
+        )
+        let viewModel = IPOverviewViewModel(
+            provider: provider,
+            storage: IPOverviewPluginTestStorage(),
+            pasteboard: pasteboard
+        )
+        let initialRefresh = try XCTUnwrap(viewModel.refreshAddresses())
+        await initialRefresh.value
+        let plugin = IPOverviewPlugin(viewModel: viewModel)
+        let publicReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.map(\.reference).first {
+                $0.key.actionID == "copy-public-ipv4"
+            }
+        )
+
+        let inFlightRefresh = try XCTUnwrap(viewModel.refreshAddresses())
+        let copyTask = Task { @MainActor in
+            try await plugin.beginAction(
+                ActionInvocation(reference: publicReference, source: .test, mode: .background)
+            ).result()
+        }
+        await provider.waitForBlockedAddressCall()
+        await Task.yield()
+        await provider.releaseBlockedAddressCall()
+
+        let result = try await copyTask.value
+        await inFlightRefresh.value
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(pasteboard.string(forType: .string), "198.51.100.24")
+        let callCounts = await provider.callCounts()
+        XCTAssertEqual(callCounts.addresses, 2)
     }
 
     func testPrimaryPanelButtonRequestsConfigurationPresentation() {
@@ -657,12 +733,27 @@ private func testSnapshot(ip: String, lastUpdated: Date) -> IPOverviewSnapshot {
 private actor IPOverviewProviderSpy: IPOverviewProviding {
     private(set) var collectSnapshotCallCount = 0
     private(set) var collectAddressSnapshotCallCount = 0
-    private let publicSnapshot: IPOverviewSnapshot
+    private let publicSnapshots: [IPOverviewSnapshot]
     private let fullSnapshot: IPOverviewSnapshot
+    private let blockedAddressCallNumber: Int?
+    private let blockedAddressCallStarted = IPOverviewAddressRefreshGate()
+    private let blockedAddressCallRelease = IPOverviewAddressRefreshGate()
 
     init(publicSnapshot: IPOverviewSnapshot, fullSnapshot: IPOverviewSnapshot = .empty) {
-        self.publicSnapshot = publicSnapshot
+        self.publicSnapshots = [publicSnapshot]
         self.fullSnapshot = fullSnapshot
+        self.blockedAddressCallNumber = nil
+    }
+
+    init(
+        publicSnapshots: [IPOverviewSnapshot],
+        fullSnapshot: IPOverviewSnapshot = .empty,
+        blockedAddressCallNumber: Int? = nil
+    ) {
+        precondition(!publicSnapshots.isEmpty)
+        self.publicSnapshots = publicSnapshots
+        self.fullSnapshot = fullSnapshot
+        self.blockedAddressCallNumber = blockedAddressCallNumber
     }
 
     func collectSnapshot() async -> IPOverviewSnapshot {
@@ -672,11 +763,47 @@ private actor IPOverviewProviderSpy: IPOverviewProviding {
 
     func collectAddressSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot {
         collectAddressSnapshotCallCount += 1
-        return publicSnapshot
+        if collectAddressSnapshotCallCount == blockedAddressCallNumber {
+            await blockedAddressCallStarted.open()
+            await blockedAddressCallRelease.wait()
+        }
+        let index = min(collectAddressSnapshotCallCount - 1, publicSnapshots.count - 1)
+        return publicSnapshots[index]
+    }
+
+    func waitForBlockedAddressCall() async {
+        await blockedAddressCallStarted.wait()
+    }
+
+    func releaseBlockedAddressCall() async {
+        await blockedAddressCallRelease.open()
     }
 
     func callCounts() -> (full: Int, addresses: Int) {
         (collectSnapshotCallCount, collectAddressSnapshotCallCount)
+    }
+}
+
+private actor IPOverviewAddressRefreshGate {
+    private var isOpen = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        let waitingContinuations = continuations
+        continuations.removeAll()
+        for continuation in waitingContinuations {
+            continuation.resume()
+        }
     }
 }
 

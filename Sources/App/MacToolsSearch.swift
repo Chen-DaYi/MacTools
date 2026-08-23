@@ -74,7 +74,7 @@ struct MacToolsSearchResult: Identifiable, Hashable {
         Self.normalize(keywords.joined(separator: " "))
     }
 
-    fileprivate static func normalize(_ value: String) -> String {
+    static func normalize(_ value: String) -> String {
         value
             .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
             .trimmingCharacters(in: .whitespacesAndNewlines)
