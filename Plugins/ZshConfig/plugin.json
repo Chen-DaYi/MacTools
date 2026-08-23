@@ -52,17 +52,17 @@
     "display-name": "@displayName",
     "summary": "@summary",
     "retention-description": {
-      "ar": "يُحفظ محتوى ملف shell ونسخة احتياطية واحدة بلاحقة .bak. تستبدل عملية الحفظ التالية النسخة الاحتياطية، وتبقى حتى تحذفها.",
-      "de": "Der Inhalt der Shell-Datei und eine .bak-Sicherung werden gespeichert. Beim nächsten Speichern wird die Sicherung ersetzt; andernfalls bleibt sie bestehen, bis du sie löschst.",
-      "en": "Shell file contents and one .bak backup are stored. The next save replaces the backup; otherwise it remains until you remove it.",
-      "es": "Se guardan el contenido del archivo de shell y una copia .bak. El siguiente guardado reemplaza la copia; de lo contrario, permanece hasta que la elimines.",
-      "fr": "Le contenu du fichier shell et une sauvegarde .bak sont conservés. L’enregistrement suivant remplace la sauvegarde ; sinon, elle reste jusqu’à sa suppression.",
-      "ja": "シェルファイルの内容と 1 つの .bak バックアップを保存します。次回の保存時にバックアップは置き換えられ、削除するまで保持されます。",
-      "ko": "셸 파일 내용과 .bak 백업 하나를 저장합니다. 다음 저장 시 백업을 교체하며, 직접 삭제할 때까지 유지됩니다.",
-      "pt": "O conteúdo do arquivo de shell e um backup .bak são armazenados. O próximo salvamento substitui o backup; caso contrário, ele permanece até ser removido.",
-      "ru": "Содержимое файла оболочки и одна резервная копия .bak сохраняются. При следующем сохранении копия заменяется и иначе хранится до удаления пользователем.",
-      "zh-Hans": "会保存 Shell 文件内容和一个 .bak 备份。下次保存时会替换该备份，否则将保留到你手动删除为止。",
-      "zh-Hant": "會儲存 Shell 檔案內容和一個 .bak 備份。下次儲存時會取代該備份，否則將保留到你手動刪除為止。"
+      "ar": "يُحفظ محتوى ملفات shell ونسخة احتياطية واحدة بلاحقة .bak لكل ملف shell مُحرَّر. يستبدل الحفظ التالي لذلك الملف نسخته الاحتياطية، وتبقى النسخ الاحتياطية حتى تحذفها.",
+      "de": "Der Inhalt von Shell-Dateien und je eine .bak-Sicherung pro bearbeiteter Shell-Datei werden gespeichert. Beim nächsten Speichern derselben Datei wird ihre Sicherung ersetzt; andernfalls bleibt sie bestehen, bis du sie löschst.",
+      "en": "Shell file contents and one .bak backup per edited shell file are stored. The next save of that file replaces its backup; backups otherwise remain until you remove them.",
+      "es": "Se guardan el contenido de los archivos de shell y una copia .bak por cada archivo de shell editado. Al volver a guardar ese archivo se reemplaza su copia; las copias permanecen hasta que las elimines.",
+      "fr": "Le contenu des fichiers shell et une sauvegarde .bak par fichier shell modifié sont conservés. Le prochain enregistrement de ce fichier remplace sa sauvegarde ; les sauvegardes restent sinon jusqu’à leur suppression.",
+      "ja": "シェルファイルの内容と、編集したシェルファイルごとに 1 つの .bak バックアップを保存します。そのファイルを次回保存するとバックアップが置き換えられ、削除するまで保持されます。",
+      "ko": "셸 파일 내용과 편집한 셸 파일마다 하나의 .bak 백업을 저장합니다. 해당 파일을 다음에 저장하면 그 백업을 교체하며, 직접 삭제할 때까지 유지됩니다.",
+      "pt": "O conteúdo dos arquivos de shell e um backup .bak por arquivo de shell editado são armazenados. O próximo salvamento desse arquivo substitui seu backup; os backups permanecem até serem removidos.",
+      "ru": "Содержимое файлов оболочки и одна резервная копия .bak для каждого изменённого файла сохраняются. При следующем сохранении этого файла его копия заменяется; резервные копии хранятся до удаления пользователем.",
+      "zh-Hans": "会保存 Shell 文件内容，并为每个编辑过的 Shell 文件保留一个 .bak 备份。再次保存该文件时会替换它的备份；这些备份会保留到你手动删除为止。",
+      "zh-Hant": "會儲存 Shell 檔案內容，並為每個編輯過的 Shell 檔案保留一個 .bak 備份。再次儲存該檔案時會取代它的備份；這些備份會保留到你手動刪除為止。"
     }
   },
   "version": "1.1.0",

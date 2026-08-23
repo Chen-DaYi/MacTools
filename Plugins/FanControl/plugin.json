@@ -51,8 +51,58 @@
   "productStrings": {
     "display-name": "@displayName",
     "summary": "@summary",
-    "setup.requirements.title": "@standardSetup.requirements.title",
-    "setup.requirements.description": "@standardSetup.requirements.description",
+    "setup.install-helper.title": {
+      "ar": "تثبيت أداة مساعدة ذات صلاحيات مميّزة",
+      "de": "Privilegiertes Hilfsprogramm installieren",
+      "en": "Install Privileged Helper",
+      "es": "Instalar herramienta auxiliar con privilegios",
+      "fr": "Installer l’utilitaire privilégié",
+      "ja": "特権ヘルパーをインストール",
+      "ko": "권한 있는 도우미 설치",
+      "pt": "Instalar auxiliar privilegiado",
+      "ru": "Установить привилегированную службу",
+      "zh-Hans": "安装特权辅助工具",
+      "zh-Hant": "安裝特權輔助工具"
+    },
+    "setup.install-helper.description": {
+      "ar": "عند الاستخدام الأول، يطلب MacTools تفويض المسؤول لتثبيت أداة مساعدة يملكها root وبوضع 4755 في /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper. تغيّر الأداة إعدادات مراوح النظام.",
+      "de": "Bei der ersten Verwendung fordert MacTools eine Administratorautorisierung an, um unter /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper ein root-eigenes Hilfsprogramm mit Modus 4755 zu installieren. Es ändert die Einstellungen der Systemlüfter.",
+      "en": "On first use, MacTools requests administrator authorization to install a root-owned, mode-4755 helper at /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper. The helper changes system fan settings.",
+      "es": "En el primer uso, MacTools solicita autorización de administrador para instalar en /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper una herramienta auxiliar propiedad de root y con modo 4755. La herramienta cambia los ajustes de los ventiladores del sistema.",
+      "fr": "Lors de la première utilisation, MacTools demande une autorisation d’administrateur pour installer dans /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper un utilitaire appartenant à root et doté du mode 4755. Cet utilitaire modifie les réglages des ventilateurs du système.",
+      "ja": "初回使用時に、MacTools は管理者認証を求め、root 所有かつモード 4755 のヘルパーを /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper にインストールします。このヘルパーはシステムファンの設定を変更します。",
+      "ko": "처음 사용할 때 MacTools는 관리자 인증을 요청하고 root 소유의 모드 4755 도우미를 /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper에 설치합니다. 이 도우미는 시스템 팬 설정을 변경합니다.",
+      "pt": "No primeiro uso, o MacTools solicita autorização de administrador para instalar em /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper um auxiliar pertencente ao root e com modo 4755. O auxiliar altera os ajustes das ventoinhas do sistema.",
+      "ru": "При первом использовании MacTools запрашивает авторизацию администратора, чтобы установить в /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper принадлежащую root службу с режимом 4755. Она изменяет настройки системных вентиляторов.",
+      "zh-Hans": "首次使用时，MacTools 会请求管理员授权，在 /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper 安装 root 所有且权限模式为 4755 的辅助工具，用于更改系统风扇设置。",
+      "zh-Hant": "首次使用時，MacTools 會要求管理員授權，在 /Library/PrivilegedHelperTools/cc.ggbond.mactools.fan-control.smc-helper 安裝 root 所有且權限模式為 4755 的輔助工具，用於更改系統風扇設定。"
+    },
+    "setup.verify-hardware.title": {
+      "ar": "التحقق من توافق المراوح",
+      "de": "Steuerbare Lüfter prüfen",
+      "en": "Verify Controllable Fans",
+      "es": "Comprobar ventiladores controlables",
+      "fr": "Vérifier les ventilateurs contrôlables",
+      "ja": "制御可能なファンを確認",
+      "ko": "제어 가능한 팬 확인",
+      "pt": "Verificar ventoinhas controláveis",
+      "ru": "Проверить управляемые вентиляторы",
+      "zh-Hans": "确认风扇可控制",
+      "zh-Hant": "確認風扇可控制"
+    },
+    "setup.verify-hardware.description": {
+      "ar": "يتطلب جهاز Mac يمكن قراءة مراوح نظامه والتحكم فيها عبر SMC.",
+      "de": "Erfordert einen Mac, dessen Systemlüfter über den SMC gelesen und gesteuert werden können.",
+      "en": "Requires a Mac whose system fans can be read and controlled through the SMC.",
+      "es": "Requiere un Mac cuyos ventiladores del sistema puedan leerse y controlarse mediante el SMC.",
+      "fr": "Nécessite un Mac dont les ventilateurs système peuvent être lus et contrôlés via le SMC.",
+      "ja": "SMC 経由でシステムファンを読み取り、制御できる Mac が必要です。",
+      "ko": "SMC를 통해 시스템 팬을 읽고 제어할 수 있는 Mac이 필요합니다.",
+      "pt": "Requer um Mac cujas ventoinhas do sistema possam ser lidas e controladas pelo SMC.",
+      "ru": "Требуется Mac, системные вентиляторы которого можно считывать и контролировать через SMC.",
+      "zh-Hans": "需要系统风扇可通过 SMC 读取和控制的 Mac。",
+      "zh-Hant": "需要系統風扇可透過 SMC 讀取和控制的 Mac。"
+    },
     "action.apply-preset.title": {
       "ar": "تطبيق إعداد مروحة مسبق", "de": "Lüftervoreinstellung anwenden",
       "en": "Apply Fan Preset", "es": "Aplicar preajuste de ventilador",
@@ -211,9 +261,14 @@
   "setup": {
     "steps": [
       {
-        "id": "review-requirements",
-        "title": "@productStrings.setup.requirements.title",
-        "description": "@productStrings.setup.requirements.description"
+        "id": "install-privileged-helper",
+        "title": "@productStrings.setup.install-helper.title",
+        "description": "@productStrings.setup.install-helper.description"
+      },
+      {
+        "id": "verify-compatible-hardware",
+        "title": "@productStrings.setup.verify-hardware.title",
+        "description": "@productStrings.setup.verify-hardware.description"
       }
     ],
     "optionalSurfaces": []

@@ -142,6 +142,47 @@ class PluginSourceManifestTests(unittest.TestCase):
         self.assertEqual(set(battery["requirements"]["architectures"]), {"arm64", "x86_64"})
         self.assertNotIn("Apple Silicon Mac", battery["requirements"]["hardware"])
 
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+        privileged_helpers = {
+            "BatteryChargeLimit": (
+                "cc.ggbond.mactools.battery-charge-limit.smc-helper",
+                "built-in battery",
+            ),
+            "FanControl": (
+                "cc.ggbond.mactools.fan-control.smc-helper",
+                "system fans",
+            ),
+        }
+        for directory, (helper_name, hardware_copy) in privileged_helpers.items():
+            path = PLUGINS_ROOT / directory / "plugin.json"
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            projected, _ = validate_and_project_manifest(manifest, path, known_ids)
+            steps = {step["id"]: step for step in projected["setup"]["steps"]}
+            with self.subTest(plugin=manifest["id"], disclosure="privileged-helper"):
+                self.assertEqual(
+                    set(steps),
+                    {"install-privileged-helper", "verify-compatible-hardware"},
+                )
+                helper_description = steps["install-privileged-helper"]["description"]["en"]
+                self.assertIn("administrator authorization", helper_description)
+                self.assertIn("root-owned, mode-4755 helper", helper_description)
+                self.assertIn(
+                    f"/Library/PrivilegedHelperTools/{helper_name}",
+                    helper_description,
+                )
+                self.assertIn(
+                    hardware_copy,
+                    steps["verify-compatible-hardware"]["description"]["en"],
+                )
+
+        zsh_path = PLUGINS_ROOT / "ZshConfig" / "plugin.json"
+        zsh_manifest = json.loads(zsh_path.read_text(encoding="utf-8"))
+        zsh_projected, _ = validate_and_project_manifest(zsh_manifest, zsh_path, known_ids)
+        zsh_retention = zsh_projected["privacy"]["retention"]["description"]["en"]
+        self.assertIn("one .bak backup per edited shell file", zsh_retention)
+        self.assertIn("next save of that file replaces its backup", zsh_retention)
+        self.assertIn("until you remove them", zsh_retention)
+
         cloudflare = json.loads(
             (PLUGINS_ROOT / "CloudflareR2" / "plugin.json").read_text(encoding="utf-8")
         )
