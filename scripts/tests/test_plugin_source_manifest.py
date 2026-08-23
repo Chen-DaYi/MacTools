@@ -774,7 +774,18 @@ class PluginSourceManifestTests(unittest.TestCase):
             package = root / "appearance.mactoolsplugin"
             package.mkdir()
             source = PLUGINS_ROOT / "Appearance" / "plugin.json"
-            package.joinpath("plugin.json").write_bytes(source.read_bytes())
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_ROOT / "copy-plugin-manifest.py"),
+                    "copy",
+                    "--source", str(source),
+                    "--destination", str(package / "plugin.json"),
+                    "--configuration", "Release",
+                    "--app-version-config", str(REPO_ROOT / "Configs/AppVersion.xcconfig"),
+                ],
+                check=True,
+            )
             package.joinpath("Appearance.bundle").mkdir()
             package.joinpath("Appearance.bundle", "payload").write_text("fixture", encoding="utf-8")
             first_catalog = root / "first.json"

@@ -430,6 +430,10 @@ def _https_url(value: object, plugin_id: str, field: str) -> None:
             _fail(plugin_id, field, "must be an HTTPS URL")
 
 
+def validate_https_url(value: object, owner: str, field: str) -> None:
+    _https_url(value, owner, field)
+
+
 def _image_dimensions(path: Path, media_type: str) -> tuple[int | None, int | None]:
     data = path.read_bytes()
     if media_type == "image/png" and len(data) >= 24 and data[:8] == b"\x89PNG\r\n\x1a\n":
@@ -534,6 +538,17 @@ def _validate_asset(asset: dict, plugin_root: Path, plugin_id: str, field: str) 
     projected.update({"mediaType": media_type, "sha256": digest, "size": size})
     projected.update({"width": width, "height": height})
     return AssetProjection(source=source, catalog=projected)
+
+
+def _validate_projected_asset(asset: dict, plugin_id: str, field: str) -> dict:
+    _require_keys(asset, {"id", "path", "alt"}, plugin_id, field)
+    _identifier(asset["id"], plugin_id, f"{field}.id")
+    _localized_text(asset["alt"], plugin_id, f"{field}.alt")
+    _non_empty_string(asset["path"], plugin_id, f"{field}.path")
+    relative = PurePosixPath(asset["path"])
+    if relative.is_absolute() or ".." in relative.parts or relative.parts[:1] != ("MarketplaceAssets",):
+        _fail(plugin_id, f"{field}.path", "must stay under MarketplaceAssets/")
+    return json.loads(json.dumps(asset))
 
 
 def _validate_parameters(parameters: object, plugin_id: str, field: str) -> None:
@@ -685,14 +700,16 @@ def _validate_actions(actions: dict, plugin_id: str) -> None:
             )
 
 
-def validate_and_project_manifest(
+def _validate_manifest(
     manifest: dict,
     manifest_path: Path,
     known_plugin_ids: set[str],
     *,
     allow_sparse_legacy: bool = False,
+    projected_assets: bool = False,
+    validate_plugin_references: bool = True,
 ) -> tuple[dict, list[AssetProjection]]:
-    manifest = expand_localized_references(manifest)
+    manifest = json.loads(json.dumps(manifest))
     plugin_id = validate_runtime_envelope(
         manifest,
         manifest_path,
@@ -721,11 +738,16 @@ def validate_and_project_manifest(
             _localized_text(example.get("text"), plugin_id, f"presentation.examples[{index}].text")
         seen_asset_ids: set[str] = set()
         for index, asset in enumerate(presentation["screenshots"]):
-            projected = _validate_asset(asset, manifest_path.parent, plugin_id, f"presentation.screenshots[{index}]")
-            if projected.catalog["id"] in seen_asset_ids:
+            asset_field = f"presentation.screenshots[{index}]"
+            if projected_assets:
+                projected_asset = _validate_projected_asset(asset, plugin_id, asset_field)
+            else:
+                source_asset = _validate_asset(asset, manifest_path.parent, plugin_id, asset_field)
+                assets.append(source_asset)
+                projected_asset = source_asset.catalog
+            if projected_asset["id"] in seen_asset_ids:
                 _fail(plugin_id, f"presentation.screenshots[{index}].id", "duplicates an asset ID")
-            seen_asset_ids.add(projected.catalog["id"])
-            assets.append(projected)
+            seen_asset_ids.add(projected_asset["id"])
         for key in ("documentationURL", "supportURL"):
             if key in presentation:
                 _https_url(presentation[key], plugin_id, f"presentation.{key}")
@@ -892,22 +914,74 @@ def validate_and_project_manifest(
         for key in ("relatedPluginIDs", "includedPackIDs", "suggestedRecipeIDs", "supersedesPluginIDs"):
             _unique_strings(relationships[key], plugin_id, f"relationships.{key}")
         referenced = set(relationships["relatedPluginIDs"]) | set(relationships["supersedesPluginIDs"])
-        missing = sorted(referenced - known_plugin_ids)
-        if missing:
-            _fail(plugin_id, "relationships", "references unknown plugins: " + ", ".join(missing))
+        if validate_plugin_references:
+            missing = sorted(referenced - known_plugin_ids)
+            if missing:
+                _fail(plugin_id, "relationships", "references unknown plugins: " + ", ".join(missing))
 
     if discovery is not None:
         referenced = set(discovery["relatedPluginIDs"]) | set(discovery["alternativePluginIDs"])
-        missing = sorted(referenced - known_plugin_ids)
-        if missing:
-            _fail(plugin_id, "discovery", "references unknown plugins: " + ", ".join(missing))
+        if validate_plugin_references:
+            missing = sorted(referenced - known_plugin_ids)
+            if missing:
+                _fail(plugin_id, "discovery", "references unknown plugins: " + ", ".join(missing))
 
     projected = json.loads(json.dumps(manifest))
     if presentation is not None:
-        projected["presentation"]["screenshots"] = [asset.catalog for asset in assets]
+        if projected_assets:
+            projected["presentation"]["screenshots"] = [
+                _validate_projected_asset(
+                    asset,
+                    plugin_id,
+                    f"presentation.screenshots[{index}]",
+                )
+                for index, asset in enumerate(presentation["screenshots"])
+            ]
+        else:
+            projected["presentation"]["screenshots"] = [asset.catalog for asset in assets]
     projected.pop("build", None)
     projected.pop("package", None)
     return projected, assets
+
+
+def validate_and_project_manifest(
+    manifest: dict,
+    manifest_path: Path,
+    known_plugin_ids: set[str],
+    *,
+    allow_sparse_legacy: bool = False,
+) -> tuple[dict, list[AssetProjection]]:
+    return _validate_manifest(
+        expand_localized_references(manifest),
+        manifest_path,
+        known_plugin_ids,
+        allow_sparse_legacy=allow_sparse_legacy,
+    )
+
+
+def validate_projected_manifest(
+    manifest: dict,
+    manifest_path: Path,
+    known_plugin_ids: set[str],
+    *,
+    allow_sparse_legacy: bool = False,
+    validate_plugin_references: bool = True,
+) -> dict:
+    if "productStrings" in manifest:
+        _fail(
+            manifest.get("id", manifest_path.parent.name),
+            "productStrings",
+            "must be removed from a projected package manifest",
+        )
+    projected, _ = _validate_manifest(
+        manifest,
+        manifest_path,
+        known_plugin_ids,
+        allow_sparse_legacy=allow_sparse_legacy,
+        projected_assets=True,
+        validate_plugin_references=validate_plugin_references,
+    )
+    return projected
 
 
 def load_known_plugin_ids(plugins_root: Path) -> set[str]:

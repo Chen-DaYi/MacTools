@@ -154,7 +154,7 @@ MacToolsPlugins/
 
 `plugin.json` declares the plugin ID, version, capabilities, bundle path, optional `releaseChannel`, and build scheme. In this repository `make generate`, `make build`, `make run`, and `make build-plugin` first scan `Plugins/*/plugin.json` and generate the local XcodeGen plugin targets. External repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The package projection removes the source-only `build` section while retaining the runtime envelope, signing paths, and optional product metadata. The built package contains only that projected `plugin.json` and the signed `.bundle`; extra executables must already be copied into the bundle resources and listed in `plugin.json.package.signPaths` when they require an individual code signature.
 
-Current source and packaged manifests are validated against the complete runtime envelope before package copy or catalog projection. Legacy manifests must retain runtime-decodable `capabilities` and `permissions`, including the PluginKit v3 `capabilities.configuration` form; omitting newer product fields is accepted only below PluginKit 5 through the explicit `--allow-sparse-legacy` local-debug compatibility path. Release catalog generation rejects this mode.
+Current source and packaged manifests are validated against the complete runtime envelope before package copy or catalog projection. Source manifests use `productStrings` references; package manifests must contain the expanded projection and must match the source metadata when the source is available. A valid package can still generate a local catalog when its source repository is unavailable, in which case its projected manifest is authoritative. Legacy manifests must retain runtime-decodable `capabilities` and `permissions`, including the PluginKit v3 `capabilities.configuration` form; omitting newer product fields is accepted only below PluginKit 5 through the explicit `--allow-sparse-legacy` local-debug compatibility path. Release catalog generation rejects this mode.
 
 From the MacTools repository, build all local plugins and generate the Debug catalog:
 
@@ -306,6 +306,8 @@ scripts/plugins/sign-plugin-catalog.sh \
 ```
 
 `--website-output` writes a package-URL-free deterministic projection for website builds. Referenced screenshots are copied beside it under `assets/` with checksum-based names. Use `--generated-at` in fixtures or reproducibility checks when the catalog timestamp must also be stable.
+
+Catalog generation rejects duplicate plugin IDs, malformed HTTPS URLs or timestamps, and packages larger than 200 MiB. ZIP packages are inspected from their central directory without extraction: archive paths and member types must be safe, symlinks must remain inside the package root, and member count and expanded size are bounded. Catalog projection of screenshots still requires the matching source assets.
 
 The catalog private key, Developer ID identity, and GitHub token must come from local environment variables or CI secrets. Do not commit them. The catalog public key is safe to embed in the app as `PLUGIN_CATALOG_PUBLIC_KEY`.
 

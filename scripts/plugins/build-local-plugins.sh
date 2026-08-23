@@ -412,6 +412,7 @@ if [[ "$SKIP_CATALOG" != "1" ]]; then
         --mode debug \
         --output "$CATALOG_PATH" \
         --plugins-root "$SOURCE_DIR" \
+        --allow-sparse-legacy \
         "${catalog_args[@]}"
 fi
 
