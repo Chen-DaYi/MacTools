@@ -179,7 +179,10 @@ final class IPOverviewPluginTests: XCTestCase {
                 ActionInvocation(reference: publicReference, source: .test, mode: .background)
             ).result()
         }
-        await provider.waitForBlockedAddressCall()
+        try await waitUntil {
+            let callCounts = await provider.callCounts()
+            return callCounts.addresses == 2
+        }
         await Task.yield()
         await provider.releaseBlockedAddressCall()
 
@@ -772,7 +775,6 @@ private actor IPOverviewProviderSpy: IPOverviewProviding {
     private let publicSnapshots: [IPOverviewSnapshot]
     private let fullSnapshot: IPOverviewSnapshot
     private let blockedAddressCallNumber: Int?
-    private let blockedAddressCallStarted = IPOverviewAddressRefreshGate()
     private let blockedAddressCallRelease = IPOverviewAddressRefreshGate()
 
     init(publicSnapshot: IPOverviewSnapshot, fullSnapshot: IPOverviewSnapshot = .empty) {
@@ -800,15 +802,10 @@ private actor IPOverviewProviderSpy: IPOverviewProviding {
     func collectAddressSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot {
         collectAddressSnapshotCallCount += 1
         if collectAddressSnapshotCallCount == blockedAddressCallNumber {
-            await blockedAddressCallStarted.open()
             await blockedAddressCallRelease.wait()
         }
         let index = min(collectAddressSnapshotCallCount - 1, publicSnapshots.count - 1)
         return publicSnapshots[index]
-    }
-
-    func waitForBlockedAddressCall() async {
-        await blockedAddressCallStarted.wait()
     }
 
     func releaseBlockedAddressCall() async {
@@ -946,10 +943,10 @@ private actor IPOverviewNetworkQualityCompletionGate {
 @MainActor
 private func waitUntil(
     timeout: Duration = .seconds(1),
-    condition: @escaping @MainActor () -> Bool
+    condition: @escaping @MainActor () async -> Bool
 ) async throws {
     let deadline = ContinuousClock.now + timeout
-    while !condition() {
+    while !(await condition()) {
         if ContinuousClock.now >= deadline {
             XCTFail("Timed out waiting for condition")
             return
