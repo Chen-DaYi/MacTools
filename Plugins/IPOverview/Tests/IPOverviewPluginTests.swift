@@ -82,7 +82,7 @@ final class IPOverviewPluginTests: XCTestCase {
         XCTAssertEqual(callCounts.addresses, 2)
     }
 
-    func testCopyPublicIPFallsBackToCachedAddressWhenRefreshFails() async throws {
+    func testCopyPublicIPFailsInsteadOfUsingCachedAddressWhenRefreshFails() async throws {
         let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
         let provider = IPOverviewProviderSpy(
             publicSnapshots: [
@@ -108,8 +108,44 @@ final class IPOverviewPluginTests: XCTestCase {
             ActionInvocation(reference: publicReference, source: .test, mode: .background)
         ).result()
 
-        XCTAssertEqual(result, .succeeded())
-        XCTAssertEqual(pasteboard.string(forType: .string), "203.0.113.8")
+        guard case .failed = result else {
+            return XCTFail("Expected the action to fail without a current public IP")
+        }
+        XCTAssertNil(pasteboard.string(forType: .string))
+        let callCounts = await provider.callCounts()
+        XCTAssertEqual(callCounts.addresses, 2)
+    }
+
+    func testCopyLocalIPFailsInsteadOfUsingAnAddressMissingAfterRefresh() async throws {
+        let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
+        let provider = IPOverviewProviderSpy(
+            publicSnapshots: [
+                testSnapshot(ip: "203.0.113.8", lastUpdated: Date()),
+                .empty,
+            ]
+        )
+        let viewModel = IPOverviewViewModel(
+            provider: provider,
+            storage: IPOverviewPluginTestStorage(),
+            pasteboard: pasteboard
+        )
+        let initialRefresh = try XCTUnwrap(viewModel.refreshAddresses())
+        await initialRefresh.value
+        let plugin = IPOverviewPlugin(viewModel: viewModel)
+        let localReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.map(\.reference).first {
+                $0.key.actionID == "copy-local-ipv4"
+            }
+        )
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: localReference, source: .test, mode: .background)
+        ).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected the action to fail without a current local IPv4 address")
+        }
+        XCTAssertNil(pasteboard.string(forType: .string))
         let callCounts = await provider.callCounts()
         XCTAssertEqual(callCounts.addresses, 2)
     }

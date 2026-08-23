@@ -171,11 +171,10 @@ final class IPOverviewPlugin:
 
         return ActionExecutionHandle { [weak self] in
             guard let self else { return .cancelled }
-            let fallbackValue = self.copyValue(for: actionID)
             await self.viewModel.refreshAddressesAndWait()
             guard !Task.isCancelled else { return .cancelled }
 
-            let value = self.copyValue(for: actionID) ?? fallbackValue
+            let value = self.copyValue(for: actionID)
             guard let value, !value.isEmpty else {
                 let fallbackMessage = actionID == ActionID.copyLocalIPv4
                     ? PluginKitLocalization.actionUnavailable
