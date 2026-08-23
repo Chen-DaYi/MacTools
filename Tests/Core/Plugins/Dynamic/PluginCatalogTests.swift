@@ -18,33 +18,17 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
-    func testPluginKit4LegacyHostKeepsImmutableVersionedCatalogURL() throws {
+    func testPluginKit4KeepsImmutableVersionedCatalogURL() throws {
         XCTAssertEqual(
-            PluginCatalogProviderConfiguration.productionCatalogURL(
-                for: 4,
-                hostVersion: "1.1.6"
-            ),
+            PluginCatalogProviderConfiguration.productionCatalogURL(for: 4),
             URL(string: "https://mactools.ggbond.app/plugins/v4/catalog.json")
         )
     }
 
-    func testPluginKit4CurrentHostUsesMixedHostCompatibleCatalogURL() throws {
+    func testCurrentPluginKitUsesVersion5CatalogURL() throws {
         XCTAssertEqual(
-            PluginCatalogProviderConfiguration.productionCatalogURL(
-                for: 4,
-                hostVersion: "1.2.0"
-            ),
-            URL(string: "https://mactools.ggbond.app/plugins/v4/host-1.2/catalog.json")
-        )
-    }
-
-    func testPluginKit4FutureHostKeepsHostCompatibleCatalogURL() throws {
-        XCTAssertEqual(
-            PluginCatalogProviderConfiguration.productionCatalogURL(
-                for: 4,
-                hostVersion: "1.3.0"
-            ),
-            URL(string: "https://mactools.ggbond.app/plugins/v4/host-1.2/catalog.json")
+            PluginCatalogProviderConfiguration.productionCatalogURL,
+            URL(string: "https://mactools.ggbond.app/plugins/v5/catalog.json")
         )
     }
 

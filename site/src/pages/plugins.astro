@@ -2,7 +2,12 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import SiteNav from "@/components/SiteNav.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
-import { categoryLabel, loadPluginCatalog, localizedPluginText } from "@/lib/plugins";
+import {
+  categoryLabel,
+  hasPluginSettings,
+  loadPluginCatalog,
+  localizedPluginText,
+} from "@/lib/plugins";
 
 type LocalizedText = {
   zh: string;
@@ -773,7 +778,7 @@ const catalog = await loadPluginCatalog();
 const plugins = catalog.plugins.filter((plugin) => plugin.id !== "menu-bar-hidden").sort((a, b) =>
   localizedPluginText(a).zh.displayName.localeCompare(localizedPluginText(b).zh.displayName, "zh-CN")
 );
-const settingsPlugins = plugins.filter((plugin) => plugin.capabilities.configuration);
+const settingsPlugins = plugins.filter(hasPluginSettings);
 
 const categoryOrder = ["display", "audio", "system", "storage", "productivity", "monitoring", "other"];
 const counts = new Map<string, number>();
@@ -967,8 +972,8 @@ const structuredData = {
                 {plugins.map((plugin) => {
                   const text = localizedPluginText(plugin);
                   const category = plugin.category ?? "other";
-                  const isInitiallyInstalled = plugin.capabilities.configuration;
-                  const capability = plugin.capabilities.configuration
+                  const isInitiallyInstalled = hasPluginSettings(plugin);
+                  const capability = hasPluginSettings(plugin)
                     ? t("功能面板 · 可配置", "Feature panel · Configurable")
                     : plugin.capabilities.componentPanel
                       ? t("仪表盘组件", "Dashboard widget")

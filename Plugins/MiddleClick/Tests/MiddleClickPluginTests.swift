@@ -105,6 +105,37 @@ final class MiddleClickPluginTests: XCTestCase {
         XCTAssertFalse(sequentialRecognizer.process(frame(at: 2.08, contacts: [])))
     }
 
+    func testNativeClickRewriteSuppressesSyntheticClickForSameEpisode() {
+        let pipeline = MiddleClickTapPipeline(fingerCount: 3)
+        XCTAssertFalse(pipeline.process(frame(
+            at: 1.00,
+            contacts: [contact(1), contact(2), contact(3)]
+        )))
+
+        XCTAssertEqual(
+            pipeline.handleNativeMouseEvent(.down(.left)),
+            .rewriteAsMiddle
+        )
+        XCTAssertEqual(
+            pipeline.handleNativeMouseEvent(.up(.left)),
+            .rewriteAsMiddle
+        )
+        XCTAssertFalse(pipeline.process(frame(at: 1.10, contacts: [])))
+    }
+
+    func testNativeClickPassesThroughWithoutConfiguredTrackpadContacts() {
+        let pipeline = MiddleClickTapPipeline(fingerCount: 3)
+
+        XCTAssertEqual(
+            pipeline.handleNativeMouseEvent(.down(.left)),
+            .passThrough
+        )
+        XCTAssertEqual(
+            pipeline.handleNativeMouseEvent(.up(.left)),
+            .passThrough
+        )
+    }
+
     func testTapPipelineTracksMultipleDevicesIndependently() {
         let pipeline = MiddleClickTapPipeline(fingerCount: 3)
         XCTAssertFalse(pipeline.process(frame(
@@ -394,7 +425,7 @@ final class MiddleClickPluginTests: XCTestCase {
         XCTAssertFalse(plugin.permissionState(for: "accessibility").isGranted)
     }
 
-    func testSettingsPageUsesValidPluginKitV4Form() throws {
+    func testSettingsPageUsesValidPluginKitV5Form() throws {
         let plugin = makePlugin()
         let page = try XCTUnwrap(plugin.settingsPage)
 

@@ -14,8 +14,8 @@ The following plugin source directories publish canonical actions:
 - App and input control: `AppHotkey`, `AppVolume`, `AutoInput`, `MiddleClick`, `WindowSwitcher`.
 - Display and workspace control: `Appearance`, `DisplayBrightness`, `DisplayResolution`, `DisplaySleep`, `DisplayTrueColor`, `DockLock`, `HideNotch`, `NightShift`, `Sidecar`, `StageManager`.
 - Menu bar and Dock control: `AutoHideDock`, `AutoHideMenuBar`.
-- System and device control: `BatteryChargeLimit`, `FanControl`, `KeepAwake`, `LockScreen`, `MicrophoneMute`, `SystemMute`.
-- Productivity and maintenance: `ActivityBar`, `ClipboardClear`, `DiskClean`, `EjectDisk`, `EmptyTrash`, `FixDamagedApp`, `Homebrew`, `IPOverview`, `LaunchControl`, `Launchpad`, `PhysicalCleanMode`, `QuitApps`, `Translator`, `XcodeClean`.
+- System and device control: `BatteryChargeLimit`, `FanControl`, `KeepAwake`, `LockScreen`, `MicrophoneMute`, `SystemMute`, `SystemSoftRestart`.
+- Productivity and maintenance: `ActivityBar`, `AppleShortcuts`, `ClipboardClear`, `CloudflareR2`, `DiskClean`, `EjectDisk`, `EmptyTrash`, `FixDamagedApp`, `Homebrew`, `IPOverview`, `LaunchControl`, `Launchpad`, `PhysicalCleanMode`, `QuitApps`, `Translator`, `WindowLayouts`, `XcodeClean`.
 
 Parameterized actions publish concrete catalog entries rather than asking each action surface to construct parameters. For example, Sidecar publishes per-device entries, Display Resolution publishes current display modes, App Volume publishes current audio apps, Battery Charge Limit publishes useful limit presets, and Fan Control publishes saved presets. Availability is resolved again at execution time so stale hardware, processes, or configuration fail safely.
 
@@ -26,9 +26,11 @@ Unattended automation is also an explicit provider decision. An action must publ
 The maintenance providers use deliberately narrow contracts:
 
 - Disk Clean and Xcode Clean expose only a foreground **scan and review** action. It opens the owning settings page and starts a scan; deletion still requires the plugin's existing selection, safety validation, and confirmation flow.
+- Cloudflare R2 exposes only its foreground file-picker upload action. It requires saved configuration, preserves interactive file selection and cancellation, and does not allow Run Links or unattended automation.
 - Homebrew exposes update, upgrade-all, doctor, and cleanup. Upgrade-all and cleanup retain confirmation, every command reports its real completion result, and none can be invoked through a Run Link.
 - Launch Items exposes start, stop, and restart only for user-owned items that the user has marked as favorites. Item IDs are local-only, stop/restart require confirmation, and stale or no-longer-favorite targets become unavailable.
 - IP Check exposes refreshed copy actions for local and public IPv4 addresses. Keep Awake exposes useful timed sessions, Activity Stats exposes its existing reset flow with confirmation, Display Brightness exposes guarded built-in-display disable/restore operations, and App Volume includes a 50% preset.
+- Apple Shortcuts publishes every discovered shortcut. Folder membership is shown as context in MacTools, local confirmation defaults on, Run Links always confirm, and safety-policy changes rebuild the host action registry synchronously.
 
 ## Intentionally specialized or non-operational
 
@@ -37,6 +39,7 @@ These plugins should not publish a canonical action merely to appear in action p
 - `Calendar`, `DeviceBattery`, and `SystemStatus` primarily present information without a stable repeatable mutation. Calendar's selected-date context belongs in its view, while app launching is already covered by App Hotkeys.
 - `MouseEnhancer` and `ZshConfig` are configuration editors; runnable shell tasks belong in Saved Scripts.
 - `InputRemapping` is an input-lifecycle and configuration surface rather than one stable repeatable operation. If it adopts canonical MacTools actions as mapping outputs, it remains an action consumer rather than publishing a parallel provider surface.
+- `DockClickMinimize` observes native Dock clicks and hides the active app only after macOS processes the click. Its enable switch and event-monitor lifecycle are configuration, not a user-invoked canonical action.
 - `RightClick` extends Finder context menus rather than representing one repeatable operation.
 - `TrackpadGestures` is an input surface that consumes canonical actions; it is not itself an action provider.
 

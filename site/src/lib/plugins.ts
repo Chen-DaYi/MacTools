@@ -23,7 +23,8 @@ export type Plugin = {
   capabilities: {
     primaryPanel: boolean;
     componentPanel: boolean;
-    configuration: boolean;
+    configuration?: boolean;
+    settings?: "none" | "form" | "workspace";
   };
 };
 
@@ -38,17 +39,20 @@ export type PluginLocalizedText = {
 };
 
 const legacyCatalogURL = "https://mactools.ggbond.app/plugins/catalog.json";
-const pluginKitVersion = Number(process.env.MACTOOLS_PLUGIN_KIT_VERSION ?? "3");
+const pluginKitVersion = Number(process.env.MACTOOLS_PLUGIN_KIT_VERSION ?? "5");
+const previousVersionedCatalogURL = `https://mactools.ggbond.app/plugins/v${pluginKitVersion - 1}/catalog.json`;
 const remoteCatalogURLs = pluginKitVersion === 2
   ? [legacyCatalogURL]
   : [
       `https://mactools.ggbond.app/plugins/v${pluginKitVersion}/catalog.json`,
+      previousVersionedCatalogURL,
       legacyCatalogURL,
     ];
 const localCatalogPaths = pluginKitVersion === 2
   ? [resolve(process.cwd(), "..", "docs", "plugins", "catalog.json")]
   : [
       resolve(process.cwd(), "..", "docs", "plugins", `v${pluginKitVersion}`, "catalog.json"),
+      resolve(process.cwd(), "..", "docs", "plugins", `v${pluginKitVersion - 1}`, "catalog.json"),
       resolve(process.cwd(), "..", "docs", "plugins", "catalog.json"),
     ];
 
@@ -74,6 +78,13 @@ export async function loadPluginCatalog(): Promise<PluginCatalog> {
   }
 
   throw new Error(`Plugin catalog unavailable for PluginKit ${pluginKitVersion}.`);
+}
+
+export function hasPluginSettings(plugin: Plugin): boolean {
+  if (plugin.capabilities.settings !== undefined) {
+    return plugin.capabilities.settings !== "none";
+  }
+  return plugin.capabilities.configuration === true;
 }
 
 export function categoryLabel(category: string | null): { zh: string; en: string } {

@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGINS_ROOT = REPO_ROOT / "Plugins"
 LEGACY_V4_CATALOG = REPO_ROOT / "docs/plugins/v4/catalog.json"
 PLUGIN_RELEASE_WORKFLOW = REPO_ROOT / ".github/workflows/plugin-release.yml"
+MAKEFILE = REPO_ROOT / "Makefile"
 ACTION_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/ActionModels.swift"
 COMPONENT_THEME_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginComponentTheme.swift"
 NEW_API_MINIMUM_HOSTS = {
@@ -23,14 +24,23 @@ NEW_API_MINIMUM_HOSTS = {
     "ActionCatalogEntry": "1.2.0",
     "ActionAvailability": "1.2.0",
     "ActionRisk": "1.2.0",
+    "ActionExternalInvocationPolicy": "1.2.0",
     "ActionExecutionCapabilities": "1.2.0",
     "ActionConfirmation": "1.2.0",
     "ActionInvocation": "1.2.0",
     "ActionExecutionResult": "1.2.0",
     "ActionExecutionHandle": "1.2.0",
+    "ActionExecutionSource": "1.2.0",
+    "ActionExposureSurface": "1.2.0",
+    "ActionExposurePolicy": "1.2.0",
     "PluginActionProviding": "1.2.0",
     "PluginActionShortcutSettingsConfiguration": "1.2.0",
     "PluginActionShortcutSettingsProviding": "1.2.0",
+    "PluginRetiredActionShortcutProviding": "1.2.0",
+    "PluginActionShortcutPresetPreviewItem": "1.2.0",
+    "PluginActionShortcutPresetPreview": "1.2.0",
+    "PluginActionShortcutPresetApplying": "1.2.0",
+    "PluginActionShortcutAssignmentChangeHandling": "1.2.0",
     "PluginActionExecutionRevisionProviding": "1.2.0",
     "PluginActionExposureProviding": "1.2.0",
     "PluginActionPermissionProviding": "1.2.0",
@@ -61,6 +71,7 @@ NEW_API_MINIMUM_HOSTS = {
     # Shared component-panel theme surfaces introduced in host 1.2.
     "PluginComponentTheme": "1.2.0",
     "PluginComponentCardBackground": "1.2.0",
+    "PluginActionSafetyStateChangeProviding": "1.2.0",
 }
 
 
@@ -102,13 +113,26 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
         ]
         self.assertEqual(incompatible, [])
 
-    def test_plugin_kit4_release_targets_host_compatible_catalog(self) -> None:
+    def test_plugin_kit5_release_targets_versioned_host_compatible_catalog(self) -> None:
         workflow = PLUGIN_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        makefile = MAKEFILE.read_text(encoding="utf-8")
         self.assertIn(
-            'PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v4/host-1.2/catalog.json"',
+            'PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v5/catalog.json"',
             workflow,
         )
         self.assertIn('PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.2.0"', workflow)
+        self.assertIn(
+            "PLUGIN_CATALOG_MINIMUM_HOST_VERSION ?= $(if $(filter 5,$(PLUGIN_KIT_VERSION)),1.2.0,1.1.6)",
+            makefile,
+        )
+
+    def test_every_current_plugin_targets_plugin_kit5_and_mac_tools_1_2(self) -> None:
+        incompatible = []
+        for manifest_path in sorted(PLUGINS_ROOT.glob("*/plugin.json")):
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest["pluginKitVersion"] != 5 or manifest["minHostVersion"] != "1.2.0":
+                incompatible.append(manifest["id"])
+        self.assertEqual(incompatible, [])
 
     def test_new_plugin_kit_api_consumers_require_compatible_host(self) -> None:
         violations: list[str] = []

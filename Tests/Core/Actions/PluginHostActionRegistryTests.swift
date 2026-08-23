@@ -250,6 +250,50 @@ final class PluginHostActionRegistryTests: XCTestCase {
         }
     }
 
+    func testHostRemovesOnlyShortcutsExplicitlyRetiredByLoadedPlugin() throws {
+        let suiteName = "PluginHostActionRegistryTests.retired-shortcut.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let plugin = NativeActionTestPlugin()
+        plugin.retiredActionShortcutIDs = ["retired-action"]
+        let activeReference = ActionReference(key: plugin.definition.key)
+        let retiredReference = ActionReference(
+            key: ActionKey(providerID: plugin.metadata.id, actionID: "retired-action")
+        )
+        XCTAssertEqual(
+            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([
+                ActionShortcutAssignmentRecord(
+                    reference: activeReference,
+                    binding: ShortcutBinding(
+                        keyCode: UInt16(kVK_ANSI_A),
+                        modifiers: [.command, .option]
+                    )
+                ),
+                ActionShortcutAssignmentRecord(
+                    reference: retiredReference,
+                    binding: ShortcutBinding(
+                        keyCode: UInt16(kVK_ANSI_R),
+                        modifiers: [.command, .option]
+                    )
+                ),
+            ]),
+            .committed
+        )
+
+        _ = makeIsolatedHost(
+            plugin: plugin,
+            defaults: defaults,
+            shortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        )
+
+        XCTAssertEqual(
+            ActionShortcutAssignmentStore(userDefaults: defaults)
+                .assignments().map(\.reference),
+            [activeReference]
+        )
+    }
+
     func testPluginStateChangeRegistersPersistedShortcutWhenDynamicActionAppears() async throws {
         let suiteName = "PluginHostActionRegistryTests.dynamic-reappearance.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -342,6 +386,52 @@ final class PluginHostActionRegistryTests: XCTestCase {
         })?.status else {
             return XCTFail("Expected the removed parameterized catalog entry to become unavailable")
         }
+    }
+
+    func testActionSafetyStateChangeRebuildsRegistrySynchronously() async {
+        let plugin = SafetyStateActionTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+
+        XCTAssertEqual(
+            host.actionRegistry.definition(for: plugin.actionKey)?.risk,
+            .safe
+        )
+        XCTAssertEqual(
+            host.actionRegistry.definition(for: plugin.actionKey)?.externalInvocationPolicy,
+            .confirmAlways
+        )
+
+        plugin.requiresConfirmation = true
+        plugin.allowsRunLink = false
+        plugin.onActionSafetyStateChange?()
+
+        XCTAssertEqual(
+            host.actionRegistry.definition(for: plugin.actionKey)?.risk,
+            .confirmationRequired
+        )
+        XCTAssertEqual(
+            host.actionRegistry.definition(for: plugin.actionKey)?.externalInvocationPolicy,
+            .unavailable
+        )
+
+        let localOutcome = await host.actionExecutor.execute(
+            ActionInvocation(
+                reference: ActionReference(key: plugin.actionKey),
+                source: .manual,
+                mode: .background
+            ),
+            confirmationService: ActionExecutorConfirmationService { false }
+        )
+        XCTAssertEqual(localOutcome, .rejected(.confirmationDenied))
+        let runLinkOutcome = await host.actionExecutor.execute(
+            ActionInvocation(
+                reference: ActionReference(key: plugin.actionKey),
+                source: .runLink,
+                mode: .background
+            )
+        )
+        XCTAssertEqual(runLinkOutcome, .rejected(.externalInvocationUnavailable))
+        XCTAssertEqual(plugin.beginCount, 0)
     }
 
     func testConvergedShortcutAssignmentsRemainIndividuallyVisibleAndEditable() async throws {
@@ -809,6 +899,54 @@ final class PluginHostActionRegistryTests: XCTestCase {
         )
     }
 
+    func testActionShortcutChangesNotifyPluginAndPresetApplyRefreshesHostState() throws {
+        let suiteName = "PluginHostActionRegistryTests.preset-refresh.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let plugin = NativeActionTestPlugin()
+        let shortcutManager = GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        let host = makeIsolatedHost(
+            plugin: plugin,
+            defaults: defaults,
+            shortcutManager: shortcutManager
+        )
+        let reference = ActionReference(key: plugin.definition.key)
+        let initialChangeCount = plugin.actionShortcutAssignmentChangeCount
+        let firstBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_A),
+            modifiers: [.command, .option]
+        )
+
+        XCTAssertEqual(host.setActionShortcutBinding(firstBinding, to: reference), .success)
+        XCTAssertEqual(
+            plugin.actionShortcutAssignmentChangeCount,
+            initialChangeCount + 1
+        )
+
+        let revisionBeforePreset = host.shortcutBindingRevision
+        let applyPreset = try XCTUnwrap(plugin.applyActionShortcutPreset)
+        let replacementBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_B),
+            modifiers: [.command, .shift]
+        )
+
+        XCTAssertNil(applyPreset(
+            [plugin.definition.key.actionID],
+            [plugin.definition.key.actionID: replacementBinding]
+        ))
+        XCTAssertEqual(
+            host.actionShortcutSettingsItem(for: reference)?.assignment.binding,
+            replacementBinding
+        )
+        XCTAssertGreaterThan(host.shortcutBindingRevision, revisionBeforePreset)
+        XCTAssertEqual(
+            plugin.actionShortcutAssignmentChangeCount,
+            initialChangeCount + 2
+        )
+    }
+
     func testKeyPhaseActionShortcutRemainsInPluginSettings() throws {
         let plugin = EventHandlingActionBackedShortcutTestPlugin()
         let suiteName = "PluginHostActionRegistryTests-\(UUID().uuidString)"
@@ -1057,6 +1195,9 @@ private final class NativeActionTestPlugin:
     PluginActionProviding,
     PluginActionExposureProviding,
     PluginActionPermissionProviding,
+    PluginRetiredActionShortcutProviding,
+    PluginActionShortcutPresetApplying,
+    PluginActionShortcutAssignmentChangeHandling,
     ActionSurfaceAssignmentSummarizing
 {
     let metadata = PluginMetadata(
@@ -1076,6 +1217,13 @@ private final class NativeActionTestPlugin:
     var summarizedReference: ActionReference?
     var permissionTitles = ["测试权限"]
     var additionalDefinitions: [ActionDefinition] = []
+    var retiredActionShortcutIDs: Set<String> = []
+    var previewActionShortcutPreset: ((
+        Set<String>,
+        [String: ShortcutBinding]
+    ) -> PluginActionShortcutPresetPreview)?
+    var applyActionShortcutPreset: ((Set<String>, [String: ShortcutBinding]) -> String?)?
+    private(set) var actionShortcutAssignmentChangeCount = 0
     var operation: @MainActor @Sendable () async -> ActionExecutionResult = {
         .succeeded(message: "native")
     }
@@ -1102,6 +1250,10 @@ private final class NativeActionTestPlugin:
 
     var actionDefinitions: [ActionDefinition] {
         [definition] + additionalDefinitions
+    }
+
+    func actionShortcutAssignmentsDidChange() {
+        actionShortcutAssignmentChangeCount += 1
     }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
@@ -1349,4 +1501,55 @@ private final class EventHandlingActionBackedShortcutTestPlugin:
     override var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] { [] }
 
     func handleShortcutEvent(id: String, phase: PluginShortcutEventPhase) {}
+}
+
+@MainActor
+private final class SafetyStateActionTestPlugin:
+    MacToolsPlugin,
+    PluginActionProviding,
+    PluginActionSafetyStateChangeProviding
+{
+    let metadata = PluginMetadata(
+        id: "safety-state-action-provider",
+        title: "安全状态操作插件",
+        iconName: "lock.shield",
+        iconTint: .blue,
+        order: 1,
+        defaultDescription: "测试同步安全状态"
+     )
+    var onStateChange: (() -> Void)?
+    var onActionSafetyStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requiresConfirmation = false
+    var allowsRunLink = true
+    var beginCount = 0
+
+    var actionKey: ActionKey {
+        ActionKey(providerID: metadata.id, actionID: "run")
+     }
+
+    var actionDefinitions: [ActionDefinition] {
+         [
+            ActionDefinition(
+                key: actionKey,
+                title: "运行",
+                description: "运行测试操作",
+                systemImage: "lock.shield",
+                risk: requiresConfirmation ? .confirmationRequired : .safe,
+                confirmation: ActionConfirmation(
+                    title: "运行？",
+                    message: "运行测试操作。",
+                    confirmButtonTitle: "运行"
+                 ),
+                externalInvocationPolicy: allowsRunLink ? .confirmAlways : .unavailable,
+                capabilities: [.background]
+             ),
+         ]
+     }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        beginCount += 1
+        return ActionExecutionHandle { .succeeded() }
+     }
 }

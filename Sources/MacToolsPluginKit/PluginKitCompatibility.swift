@@ -1,5 +1,5 @@
 import Foundation
 
 public enum PluginKitCompatibility {
-    public static let currentVersion = 4
+    public static let currentVersion = 5
 }

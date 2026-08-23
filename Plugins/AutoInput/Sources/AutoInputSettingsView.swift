@@ -16,12 +16,38 @@ struct AutoInputSettingsView: View {
         case rules
     }
 
+    private enum NumericField: Hashable {
+        case reminderInterval
+        case appSwitchCount
+    }
+
     @ObservedObject var store: AutoInputStore
     @ObservedObject var controller: AutoInputController
     let localization: PluginLocalization
     let onChange: () -> Void
     let onHUDChange: (Bool) -> Void
     let section: SectionKind
+    @State private var reminderIntervalText: String
+    @State private var appSwitchCountText: String
+    @FocusState private var focusedNumericField: NumericField?
+
+    init(
+        store: AutoInputStore,
+        controller: AutoInputController,
+        localization: PluginLocalization,
+        onChange: @escaping () -> Void,
+        onHUDChange: @escaping (Bool) -> Void,
+        section: SectionKind
+    ) {
+        self.store = store
+        self.controller = controller
+        self.localization = localization
+        self.onChange = onChange
+        self.onHUDChange = onHUDChange
+        self.section = section
+        _reminderIntervalText = State(initialValue: "\(store.inputHUDReminderIntervalSeconds)")
+        _appSwitchCountText = State(initialValue: "\(store.inputHUDAppSwitchReminderCount)")
+    }
 
     @ViewBuilder
     var body: some View {
@@ -39,6 +65,12 @@ struct AutoInputSettingsView: View {
             pluginID: "auto-input",
             entryID: searchEntryID
         )
+        .onChange(of: store.inputHUDReminderIntervalSeconds) { _, value in
+            reminderIntervalText = "\(value)"
+        }
+        .onChange(of: store.inputHUDAppSwitchReminderCount) { _, value in
+            appSwitchCountText = "\(value)"
+        }
     }
 
     private var searchEntryID: String {
@@ -94,11 +126,271 @@ struct AutoInputSettingsView: View {
                 PluginSettingsListDivider()
                 hudSizePicker
                 PluginSettingsListDivider()
+                reducedHUDFrequencyToggle
+                if store.reducesFrequentHUDPresentations {
+                    PluginSettingsListDivider()
+                    hudReminderIntervalRow
+                    PluginSettingsListDivider()
+                    hudAppSwitchReminderRow
+                }
+                PluginSettingsListDivider()
                 interactiveHUDToggle
                 PluginSettingsListDivider()
                 hudPositionPicker
             }
         }
+    }
+
+    private var reducedHUDFrequencyToggle: some View {
+        settingToggle(
+            icon: "timer",
+            title: localization.string(
+                "settings.hud.reducedFrequency.title",
+                defaultValue: "减少频繁提示"
+            ),
+            description: localization.string(
+                "settings.hud.reducedFrequency.description",
+                defaultValue: "首次聚焦和输入法变化时立即提示。输入法不变时，达到下方任一条件后再次提示。"
+            ),
+            isOn: Binding(
+                get: { store.reducesFrequentHUDPresentations },
+                set: { value in
+                    store.setReducesFrequentHUDPresentations(value)
+                    onChange()
+                }
+            )
+        )
+    }
+
+    private var hudReminderIntervalRow: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            settingLabel(
+                icon: "clock.arrow.circlepath",
+                title: hudReminderIntervalTitle,
+                description: hudReminderIntervalDescription
+            )
+
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                PluginSettingsSlider(
+                    value: Binding(
+                        get: { Double(store.inputHUDReminderIntervalSeconds) },
+                        set: { value in
+                            store.setInputHUDReminderIntervalSeconds(Int(value.rounded()))
+                            onChange()
+                        }
+                    ),
+                    in: Double(AutoInputHUDReminderLimits.minimumIntervalSeconds)...Double(AutoInputHUDReminderLimits.maximumIntervalSeconds),
+                    step: 5
+                )
+                .frame(minWidth: 120, idealWidth: 150, maxWidth: 180)
+                .accessibilityLabel(Text(hudReminderIntervalTitle))
+                .accessibilityValue(Text(
+                    "\(store.inputHUDReminderIntervalSeconds) \(hudReminderIntervalUnit)"
+                ))
+                .accessibilityHint(Text(hudReminderIntervalDescription))
+                .accessibilityIdentifier("auto-input.hud-reminder-interval-slider")
+
+                numericTextField(
+                    text: $reminderIntervalText,
+                    validRange: AutoInputHUDReminderLimits.minimumIntervalSeconds...AutoInputHUDReminderLimits.maximumIntervalSeconds,
+                    field: .reminderInterval,
+                    accessibilityLabel: hudReminderIntervalTitle,
+                    accessibilityHint: hudReminderIntervalDescription,
+                    accessibilityIdentifier: "auto-input.hud-reminder-interval-field",
+                    update: { value in
+                        store.setInputHUDReminderIntervalSeconds(value)
+                    },
+                    commit: commitReminderIntervalText
+                )
+
+                Text(localization.string(
+                    "settings.hud.reminderInterval.unit",
+                    defaultValue: "秒"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 24, alignment: .leading)
+            }
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private var hudAppSwitchReminderRow: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            settingLabel(
+                icon: "arrow.triangle.swap",
+                title: hudAppSwitchReminderTitle,
+                description: hudAppSwitchReminderDescription
+            )
+
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                numericTextField(
+                    text: $appSwitchCountText,
+                    validRange: AutoInputHUDReminderLimits.minimumAppSwitchCount...AutoInputHUDReminderLimits.maximumAppSwitchCount,
+                    field: .appSwitchCount,
+                    accessibilityLabel: hudAppSwitchReminderTitle,
+                    accessibilityHint: hudAppSwitchReminderDescription,
+                    accessibilityIdentifier: "auto-input.hud-app-switch-field",
+                    update: { value in
+                        store.setInputHUDAppSwitchReminderCount(value)
+                    },
+                    commit: commitAppSwitchCountText
+                )
+
+                Text(localization.string(
+                    "settings.hud.appSwitchReminder.unit",
+                    defaultValue: "次"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+
+                Stepper(
+                    "",
+                    value: Binding(
+                        get: { store.inputHUDAppSwitchReminderCount },
+                        set: { value in
+                            store.setInputHUDAppSwitchReminderCount(value)
+                            onChange()
+                        }
+                    ),
+                    in: AutoInputHUDReminderLimits.minimumAppSwitchCount...AutoInputHUDReminderLimits.maximumAppSwitchCount
+                )
+                .labelsHidden()
+                .controlSize(.small)
+                .accessibilityLabel(Text(hudAppSwitchReminderTitle))
+                .accessibilityValue(Text(
+                    "\(store.inputHUDAppSwitchReminderCount) \(hudAppSwitchReminderUnit)"
+                ))
+                .accessibilityHint(Text(hudAppSwitchReminderDescription))
+                .accessibilityIdentifier("auto-input.hud-app-switch-stepper")
+            }
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private func settingLabel(
+        icon: String,
+        title: String,
+        description: String
+    ) -> some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: icon)
+                .pluginSettingsRowIconStyle()
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Text(description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func numericTextField(
+        text: Binding<String>,
+        validRange: ClosedRange<Int>,
+        field: NumericField,
+        accessibilityLabel: String,
+        accessibilityHint: String,
+        accessibilityIdentifier: String,
+        update: @escaping (Int) -> Void,
+        commit: @escaping () -> Void
+    ) -> some View {
+        TextField(
+            "",
+            text: Binding(
+                get: { text.wrappedValue },
+                set: { value in
+                    let digits = value.filter(\.isNumber)
+                    text.wrappedValue = digits
+                    guard let number = Int(digits), validRange.contains(number) else { return }
+                    update(number)
+                    onChange()
+                }
+            )
+        )
+        .textFieldStyle(.roundedBorder)
+        .font(PluginSettingsTheme.Typography.monospacedValue)
+        .multilineTextAlignment(.trailing)
+        .frame(width: 58)
+        .focused($focusedNumericField, equals: field)
+        .onChange(of: focusedNumericField) { previousField, currentField in
+            if previousField == field && currentField != field {
+                commit()
+            }
+        }
+        .onSubmit(commit)
+        .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityHint(Text(accessibilityHint))
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var hudReminderIntervalTitle: String {
+        localization.string(
+            "settings.hud.reminderInterval.title",
+            defaultValue: "提示间隔"
+        )
+    }
+
+    private var hudReminderIntervalDescription: String {
+        localization.string(
+            "settings.hud.reminderInterval.description",
+            defaultValue: "经过这段时间后，在下一次有效聚焦时再次提示。"
+        )
+    }
+
+    private var hudReminderIntervalUnit: String {
+        localization.string(
+            "settings.hud.reminderInterval.unit",
+            defaultValue: "秒"
+        )
+    }
+
+    private var hudAppSwitchReminderTitle: String {
+        localization.string(
+            "settings.hud.appSwitchReminder.title",
+            defaultValue: "应用切换提示"
+        )
+    }
+
+    private var hudAppSwitchReminderDescription: String {
+        localization.string(
+            "settings.hud.appSwitchReminder.description",
+            defaultValue: "达到此切换次数后，即使尚未到提示间隔，也会在输入区域聚焦时提示。"
+        )
+    }
+
+    private var hudAppSwitchReminderUnit: String {
+        localization.string(
+            "settings.hud.appSwitchReminder.unit",
+            defaultValue: "次"
+        )
+    }
+
+    private func commitReminderIntervalText() {
+        let value = clamped(
+            Int(reminderIntervalText) ?? store.inputHUDReminderIntervalSeconds,
+            to: AutoInputHUDReminderLimits.minimumIntervalSeconds...AutoInputHUDReminderLimits.maximumIntervalSeconds
+        )
+        store.setInputHUDReminderIntervalSeconds(value)
+        reminderIntervalText = "\(store.inputHUDReminderIntervalSeconds)"
+        onChange()
+    }
+
+    private func commitAppSwitchCountText() {
+        let value = clamped(
+            Int(appSwitchCountText) ?? store.inputHUDAppSwitchReminderCount,
+            to: AutoInputHUDReminderLimits.minimumAppSwitchCount...AutoInputHUDReminderLimits.maximumAppSwitchCount
+        )
+        store.setInputHUDAppSwitchReminderCount(value)
+        appSwitchCountText = "\(store.inputHUDAppSwitchReminderCount)"
+        onChange()
+    }
+
+    private func clamped(_ value: Int, to range: ClosedRange<Int>) -> Int {
+        min(max(value, range.lowerBound), range.upperBound)
     }
 
     private var interactiveHUDToggle: some View {

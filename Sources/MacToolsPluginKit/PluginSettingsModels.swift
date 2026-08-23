@@ -270,6 +270,8 @@ public struct PluginSettingsRow: Identifiable {
     public let systemImage: String?
     public let keywords: [String]
     public let help: String?
+    public let helpItems: [String]
+    public let helpTone: PluginStatusTone
     public let error: String?
     public let isEnabled: Bool
     public let isVisible: Bool
@@ -282,6 +284,8 @@ public struct PluginSettingsRow: Identifiable {
         systemImage: String? = nil,
         keywords: [String] = [],
         help: String? = nil,
+        helpItems: [String] = [],
+        helpTone: PluginStatusTone = .neutral,
         error: String? = nil,
         isEnabled: Bool = true,
         isVisible: Bool = true,
@@ -293,6 +297,8 @@ public struct PluginSettingsRow: Identifiable {
         self.systemImage = systemImage
         self.keywords = keywords
         self.help = help
+        self.helpItems = helpItems
+        self.helpTone = helpTone
         self.error = error
         self.isEnabled = isEnabled
         self.isVisible = isVisible
@@ -307,6 +313,7 @@ public enum PluginSettingsControl {
         options: [PluginSettingsOption],
         style: PluginSettingsPickerStyle
     )
+    case choiceGroup(selectionID: String, options: [PluginSettingsOption])
     case slider(
         value: Double,
         range: ClosedRange<Double>,
@@ -316,6 +323,11 @@ public enum PluginSettingsControl {
     case textField(value: String, prompt: String?, isRequired: Bool)
     case secureField(value: String, prompt: String?, isRequired: Bool)
     case action(title: String, role: PluginSettingsActionRole)
+    case confirmationAction(
+        title: String,
+        role: PluginSettingsActionRole,
+        confirmation: PluginSettingsConfirmation
+    )
     case status(
         text: String,
         systemImage: String,
@@ -328,11 +340,18 @@ public struct PluginSettingsOption: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let description: String?
+    public let descriptionTone: PluginStatusTone
 
-    public init(id: String, title: String, description: String? = nil) {
+    public init(
+        id: String,
+        title: String,
+        description: String? = nil,
+        descriptionTone: PluginStatusTone = .neutral
+    ) {
         self.id = id
         self.title = title
         self.description = description
+        self.descriptionTone = descriptionTone
     }
 }
 
@@ -340,7 +359,6 @@ public enum PluginSettingsPickerStyle: Sendable {
     case automatic
     case menu
     case segmented
-    case radioGroup
 }
 
 /// Describes a slider readout without freezing it to the page snapshot's value.
@@ -376,10 +394,29 @@ public struct PluginSettingsSliderValueFormat: Equatable, Sendable {
     }
 }
 
-public enum PluginSettingsActionRole: Sendable {
+public enum PluginSettingsActionRole: Equatable, Sendable {
     case normal
     case prominent
     case destructive
+}
+
+public struct PluginSettingsConfirmation: Equatable, Sendable {
+    public let title: String
+    public let message: String
+    public let confirmButtonTitle: String
+    public let cancelButtonTitle: String
+
+    public init(
+        title: String,
+        message: String,
+        confirmButtonTitle: String,
+        cancelButtonTitle: String
+    ) {
+        self.title = title
+        self.message = message
+        self.confirmButtonTitle = confirmButtonTitle
+        self.cancelButtonTitle = cancelButtonTitle
+    }
 }
 
 public enum PluginSettingsAction: Equatable, Sendable {
@@ -567,7 +604,8 @@ public enum PluginSettingsValidator {
 
     private static func validate(_ row: PluginSettingsRow) throws {
         switch row.control {
-        case let .picker(selectionID, options, _):
+        case let .picker(selectionID, options, _),
+             let .choiceGroup(selectionID, options):
             var optionIDs: Set<String> = []
             for option in options {
                 guard !option.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -602,7 +640,7 @@ public enum PluginSettingsValidator {
             if let valueFormat, !(0...12).contains(valueFormat.fractionDigits) {
                 throw PluginSettingsValidationError.invalidSliderValueFormat(rowID: row.id)
             }
-        case .toggle, .textField, .secureField, .action, .status:
+        case .toggle, .textField, .secureField, .action, .confirmationAction, .status:
             break
         }
     }

@@ -175,20 +175,6 @@ enum AppDockVisibilityPolicy {
 }
 
 @MainActor
-enum SettingsToolbarPolicy {
-    static func removeSidebarToggle(from toolbar: NSToolbar?) {
-        guard let toolbar else { return }
-
-        while let index = toolbar.items.firstIndex(where: {
-            $0.itemIdentifier == .toggleSidebar
-                || $0.itemIdentifier.rawValue.localizedCaseInsensitiveContains("toggleSidebar")
-        }) {
-            toolbar.removeItem(at: index)
-        }
-    }
-}
-
-@MainActor
 enum AppDockVisibilityController {
     static func update(hasVisibleSettingsWindow: Bool) {
         update(
@@ -417,7 +403,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private(set) var commandPalettePanel: NSPanel?
     private(set) var commandPaletteState: StandaloneCommandPaletteState?
     private var runtimeLocaleCancellable: AnyCancellable?
-    private var settingsNavigationCancellable: AnyCancellable?
     private var appDeactivationObserver: NSObjectProtocol?
     private var appearanceObserver: NSObjectProtocol?
     private var panelPresentationActions = SettingsPanelPresentationActions()
@@ -429,6 +414,27 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     static var commandPaletteWindowTitle: String {
         AppL10n.search("search.title", defaultValue: "搜索 MacTools")
+    }
+
+    var focusedWindowLayoutTarget: NSWindow? {
+        guard let settingsWindow,
+              Self.isEligibleFocusedWindowLayoutTarget(
+                  isKeyWindow: settingsWindow.isKeyWindow,
+                  isVisible: settingsWindow.isVisible,
+                  isUnifiedSearchPresented: settingsNavigationCoordinator?.isUnifiedSearchPresented == true
+              )
+        else {
+            return nil
+        }
+        return settingsWindow
+    }
+
+    static func isEligibleFocusedWindowLayoutTarget(
+        isKeyWindow: Bool,
+        isVisible: Bool,
+        isUnifiedSearchPresented: Bool
+    ) -> Bool {
+        isKeyWindow && isVisible && !isUnifiedSearchPresented
     }
 
     init(
@@ -449,7 +455,8 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.menuBarPanelThemeStore = menuBarPanelThemeStore
         self.appearanceUserDefaults = appearanceUserDefaults
         self.settingsSidebarPreferences = SettingsSidebarPreferencesStore(
-            userDefaults: appearanceUserDefaults
+            userDefaults: appearanceUserDefaults,
+            preferencesBackupChangeReporter: pluginHost.preferencesBackupChangeReporter
         )
         self.commandPaletteFocusRestoration = commandPaletteFocusRestoration
         super.init()
@@ -488,7 +495,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     isolated deinit {
         runtimeLocaleCancellable?.cancel()
-        settingsNavigationCancellable?.cancel()
         if let appDeactivationObserver {
             NotificationCenter.default.removeObserver(appDeactivationObserver)
         }
@@ -502,12 +508,15 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     func showUnifiedSearch() {
+        pluginHost.captureCurrentFocusedWindowTarget()
         launchAtLoginController.refreshStatus()
+        pluginHost.refreshActionPresentations(providerIDs: ["apple-shortcuts"])
         presentSettings(.settings)
         settingsNavigationCoordinator?.presentUnifiedSearch(origin: .keyboard)
     }
 
     func windowForActionConfirmation() -> NSWindow? {
+        pluginHost.captureCurrentFocusedWindowTarget()
         presentSettings(.settings)
         return settingsWindow
     }
@@ -532,7 +541,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             return
         }
 
+        pluginHost.captureCurrentFocusedWindowTarget()
         launchAtLoginController.refreshStatus()
+        pluginHost.refreshActionPresentations(providerIDs: ["apple-shortcuts"])
         onProgrammaticSettingsPresentation()
         let state = commandPaletteState ?? StandaloneCommandPaletteState()
         let panel = commandPalettePanel ?? makeCommandPalettePanel(state: state)
@@ -613,6 +624,41 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         )
     }
 
+    private func configureSettingsInitialResponder(
+        in window: NSWindow,
+        hostingView: NSView
+    ) {
+        window.layoutIfNeeded()
+
+        let listViews = descendantViews(of: hostingView)
+            .compactMap { $0 as? NSScrollView }
+            .compactMap(\.documentView)
+            .compactMap { $0 as? NSTableView }
+
+        let sidebarList: NSTableView?
+        if hostingView.userInterfaceLayoutDirection == .rightToLeft {
+            sidebarList = listViews.max { lhs, rhs in
+                lhs.convert(lhs.bounds, to: hostingView).maxX
+                    < rhs.convert(rhs.bounds, to: hostingView).maxX
+            }
+        } else {
+            sidebarList = listViews.min { lhs, rhs in
+                lhs.convert(lhs.bounds, to: hostingView).minX
+                    < rhs.convert(rhs.bounds, to: hostingView).minX
+            }
+        }
+
+        if sidebarList?.acceptsFirstResponder == true {
+            window.initialFirstResponder = sidebarList
+        }
+    }
+
+    private func descendantViews(of view: NSView) -> [NSView] {
+        view.subviews.flatMap { subview in
+            [subview] + descendantViews(of: subview)
+        }
+    }
+
     private func makeSettingsWindow() -> NSWindow {
         let navigationCoordinator = SettingsNavigationCoordinator(
             pluginHost: pluginHost,
@@ -656,6 +702,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         )
         hostingView.sizingOptions = []
         window.contentView = hostingView
+        configureSettingsInitialResponder(in: window, hostingView: hostingView)
         window.toolbarStyle = .unified
         window.delegate = self
         window.isReleasedWhenClosed = false
@@ -664,22 +711,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         }
         window.center()
         settingsNavigationCoordinator = navigationCoordinator
-        settingsNavigationCancellable = navigationCoordinator.$destination
-            .dropFirst()
-            .sink { [weak self, weak window] _ in
-                DispatchQueue.main.async { [weak self, weak window] in
-                    guard
-                        let self,
-                        let window,
-                        settingsWindow === window
-                    else {
-                        return
-                    }
-
-                    window.layoutIfNeeded()
-                    SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
-                }
-            }
         return window
     }
 
@@ -772,7 +803,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     func presentSettings(_ request: SettingsPresentationRequest) {
         dismissCommandPalette(restoringFocus: false)
         let window = settingsWindow ?? makeSettingsWindow()
-        let wasVisible = window.isVisible
         let pendingAppUpdateVersion: String?
 
         settingsNavigationCoordinator?.dismissUnifiedSearch()
@@ -813,15 +843,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         // SwiftUI installs its toolbar when the window becomes visible. Finish that
         // layout before restoring the content size.
         window.layoutIfNeeded()
-        SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
         window.setContentSize(contentSize)
         window.layoutIfNeeded()
         onProgrammaticSettingsPresentation()
-
-        DispatchQueue.main.async { [weak self, weak window] in
-            guard let self, let window, settingsWindow === window else { return }
-            SettingsToolbarPolicy.removeSidebarToggle(from: window.toolbar)
-        }
 
         if let pendingAppUpdateVersion {
             settingsNavigationCoordinator?.requestAboutUpdateAction(
@@ -829,28 +853,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             )
         }
 
-        if !wasVisible {
-            clearAutomaticInitialFocusAfterPresentation(in: window)
-        }
-    }
-
-    private func clearAutomaticInitialFocusAfterPresentation(in window: NSWindow) {
-        // SwiftUI assigns an initial responder after installing the visible hierarchy.
-        // Wait for that pass, then leave focus entry to Tab or an explicit search request.
-        DispatchQueue.main.async { [weak self, weak window] in
-            guard
-                let self,
-                let window,
-                settingsWindow === window,
-                window.isVisible,
-                settingsNavigationCoordinator?.isUnifiedSearchPresented != true,
-                settingsNavigationCoordinator?.focusedSearchField == nil
-            else {
-                return
-            }
-
-            window.makeFirstResponder(nil)
-        }
     }
 
     private func handleLocalKeyboardCommand(_ command: MacToolsLocalKeyboardCommand) -> Bool {
@@ -925,8 +927,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
         window.delegate = nil
         window.contentView = nil
-        settingsNavigationCancellable?.cancel()
-        settingsNavigationCancellable = nil
         settingsWindow = nil
         settingsNavigationCoordinator = nil
         AppDockVisibilityController.update(hasVisibleSettingsWindow: false)

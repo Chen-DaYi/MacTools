@@ -14,7 +14,7 @@ enum GeneralSettingsCardLayout {
 
 private enum SettingsSplitViewLayout {
     static let sidebarMinWidth: CGFloat = 180
-    static let sidebarIdealWidth: CGFloat = 220
+    static let sidebarIdealWidth: CGFloat = 232
     static let sidebarMaxWidth: CGFloat = 280
     static let detailMinWidth: CGFloat = 560
 }
@@ -80,8 +80,8 @@ struct SettingsView: View {
             configurationItems: pluginHost.pluginSettingsItems
         )
 
-        return ZStack {
-            NavigationSplitView {
+        return NavigationSplitView {
+            SettingsSidebarColumn {
                 SettingsSidebar(
                     configurationItems: configurationItems,
                     orderedDestinations: orderedSidebarDestinations,
@@ -91,47 +91,44 @@ struct SettingsView: View {
                         navigationCoordinator.presentUnifiedSearch(origin: .settingsSidebar)
                     }
                 )
-                .navigationSplitViewColumnWidth(
-                    min: SettingsSplitViewLayout.sidebarMinWidth,
-                    ideal: SettingsSplitViewLayout.sidebarIdealWidth,
-                    max: SettingsSplitViewLayout.sidebarMaxWidth
-                )
-            } detail: {
-                SettingsDetailColumn {
-                    SettingsDetailPane(
-                        pluginHost: pluginHost,
-                        navigationCoordinator: navigationCoordinator,
-                        destination: navigationCoordinator.destination,
-                        uninstallConfirmationSession: uninstallConfirmationSession,
-                        appUpdater: appUpdater,
-                        menuBarIconSettings: menuBarIconSettings,
-                        menuBarIconGallery: menuBarIconGallery,
-                        launchAtLoginController: launchAtLoginController,
-                        menuBarPanelThemeStore: menuBarPanelThemeStore,
-                        appearanceUserDefaults: appearanceUserDefaults,
-                        showDashboard: showDashboard,
-                        showFeaturePanel: showFeaturePanel
-                    )
-                }
-                .frame(
-                    minWidth: SettingsSplitViewLayout.detailMinWidth,
-                    maxWidth: .infinity,
-                    maxHeight: .infinity
+            }
+            .toolbar(removing: .sidebarToggle)
+            .navigationSplitViewColumnWidth(
+                min: SettingsSplitViewLayout.sidebarMinWidth,
+                ideal: SettingsSplitViewLayout.sidebarIdealWidth,
+                max: SettingsSplitViewLayout.sidebarMaxWidth
+            )
+        } detail: {
+            SettingsDetailColumn {
+                SettingsDetailPane(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    destination: navigationCoordinator.destination,
+                    uninstallConfirmationSession: uninstallConfirmationSession,
+                    appUpdater: appUpdater,
+                    menuBarIconSettings: menuBarIconSettings,
+                    menuBarIconGallery: menuBarIconGallery,
+                    launchAtLoginController: launchAtLoginController,
+                    menuBarPanelThemeStore: menuBarPanelThemeStore,
+                    appearanceUserDefaults: appearanceUserDefaults,
+                    showDashboard: showDashboard,
+                    showFeaturePanel: showFeaturePanel
                 )
             }
-            .navigationSplitViewStyle(.balanced)
+            .frame(
+                minWidth: SettingsSplitViewLayout.detailMinWidth,
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    SettingsHistoryNavigationControls(
-                        coordinator: navigationCoordinator
-                    )
-                    .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
-                    .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
-                    .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
-                    .accessibilityIdentifier("mactools.settings.history-navigation")
-                }
-
                 if #available(macOS 26.0, *) {
+                    ToolbarItem(placement: .navigation) {
+                        historyNavigationControls
+                    }
+                    .sharedBackgroundVisibility(
+                        navigationCoordinator.isUnifiedSearchPresented ? .hidden : .automatic
+                    )
+
                     ToolbarItem(placement: .navigation) {
                         SettingsDetailToolbarTitle(
                             title: detailTitle,
@@ -141,6 +138,10 @@ struct SettingsView: View {
                     .sharedBackgroundVisibility(.hidden)
                 } else {
                     ToolbarItem(placement: .navigation) {
+                        historyNavigationControls
+                    }
+
+                    ToolbarItem(placement: .navigation) {
                         SettingsDetailToolbarTitle(
                             title: detailTitle,
                             isHidden: navigationCoordinator.isUnifiedSearchPresented
@@ -148,35 +149,37 @@ struct SettingsView: View {
                     }
                 }
             }
-            .toolbar(removing: .sidebarToggle)
-            .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
-                navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
+        .navigationSplitViewStyle(.balanced)
+        .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
+            navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
+        .blur(
+            radius: navigationCoordinator.isUnifiedSearchPresented
+                && !accessibilityReduceTransparency
+                ? 2.5
+                : 0
+        )
+        .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+        .overlay {
+            Group {
+                if navigationCoordinator.isUnifiedSearchPresented {
+                    UnifiedSearchPresentationView(
+                        pluginHost: pluginHost,
+                        launchAtLoginController: launchAtLoginController,
+                        appearanceUserDefaults: appearanceUserDefaults,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
-            .blur(
-                radius: navigationCoordinator.isUnifiedSearchPresented
-                    && !accessibilityReduceTransparency
-                    ? 2.5
-                    : 0
-            )
-            .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
-            .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
-
-            if navigationCoordinator.isUnifiedSearchPresented {
-                UnifiedSearchPresentationView(
-                    pluginHost: pluginHost,
-                    launchAtLoginController: launchAtLoginController,
-                    appearanceUserDefaults: appearanceUserDefaults,
-                    navigationCoordinator: navigationCoordinator
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                .zIndex(1)
-            }
+            .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
         }
         .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
-        .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
     }
 
     private var settingsSelection: Binding<SettingsNavigationDestination> {
@@ -185,6 +188,16 @@ struct SettingsView: View {
         } set: { destination in
             navigationCoordinator.navigate(to: destination)
         }
+    }
+
+    private var historyNavigationControls: some View {
+        SettingsHistoryNavigationControls(
+            coordinator: navigationCoordinator
+        )
+        .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
+        .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+        .accessibilityIdentifier("mactools.settings.history-navigation")
     }
 
     private var layoutDirection: LayoutDirection {
@@ -283,7 +296,6 @@ struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
-    private let appearanceUserDefaults: UserDefaults
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
     @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
@@ -305,10 +317,19 @@ struct GeneralSettingsView: View {
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
         self.menuBarPanelThemeStore = menuBarPanelThemeStore
-        self.appearanceUserDefaults = appearanceUserDefaults
         _appearancePreferenceRawValue = AppStorage(
             wrappedValue: AppAppearancePreference.system.rawValue,
             AppAppearancePreference.userDefaultsKey,
+            store: appearanceUserDefaults
+        )
+        _languagePreferenceRawValue = AppStorage(
+            wrappedValue: AppLanguagePreference.system.rawValue,
+            AppLanguagePreference.userDefaultsKey,
+            store: appearanceUserDefaults
+        )
+        _clickBehaviorRawValue = AppStorage(
+            wrappedValue: MenuBarClickBehaviorPreference.standard.rawValue,
+            MenuBarClickBehaviorPreference.userDefaultsKey,
             store: appearanceUserDefaults
         )
     }
@@ -331,8 +352,7 @@ struct GeneralSettingsView: View {
                 }
                 Section {
                     AppearanceSettingsRow(
-                        selectionRawValue: $appearancePreferenceRawValue,
-                        userDefaults: appearanceUserDefaults
+                        selectionRawValue: appearancePreferenceBinding
                     )
                         .generalSettingsSearchAnchor(
                             target: .appearance,
@@ -346,7 +366,7 @@ struct GeneralSettingsView: View {
                         ) ?? .system
                     )
                     .settingsGroupedFormRowWidth(widths.sectionLayout)
-                    LanguageSettingsRow(selectionRawValue: $languagePreferenceRawValue)
+                    LanguageSettingsRow(selectionRawValue: languagePreferenceBinding)
                         .generalSettingsSearchAnchor(
                             target: .language,
                             activeTarget: activeSearchTarget
@@ -368,7 +388,7 @@ struct GeneralSettingsView: View {
                         activeTarget: activeSearchTarget
                     )
                     .settingsGroupedFormRowWidth(widths.sectionLayout)
-                    MenuBarClickBehaviorSettingsRow(selectionRawValue: $clickBehaviorRawValue)
+                    MenuBarClickBehaviorSettingsRow(selectionRawValue: clickBehaviorPreferenceBinding)
                         .generalSettingsSearchAnchor(
                             target: .menuBarClickBehavior,
                             activeTarget: activeSearchTarget
@@ -462,6 +482,42 @@ struct GeneralSettingsView: View {
             activeSearchTarget = nil
             navigationCoordinator.clearSearchRevealRequest(request)
         }
+    }
+
+    private var appearancePreferenceBinding: Binding<String> {
+        Binding(
+            get: { appearancePreferenceRawValue },
+            set: { rawValue in
+                guard pluginHost.setApplicationAppearancePreference(rawValue: rawValue) else {
+                    return
+                }
+                appearancePreferenceRawValue = rawValue
+            }
+        )
+    }
+
+    private var languagePreferenceBinding: Binding<String> {
+        Binding(
+            get: { languagePreferenceRawValue },
+            set: { rawValue in
+                guard pluginHost.setApplicationLanguagePreference(rawValue: rawValue) else {
+                    return
+                }
+                languagePreferenceRawValue = rawValue
+            }
+        )
+    }
+
+    private var clickBehaviorPreferenceBinding: Binding<String> {
+        Binding(
+            get: { clickBehaviorRawValue },
+            set: { rawValue in
+                guard pluginHost.setMenuBarClickBehaviorPreference(rawValue: rawValue) else {
+                    return
+                }
+                clickBehaviorRawValue = rawValue
+            }
+        )
     }
 }
 
@@ -670,6 +726,11 @@ private struct PendingPreferencesImport: Identifiable {
 }
 
 private struct PreferencesBackupSettingsRow: View {
+    private enum ManualBackupFeedback {
+        case created
+        case unchanged
+    }
+
     @ObservedObject var pluginHost: PluginHost
     @State private var pendingImport: PendingPreferencesImport?
     @State private var isChoosingExport = false
@@ -679,46 +740,137 @@ private struct PreferencesBackupSettingsRow: View {
     @State private var alertMessage: String?
     @State private var isPreparingImport = false
     @State private var isImporting = false
+    @State private var isBackingUp = false
+    @State private var manualBackupFeedback: ManualBackupFeedback?
 
     var body: some View {
-        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
-            ZStack {
-                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.12))
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.12))
 
-                Image(systemName: "externaldrive.badge.checkmark")
-                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+                    Image(systemName: "externaldrive.badge.checkmark")
+                        .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(AppL10n.preferencesBackup("preferencesBackup.title", defaultValue: "偏好设置备份"))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.description",
+                        defaultValue: "自动备份保存在本机，包含可移植的应用与插件设置；不包含权限、缓存、凭证或其他私密数据。"
+                    ))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+            .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+            .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(AppL10n.preferencesBackup("preferencesBackup.title", defaultValue: "导出与导入偏好设置"))
-                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+            backupRowDivider
 
-                Text(AppL10n.preferencesBackup(
-                    "preferencesBackup.description",
-                    defaultValue: "包含应用偏好、插件布局、快捷键、工作流、自动化规则、已保存的运行链接和支持导出的插件设置；不包含权限、缓存、凭证或运行历史。"
-                ))
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            Toggle(
+                isOn: Binding(
+                    get: { pluginHost.automaticPreferencesBackupEnabled },
+                    set: { enabled in
+                        pluginHost.setAutomaticPreferencesBackupEnabled(enabled)
+                    }
+                )
+            ) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(
+                        AppL10n.preferencesBackup(
+                            "preferencesBackup.automatic.enabled",
+                            defaultValue: "自动备份设置"
+                        )
+                    )
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+
+                    automaticBackupSummaryView
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+            .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
 
-            HStack(spacing: 8) {
-                Button(AppL10n.preferencesBackup("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
+            backupRowDivider
+
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.manual.title",
+                        defaultValue: "手动备份"
+                    ))
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+
+                    if let manualBackupFeedback {
+                        Text(manualBackupFeedbackText(manualBackupFeedback))
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                Button(
+                    AppL10n.preferencesBackup(
+                        "preferencesBackup.automatic.backUpNow",
+                        defaultValue: "立即备份"
+                    ),
+                    action: backUpNow
+                )
+                    .buttonStyle(.bordered)
+                    .disabled(isPreparingImport || isImporting || isBackingUp)
+
+                Button(
+                    AppL10n.preferencesBackup(
+                        "preferencesBackup.automatic.openFolder",
+                        defaultValue: "打开备份文件夹"
+                    ),
+                    action: openBackupFolder
+                )
                     .buttonStyle(.bordered)
                     .disabled(isPreparingImport || isImporting)
+            }
+            .controlSize(.small)
+            .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+            .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+
+            backupRowDivider
+
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Text(AppL10n.preferencesBackup(
+                    "preferencesBackup.transfer.title",
+                    defaultValue: "迁移偏好设置"
+                ))
+                .font(PluginSettingsTheme.Typography.rowTitle)
+
+                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                Button(AppL10n.preferencesBackup("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
+                    .buttonStyle(.bordered)
+                    .disabled(isPreparingImport || isImporting || isBackingUp)
 
                 Button(AppL10n.preferencesBackup("preferencesBackup.import", defaultValue: "导入偏好设置…"), action: choosePreferencesImport)
                     .buttonStyle(.bordered)
-                    .disabled(isPreparingImport || isImporting)
+                    .disabled(isPreparingImport || isImporting || isBackingUp)
             }
+            .controlSize(.small)
+            .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+            .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
-        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
-        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .sheet(item: $pendingImport) { pending in
             PreferencesImportPreviewSheet(
                 preview: pending.preview,
@@ -766,6 +918,127 @@ private struct PreferencesBackupSettingsRow: View {
             Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
         } message: {
             Text(alertMessage ?? "")
+        }
+    }
+
+    private var backupRowDivider: some View {
+        PluginSettingsListDivider(
+            leadingInset: GeneralSettingsCardLayout.horizontalPadding,
+            trailingInset: GeneralSettingsCardLayout.horizontalPadding
+        )
+    }
+
+    @ViewBuilder
+    private var automaticBackupSummaryView: some View {
+        let summary = pluginHost.automaticPreferencesBackupSummary
+        if let latestBackupDate = summary.latestBackupDate {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(automaticBackupRelativeText(
+                        latestBackupDate,
+                        relativeTo: context.date
+                    ))
+                    Text(automaticBackupDetailsText(
+                        summary,
+                        latestBackupDate: latestBackupDate
+                    ))
+                }
+                .accessibilityElement(children: .combine)
+            }
+        } else {
+            Text(AppL10n.preferencesBackup(
+                "preferencesBackup.automatic.noBackups",
+                defaultValue: "还没有备份"
+            ))
+        }
+    }
+
+    private func automaticBackupRelativeText(
+        _ latestBackupDate: Date,
+        relativeTo referenceDate: Date
+    ) -> String {
+        let locale = PluginRuntimeLocalization.locale
+        let relativeDate = PreferencesBackupStatusFormatter.relativeDate(
+            latestBackupDate,
+            relativeTo: referenceDate,
+            locale: locale,
+            justNow: AppL10n.preferencesBackup(
+                "preferencesBackup.automatic.justNow",
+                defaultValue: "刚刚"
+            )
+        )
+        return String(
+            format: AppL10n.preferencesBackup(
+                "preferencesBackup.automatic.lastBackup",
+                defaultValue: "上次备份：%@"
+            ),
+            locale: locale,
+            relativeDate
+        )
+    }
+
+    private func automaticBackupDetailsText(
+        _ summary: AutomaticPreferencesBackupSummary,
+        latestBackupDate: Date
+    ) -> String {
+        let locale = PluginRuntimeLocalization.locale
+        let date = PreferencesBackupStatusFormatter.absoluteDate(
+            latestBackupDate,
+            locale: locale
+        )
+        let size = PreferencesBackupStatusFormatter.byteCount(
+            summary.totalSize,
+            locale: locale
+        )
+        let history = AppL10n.preferencesBackupPluralFormat(
+            "preferencesBackup.automatic.history",
+            defaultValue: "%d 个备份 · %@",
+            count: summary.snapshotCount,
+            size
+        )
+        return "\(date) · \(history)"
+    }
+
+    private func manualBackupFeedbackText(_ feedback: ManualBackupFeedback) -> String {
+        switch feedback {
+        case .created:
+            AppL10n.preferencesBackup(
+                "preferencesBackup.manual.created",
+                defaultValue: "刚刚已备份"
+            )
+        case .unchanged:
+            AppL10n.preferencesBackup(
+                "preferencesBackup.manual.unchanged",
+                defaultValue: "与上次备份相比没有变化"
+            )
+        }
+    }
+
+    private func backUpNow() {
+        Task { @MainActor in
+            isBackingUp = true
+            defer { isBackingUp = false }
+            do {
+                let result = try await pluginHost.createAutomaticPreferencesBackupNow()
+                switch result {
+                case .created:
+                    manualBackupFeedback = .created
+                case .unchanged:
+                    manualBackupFeedback = .unchanged
+                }
+            } catch {
+                alertMessage = preferencesBackupErrorMessage(error)
+            }
+        }
+    }
+
+    private func openBackupFolder() {
+        do {
+            NSWorkspace.shared.open(
+                try pluginHost.prepareAutomaticPreferencesBackupDirectory()
+            )
+        } catch {
+            alertMessage = preferencesBackupErrorMessage(error)
         }
     }
 
@@ -915,6 +1188,39 @@ private struct PreferencesBackupSettingsRow: View {
 private struct PreferencesPluginOption: Identifiable, Equatable {
     let id: String
     let title: String
+}
+
+enum PreferencesBackupStatusFormatter {
+    static func relativeDate(
+        _ date: Date,
+        relativeTo referenceDate: Date,
+        locale: Locale,
+        justNow: String
+    ) -> String {
+        guard referenceDate.timeIntervalSince(date) >= 60 else {
+            return justNow
+        }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.dateTimeStyle = .numeric
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: referenceDate)
+    }
+
+    static func absoluteDate(_ date: Date, locale: Locale) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    static func byteCount(_ count: Int, locale: Locale) -> String {
+        Int64(count).formatted(
+            ByteCountFormatStyle(style: .file).locale(locale)
+        )
+    }
 }
 
 private struct PreferencesExportSelectionSheet: View {
@@ -1395,7 +1701,6 @@ private struct MenuBarClickBehaviorSettingsRow: View {
 
 private struct AppearanceSettingsRow: View {
     @Binding var selectionRawValue: String
-    let userDefaults: UserDefaults
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -1433,13 +1738,6 @@ private struct AppearanceSettingsRow: View {
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help(AppL10n.settings("appearance.help", defaultValue: "设置应用外观"))
-        .onChange(of: selectionRawValue) { _, rawValue in
-            guard let preference = AppAppearancePreference(rawValue: rawValue) else {
-                selectionRawValue = AppAppearancePreference.system.rawValue
-                return
-            }
-            preference.storeAndApply(in: userDefaults)
-        }
     }
 }
 
@@ -1484,13 +1782,6 @@ private struct LanguageSettingsRow: View {
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help(AppL10n.settings("language.help", defaultValue: "设置应用语言"))
-        .onChange(of: selectionRawValue) { _, rawValue in
-            guard let preference = AppLanguagePreference(rawValue: rawValue) else {
-                selectionRawValue = AppLanguagePreference.system.rawValue
-                return
-            }
-            preference.store()
-        }
     }
 }
 
@@ -1551,7 +1842,71 @@ private struct LaunchAtLoginSettingsRow: View {
     }
 }
 
+private struct SettingsSidebarSearchLauncher: NSViewRepresentable {
+    let prompt: String
+    let onActivate: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onActivate: onActivate)
+    }
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = SearchLauncherField()
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.activate(_:))
+        field.isEditable = false
+        field.isSelectable = false
+        field.focusRingType = .none
+        field.bezelStyle = .roundedBezel
+        field.controlSize = .large
+        configure(field)
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.onActivate = onActivate
+        configure(field)
+    }
+
+    private func configure(_ field: NSSearchField) {
+        field.placeholderString = prompt
+        field.stringValue = ""
+        field.toolTip = prompt
+        field.setAccessibilityLabel(prompt)
+    }
+
+    final class Coordinator: NSObject {
+        var onActivate: () -> Void
+
+        init(onActivate: @escaping () -> Void) {
+            self.onActivate = onActivate
+        }
+
+        @objc func activate(_ sender: Any?) {
+            onActivate()
+        }
+    }
+
+    private final class SearchLauncherField: NSSearchField {
+        override var acceptsFirstResponder: Bool { false }
+
+        override func mouseDown(with event: NSEvent) {
+            guard isEnabled else { return }
+            sendAction(action, to: target)
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .arrow)
+        }
+    }
+}
+
 private struct SettingsSidebar: View {
+    private enum Layout {
+        static let sectionHeaderTrailingInset: CGFloat = 8
+        static let searchSectionSpacing = PluginSettingsTheme.Spacing.sectionHeaderContent
+    }
+
     let configurationItems: [PluginSettingsPageItem]
     let orderedDestinations: [SettingsNavigationDestination]
     @ObservedObject var sidebarPreferences: SettingsSidebarPreferencesStore
@@ -1559,61 +1914,66 @@ private struct SettingsSidebar: View {
     let onSearch: () -> Void
 
     var body: some View {
-        ScrollViewReader { proxy in
-            List(selection: optionalSelectionBinding) {
-                Section {
-                    ForEach(appDestinations, id: \.self) { destination in
-                        sidebarRow(for: destination)
-                    }
-                } header: {
-                    Text("MacTools")
-                }
+        VStack(spacing: 0) {
+            SettingsSidebarSearchLauncher(
+                prompt: AppL10n.search("search.title", defaultValue: "搜索 MacTools"),
+                onActivate: onSearch
+            )
+            .frame(height: 30)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, Layout.searchSectionSpacing)
 
-                Section {
-                    ForEach(primaryPluginDestinations, id: \.self) { destination in
-                        sidebarRow(for: destination)
-                    }
-                } header: {
-                    Text(AppL10n.settings(
-                        "plugins.sidebar.pluginsSection",
-                        defaultValue: "插件"
-                    ))
-                }
-
-                Section {
-                    if configurationDestinations.isEmpty {
-                        Text(emptyConfigurationsText)
-                            .font(PluginSettingsTheme.Typography.secondaryLabel)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(configurationDestinations, id: \.self) { destination in
+            ScrollViewReader { proxy in
+                List(selection: optionalSelectionBinding) {
+                    Section {
+                        ForEach(appDestinations, id: \.self) { destination in
                             sidebarRow(for: destination)
                         }
-                        .onMove(perform: moveConfigurations)
+                    } header: {
+                        Text("MacTools")
                     }
-                } header: {
-                    configurationSectionHeader
+
+                    Section {
+                        ForEach(primaryPluginDestinations, id: \.self) { destination in
+                            sidebarRow(for: destination)
+                        }
+                    } header: {
+                        Text(AppL10n.settings(
+                            "plugins.sidebar.pluginsSection",
+                            defaultValue: "插件"
+                        ))
+                    }
+
+                    Section {
+                        if configurationDestinations.isEmpty {
+                            Text(emptyConfigurationsText)
+                                .font(PluginSettingsTheme.Typography.secondaryLabel)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(configurationDestinations, id: \.self) { destination in
+                                sidebarRow(for: destination)
+                            }
+                            .onMove(perform: moveConfigurations)
+                        }
+                    } header: {
+                        configurationSectionHeader
+                    }
                 }
-            }
-            .listStyle(.sidebar)
-            .onChange(of: selection) { _, destination in
-                withAnimation {
-                    proxy.scrollTo(destination)
+                .listStyle(.sidebar)
+                .onChange(of: selection) { _, destination in
+                    withAnimation {
+                        proxy.scrollTo(destination)
+                    }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(AppL10n.settings(
+                    "settings.sidebar.accessibilityLabel",
+                    defaultValue: "设置导航"
+                ))
+                .accessibilityHint(configurationDestinations.isEmpty ? emptyConfigurationsText : "")
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(AppL10n.settings(
-                "settings.sidebar.accessibilityLabel",
-                defaultValue: "设置导航"
-            ))
-            .accessibilityHint(configurationDestinations.isEmpty ? emptyConfigurationsText : "")
         }
-        .searchable(
-            text: nativeSearchText,
-            isPresented: nativeSearchPresentation,
-            placement: .sidebar,
-            prompt: Text(AppL10n.search("search.title", defaultValue: "搜索 MacTools"))
-        )
     }
 
     private var emptyConfigurationsText: String {
@@ -1763,6 +2123,7 @@ private struct SettingsSidebar: View {
                 "plugins.sidebar.configurationSection",
                 defaultValue: "插件设置"
             ))
+                .foregroundStyle(.secondary)
 
             Spacer(minLength: 0)
 
@@ -1814,17 +2175,17 @@ private struct SettingsSidebar: View {
                 }
                 .disabled(true)
             } label: {
-                HStack(spacing: 4) {
-                    Text(sidebarPreferences.sortMode.localizedCompactTitle)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    Image(systemName: "arrow.up.arrow.down")
-                }
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.caption2.weight(.medium))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 11, height: 11, alignment: .center)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
+            .scaleEffect(0.80, anchor: .trailing)
+            .padding(.trailing, Layout.sectionHeaderTrailingInset)
             .accessibilityLabel(sidebarPreferences.sortMode.localizedTitle)
             .help(AppL10n.settings(
                 "settings.sidebar.pluginSortHelp",
@@ -1847,24 +2208,6 @@ private struct SettingsSidebar: View {
     private func sortOption(_ sortMode: SettingsSidebarPluginSortMode) -> some View {
         Text(sortMode.localizedTitle)
             .tag(sortMode)
-    }
-
-    private var nativeSearchText: Binding<String> {
-        Binding {
-            ""
-        } set: { newValue in
-            guard !newValue.isEmpty else { return }
-            onSearch()
-        }
-    }
-
-    private var nativeSearchPresentation: Binding<Bool> {
-        Binding {
-            false
-        } set: { isPresented in
-            guard isPresented else { return }
-            onSearch()
-        }
     }
 
     private func shortcutNumber(for destination: SettingsNavigationDestination) -> Int? {
@@ -1905,6 +2248,28 @@ private struct SettingsSidebar: View {
     }
 }
 
+private struct SettingsSidebarColumn<Content: View>: View {
+    private let content: Content
+    @State private var headerHeight: CGFloat = 0
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        // Keep the sidebar viewport tied to the window chrome instead of the
+        // transient safe-area proposal from an in-window overlay.
+        content
+            .padding(.top, headerHeight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                SettingsWindowTopSafeAreaReader(topInset: $headerHeight)
+                    .frame(width: 0, height: 0)
+            }
+            .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
 private struct SettingsDetailColumn<Content: View>: View {
     private let content: Content
     @State private var headerHeight: CGFloat = 0
@@ -1919,7 +2284,7 @@ private struct SettingsDetailColumn<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .top) {
                 if headerHeight > 0 {
-                    SettingsHeaderMaterialBackground()
+                    SettingsStyle.contentBackground
                         .frame(height: headerHeight)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -1930,24 +2295,6 @@ private struct SettingsDetailColumn<Content: View>: View {
                     .frame(width: 0, height: 0)
             }
             .ignoresSafeArea(.container, edges: .top)
-    }
-}
-
-private struct SettingsHeaderMaterialBackground: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        configure(view)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        configure(nsView)
-    }
-
-    private func configure(_ view: NSVisualEffectView) {
-        view.material = .headerView
-        view.blendingMode = .behindWindow
-        view.state = .followsWindowActiveState
     }
 }
 
@@ -2031,7 +2378,7 @@ private struct SettingsSidebarRow: View {
                     .truncationMode(.tail)
             } icon: {
                 Image(systemName: PluginSystemImage.resolvedName(systemImage))
-                    .imageScale(.small)
+                    .font(PluginSettingsTheme.Typography.rowIcon)
                     .foregroundStyle(iconTint)
                     .frame(width: Layout.iconWidth)
             }
@@ -2097,35 +2444,6 @@ private extension SettingsSidebarPluginSortMode {
         }
     }
 
-    var localizedCompactTitle: String {
-        switch self {
-        case .installedOldestFirst:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.oldest",
-                defaultValue: "最早"
-            )
-        case .installedNewestFirst:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.newest",
-                defaultValue: "最新"
-            )
-        case .nameAscending:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.nameAscending",
-                defaultValue: "升序"
-            )
-        case .nameDescending:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.nameDescending",
-                defaultValue: "降序"
-            )
-        case .custom:
-            AppL10n.settings(
-                "settings.sidebar.pluginSort.compact.custom",
-                defaultValue: "自定义"
-            )
-        }
-    }
 }
 
 private struct SettingsDetailPane: View {
@@ -2967,9 +3285,44 @@ private struct PluginSettingsRowView: View {
     let pluginID: String
     let row: PluginSettingsRow
     let onAction: (PluginSettingsAction) -> Void
+    @State private var showsConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            rowContent
+
+            if let error = row.error {
+                Text(error)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !row.helpItems.isEmpty {
+                PluginSettingsHelpList(
+                    items: row.helpItems,
+                    tone: row.helpTone
+                )
+            } else if let help = row.help {
+                Text(help)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(statusColor(for: row.helpTone))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .disabled(!row.isEnabled)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var rowContent: some View {
+        if case let .choiceGroup(selectionID, options) = row.control {
+            PluginSettingsChoiceGroupControl(
+                selectionID: selectionID,
+                options: options,
+                onSelect: {
+                    onAction(.setSelection(controlID: row.id, optionID: $0))
+                }
+            )
+        } else {
             HStack(alignment: .center, spacing: 0) {
                 HStack(
                     alignment: .center,
@@ -3002,21 +3355,7 @@ private struct PluginSettingsRowView: View {
                 control
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let error = row.error {
-                Text(error)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if let help = row.help {
-                Text(help)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
-        .disabled(!row.isEnabled)
-        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
@@ -3041,6 +3380,8 @@ private struct PluginSettingsRowView: View {
                     onAction(.setSelection(controlID: row.id, optionID: $0))
                 }
             )
+        case .choiceGroup:
+            EmptyView()
         case let .slider(value, range, step, valueFormat):
             PluginSettingsSliderControl(
                 controlID: row.id,
@@ -3072,6 +3413,21 @@ private struct PluginSettingsRowView: View {
             PluginSettingsActionButton(title: title, role: role) {
                 onAction(.invoke(controlID: row.id))
             }
+        case let .confirmationAction(title, role, confirmation):
+            PluginSettingsActionButton(title: title, role: role) {
+                showsConfirmation = true
+            }
+            .alert(confirmation.title, isPresented: $showsConfirmation) {
+                Button(confirmation.cancelButtonTitle, role: .cancel) {}
+                Button(
+                    confirmation.confirmButtonTitle,
+                    role: role == .destructive ? .destructive : nil
+                ) {
+                    onAction(.invoke(controlID: row.id))
+                }
+            } message: {
+                Text(confirmation.message)
+            }
         case let .status(text, systemImage, tone, actionTitle):
             HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
                 Label(text, systemImage: systemImage)
@@ -3091,6 +3447,28 @@ private struct PluginSettingsRowView: View {
     }
 }
 
+private struct PluginSettingsHelpList: View {
+    let items: [String]
+    let tone: PluginStatusTone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("•")
+                        .accessibilityHidden(true)
+
+                    Text(item)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .font(PluginSettingsTheme.Typography.rowDescription)
+        .foregroundStyle(statusColor(for: tone))
+        .accessibilityElement(children: .contain)
+    }
+}
+
 private struct PluginSettingsPickerControl: View {
     let selectionID: String
     let options: [PluginSettingsOption]
@@ -3105,8 +3483,6 @@ private struct PluginSettingsPickerControl: View {
             picker.pickerStyle(.menu)
         case .segmented:
             picker.pickerStyle(.segmented)
-        case .radioGroup:
-            picker.pickerStyle(.radioGroup)
         }
     }
 
@@ -3126,6 +3502,103 @@ private struct PluginSettingsPickerControl: View {
         .frame(minWidth: 120, idealWidth: 180, maxWidth: 240)
     }
 }
+
+private struct PluginSettingsChoiceGroupControl: View {
+    let selectionID: String
+    let options: [PluginSettingsOption]
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            ViewThatFits(in: .horizontal) {
+                horizontalChoices
+                verticalChoices
+            }
+
+            if let description = selectedOption?.description {
+                Text(description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(statusColor(for: selectedOption?.descriptionTone ?? .neutral))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var horizontalChoices: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            ForEach(options) { option in
+                choiceButton(option: option)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var verticalChoices: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            ForEach(options) { option in
+                choiceButton(option: option)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var selectedOption: PluginSettingsOption? {
+        options.first { $0.id == selectionID }
+    }
+
+    @ViewBuilder
+    private func choiceButton(option: PluginSettingsOption) -> some View {
+        let isSelected = selectionID == option.id
+        Button {
+            onSelect(option.id)
+        } label: {
+            HStack(spacing: 6) {
+                Text(option.title)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity)
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.semibold))
+                        .accessibilityHidden(true)
+                }
+            }
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .frame(minWidth: 132, maxWidth: .infinity, minHeight: PluginSettingsTheme.Size.controlHeight + 8)
+            .padding(.horizontal, PluginSettingsTheme.Spacing.controlCluster)
+            .background {
+                RoundedRectangle(
+                    cornerRadius: PluginSettingsTheme.Radius.control,
+                    style: .continuous
+                )
+                .fill(
+                    isSelected
+                        ? Color.accentColor
+                        : PluginSettingsTheme.Palette.recessedControlBackground
+                )
+            }
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: PluginSettingsTheme.Radius.control,
+                    style: .continuous
+                )
+                .stroke(
+                    isSelected ? Color.accentColor : PluginSettingsTheme.Palette.separator,
+                    lineWidth: PluginSettingsTheme.Stroke.hairline
+                )
+            }
+            .contentShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 
 private struct PluginSettingsSliderControl: View {
     let controlID: String
@@ -3326,56 +3799,31 @@ private func statusColor(for tone: PluginStatusTone) -> Color {
 struct AboutSettingsView: View {
     @StateObject private var updateViewModel: AboutUpdateViewModel
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
+    private let releaseHistory: ReleaseHistory
 
     init(
         appUpdater: AppUpdater,
-        navigationCoordinator: SettingsNavigationCoordinator
+        navigationCoordinator: SettingsNavigationCoordinator,
+        releaseHistory: ReleaseHistory = .bundled
     ) {
         _updateViewModel = StateObject(
             wrappedValue: AboutUpdateViewModel(updater: appUpdater)
         )
         self.navigationCoordinator = navigationCoordinator
+        self.releaseHistory = releaseHistory
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 28)
+            AboutProductSummary(viewModel: updateViewModel)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 22)
 
-            AppIconPreview()
+            Divider()
 
-            Text(AppMetadata.appName)
-                .font(PluginSettingsTheme.Typography.pageTitle)
-                .padding(.top, 8)
-
-            Text(AppL10n.settingsFormat("about.versionFormat", defaultValue: "版本 %@", AppMetadata.versionDescription))
-                .font(PluginSettingsTheme.Typography.pageDescription)
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
-
-            AboutUpdateCard(viewModel: updateViewModel)
-                .padding(.top, 28)
-                .frame(maxWidth: 420)
-
-            Text(AppMetadata.aboutDescription)
-                .font(PluginSettingsTheme.Typography.rowTitle)
-                .lineLimit(nil)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 320)
-                .padding(.top, 28)
-
-            VStack(spacing: 0) {
-                Link(AppMetadata.repositoryDisplayName, destination: AppMetadata.repositoryURL)
-                    .font(PluginSettingsTheme.Typography.rowTitle)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 28)
-
-            Spacer(minLength: 36)
+            AboutReleaseHistoryView(releaseHistory: releaseHistory)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.horizontal, 40)
-        .padding(.vertical, 28)
         .background(Color(nsColor: .windowBackgroundColor))
         .onChange(
             of: navigationCoordinator.aboutUpdateActionRequest,
@@ -3397,6 +3845,197 @@ struct AboutSettingsView: View {
             await Task.yield()
             updateViewModel.performAvailableUpdateAction(version: request.version)
         }
+    }
+}
+
+private struct AboutProductSummary: View {
+    @ObservedObject var viewModel: AboutUpdateViewModel
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 20) {
+            AppIconPreview()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AppMetadata.appName)
+                    .font(PluginSettingsTheme.Typography.pageTitle)
+
+                Text(AppL10n.settingsFormat("about.versionFormat", defaultValue: "版本 %@", AppMetadata.versionDescription))
+                    .font(PluginSettingsTheme.Typography.pageDescription)
+                    .foregroundStyle(.secondary)
+
+                Text(AppMetadata.aboutDescription)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+
+                Link(destination: AppMetadata.repositoryURL) {
+                    HStack(spacing: 5) {
+                        Text(AppMetadata.repositoryDisplayName)
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                    }
+                }
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .padding(.top, 2)
+            }
+
+            Spacer(minLength: 12)
+
+            AboutUpdateCard(viewModel: viewModel)
+                .frame(minWidth: 160, idealWidth: 190, maxWidth: 220)
+        }
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct AboutReleaseHistoryView: View {
+    private static let maximumReleaseCount = 10
+
+    let releaseHistory: ReleaseHistory
+
+    private var displayedReleases: [ReleaseHistoryItem] {
+        releaseHistory.mostRecentReleases(limit: Self.maximumReleaseCount)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Label(
+                    AppL10n.settings("about.changelog.title", defaultValue: "版本记录"),
+                    systemImage: "clock.arrow.circlepath"
+                )
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+
+                Text(
+                    AppL10n.settings(
+                        "about.changelog.description",
+                        defaultValue: "MacTools 与插件最近 10 个版本的发布记录"
+                    )
+                )
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+
+            if displayedReleases.isEmpty {
+                ContentUnavailableView(
+                    AppL10n.settings(
+                        "about.changelog.empty.title",
+                        defaultValue: "暂无版本记录"
+                    ),
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text(
+                        AppL10n.settings(
+                            "about.changelog.empty.description",
+                            defaultValue: "发布新版本后，更新内容会显示在这里。"
+                        )
+                    )
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(displayedReleases) { release in
+                            AboutReleaseCard(release: release)
+                        }
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct AboutReleaseCard: View {
+    let release: ReleaseHistoryItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Label(releaseKindTitle, systemImage: releaseKindSystemImage)
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
+                    .foregroundStyle(.secondary)
+
+                Text(release.version)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                if isCurrentVersion {
+                    Text(
+                        AppL10n.settings(
+                            "about.changelog.currentVersion",
+                            defaultValue: "当前版本"
+                        )
+                    )
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
+                }
+
+                Spacer(minLength: 12)
+
+                Text(release.date)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.tertiary)
+            }
+
+            ForEach(release.sections) { section in
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(section.kind.displayName)
+                        .font(PluginSettingsTheme.Typography.secondaryLabel)
+                        .foregroundStyle(.secondary)
+
+                    ForEach(Array(section.entries.enumerated()), id: \.offset) { _, entry in
+                        HStack(alignment: .firstTextBaseline, spacing: 9) {
+                            Circle()
+                                .fill(Color.secondary.opacity(0.7))
+                                .frame(width: 4, height: 4)
+                                .alignmentGuide(.firstTextBaseline) { dimensions in
+                                    dimensions[VerticalAlignment.center]
+                                }
+                                .accessibilityHidden(true)
+
+                            Text(entry)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .pluginSettingsCardBackground(.standard)
+    }
+
+    private var releaseKindTitle: String {
+        switch release.kind {
+        case .app:
+            return AppMetadata.appName
+        case .plugin:
+            return AppL10n.settings("tab.plugins", defaultValue: "插件")
+        }
+    }
+
+    private var releaseKindSystemImage: String {
+        switch release.kind {
+        case .app:
+            return "app.fill"
+        case .plugin:
+            return "shippingbox.fill"
+        }
+    }
+
+    private var isCurrentVersion: Bool {
+        release.kind == .app && release.version == AppMetadata.shortVersion
     }
 }
 
@@ -3442,7 +4081,7 @@ private struct AboutUpdateCard: View {
 }
 
 private struct AppIconPreview: View {
-    private static let iconSize: CGFloat = 82
+    private static let iconSize: CGFloat = 76
 
     var body: some View {
         if let appIcon = AppMetadata.appIcon {

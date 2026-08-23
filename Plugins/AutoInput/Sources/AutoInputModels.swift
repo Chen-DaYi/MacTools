@@ -27,6 +27,29 @@ enum AutoInputHUDPosition: String, Codable, CaseIterable, Identifiable, Sendable
     }
 }
 
+enum AutoInputHUDReminderLimits {
+    static let minimumIntervalSeconds = 5
+    static let maximumIntervalSeconds = 300
+    static let defaultIntervalSeconds = 60
+    static let minimumAppSwitchCount = 1
+    static let maximumAppSwitchCount = 10
+    static let defaultAppSwitchCount = 3
+
+    static func normalizedIntervalSeconds(_ value: Int) -> Int {
+        guard (minimumIntervalSeconds...maximumIntervalSeconds).contains(value) else {
+            return defaultIntervalSeconds
+        }
+        return value
+    }
+
+    static func normalizedAppSwitchCount(_ value: Int) -> Int {
+        guard (minimumAppSwitchCount...maximumAppSwitchCount).contains(value) else {
+            return defaultAppSwitchCount
+        }
+        return value
+    }
+}
+
 struct AutoInputHUDConfiguration: Equatable, Sendable {
     let size: AutoInputHUDSize
     let position: AutoInputHUDPosition

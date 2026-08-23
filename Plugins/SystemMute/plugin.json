@@ -48,9 +48,9 @@
       "summary": "快速靜音或恢復系統音頻輸出"
     }
   },
-  "version": "1.0.8",
+  "version": "1.1.0",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 4,
+  "pluginKitVersion": 5,
   "bundleRelativePath": "SystemMute.bundle",
   "factoryClass": "SystemMutePlugin.SystemMutePluginFactory",
   "build": {

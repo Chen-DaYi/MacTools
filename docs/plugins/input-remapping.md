@@ -11,7 +11,7 @@
 - ID: `input-remapping`.
 - Settings layout: `workspace`.
 - Permissions: Accessibility, Input Monitoring.
-- `pluginKitVersion`: `4`.
+- `pluginKitVersion`: `5`.
 
 ## Shared trackpad gestures
 

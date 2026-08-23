@@ -26,6 +26,71 @@ final class PluginHostApplicationActivityTests: XCTestCase {
         XCTAssertEqual(plugin.states, [.displayAsleep, .interactive])
         withExtendedLifetime(host) {}
     }
+
+    func testHostRefreshesDisplayTopologyAfterWakeSettles() async {
+        let observer = StubApplicationActivityObserver(state: .systemSleeping)
+        let plugin = RecordingDisplayTopologyPlugin()
+        let suiteName = "PluginHostApplicationActivityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let host = PluginHost(
+            plugins: [plugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager(),
+            applicationActivityObserver: observer,
+            displayTopologyRefreshDelay: .zero
+        )
+
+        observer.send(.waking)
+        await Task.yield()
+        XCTAssertEqual(plugin.displayTopologyRefreshCount, 0)
+
+        observer.send(.displayAsleep)
+        await waitUntil { plugin.displayTopologyRefreshCount == 1 }
+
+        XCTAssertEqual(plugin.displayTopologyRefreshCount, 1)
+        withExtendedLifetime(host) {}
+    }
+
+    func testHostDoesNotRefreshDisplayTopologyWhenWakeReturnsToSleep() async {
+        let observer = StubApplicationActivityObserver(state: .systemSleeping)
+        let plugin = RecordingDisplayTopologyPlugin()
+        let suiteName = "PluginHostApplicationActivityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let host = PluginHost(
+            plugins: [plugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager(),
+            applicationActivityObserver: observer,
+            displayTopologyRefreshDelay: .zero
+        )
+
+        observer.send(.waking)
+        observer.send(.systemSleeping)
+        for _ in 0..<3 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(plugin.displayTopologyRefreshCount, 0)
+        withExtendedLifetime(host) {}
+    }
+
+    private func waitUntil(
+        _ condition: @escaping @MainActor () -> Bool
+    ) async {
+        let deadline = ContinuousClock().now.advanced(by: .seconds(1))
+        while !condition(), ContinuousClock().now < deadline {
+            await Task.yield()
+        }
+        XCTAssertTrue(condition())
+    }
 }
 
 @MainActor
@@ -61,5 +126,25 @@ private final class RecordingApplicationActivityPlugin: MacToolsPlugin,
 
     func applicationActivityStateDidChange(_ state: PluginApplicationActivityState) {
         states.append(state)
+    }
+}
+
+@MainActor
+private final class RecordingDisplayTopologyPlugin: MacToolsPlugin, DisplayTopologyRefreshing {
+    let metadata = PluginMetadata(
+        id: "display-topology-recorder",
+        title: "Display Topology Recorder",
+        iconName: "display",
+        iconTint: Color.primary,
+        order: 0,
+        defaultDescription: ""
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var displayTopologyRefreshCount = 0
+
+    func refreshDisplayTopology() {
+        displayTopologyRefreshCount += 1
     }
 }

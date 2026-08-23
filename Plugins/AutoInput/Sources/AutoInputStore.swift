@@ -12,6 +12,9 @@ final class AutoInputStore: ObservableObject {
         static let legacyIsEnabled = "isEnabled"
         static let isAutoSwitchEnabled = "isAutoSwitchEnabled"
         static let isInputHUDEnabled = "isInputHUDEnabled"
+        static let reducesFrequentHUDPresentations = "reducesFrequentHUDPresentations"
+        static let inputHUDReminderIntervalSeconds = "inputHUDReminderIntervalSeconds"
+        static let inputHUDAppSwitchReminderCount = "inputHUDAppSwitchReminderCount"
         static let isInteractiveHUDEnabled = "isInteractiveHUDEnabled"
         static let inputHUDSize = "inputHUDSize"
         static let inputHUDPosition = "inputHUDPosition"
@@ -22,6 +25,9 @@ final class AutoInputStore: ObservableObject {
 
     @Published private(set) var isAutoSwitchEnabled: Bool
     @Published private(set) var isInputHUDEnabled: Bool
+    @Published private(set) var reducesFrequentHUDPresentations: Bool
+    @Published private(set) var inputHUDReminderIntervalSeconds: Int
+    @Published private(set) var inputHUDAppSwitchReminderCount: Int
     @Published private(set) var isInteractiveHUDEnabled: Bool
     @Published private(set) var inputHUDSize: AutoInputHUDSize
     @Published private(set) var inputHUDPosition: AutoInputHUDPosition
@@ -43,6 +49,23 @@ final class AutoInputStore: ObservableObject {
         self.isInputHUDEnabled = storage.object(forKey: Keys.isInputHUDEnabled) == nil
             ? false
             : storage.bool(forKey: Keys.isInputHUDEnabled)
+        self.reducesFrequentHUDPresentations = storage.object(
+            forKey: Keys.reducesFrequentHUDPresentations
+        ) == nil
+            ? false
+            : storage.bool(forKey: Keys.reducesFrequentHUDPresentations)
+        self.inputHUDReminderIntervalSeconds = AutoInputHUDReminderLimits
+            .normalizedIntervalSeconds(
+                storage.object(forKey: Keys.inputHUDReminderIntervalSeconds) == nil
+                    ? AutoInputHUDReminderLimits.defaultIntervalSeconds
+                    : storage.integer(forKey: Keys.inputHUDReminderIntervalSeconds)
+            )
+        self.inputHUDAppSwitchReminderCount = AutoInputHUDReminderLimits
+            .normalizedAppSwitchCount(
+                storage.object(forKey: Keys.inputHUDAppSwitchReminderCount) == nil
+                    ? AutoInputHUDReminderLimits.defaultAppSwitchCount
+                    : storage.integer(forKey: Keys.inputHUDAppSwitchReminderCount)
+            )
         self.isInteractiveHUDEnabled = storage.object(forKey: Keys.isInteractiveHUDEnabled) == nil
             ? false
             : storage.bool(forKey: Keys.isInteractiveHUDEnabled)
@@ -72,6 +95,36 @@ final class AutoInputStore: ObservableObject {
         guard isInputHUDEnabled != value else { return record(.committed) }
         let result = persist(value, forKey: Keys.isInputHUDEnabled)
         if result == .committed { isInputHUDEnabled = value }
+        return record(result)
+    }
+
+    @discardableResult
+    func setReducesFrequentHUDPresentations(_ value: Bool) -> AutoInputStoreMutationResult {
+        guard reducesFrequentHUDPresentations != value else { return record(.committed) }
+        let result = persist(value, forKey: Keys.reducesFrequentHUDPresentations)
+        if result == .committed { reducesFrequentHUDPresentations = value }
+        return record(result)
+    }
+
+    @discardableResult
+    func setInputHUDReminderIntervalSeconds(_ value: Int) -> AutoInputStoreMutationResult {
+        let normalizedValue = AutoInputHUDReminderLimits.normalizedIntervalSeconds(value)
+        guard inputHUDReminderIntervalSeconds != normalizedValue else {
+            return record(.committed)
+        }
+        let result = persist(normalizedValue, forKey: Keys.inputHUDReminderIntervalSeconds)
+        if result == .committed { inputHUDReminderIntervalSeconds = normalizedValue }
+        return record(result)
+    }
+
+    @discardableResult
+    func setInputHUDAppSwitchReminderCount(_ value: Int) -> AutoInputStoreMutationResult {
+        let normalizedValue = AutoInputHUDReminderLimits.normalizedAppSwitchCount(value)
+        guard inputHUDAppSwitchReminderCount != normalizedValue else {
+            return record(.committed)
+        }
+        let result = persist(normalizedValue, forKey: Keys.inputHUDAppSwitchReminderCount)
+        if result == .committed { inputHUDAppSwitchReminderCount = normalizedValue }
         return record(result)
     }
 
@@ -174,6 +227,17 @@ final class AutoInputStore: ObservableObject {
         let previous = storage.object(forKey: key)
         storage.set(value, forKey: key)
         guard storage.string(forKey: key) == value else {
+            restore(previous, forKey: key)
+            return .rejected(rollbackSucceeded: rawValue(storage.object(forKey: key), equals: previous))
+        }
+        return .committed
+    }
+
+    private func persist(_ value: Int, forKey key: String) -> AutoInputStoreMutationResult {
+        let previous = storage.object(forKey: key)
+        storage.set(value, forKey: key)
+        guard storage.integer(forKey: key) == value,
+              storage.object(forKey: key) != nil else {
             restore(previous, forKey: key)
             return .rejected(rollbackSucceeded: rawValue(storage.object(forKey: key), equals: previous))
         }

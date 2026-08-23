@@ -3,21 +3,54 @@
   "displayName": "自动切换输入法",
   "summary": "按应用记住并自动切换输入法",
   "localizedMetadata": {
-    "ar": { "displayName": "تبديل مصادر الإدخال تلقائيًا", "summary": "تذكّر مصادر الإدخال وبدّلها تلقائيًا لكل تطبيق." },
-    "de": { "displayName": "Eingabequelle automatisch wechseln", "summary": "Eingabequellen pro App merken und automatisch wechseln." },
-    "en": { "displayName": "Auto Input", "summary": "Remember and automatically switch input sources for each app." },
-    "es": { "displayName": "Cambio automático de entrada", "summary": "Recuerde y cambie automáticamente las fuentes de entrada de cada app." },
-    "fr": { "displayName": "Changement automatique de saisie", "summary": "Mémorisez et changez automatiquement la source de saisie pour chaque app." },
-    "ja": { "displayName": "入力ソースの自動切り替え", "summary": "アプリごとに入力ソースを記憶して自動的に切り替えます。" },
-    "ko": { "displayName": "입력 소스 자동 전환", "summary": "앱별 입력 소스를 기억하고 자동으로 전환합니다." },
-    "pt": { "displayName": "Troca automática de entrada", "summary": "Lembre e alterne automaticamente as fontes de entrada de cada app." },
-    "ru": { "displayName": "Автопереключение источника ввода", "summary": "Запоминайте и автоматически переключайте источники ввода для приложений." },
-    "zh-Hans": { "displayName": "自动切换输入法", "summary": "按应用记住并自动切换输入法" },
-    "zh-Hant": { "displayName": "自動切換輸入法", "summary": "按應用程式記住並自動切換輸入法" }
+    "ar": {
+      "displayName": "تبديل مصادر الإدخال تلقائيًا",
+      "summary": "تذكّر مصادر الإدخال وبدّلها تلقائيًا لكل تطبيق."
+    },
+    "de": {
+      "displayName": "Eingabequelle automatisch wechseln",
+      "summary": "Eingabequellen pro App merken und automatisch wechseln."
+    },
+    "en": {
+      "displayName": "Auto Input",
+      "summary": "Remember and automatically switch input sources for each app."
+    },
+    "es": {
+      "displayName": "Cambio automático de entrada",
+      "summary": "Recuerde y cambie automáticamente las fuentes de entrada de cada app."
+    },
+    "fr": {
+      "displayName": "Changement automatique de saisie",
+      "summary": "Mémorisez et changez automatiquement la source de saisie pour chaque app."
+    },
+    "ja": {
+      "displayName": "入力ソースの自動切り替え",
+      "summary": "アプリごとに入力ソースを記憶して自動的に切り替えます。"
+    },
+    "ko": {
+      "displayName": "입력 소스 자동 전환",
+      "summary": "앱별 입력 소스를 기억하고 자동으로 전환합니다."
+    },
+    "pt": {
+      "displayName": "Troca automática de entrada",
+      "summary": "Lembre e alterne automaticamente as fontes de entrada de cada app."
+    },
+    "ru": {
+      "displayName": "Автопереключение источника ввода",
+      "summary": "Запоминайте и автоматически переключайте источники ввода для приложений."
+    },
+    "zh-Hans": {
+      "displayName": "自动切换输入法",
+      "summary": "按应用记住并自动切换输入法"
+    },
+    "zh-Hant": {
+      "displayName": "自動切換輸入法",
+      "summary": "按應用程式記住並自動切換輸入法"
+    }
   },
-  "version": "1.0.1",
+  "version": "1.1.0",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 4,
+  "pluginKitVersion": 5,
   "bundleRelativePath": "AutoInput.bundle",
   "factoryClass": "AutoInputPlugin.AutoInputPluginFactory",
   "build": {
@@ -29,6 +62,8 @@
     "componentPanel": false,
     "settings": "form"
   },
-  "permissions": ["accessibility"],
+  "permissions": [
+    "accessibility"
+  ],
   "category": "productivity"
 }

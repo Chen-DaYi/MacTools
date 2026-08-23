@@ -4,8 +4,25 @@ import MacToolsPluginKit
 
 private enum AutomationSplitViewLayout {
     static let workflowListMinWidth: CGFloat = 220
-    static let workflowListIdealWidth: CGFloat = 240
+    static let workflowListIdealWidth: CGFloat = 280
     static let workflowListMaxWidth: CGFloat = 340
+    static let detailMinWidth: CGFloat = 320
+    static let dividerWidth: CGFloat = 8
+    static let accessibilityAdjustment: CGFloat = 10
+
+    static func maximumSidebarWidth(for availableWidth: CGFloat) -> CGFloat {
+        max(
+            workflowListMinWidth,
+            min(
+                workflowListMaxWidth,
+                availableWidth - detailMinWidth - dividerWidth
+            )
+        )
+    }
+
+    static func clampedSidebarWidth(_ width: CGFloat, maximum: CGFloat) -> CGFloat {
+        min(max(width, workflowListMinWidth), maximum)
+    }
 }
 
 enum WorkflowListReorder {
@@ -68,12 +85,15 @@ private struct WorkflowKeyboardBoundaryMoveModifier: ViewModifier {
 }
 
 struct AutomationSettingsView: View {
+    @Environment(\.layoutDirection) private var layoutDirection
     @ObservedObject private var pluginHost: PluginHost
     @ObservedObject private var automation: AutomationController
     @ObservedObject private var navigationCoordinator: SettingsNavigationCoordinator
     @State private var selectedWorkflowID: UUID?
     @State private var previewRequest: WorkflowPreviewRequest?
     @State private var pendingDeleteWorkflow: WorkflowDefinition?
+    @State private var workflowListWidth = AutomationSplitViewLayout.workflowListIdealWidth
+    @GestureState private var workflowListDragTranslation: CGFloat = 0
     @AppStorage("automation.previewBeforeRunning") private var previewBeforeRunning = true
 
     init(
@@ -86,17 +106,33 @@ struct AutomationSettingsView: View {
     }
 
     var body: some View {
-        HSplitView {
-            workflowList
-                .frame(
-                    minWidth: AutomationSplitViewLayout.workflowListMinWidth,
-                    idealWidth: AutomationSplitViewLayout.workflowListIdealWidth,
-                    maxWidth: AutomationSplitViewLayout.workflowListMaxWidth
-                )
-                .layoutPriority(1)
+        GeometryReader { geometry in
+            let maximumSidebarWidth = AutomationSplitViewLayout.maximumSidebarWidth(
+                for: geometry.size.width
+            )
+            let sidebarWidth = AutomationSplitViewLayout.clampedSidebarWidth(
+                workflowListWidth + directionalTranslation(workflowListDragTranslation),
+                maximum: maximumSidebarWidth
+            )
 
-            workflowDetail
-                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            HStack(spacing: 0) {
+                workflowList
+                    .frame(width: sidebarWidth)
+
+                splitDivider(
+                    sidebarWidth: sidebarWidth,
+                    maximumSidebarWidth: maximumSidebarWidth
+                )
+
+                workflowDetail
+                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .onChange(of: geometry.size.width) { _, _ in
+                workflowListWidth = AutomationSplitViewLayout.clampedSidebarWidth(
+                    workflowListWidth,
+                    maximum: maximumSidebarWidth
+                )
+            }
         }
         .overlay(alignment: .top) {
             if let error = automation.definitionLoadErrorMessage {
@@ -141,6 +177,65 @@ struct AutomationSettingsView: View {
             handleNavigationRevealRequest(request)
         }
         .accessibilityIdentifier("mactools.automation")
+    }
+
+    private func splitDivider(
+        sidebarWidth: CGFloat,
+        maximumSidebarWidth: CGFloat
+    ) -> some View {
+        ZStack {
+            Color.clear
+            Rectangle()
+                .fill(SettingsStyle.separator)
+                .frame(width: 1)
+        }
+        .frame(width: AutomationSplitViewLayout.dividerWidth)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($workflowListDragTranslation) { value, translation, _ in
+                    translation = value.translation.width
+                }
+                .onEnded { value in
+                    workflowListWidth = AutomationSplitViewLayout.clampedSidebarWidth(
+                        workflowListWidth + directionalTranslation(value.translation.width),
+                        maximum: maximumSidebarWidth
+                    )
+                }
+        )
+        .onContinuousHover { phase in
+            switch phase {
+            case .active:
+                NSCursor.resizeLeftRight.set()
+            case .ended:
+                NSCursor.arrow.set()
+            }
+        }
+        .onDisappear {
+            NSCursor.arrow.set()
+        }
+        .accessibilityElement()
+        .accessibilityLabel(Text(FeatureL10n.string("工作流")))
+        .accessibilityValue(Text("\(Int(sidebarWidth)) pt"))
+        .accessibilityAdjustableAction { direction in
+            let adjustment: CGFloat
+            switch direction {
+            case .increment:
+                adjustment = AutomationSplitViewLayout.accessibilityAdjustment
+            case .decrement:
+                adjustment = -AutomationSplitViewLayout.accessibilityAdjustment
+            @unknown default:
+                return
+            }
+            workflowListWidth = AutomationSplitViewLayout.clampedSidebarWidth(
+                workflowListWidth + adjustment,
+                maximum: maximumSidebarWidth
+            )
+        }
+    }
+
+    private func directionalTranslation(_ translation: CGFloat) -> CGFloat {
+        layoutDirection == .leftToRight ? translation : -translation
     }
 
     @ViewBuilder

@@ -36,24 +36,27 @@ PLUGIN_RELEASE_DIST_DIR ?= build/PluginRelease
 PLUGIN_RELEASE_ASSETS_DIR ?= $(PLUGIN_RELEASE_DIST_DIR)/Assets
 PLUGIN_RELEASE_CATALOG ?= $(PLUGIN_RELEASE_DIST_DIR)/catalog.json
 PLUGIN_KIT_VERSION ?= $(shell $(PYTHON3) -c 'import glob,json; versions={json.load(open(path, encoding="utf-8"))["pluginKitVersion"] for path in glob.glob("Plugins/*/plugin.json")}; print(next(iter(versions)) if len(versions) == 1 else "")')
-PLUGIN_RELEASE_SIGNED_CATALOG ?= $(if $(filter 2,$(PLUGIN_KIT_VERSION)),docs/plugins/catalog.json,$(if $(filter 4,$(PLUGIN_KIT_VERSION)),docs/plugins/v4/host-1.2/catalog.json,docs/plugins/v$(PLUGIN_KIT_VERSION)/catalog.json))
-PLUGIN_CATALOG_MINIMUM_HOST_VERSION ?= $(if $(filter 4,$(PLUGIN_KIT_VERSION)),1.2.0,1.1.6)
+PLUGIN_RELEASE_SIGNED_CATALOG ?= $(if $(filter 2,$(PLUGIN_KIT_VERSION)),docs/plugins/catalog.json,docs/plugins/v$(PLUGIN_KIT_VERSION)/catalog.json)
+PLUGIN_CATALOG_MINIMUM_HOST_VERSION ?= $(if $(filter 5,$(PLUGIN_KIT_VERSION)),1.2.0,1.1.6)
 PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
 E2E_SCRIPT := scripts/e2e/mactools-e2e.sh
 E2E_SESSION ?=
 E2E_DURATION ?= 90
 E2E_PACK ?=
 
-.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release stop-debug-app install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
+.PHONY: setup validate-local-debug-config generate-plugin-config generate build script-tests ci sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release stop-debug-app install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
-	@if [ ! -d .git ]; then git init; fi
+	@if ! git rev-parse --git-dir >/dev/null 2>&1; then git init; fi
 	@git branch -M main
 	@if [ "$(REMOTE_URL)" = "$(PLACEHOLDER_REMOTE_URL)" ]; then echo "Skipping origin remote setup. Pass REMOTE_URL=git@github.com:<owner>/MacTools.git to make setup when ready."; \
 	else \
 		if git remote get-url origin >/dev/null 2>&1; then git remote set-url origin $(REMOTE_URL); else git remote add origin $(REMOTE_URL); fi; \
 	fi
+
+validate-local-debug-config:
+	@./scripts/validate-local-debug-config.sh LocalConfig.xcconfig
 
 generate-plugin-config:
 	@./scripts/plugins/generate-plugin-project-config.rb \
@@ -63,9 +66,34 @@ generate-plugin-config:
 generate: generate-plugin-config
 	@xcodegen generate
 
-build: generate
+build: validate-local-debug-config generate
 	@echo "Building Debug app and plugins..."
+	@mkdir -p build
+	@touch build/.metadata_never_index
 	@$(XCODEBUILD) -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -destination "$(BUILD_DESTINATION)" -derivedDataPath $(DERIVED_DATA) build -quiet
+	@LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister; \
+	if [[ -x "$$LSREGISTER" ]]; then \
+		"$$LSREGISTER" -u "$(CURDIR)/$(APP_PATH)" >/dev/null 2>&1 || true; \
+	fi
+
+script-tests:
+	@$(PYTHON3) -m unittest discover -s scripts/tests -p 'test_*.py'
+
+ci: generate
+	@$(MAKE) script-tests
+	@$(PYTHON3) scripts/changelog.py validate
+	@$(XCODEBUILD) \
+		-project $(PROJECT_FILE) \
+		-scheme $(PROJECT_NAME) \
+		-configuration Debug \
+		-destination "$(BUILD_DESTINATION)" \
+		-derivedDataPath $(DERIVED_DATA) \
+		CODE_SIGNING_ALLOWED=NO \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGN_IDENTITY= \
+		test \
+		-quiet
+	@./scripts/plugins/verify-plugin-kit-v5-binary-compatibility.sh
 
 sync-debug-plugins: build
 	@if [ -n "$(PLUGIN)" ]; then \
@@ -145,7 +173,11 @@ stop-debug-app:
 	exit 1
 
 install-debug-app: sync-debug-plugins generate-icon-gallery
-	@./scripts/install-debug-app.sh "$(CURDIR)/$(APP_PATH)" "$(INSTALLED_APP_PATH)"
+	@EXPECTED_BUNDLE_IDENTIFIER="$$(./scripts/validate-local-debug-config.sh LocalConfig.xcconfig --print-bundle-identifier)"; \
+	./scripts/install-debug-app.sh \
+		"$(CURDIR)/$(APP_PATH)" \
+		"$(INSTALLED_APP_PATH)" \
+		"$$EXPECTED_BUNDLE_IDENTIFIER"
 
 run: stop-debug-app install-debug-app
 	@CATALOG_URL="$(MACTOOLS_PLUGIN_CATALOG_URL)"; \

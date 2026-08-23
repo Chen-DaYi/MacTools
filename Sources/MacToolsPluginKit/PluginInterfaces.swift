@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -28,6 +29,13 @@ public protocol PluginPrimaryPanel: AnyObject {
     var primaryPanelState: PluginPanelState { get }
 
     func handleAction(_ action: PluginPanelAction)
+}
+
+/// Optional capability for a plugin settings page with its own contextual search field.
+/// The Settings host invokes this when the user presses Command-F on that page.
+@MainActor
+public protocol PluginSettingsSearchFocusing: AnyObject {
+    func focusSettingsSearch()
 }
 
 public enum PluginShortcutEventPhase: Sendable {
@@ -173,6 +181,29 @@ public protocol PluginSettingsPresenting: AnyObject {
     var requestSettingsPresentation: (() -> Void)? { get set }
 }
 
+/// An exact host-selected window target for commands that may outlive a temporary MacTools surface.
+/// `preferredWindowNumber` is required when the target belongs to MacTools so plugins can exclude
+/// transient search, grid, confirmation, and feedback panels.
+public struct PluginFocusedWindowTarget {
+    public let application: NSRunningApplication
+    public let preferredWindowNumber: Int?
+
+    public init(
+        application: NSRunningApplication,
+        preferredWindowNumber: Int? = nil
+    ) {
+        self.application = application
+        self.preferredWindowNumber = preferredWindowNumber
+    }
+}
+
+/// Optional host context for commands that must continue targeting the exact window focused before
+/// a MacTools search, grid, or other transient action surface became active.
+@MainActor
+public protocol PluginFocusedWindowTargetConsuming: AnyObject {
+    var focusedWindowTargetProvider: (() -> PluginFocusedWindowTarget?)? { get set }
+}
+
 /// Optional hook for built-in plugins that cache localized descriptors or
 /// other language-dependent presentation data. The host invokes it when the
 /// app language changes; implementations must not activate, deactivate, or
@@ -198,6 +229,39 @@ public protocol PluginShortcutBindingChangeHandling: AnyObject {
 public protocol PluginPortablePreferencesProviding: AnyObject {
     func makePortablePreferencesBackup() -> Data?
     func restorePortablePreferences(from data: Data)
+}
+
+/// Optional signal for plugins that persist portable preferences outside the
+/// host's UserDefaults-backed stores. Emit only after a meaningful preference
+/// mutation, never for live status refreshes or cache updates.
+@MainActor
+public protocol PluginPersistentPreferencesChangeSignaling: AnyObject {
+    var onPersistentPreferencesChange: (() -> Void)? { get set }
+}
+
+/// Delivers successful portable-preference persistence to the host, buffering
+/// a construction-time migration until the host installs its callback.
+@MainActor
+public final class PluginPersistentPreferencesChangeEmitter {
+    public var onChange: (() -> Void)? {
+        didSet {
+            guard onChange != nil, hasPendingChange else { return }
+            hasPendingChange = false
+            onChange?()
+        }
+    }
+
+    private var hasPendingChange = false
+
+    public init() {}
+
+    public func didPersist() {
+        guard let onChange else {
+            hasPendingChange = true
+            return
+        }
+        onChange()
+    }
 }
 
 /// Optional companion for portable-preference providers that can verify validation and

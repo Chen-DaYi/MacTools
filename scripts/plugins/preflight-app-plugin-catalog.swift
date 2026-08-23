@@ -9,6 +9,7 @@ private struct Options {
     var expectedCatalogPath: String?
     var publicKeyBase64: String?
     var deployedCatalogPath: String?
+    var requiredPluginKitVersion: Int?
 }
 
 private enum PreflightError: LocalizedError {
@@ -30,9 +31,9 @@ private struct CatalogRequirement {
 
 private let host12Requirement = CatalogRequirement(
     minimumAppVersion: "1.2.0",
-    pluginKitVersion: 4,
-    url: URL(string: "https://mactools.ggbond.app/plugins/v4/host-1.2/catalog.json")!,
-    expectedCatalogPath: "docs/plugins/v4/host-1.2/catalog.json"
+    pluginKitVersion: 5,
+    url: URL(string: "https://mactools.ggbond.app/plugins/v5/catalog.json")!,
+    expectedCatalogPath: "docs/plugins/v5/catalog.json"
 )
 private let productionCatalogID = "com.ggbond.mactools.plugins"
 
@@ -55,6 +56,11 @@ private func parseOptions() throws -> Options {
         case "--expected-catalog": options.expectedCatalogPath = value
         case "--public-key-base64": options.publicKeyBase64 = value
         case "--deployed-catalog": options.deployedCatalogPath = value
+        case "--required-plugin-kit-version":
+            guard let version = Int(value), version > 0 else {
+                try fail("Invalid PluginKit version: \(value)")
+            }
+            options.requiredPluginKitVersion = version
         default: try fail("Unknown option: \(option)")
         }
     }
@@ -251,6 +257,8 @@ do {
     let expectedPath = options.expectedCatalogPath ?? host12Requirement.expectedCatalogPath
     let catalogURL = options.catalogURL ?? host12Requirement.url
     let publicKey = try options.publicKeyBase64 ?? releasePublicKey()
+    let requiredPluginKitVersion = options.requiredPluginKitVersion
+        ?? host12Requirement.pluginKitVersion
     let expectedData = try readCatalog(at: expectedPath)
     let deployedData = try options.deployedCatalogPath.map(readCatalog(at:)) ?? fetch(catalogURL)
     let expected = try validateCatalog(
@@ -258,7 +266,7 @@ do {
         label: "Committed plugin catalog",
         targetAppVersion: appVersion,
         expectedCatalogID: productionCatalogID,
-        expectedPluginKitVersion: host12Requirement.pluginKitVersion,
+        expectedPluginKitVersion: requiredPluginKitVersion,
         publicKeyBase64: publicKey
     )
     let deployed = try validateCatalog(
@@ -266,7 +274,7 @@ do {
         label: "Deployed plugin catalog",
         targetAppVersion: appVersion,
         expectedCatalogID: productionCatalogID,
-        expectedPluginKitVersion: host12Requirement.pluginKitVersion,
+        expectedPluginKitVersion: requiredPluginKitVersion,
         publicKeyBase64: publicKey
     )
     guard try normalizedJSON(expected) == normalizedJSON(deployed) else {
@@ -276,7 +284,7 @@ do {
         )
     }
     print(
-        "Verified signed PluginKit \(host12Requirement.pluginKitVersion) catalog for "
+        "Verified signed PluginKit \(requiredPluginKitVersion) catalog for "
             + "MacTools \(appVersion): \(catalogURL.absoluteString)"
     )
 } catch {

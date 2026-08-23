@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import MacToolsPluginKit
 import SwiftUI
 import XCTest
 @testable import MacTools
@@ -52,9 +53,6 @@ final class AppWindowRouterTests: XCTestCase {
         let sidebarToggleIndex = toolbarItemIdentifiers.firstIndex {
             $0.contains("toggleSidebar")
         }
-        let splitSeparatorIndex = toolbarItemIdentifiers.firstIndex {
-            $0.contains("splitViewSeparator")
-        }
 
         XCTAssertNotNil(window.toolbar)
         XCTAssertEqual(window.toolbarStyle, .unified)
@@ -66,17 +64,11 @@ final class AppWindowRouterTests: XCTestCase {
             sidebarToggleIndex,
             "Expected the settings sidebar toggle to be removed, got \(toolbarItemIdentifiers)"
         )
-        XCTAssertNotNil(
-            splitSeparatorIndex,
-            "Expected a split-view toolbar separator, got \(toolbarItemIdentifiers)"
+        XCTAssertGreaterThanOrEqual(
+            toolbarItemIdentifiers.count,
+            2,
+            "Expected history and title toolbar items, got \(toolbarItemIdentifiers)"
         )
-        if let splitSeparatorIndex {
-            XCTAssertGreaterThanOrEqual(
-                toolbarItemIdentifiers.count,
-                splitSeparatorIndex + 3,
-                "Expected separate history and title items after the sidebar separator"
-            )
-        }
         XCTAssertEqual(hostingView.sizingOptions, [])
         XCTAssertEqual(
             hostingView.frame.width,
@@ -112,26 +104,92 @@ final class AppWindowRouterTests: XCTestCase {
         window.close()
     }
 
-    func testSettingsWindowOpensWithoutAutomaticInitialFocus() async throws {
+    func testSettingsWindowUsesSidebarAsInitialFocus() async throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let router = makeRouter(defaults: defaults)
 
-        router.presentSettings(.pluginMarketplace)
+        router.showSettings()
 
         let window = try XCTUnwrap(router.settingsWindow)
-        await settleWindowLayout(window)
+        let hostingView = try XCTUnwrap(window.contentView as? NSHostingView<SettingsView>)
         for _ in 0..<5 {
-            guard window.firstResponder !== window else {
-                break
-            }
-            await Task.yield()
+            await settleWindowLayout(window)
         }
 
+        let sidebarScrollView = try XCTUnwrap(settingsSidebarScrollView(in: hostingView))
+        let sidebarListView = try XCTUnwrap(sidebarScrollView.documentView as? NSTableView)
         XCTAssertTrue(
-            window.firstResponder === window,
-            "Expected the window to own initial focus, got \(String(describing: window.firstResponder))"
+            window.firstResponder === sidebarListView,
+            "Expected the settings sidebar to own initial focus, got \(String(describing: window.firstResponder))"
+        )
+
+        window.close()
+    }
+
+    func testUnifiedSearchOverlayPreservesSidebarScrollGeometry() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        let hostingView = try XCTUnwrap(window.contentView as? NSHostingView<SettingsView>)
+        await settleWindowLayout(window)
+        let sidebarScrollView = try XCTUnwrap(settingsSidebarScrollView(in: hostingView))
+        let initialBoundsOrigin = sidebarScrollView.contentView.bounds.origin
+        let initialContentInsets = sidebarScrollView.contentInsets
+        let initialFrame = sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView)
+
+        coordinator.presentUnifiedSearch(origin: .settingsSidebar)
+        await settleWindowLayout(window)
+
+        XCTAssertTrue(settingsSidebarScrollView(in: hostingView) === sidebarScrollView)
+        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.x, initialBoundsOrigin.x, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.y, initialBoundsOrigin.y, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentInsets.top, initialContentInsets.top, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentInsets.bottom, initialContentInsets.bottom, accuracy: 0.5)
+        assertEqual(
+            sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView),
+            initialFrame
+        )
+
+        coordinator.dismissUnifiedSearch()
+        await settleWindowLayout(window)
+
+        XCTAssertTrue(settingsSidebarScrollView(in: hostingView) === sidebarScrollView)
+        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.x, initialBoundsOrigin.x, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.y, initialBoundsOrigin.y, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentInsets.top, initialContentInsets.top, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentInsets.bottom, initialContentInsets.bottom, accuracy: 0.5)
+        assertEqual(
+            sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView),
+            initialFrame
+        )
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_K),
+                    characters: "k",
+                    windowNumber: window.windowNumber
+                )
+            )
+        )
+        await settleWindowLayout(window)
+
+        XCTAssertTrue(settingsSidebarScrollView(in: hostingView) === sidebarScrollView)
+        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.x, initialBoundsOrigin.x, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.y, initialBoundsOrigin.y, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentInsets.top, initialContentInsets.top, accuracy: 0.5)
+        XCTAssertEqual(sidebarScrollView.contentInsets.bottom, initialContentInsets.bottom, accuracy: 0.5)
+        assertEqual(
+            sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView),
+            initialFrame
         )
 
         window.close()
@@ -184,6 +242,37 @@ final class AppWindowRouterTests: XCTestCase {
             }
         }
         window.layoutIfNeeded()
+    }
+
+    private func settingsSidebarScrollView(in rootView: NSView) -> NSScrollView? {
+        descendantViews(of: rootView)
+            .compactMap { $0 as? NSScrollView }
+            .filter { scrollView in
+                let frame = scrollView.convert(scrollView.bounds, to: rootView)
+                return frame.minX < 320 && frame.width < 320 && frame.height > 200
+            }
+            .max { lhs, rhs in
+                lhs.bounds.height < rhs.bounds.height
+            }
+    }
+
+    private func descendantViews(of view: NSView) -> [NSView] {
+        view.subviews.flatMap { subview in
+            [subview] + descendantViews(of: subview)
+        }
+    }
+
+    private func assertEqual(
+        _ actual: NSRect,
+        _ expected: NSRect,
+        accuracy: CGFloat = 0.5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(actual.origin.x, expected.origin.x, accuracy: accuracy, file: file, line: line)
+        XCTAssertEqual(actual.origin.y, expected.origin.y, accuracy: accuracy, file: file, line: line)
+        XCTAssertEqual(actual.width, expected.width, accuracy: accuracy, file: file, line: line)
+        XCTAssertEqual(actual.height, expected.height, accuracy: accuracy, file: file, line: line)
     }
 
     func testSettingsWindowConstrainsLiveResizeToMinimumContentSize() throws {
@@ -793,6 +882,68 @@ final class AppWindowRouterTests: XCTestCase {
         router.settingsWindow?.close()
     }
 
+    func testSettingsWindowLayoutTargetRequiresVisibleKeyWindowWithoutUnifiedSearch() {
+        XCTAssertTrue(
+            AppWindowRouter.isEligibleFocusedWindowLayoutTarget(
+                isKeyWindow: true,
+                isVisible: true,
+                isUnifiedSearchPresented: false
+            )
+        )
+        XCTAssertFalse(
+            AppWindowRouter.isEligibleFocusedWindowLayoutTarget(
+                isKeyWindow: false,
+                isVisible: true,
+                isUnifiedSearchPresented: false
+            )
+        )
+        XCTAssertFalse(
+            AppWindowRouter.isEligibleFocusedWindowLayoutTarget(
+                isKeyWindow: true,
+                isVisible: false,
+                isUnifiedSearchPresented: false
+            )
+        )
+        XCTAssertFalse(
+            AppWindowRouter.isEligibleFocusedWindowLayoutTarget(
+                isKeyWindow: true,
+                isVisible: true,
+                isUnifiedSearchPresented: true
+            )
+        )
+    }
+
+    func testGlobalSearchRefreshesOnlyAppleShortcutsActions() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let appleShortcuts = RefreshCountingPlugin(id: "apple-shortcuts")
+        let unrelatedPlugin = RefreshCountingPlugin(id: "unrelated")
+        let host = PluginHost(
+            plugins: [appleShortcuts, unrelatedPlugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        let router = AppWindowRouter(
+            pluginHost: host,
+            appUpdater: AppUpdater(startingUpdater: false),
+            menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
+            menuBarIconGallery: MenuBarIconGalleryLibrary(),
+            launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
+            appearanceUserDefaults: defaults
+        )
+        let appleShortcutsRefreshCount = appleShortcuts.refreshCount
+        let unrelatedRefreshCount = unrelatedPlugin.refreshCount
+
+        router.showUnifiedSearch()
+
+        XCTAssertEqual(appleShortcuts.refreshCount, appleShortcutsRefreshCount + 1)
+        XCTAssertEqual(unrelatedPlugin.refreshCount, unrelatedRefreshCount)
+        router.settingsWindow?.close()
+    }
+
     private func makeRouter(
         defaults: UserDefaults,
         appUpdater: AppUpdater? = nil,
@@ -836,6 +987,30 @@ final class AppWindowRouterTests: XCTestCase {
             isARepeat: false,
             keyCode: keyCode
         )!
+    }
+}
+
+@MainActor
+private final class RefreshCountingPlugin: MacToolsPlugin {
+    let metadata: PluginMetadata
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var refreshCount = 0
+
+    init(id: String) {
+        metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "bolt",
+            iconTint: .accentColor,
+            order: 0,
+            defaultDescription: id
+        )
+    }
+
+    func refresh() {
+        refreshCount += 1
     }
 }
 
