@@ -449,7 +449,7 @@ final class MacToolsSearchTests: XCTestCase {
                 for: "setting",
                 in: ordered
             ),
-            2
+            3
         )
         XCTAssertNil(
             MacToolsSearchPresentation.quickSelectionNumber(
