@@ -9,7 +9,7 @@ import pathlib
 import re
 import shutil
 
-from plugin_source_manifest import expand_localized_references
+from plugin_source_manifest import expand_localized_references, validate_runtime_envelope
 
 
 MARKETING_VERSION_PATTERN = re.compile(
@@ -30,6 +30,7 @@ def copy_manifest(
     destination: pathlib.Path,
     configuration: str,
     app_version_config: pathlib.Path,
+    allow_sparse_legacy: bool = False,
 ) -> None:
     manifest = json.loads(source.read_text(encoding="utf-8"))
     had_build_metadata = "build" in manifest
@@ -37,6 +38,11 @@ def copy_manifest(
     expanded_manifest = expand_localized_references(manifest)
     had_localization_references = expanded_manifest != manifest
     manifest = expanded_manifest
+    validate_runtime_envelope(
+        manifest,
+        source,
+        allow_sparse_legacy=allow_sparse_legacy,
+    )
 
     if configuration != "Debug" and not had_build_metadata and not had_localization_references:
         shutil.copy2(source, destination)
@@ -59,6 +65,7 @@ def main() -> None:
     copy_parser.add_argument("--destination", type=pathlib.Path, required=True)
     copy_parser.add_argument("--configuration", required=True)
     copy_parser.add_argument("--app-version-config", type=pathlib.Path, required=True)
+    copy_parser.add_argument("--allow-sparse-legacy", action="store_true")
 
     version_parser = subparsers.add_parser("host-version")
     version_parser.add_argument("--app-version-config", type=pathlib.Path, required=True)
@@ -73,6 +80,7 @@ def main() -> None:
         destination=args.destination,
         configuration=args.configuration,
         app_version_config=args.app_version_config,
+        allow_sparse_legacy=args.allow_sparse_legacy,
     )
 
 

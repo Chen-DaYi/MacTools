@@ -195,9 +195,22 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
                     definition.key.id
                 )
             }
-            if let permissionProvider = plugin as? any PluginActionPermissionProviding {
+            let manifestPermissionIDs = Set(descriptor["permissionIDs"] as? [String] ?? [])
+            if !manifestPermissionIDs.isEmpty {
+                guard let permissionProvider = plugin as? any PluginActionPermissionProviding else {
+                    XCTFail(
+                        "\(definition.key.id) declares action permissions without a runtime provider"
+                    )
+                    continue
+                }
                 XCTAssertEqual(
-                    Set(descriptor["permissionIDs"] as? [String] ?? []),
+                    manifestPermissionIDs,
+                    Set(permissionProvider.permissionRequirementIDs(for: definition.key)),
+                    definition.key.id
+                )
+            } else if let permissionProvider = plugin as? any PluginActionPermissionProviding {
+                XCTAssertEqual(
+                    manifestPermissionIDs,
                     Set(permissionProvider.permissionRequirementIDs(for: definition.key)),
                     definition.key.id
                 )

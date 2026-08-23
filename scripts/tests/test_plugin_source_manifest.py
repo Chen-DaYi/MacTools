@@ -110,7 +110,7 @@ class PluginSourceManifestTests(unittest.TestCase):
             "AutoHideDock": ["automation"],
             "AutoHideMenuBar": ["automation"],
             "EmptyTrash": ["automation"],
-            "RightClick": ["automation"],
+            "RightClick": [],
             "DeviceBattery": ["inputMonitoring"],
             "ZshConfig": ["automation"],
         }
@@ -134,6 +134,14 @@ class PluginSourceManifestTests(unittest.TestCase):
         self.assertEqual(cloudflare["requirements"]["setupComplexity"], "advanced")
         self.assertTrue(cloudflare["setup"]["steps"])
 
+        right_click = json.loads(
+            (PLUGINS_ROOT / "RightClick" / "plugin.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(right_click["permissions"], [])
+        self.assertEqual(right_click["requirements"]["permissionIDs"], [])
+        self.assertEqual(right_click["requirements"]["setupComplexity"], "guided")
+        self.assertTrue(right_click["setup"]["steps"])
+
         translator = json.loads(
             (PLUGINS_ROOT / "Translator" / "plugin.json").read_text(encoding="utf-8")
         )
@@ -148,6 +156,20 @@ class PluginSourceManifestTests(unittest.TestCase):
                 "select-translation": ["accessibility", "automation"],
                 "screenshot-translation": ["screen-recording"],
             },
+        )
+
+        auto_input = json.loads(
+            (PLUGINS_ROOT / "AutoInput" / "plugin.json").read_text(encoding="utf-8")
+        )
+        auto_input_actions = auto_input["actions"]["providers"][0]
+        self.assertTrue(
+            all(
+                not action["permissionIDs"]
+                for action in (
+                    auto_input_actions["staticActions"]
+                    + auto_input_actions["dynamicTemplates"]
+                )
+            )
         )
 
         activity = json.loads(
@@ -167,25 +189,37 @@ class PluginSourceManifestTests(unittest.TestCase):
 
         shortcuts = json.loads(
             (PLUGINS_ROOT / "AppleShortcuts" / "plugin.json").read_text(encoding="utf-8")
-        )["actions"]["providers"][0]["dynamicTemplates"][0]
-        self.assertTrue(shortcuts["riskVariesByEntry"])
-        self.assertNotIn("automaticEligibilityVariesByEntry", shortcuts)
-        self.assertEqual(shortcuts["risk"], "confirmationRequired")
-        self.assertEqual(shortcuts["externalInvocation"], "confirmAlways")
-        self.assertIn("run-link", shortcuts["surfaces"])
+        )
+        self.assertTrue(shortcuts["privacy"]["processesSensitiveUserContent"])
+        shortcut_template = shortcuts["actions"]["providers"][0]["dynamicTemplates"][0]
+        self.assertTrue(shortcut_template["riskVariesByEntry"])
+        self.assertNotIn("automaticEligibilityVariesByEntry", shortcut_template)
+        self.assertEqual(shortcut_template["risk"], "confirmationRequired")
+        self.assertEqual(shortcut_template["externalInvocation"], "confirmAlways")
+        self.assertIn("run-link", shortcut_template["surfaces"])
 
         scripts = json.loads(
             (PLUGINS_ROOT / "SavedScripts" / "plugin.json").read_text(encoding="utf-8")
-        )["actions"]["providers"][0]["dynamicTemplates"][0]
-        self.assertTrue(scripts["riskVariesByEntry"])
-        self.assertTrue(scripts["automaticEligibilityVariesByEntry"])
-        self.assertEqual(scripts["risk"], "confirmationRequired")
-        self.assertEqual(scripts["externalInvocation"], "configurable")
-        self.assertTrue({"run-link", "automatic-rule"}.issubset(scripts["surfaces"]))
+        )
+        self.assertTrue(
+            {"script-content", "script-working-directories"}.issubset(
+                scripts["privacy"]["dataPersisted"]
+            )
+        )
+        self.assertIn("script-working-directories", scripts["privacy"]["dataObserved"])
+        script_template = scripts["actions"]["providers"][0]["dynamicTemplates"][0]
+        self.assertTrue(script_template["riskVariesByEntry"])
+        self.assertTrue(script_template["automaticEligibilityVariesByEntry"])
+        self.assertEqual(script_template["risk"], "confirmationRequired")
+        self.assertEqual(script_template["externalInvocation"], "configurable")
+        self.assertTrue(
+            {"run-link", "automatic-rule"}.issubset(script_template["surfaces"])
+        )
 
         layouts = json.loads(
             (PLUGINS_ROOT / "WindowLayouts" / "plugin.json").read_text(encoding="utf-8")
         )
+        self.assertTrue(layouts["privacy"]["processesSensitiveUserContent"])
         custom = layouts["actions"]["providers"][0]["dynamicTemplates"][0]
         self.assertEqual(custom["externalInvocation"], "configurable")
         self.assertIn("run-link", custom["surfaces"])
@@ -294,23 +328,143 @@ class PluginSourceManifestTests(unittest.TestCase):
             ):
                 validate_and_project_manifest(manifest, path, known_ids)
 
-    def test_sparse_legacy_manifest_remains_valid(self) -> None:
+    def test_runtime_envelope_schema_matches_source_validator(self) -> None:
+        schema = json.loads(
+            (REPO_ROOT / "docs" / "plugins" / "plugin-manifest.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        definitions = schema["$defs"]
+        self.assertEqual(schema["properties"]["id"]["$ref"], "#/$defs/pluginIdentifier")
+        self.assertEqual(
+            definitions["pluginIdentifier"]["pattern"],
+            r"^[A-Za-z0-9][A-Za-z0-9._-]{1,126}[A-Za-z0-9]$",
+        )
+        self.assertEqual(definitions["pluginIdentifier"]["not"], {"const": "marketplace"})
+        self.assertEqual(
+            schema["properties"]["bundleRelativePath"]["$ref"],
+            "#/$defs/bundleRelativePath",
+        )
+        self.assertEqual(
+            schema["properties"]["localizedMetadata"]["$ref"],
+            "#/$defs/localizedMetadata",
+        )
+        self.assertEqual(schema["properties"]["releaseChannel"]["type"], "string")
+        self.assertEqual(schema["properties"]["releaseNotesURL"]["pattern"], "^https://")
+        capabilities = definitions["capabilities"]
+        self.assertEqual(
+            set(capabilities["required"]),
+            {"primaryPanel", "componentPanel", "settings"},
+        )
+        self.assertFalse(capabilities["additionalProperties"])
+        self.assertEqual(
+            set(capabilities["properties"]["settings"]["enum"]),
+            {"none", "form", "workspace"},
+        )
+
+    def test_sparse_legacy_runtime_envelopes_remain_valid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = pathlib.Path(temporary_directory) / "plugin.json"
-            manifest = {
-                "id": "legacy-demo",
-                "displayName": "Legacy",
-                "version": "1.0.0",
-                "minHostVersion": "1.0.0",
-                "pluginKitVersion": 4,
-                "bundleRelativePath": "Legacy.bundle",
-            }
-            path.write_text(json.dumps(manifest), encoding="utf-8")
+            fixtures = (
+                (3, {"primaryPanel": True, "configuration": True}),
+                (4, {"componentPanel": True, "settings": "form"}),
+            )
+            for plugin_kit_version, capabilities in fixtures:
+                manifest = {
+                    "id": "legacy-demo",
+                    "displayName": "Legacy",
+                    "version": "1.0.0",
+                    "minHostVersion": "1.0.0",
+                    "pluginKitVersion": plugin_kit_version,
+                    "bundleRelativePath": "Legacy.bundle",
+                    "capabilities": capabilities,
+                    "permissions": [],
+                }
+                path.write_text(json.dumps(manifest), encoding="utf-8")
 
-            projected, assets = validate_and_project_manifest(manifest, path, {"legacy-demo"})
+                with self.subTest(pluginKitVersion=plugin_kit_version):
+                    projected, assets = validate_and_project_manifest(
+                        manifest,
+                        path,
+                        {"legacy-demo"},
+                        allow_sparse_legacy=True,
+                    )
 
-            self.assertNotIn("presentation", projected)
-            self.assertEqual(assets, [])
+                    self.assertNotIn("presentation", projected)
+                    self.assertEqual(assets, [])
+
+    def test_runtime_envelope_mutations_are_rejected(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+        mutations = {
+            "reserved id": lambda value: value.__setitem__("id", "marketplace"),
+            "empty display name": lambda value: value.__setitem__("displayName", ""),
+            "string PluginKit version": lambda value: value.__setitem__("pluginKitVersion", "5"),
+            "traversal bundle path": lambda value: value.__setitem__(
+                "bundleRelativePath", "../Bad.bundle"
+            ),
+            "array capabilities": lambda value: value.__setitem__("capabilities", []),
+            "incomplete capabilities": lambda value: value.__setitem__(
+                "capabilities", {"primaryPanel": True}
+            ),
+            "numeric summary": lambda value: value.__setitem__("summary", 4),
+            "empty summary": lambda value: value.__setitem__("summary", ""),
+            "array localized metadata": lambda value: value.__setitem__(
+                "localizedMetadata", []
+            ),
+            "invalid localized metadata entry": lambda value: value.__setitem__(
+                "localizedMetadata", {"en": 4}
+            ),
+            "numeric release channel": lambda value: value.__setitem__("releaseChannel", 4),
+            "empty release channel": lambda value: value.__setitem__("releaseChannel", ""),
+            "numeric release notes URL": lambda value: value.__setitem__("releaseNotesURL", 4),
+            "invalid release notes URL": lambda value: value.__setitem__(
+                "releaseNotesURL", "not-a-url"
+            ),
+            "release notes URL with host whitespace": lambda value: value.__setitem__(
+                "releaseNotesURL", "https://bad host/path"
+            ),
+            "release notes URL with invalid port": lambda value: value.__setitem__(
+                "releaseNotesURL", "https://example.com:abc/x"
+            ),
+        }
+        for name, mutate in mutations.items():
+            invalid = copy.deepcopy(manifest)
+            mutate(invalid)
+            with self.subTest(mutation=name), self.assertRaises(ManifestValidationError):
+                validate_and_project_manifest(invalid, path, known_ids)
+
+    def test_catalog_rejects_invalid_packaged_runtime_envelope(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            package = root / "appearance.mactoolsplugin"
+            package.mkdir()
+            packaged_manifest = json.loads(
+                (PLUGINS_ROOT / "Appearance" / "plugin.json").read_text(encoding="utf-8")
+            )
+            packaged_manifest["capabilities"] = []
+            package.joinpath("plugin.json").write_text(
+                json.dumps(packaged_manifest),
+                encoding="utf-8",
+            )
+            package.joinpath("Appearance.bundle").mkdir()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_ROOT / "generate-plugin-catalog.py"),
+                    "--mode", "debug",
+                    "--output", str(root / "catalog.json"),
+                    "--package", str(package),
+                    "--plugins-root", str(PLUGINS_ROOT),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("capabilities", result.stderr)
 
     def test_duplicate_plugin_ids_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -514,6 +668,17 @@ class PluginSourceManifestTests(unittest.TestCase):
             localized = {locale: "Preview" for locale in SUPPORTED_LOCALES}
             manifest = {
                 "id": "asset-demo",
+                "displayName": "Asset Demo",
+                "version": "1.0.0",
+                "minHostVersion": "1.2.0",
+                "pluginKitVersion": 5,
+                "bundleRelativePath": "AssetDemo.bundle",
+                "capabilities": {
+                    "primaryPanel": False,
+                    "componentPanel": False,
+                    "settings": "none",
+                },
+                "permissions": [],
                 "category": "other",
                 "productStrings": {"preview": localized},
                 "presentation": {
@@ -546,6 +711,17 @@ class PluginSourceManifestTests(unittest.TestCase):
         def manifest_for(path: str) -> dict:
             return {
                 "id": "asset-demo",
+                "displayName": "Asset Demo",
+                "version": "1.0.0",
+                "minHostVersion": "1.2.0",
+                "pluginKitVersion": 5,
+                "bundleRelativePath": "AssetDemo.bundle",
+                "capabilities": {
+                    "primaryPanel": False,
+                    "componentPanel": False,
+                    "settings": "none",
+                },
+                "permissions": [],
                 "category": "other",
                 "productStrings": {"preview": localized},
                 "presentation": {

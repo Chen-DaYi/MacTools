@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 import struct
@@ -40,9 +41,14 @@ VALID_SETUP_COMPLEXITIES = {"none", "simple", "guided", "advanced"}
 VALID_NETWORK_USE = {"none", "optional", "required"}
 VALID_TELEMETRY = {"none", "optional", "required"}
 VALID_RETENTION = {"none", "session", "until-disabled", "until-uninstalled", "user-controlled"}
+VALID_SETTINGS_CAPABILITIES = {"none", "form", "workspace"}
+CURRENT_SOURCE_PLUGIN_KIT_VERSION = 5
 MAX_ASSET_BYTES = 10 * 1024 * 1024
 MAX_ASSET_DIMENSION = 7680
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+PLUGIN_IDENTIFIER_PATTERN = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]{1,126}[A-Za-z0-9]$"
+)
 VERSION_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+){0,2}$")
 DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
@@ -124,6 +130,140 @@ def _localized_source_fields(manifest: dict):
                         yield f"setup.steps[{index}].{field}", step[field]
         if "missingDependencyHelp" in setup:
             yield "setup.missingDependencyHelp", setup["missingDependencyHelp"]
+
+
+def validate_runtime_envelope(
+    manifest: dict,
+    manifest_path: Path,
+    *,
+    allow_sparse_legacy: bool = False,
+) -> str:
+    """Validate fields decoded by PluginPackageManifest before projection or packaging."""
+    fallback_id = manifest_path.parent.name
+    plugin_id = manifest.get("id", fallback_id)
+    plugin_kit_version = manifest.get("pluginKitVersion")
+    is_sparse_legacy = (
+        allow_sparse_legacy
+        and type(plugin_kit_version) is int
+        and plugin_kit_version < CURRENT_SOURCE_PLUGIN_KIT_VERSION
+    )
+    required = {
+        "id",
+        "displayName",
+        "version",
+        "minHostVersion",
+        "pluginKitVersion",
+        "bundleRelativePath",
+        "capabilities",
+        "permissions",
+    }
+    if not is_sparse_legacy:
+        required.add("category")
+    missing = sorted(required - set(manifest))
+    if missing:
+        _fail(plugin_id, "manifest", "missing required keys: " + ", ".join(missing))
+
+    if "id" in manifest:
+        if (
+            not isinstance(manifest["id"], str)
+            or manifest["id"] == "marketplace"
+            or not PLUGIN_IDENTIFIER_PATTERN.fullmatch(manifest["id"])
+        ):
+            _fail(plugin_id, "id", "must be a valid non-reserved plugin identifier")
+        plugin_id = manifest["id"]
+    if "displayName" in manifest:
+        _non_empty_string(manifest["displayName"], plugin_id, "displayName")
+    if "summary" in manifest:
+        _non_empty_string(manifest["summary"], plugin_id, "summary")
+    for key in ("version", "minHostVersion"):
+        if key in manifest:
+            _version(manifest[key], plugin_id, key)
+    if "pluginKitVersion" in manifest:
+        if type(manifest["pluginKitVersion"]) is not int or manifest["pluginKitVersion"] < 1:
+            _fail(plugin_id, "pluginKitVersion", "must be a positive integer")
+    if "bundleRelativePath" in manifest:
+        bundle_path = manifest["bundleRelativePath"]
+        if (
+            not isinstance(bundle_path, str)
+            or not bundle_path
+            or bundle_path.startswith("/")
+            or ".." in bundle_path.split("/")
+        ):
+            _fail(plugin_id, "bundleRelativePath", "must be a safe relative path")
+    if "factoryClass" in manifest:
+        _non_empty_string(manifest["factoryClass"], plugin_id, "factoryClass")
+    if "capabilities" in manifest:
+        capabilities = manifest["capabilities"]
+        if not isinstance(capabilities, dict):
+            _fail(plugin_id, "capabilities", "must be an object")
+        if is_sparse_legacy:
+            allowed_capabilities = {
+                "primaryPanel", "componentPanel", "settings", "configuration"
+            }
+            required_capabilities = set()
+        else:
+            allowed_capabilities = {"primaryPanel", "componentPanel", "settings"}
+            required_capabilities = allowed_capabilities
+        missing_capabilities = sorted(required_capabilities - set(capabilities))
+        if missing_capabilities:
+            _fail(
+                plugin_id,
+                "capabilities",
+                "missing required keys: " + ", ".join(missing_capabilities),
+            )
+        unexpected_capabilities = sorted(set(capabilities) - allowed_capabilities)
+        if unexpected_capabilities:
+            _fail(
+                plugin_id,
+                "capabilities",
+                "contains unsupported keys: " + ", ".join(unexpected_capabilities),
+            )
+        for key in ("primaryPanel", "componentPanel"):
+            if key in capabilities and type(capabilities[key]) is not bool:
+                _fail(plugin_id, f"capabilities.{key}", "must be a boolean")
+        if "settings" in capabilities:
+            settings = capabilities["settings"]
+            if not isinstance(settings, str) or settings not in VALID_SETTINGS_CAPABILITIES:
+                _fail(plugin_id, "capabilities.settings", "is not supported")
+        if "configuration" in capabilities and type(capabilities["configuration"]) is not bool:
+            _fail(plugin_id, "capabilities.configuration", "must be a boolean")
+    if "permissions" in manifest:
+        _unique_strings(manifest["permissions"], plugin_id, "permissions")
+        invalid_permissions = sorted(set(manifest["permissions"]) - VALID_PERMISSION_IDS)
+        if invalid_permissions:
+            _fail(plugin_id, "permissions", "unknown: " + ", ".join(invalid_permissions))
+    if "category" in manifest:
+        category = manifest["category"]
+        if not isinstance(category, str) or category not in VALID_CATEGORIES:
+            _fail(plugin_id, "category", "is not a supported category")
+    if "releaseChannel" in manifest:
+        _non_empty_string(manifest["releaseChannel"], plugin_id, "releaseChannel")
+    if "releaseNotesURL" in manifest:
+        _https_url(manifest["releaseNotesURL"], plugin_id, "releaseNotesURL")
+    if "localizedMetadata" in manifest:
+        metadata = manifest["localizedMetadata"]
+        if not isinstance(metadata, dict):
+            _fail(plugin_id, "localizedMetadata", "must be an object")
+        for locale, localized in metadata.items():
+            if not isinstance(locale, str) or not locale.strip():
+                _fail(plugin_id, "localizedMetadata", "must use non-empty locale keys")
+            if not isinstance(localized, dict):
+                _fail(plugin_id, f"localizedMetadata.{locale}", "must be an object")
+            unexpected = sorted(set(localized) - {"displayName", "summary"})
+            if unexpected:
+                _fail(
+                    plugin_id,
+                    f"localizedMetadata.{locale}",
+                    "contains unsupported keys: " + ", ".join(unexpected),
+                )
+            for field in ("displayName", "summary"):
+                if field in localized:
+                    _non_empty_string(
+                        localized[field],
+                        plugin_id,
+                        f"localizedMetadata.{locale}.{field}",
+                    )
+    return plugin_id
 
 
 def expand_localized_references(manifest: dict) -> dict:
@@ -267,9 +407,27 @@ def _version(value: object, plugin_id: str, field: str) -> None:
 
 
 def _https_url(value: object, plugin_id: str, field: str) -> None:
-    parsed = urlparse(value) if isinstance(value, str) else None
-    if parsed is None or parsed.scheme != "https" or not parsed.netloc:
+    if not isinstance(value, str) or any(character.isspace() for character in value):
         _fail(plugin_id, field, "must be an HTTPS URL")
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError:
+        _fail(plugin_id, field, "must be an HTTPS URL")
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        _fail(plugin_id, field, "must be an HTTPS URL")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        if not DOMAIN_PATTERN.fullmatch(hostname):
+            _fail(plugin_id, field, "must be an HTTPS URL")
 
 
 def _image_dimensions(path: Path, media_type: str) -> tuple[int | None, int | None]:
@@ -531,23 +689,18 @@ def validate_and_project_manifest(
     manifest: dict,
     manifest_path: Path,
     known_plugin_ids: set[str],
+    *,
+    allow_sparse_legacy: bool = False,
 ) -> tuple[dict, list[AssetProjection]]:
     manifest = expand_localized_references(manifest)
-    plugin_id = manifest.get("id", manifest_path.parent.name)
-    for key in ("version", "minHostVersion"):
-        if key in manifest:
-            _version(manifest[key], plugin_id, key)
+    plugin_id = validate_runtime_envelope(
+        manifest,
+        manifest_path,
+        allow_sparse_legacy=allow_sparse_legacy,
+    )
     for section in ("presentation", "discovery", "requirements", "privacy", "actions", "setup", "relationships"):
         if section in manifest and not isinstance(manifest[section], dict):
             _fail(plugin_id, section, "must be an object")
-    if "category" in manifest and manifest.get("category") not in VALID_CATEGORIES:
-        _fail(plugin_id, "category", "is not a supported category")
-    if "permissions" in manifest:
-        _unique_strings(manifest["permissions"], plugin_id, "permissions")
-        invalid_permissions = sorted(set(manifest["permissions"]) - VALID_PERMISSION_IDS)
-        if invalid_permissions:
-            _fail(plugin_id, "permissions", "unknown: " + ", ".join(invalid_permissions))
-
     assets: list[AssetProjection] = []
     presentation = manifest.get("presentation")
     if presentation is not None:

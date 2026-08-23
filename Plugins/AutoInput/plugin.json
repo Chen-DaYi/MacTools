@@ -206,9 +206,7 @@
             "systemImage": "keyboard",
             "parameters": [],
             "parameterSummary": "@productStrings.summary",
-            "permissionIDs": [
-              "accessibility"
-            ],
+            "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
               "unified-search",
@@ -246,9 +244,7 @@
               }
             ],
             "parameterSummary": "@productStrings.summary",
-            "permissionIDs": [
-              "accessibility"
-            ],
+            "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
               "unified-search",
@@ -289,9 +285,7 @@
               "installed",
               "sources"
             ],
-            "permissionIDs": [
-              "accessibility"
-            ],
+            "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
               "unified-search",

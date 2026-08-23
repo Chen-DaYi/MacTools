@@ -12,7 +12,11 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from plugin_source_manifest import load_known_plugin_ids, validate_and_project_manifest
+from plugin_source_manifest import (
+    load_known_plugin_ids,
+    validate_and_project_manifest,
+    validate_runtime_envelope,
+)
 
 
 SCHEMA3_MINIMUM_HOST_VERSION = "1.2.1"
@@ -38,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--plugins-root", type=Path, default=Path("Plugins"))
     parser.add_argument("--website-output", type=Path)
     parser.add_argument("--generated-at")
+    parser.add_argument("--allow-sparse-legacy", action="store_true")
     return parser.parse_args()
 
 
@@ -102,6 +107,8 @@ def main() -> None:
     args = parse_args()
     if args.mode == "release" and not args.base_url:
         raise SystemExit("--base-url is required in release mode")
+    if args.mode == "release" and args.allow_sparse_legacy:
+        raise SystemExit("--allow-sparse-legacy is available only for local debug catalogs")
     minimum_host_version = args.minimum_host_version or (
         SCHEMA3_MINIMUM_HOST_VERSION if args.mode == "release" else "0.1.0"
     )
@@ -129,13 +136,18 @@ def main() -> None:
             if not packaged_manifest_path.is_file():
                 raise SystemExit(f"Missing plugin.json: {root}")
             packaged_manifest = json.loads(packaged_manifest_path.read_text(encoding="utf-8"))
-            plugin_id = packaged_manifest["id"]
+            plugin_id = validate_runtime_envelope(
+                packaged_manifest,
+                packaged_manifest_path,
+                allow_sparse_legacy=args.allow_sparse_legacy,
+            )
             source_path = source_manifest_path(args.plugins_root, plugin_id, packaged_manifest_path)
             source_manifest = json.loads(source_path.read_text(encoding="utf-8"))
             projected, assets = validate_and_project_manifest(
                 source_manifest,
                 source_path,
                 known_plugin_ids or {plugin_id},
+                allow_sparse_legacy=args.allow_sparse_legacy,
             )
             manifest_plugin_kit_version = int(packaged_manifest["pluginKitVersion"])
             plugin_kit_versions.add(manifest_plugin_kit_version)

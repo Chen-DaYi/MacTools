@@ -14,6 +14,7 @@ PLUGIN_RELEASE_WORKFLOW = REPO_ROOT / ".github/workflows/plugin-release.yml"
 MAKEFILE = REPO_ROOT / "Makefile"
 ACTION_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/ActionModels.swift"
 COMPONENT_THEME_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginComponentTheme.swift"
+PLUGIN_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginModels.swift"
 NEW_API_MINIMUM_HOSTS = {
     # Canonical action registry, execution, discovery, and surface bridges.
     "ActionKey": "1.2.0",
@@ -72,6 +73,8 @@ NEW_API_MINIMUM_HOSTS = {
     "PluginComponentTheme": "1.2.0",
     "PluginComponentCardBackground": "1.2.0",
     "PluginActionSafetyStateChangeProviding": "1.2.0",
+    # Finder-extension permission presentation introduced after host 1.2.0.
+    ".finderExtension": "1.2.1",
 }
 
 
@@ -142,11 +145,14 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
         self.assertIn("if (( PLUGIN_KIT_VERSION < 5 )); then", workflow)
         self.assertIn('case " 1 2 3 4 " in', makefile)
 
-    def test_every_current_plugin_targets_plugin_kit5_and_mac_tools_1_2(self) -> None:
+    def test_every_current_plugin_targets_plugin_kit5_and_mac_tools_1_2_or_newer(self) -> None:
         incompatible = []
         for manifest_path in sorted(PLUGINS_ROOT.glob("*/plugin.json")):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest["pluginKitVersion"] != 5 or manifest["minHostVersion"] != "1.2.0":
+            if (
+                manifest["pluginKitVersion"] != 5
+                or version_tuple(manifest["minHostVersion"]) < version_tuple("1.2.0")
+            ):
                 incompatible.append(manifest["id"])
         self.assertEqual(incompatible, [])
 
@@ -162,6 +168,27 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
             violations += minimum_host_violations(manifest["id"], declared, source)
 
         self.assertEqual(violations, [], "\n".join(violations))
+
+    def test_plugin_permission_kind_preserves_released_case_order(self) -> None:
+        source = PLUGIN_MODELS.read_text(encoding="utf-8")
+        match = re.search(
+            r"public enum PluginPermissionKind\s*\{(?P<body>.*?)\n\}",
+            source,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        cases = re.findall(r"^\s*case\s+(\w+)", match.group("body"), flags=re.MULTILINE)
+        self.assertEqual(
+            cases[:6],
+            [
+                "accessibility",
+                "inputMonitoring",
+                "calendarFullAccess",
+                "automation",
+                "screenRecording",
+                "finderExtension",
+            ],
+        )
 
     def test_action_model_inventory_covers_every_public_type_used_by_plugins(self) -> None:
         action_model_symbols = public_top_level_type_names(

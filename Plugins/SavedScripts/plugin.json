@@ -151,10 +151,13 @@
   "privacy": {
     "dataObserved": [
       "script-content",
-      "script-output"
+      "script-output",
+      "script-working-directories"
     ],
     "dataPersisted": [
-      "plugin-configuration"
+      "plugin-configuration",
+      "script-content",
+      "script-working-directories"
     ],
     "retention": {
       "policy": "user-controlled"

@@ -5524,6 +5524,8 @@ final class PluginHost: ObservableObject {
                 : AppL10n.plugins("plugin.permission.requestAuthorization", defaultValue: "请求授权")
         case .automation:
             return AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
+        case .finderExtension:
+            return AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
         case .screenRecording:
             return isGranted
                 ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
@@ -5541,6 +5543,8 @@ final class PluginHost: ObservableObject {
             return "calendar"
         case .automation:
             return "cursorarrow.click.2"
+        case .finderExtension:
+            return "puzzlepiece.extension"
         case .screenRecording:
             return "rectangle.dashed.badge.record"
         }

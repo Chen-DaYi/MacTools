@@ -15,18 +15,20 @@
     "category"
   ],
   "properties": {
-    "id": {"$ref": "#/$defs/identifier"},
+    "id": {"$ref": "#/$defs/pluginIdentifier"},
     "displayName": {"type": "string", "minLength": 1},
     "summary": {"type": "string", "minLength": 1},
     "version": {"$ref": "#/$defs/version"},
     "minHostVersion": {"$ref": "#/$defs/version"},
     "pluginKitVersion": {"type": "integer", "minimum": 1},
-    "bundleRelativePath": {"type": "string", "minLength": 1},
+    "bundleRelativePath": {"$ref": "#/$defs/bundleRelativePath"},
     "factoryClass": {"type": "string", "minLength": 1},
-    "capabilities": {"type": "object"},
+    "capabilities": {"$ref": "#/$defs/capabilities"},
     "permissions": {"type": "array", "items": {"$ref": "#/$defs/permission"}, "uniqueItems": true},
     "category": {"enum": ["display", "audio", "system", "storage", "productivity", "monitoring", "other"]},
-    "localizedMetadata": {"type": "object"},
+    "releaseChannel": {"type": "string", "minLength": 1},
+    "releaseNotesURL": {"type": "string", "format": "uri", "pattern": "^https://"},
+    "localizedMetadata": {"$ref": "#/$defs/localizedMetadata"},
     "productStrings": {
       "type": "object",
       "minProperties": 1,
@@ -203,8 +205,42 @@
     }
   },
   "$defs": {
+    "pluginIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{1,126}[A-Za-z0-9]$",
+      "not": {"const": "marketplace"}
+    },
     "identifier": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
     "version": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+){0,2}$"},
+    "bundleRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["primaryPanel", "componentPanel", "settings"],
+      "properties": {
+        "primaryPanel": {"type": "boolean"},
+        "componentPanel": {"type": "boolean"},
+        "settings": {"enum": ["none", "form", "workspace"]}
+      },
+      "additionalProperties": false
+    },
+    "localizedMetadata": {
+      "type": "object",
+      "propertyNames": {"type": "string", "minLength": 1},
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "displayName": {"type": "string", "minLength": 1},
+          "summary": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
     "uniqueStrings": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
     "localizedText": {
       "type": "string",

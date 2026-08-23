@@ -167,7 +167,7 @@
     "networkDomains": [],
     "allowsUserConfiguredDomains": false,
     "telemetry": "none",
-    "processesSensitiveUserContent": false,
+    "processesSensitiveUserContent": true,
     "diagnosticExportsContainUserData": false
   },
   "setup": {

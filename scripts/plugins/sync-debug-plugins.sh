@@ -487,6 +487,7 @@ while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bund
             --source "$manifest" \
             --destination "$package_path/plugin.json" \
             --configuration Debug \
+            --allow-sparse-legacy \
             --app-version-config "$APP_VERSION_CONFIG"
         ditto "$bundle_path" "$package_path/$bundle_relative_path"
         printf '%s\n' "$fingerprint" > "$state_path"
@@ -562,6 +563,7 @@ if [[ "$synced_count" -gt 0 || "$removed_count" -gt 0 || ! -f "$CATALOG_PATH" ]]
         --mode debug \
         --output "$CATALOG_PATH" \
         --plugins-root "$SOURCE_DIR" \
+        --allow-sparse-legacy \
         "${catalog_args[@]}"
 fi
 
