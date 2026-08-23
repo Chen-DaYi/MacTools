@@ -32,7 +32,7 @@ final class WindowLayoutsPluginTests: XCTestCase {
         )
     }
 
-    func testAppIntentsAndRunLinksAreExposed() throws {
+    func testProviderDoesNotVetoSystemExposureAndRunLinksAreAllowed() throws {
         let plugin = makePlugin()
         let definition = try XCTUnwrap(plugin.actionDefinitions.first)
         let reference = ActionReference(key: definition.key)

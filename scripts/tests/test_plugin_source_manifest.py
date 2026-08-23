@@ -66,6 +66,55 @@ class PluginSourceManifestTests(unittest.TestCase):
             manifest["localizedMetadata"]["en"]["summary"],
         )
 
+    def test_reviewed_runtime_requirements_and_disclosures_stay_accurate(self) -> None:
+        expected_permissions = {
+            "EmptyTrash": ["automation"],
+            "RightClick": ["automation"],
+            "DeviceBattery": ["inputMonitoring"],
+        }
+        for directory, permissions in expected_permissions.items():
+            manifest = json.loads(
+                (PLUGINS_ROOT / directory / "plugin.json").read_text(encoding="utf-8")
+            )
+            with self.subTest(plugin=manifest["id"]):
+                self.assertEqual(manifest["permissions"], permissions)
+                self.assertEqual(manifest["requirements"]["permissionIDs"], permissions)
+
+        battery = json.loads(
+            (PLUGINS_ROOT / "BatteryChargeLimit" / "plugin.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(set(battery["requirements"]["architectures"]), {"arm64", "x86_64"})
+        self.assertNotIn("Apple Silicon Mac", battery["requirements"]["hardware"])
+
+        cloudflare = json.loads(
+            (PLUGINS_ROOT / "CloudflareR2" / "plugin.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(cloudflare["requirements"]["setupComplexity"], "advanced")
+        self.assertTrue(cloudflare["setup"]["steps"])
+
+        translator = json.loads(
+            (PLUGINS_ROOT / "Translator" / "plugin.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(translator["privacy"]["networkDomains"], ["api.openai.com"])
+        translator_actions = {
+            action["id"]: action["permissionIDs"]
+            for action in translator["actions"]["providers"][0]["staticActions"]
+        }
+        self.assertEqual(
+            translator_actions,
+            {
+                "select-translation": ["accessibility", "automation"],
+                "screenshot-translation": ["screen-recording"],
+            },
+        )
+
+        layouts = json.loads(
+            (PLUGINS_ROOT / "WindowLayouts" / "plugin.json").read_text(encoding="utf-8")
+        )
+        custom = layouts["actions"]["providers"][0]["dynamicTemplates"][0]
+        self.assertEqual(custom["externalInvocation"], "configurable")
+        self.assertIn("run-link", custom["surfaces"])
+
     def test_sparse_legacy_manifest_remains_valid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = pathlib.Path(temporary_directory) / "plugin.json"
@@ -120,6 +169,61 @@ class PluginSourceManifestTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ManifestValidationError, "duplicates a static action key"):
             validate_and_project_manifest(duplicate_action, path, known_ids)
+
+    def test_rejects_duplicate_dynamic_template_ids(self) -> None:
+        path = PLUGINS_ROOT / "AppVolume" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        provider = manifest["actions"]["providers"][0]
+        provider["dynamicTemplates"].append(copy.deepcopy(provider["dynamicTemplates"][0]))
+
+        with self.assertRaisesRegex(ManifestValidationError, "duplicates an action or template key"):
+            validate_and_project_manifest(manifest, path, load_known_plugin_ids(PLUGINS_ROOT))
+
+    def test_rejects_action_surfaces_that_runtime_policy_cannot_expose(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+
+        confirmation = copy.deepcopy(manifest)
+        confirmation["actions"]["providers"][0]["staticActions"][0]["risk"] = "confirmationRequired"
+        with self.assertRaisesRegex(ManifestValidationError, "automatic-rule requires"):
+            validate_and_project_manifest(confirmation, path, known_ids)
+
+        local_only = copy.deepcopy(manifest)
+        action = local_only["actions"]["providers"][0]["staticActions"][0]
+        action["parameters"] = [{
+            "id": "device", "kind": "string", "isRequired": True, "portability": "localOnly",
+        }]
+        with self.assertRaisesRegex(ManifestValidationError, "app-intent requires"):
+            validate_and_project_manifest(local_only, path, known_ids)
+
+        missing_run_link = copy.deepcopy(manifest)
+        action = missing_run_link["actions"]["providers"][0]["staticActions"][0]
+        action["surfaces"].remove("run-link")
+        with self.assertRaisesRegex(ManifestValidationError, "run-link must match"):
+            validate_and_project_manifest(missing_run_link, path, known_ids)
+
+    def test_rejects_values_that_do_not_match_the_catalog_codable_shape(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+        mutations = [
+            ("publisher", lambda value: value["presentation"].__setitem__("publisher", 7)),
+            ("requiresRelaunch", lambda value: value["requirements"].__setitem__("requiresRelaunch", "false")),
+            ("applications", lambda value: value["requirements"].__setitem__(
+                "applications", [{"bundleID": 7, "name": "Example"}]
+            )),
+            ("processesSensitiveUserContent", lambda value: value["privacy"].__setitem__(
+                "processesSensitiveUserContent", "false"
+            )),
+        ]
+
+        for field, mutate in mutations:
+            invalid = copy.deepcopy(manifest)
+            mutate(invalid)
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ManifestValidationError, field):
+                    validate_and_project_manifest(invalid, path, known_ids)
 
     def test_static_dynamic_and_mixed_provider_shapes_validate(self) -> None:
         appearance_path = PLUGINS_ROOT / "Appearance" / "plugin.json"
@@ -226,6 +330,53 @@ class PluginSourceManifestTests(unittest.TestCase):
             self.assertEqual(len(screenshot["sha256"]), 64)
             self.assertEqual(len(assets), 1)
 
+    def test_assets_cannot_escape_root_or_bypass_dimension_parsing(self) -> None:
+        localized = {locale: "Preview" for locale in SUPPORTED_LOCALES}
+
+        def manifest_for(path: str) -> dict:
+            return {
+                "id": "asset-demo",
+                "category": "other",
+                "presentation": {
+                    "longDescription": localized,
+                    "examples": [],
+                    "screenshots": [{"id": "main", "path": path, "alt": localized}],
+                    "publisher": "Example",
+                    "license": "Apache-2.0",
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            parent = pathlib.Path(temporary_directory)
+            root = parent / "Plugin"
+            assets = root / "MarketplaceAssets"
+            assets.mkdir(parents=True)
+            outside = parent / "outside.png"
+            outside.write_bytes(base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlS8AAAAASUVORK5CYII="
+            ))
+            (assets / "linked.png").symlink_to(outside)
+            path = root / "plugin.json"
+            manifest = manifest_for("MarketplaceAssets/linked.png")
+
+            with self.assertRaisesRegex(ManifestValidationError, "resolve inside"):
+                validate_and_project_manifest(manifest, path, {"asset-demo"})
+
+            corrupt = assets / "corrupt.png"
+            corrupt.write_bytes(b"\x89PNG\r\n\x1a\n")
+            manifest = manifest_for("MarketplaceAssets/corrupt.png")
+            with self.assertRaisesRegex(ManifestValidationError, "dimensions could not be parsed"):
+                validate_and_project_manifest(manifest, path, {"asset-demo"})
+
+            oversized_webp = assets / "oversized.webp"
+            width_minus_one = 8_000 - 1
+            payload = b"\0\0\0\0" + width_minus_one.to_bytes(3, "little") + (0).to_bytes(3, "little")
+            body = b"WEBP" + b"VP8X" + len(payload).to_bytes(4, "little") + payload
+            oversized_webp.write_bytes(b"RIFF" + len(body).to_bytes(4, "little") + body)
+            manifest = manifest_for("MarketplaceAssets/oversized.webp")
+            with self.assertRaisesRegex(ManifestValidationError, "dimensions must not exceed"):
+                validate_and_project_manifest(manifest, path, {"asset-demo"})
+
     def test_catalog_and_website_generation_are_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)
@@ -262,11 +413,39 @@ class PluginSourceManifestTests(unittest.TestCase):
             self.assertNotIn("@displayName", first_catalog.read_text(encoding="utf-8"))
             catalog = json.loads(first_catalog.read_text(encoding="utf-8"))
             self.assertEqual(catalog["schemaVersion"], 3)
+            self.assertEqual(catalog["minimumHostVersion"], "0.1.0")
             entry = catalog["plugins"][0]
             self.assertIn("actions", entry)
             self.assertNotIn("build", entry)
             website = json.loads(first_website.read_text(encoding="utf-8"))
             self.assertNotIn("package", website["plugins"][0])
+
+            release_catalog = root / "release.json"
+            release_command = list(base_command)
+            release_command[release_command.index("debug")] = "release"
+            subprocess.run(
+                release_command + [
+                    "--base-url", "https://example.com/plugins",
+                    "--output", str(release_catalog),
+                ],
+                check=True,
+            )
+            self.assertEqual(
+                json.loads(release_catalog.read_text(encoding="utf-8"))["minimumHostVersion"],
+                "1.2.1",
+            )
+            incompatible_release = subprocess.run(
+                release_command + [
+                    "--base-url", "https://example.com/plugins",
+                    "--minimum-host-version", "1.2.0",
+                    "--output", str(root / "incompatible-release.json"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(incompatible_release.returncode, 0)
+            self.assertIn("require MacTools 1.2.1", incompatible_release.stderr)
 
     def test_dynamic_catalog_template_never_contains_machine_local_entries(self) -> None:
         manifest = json.loads(

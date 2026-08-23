@@ -12,9 +12,11 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
 
-SUPPORTED_LOCALES = {
+SUPPORTED_LOCALE_ORDER = (
     "ar", "de", "en", "es", "fr", "ja", "ko", "pt", "ru", "zh-Hans", "zh-Hant"
-}
+)
+SUPPORTED_LOCALES = frozenset(SUPPORTED_LOCALE_ORDER)
+SUPPORTED_LOCALE_SET = SUPPORTED_LOCALES
 LOCALIZED_REFERENCES = {"@displayName", "@summary"}
 VALID_CATEGORIES = {
     "display", "audio", "system", "storage", "productivity", "monitoring", "other"
@@ -28,7 +30,7 @@ VALID_SURFACES = {
     "action-grid", "trackpad-gesture", "app-intent", "manual"
 }
 VALID_RISKS = {"safe", "confirmationRequired"}
-VALID_EXTERNAL_POLICIES = {"unavailable", "allowed", "confirmAlways"}
+VALID_EXTERNAL_POLICIES = {"unavailable", "allowed", "confirmAlways", "configurable"}
 VALID_PROVIDER_KINDS = {"static", "dynamic", "mixed"}
 VALID_PARAMETER_KINDS = {"boolean", "integer", "double", "string"}
 VALID_PORTABILITY = {"portable", "localOnly"}
@@ -65,7 +67,7 @@ def expand_localized_references(manifest: dict) -> dict:
         fallback = metadata.get("en", {}).get(field) or projected.get(field)
         reference_values[f"@{field}"] = {
             locale: metadata.get(locale, {}).get(field, fallback)
-            for locale in SUPPORTED_LOCALES
+            for locale in SUPPORTED_LOCALE_ORDER
         }
 
     def expand(value: object) -> object:
@@ -90,26 +92,35 @@ def _fail(plugin_id: str, field: str, message: str) -> None:
 
 
 def _require_keys(value: dict, keys: set[str], plugin_id: str, field: str) -> None:
+    if not isinstance(value, dict):
+        _fail(plugin_id, field, "must be an object")
     missing = sorted(keys - value.keys())
     if missing:
         _fail(plugin_id, field, "missing " + ", ".join(missing))
 
 
 def _unique_strings(values: list, plugin_id: str, field: str) -> None:
+    if not isinstance(values, list):
+        _fail(plugin_id, field, "must be an array")
     if not all(isinstance(value, str) and value.strip() for value in values):
         _fail(plugin_id, field, "must contain non-empty strings")
     if len(values) != len(set(values)):
         _fail(plugin_id, field, "contains duplicate values")
 
 
+def _non_empty_string(value: object, plugin_id: str, field: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        _fail(plugin_id, field, "must be a non-empty string")
+
+
 def _localized_text(value: object, plugin_id: str, field: str, require_all: bool = True) -> None:
     if not isinstance(value, dict) or not value:
         _fail(plugin_id, field, "must be a locale-to-string object")
-    unknown = sorted(set(value) - SUPPORTED_LOCALES)
+    unknown = sorted(set(value) - SUPPORTED_LOCALE_SET)
     if unknown:
         _fail(plugin_id, field, "uses unsupported locales: " + ", ".join(unknown))
     if require_all:
-        missing = sorted(SUPPORTED_LOCALES - set(value))
+        missing = sorted(SUPPORTED_LOCALE_SET - set(value))
         if missing:
             _fail(plugin_id, field, "missing locale fallback values: " + ", ".join(missing))
     if not all(isinstance(text, str) and text.strip() for text in value.values()):
@@ -157,6 +168,29 @@ def _image_dimensions(path: Path, media_type: str) -> tuple[int | None, int | No
                     )
                 break
             index += max(length, 2)
+    if media_type == "image/webp" and len(data) >= 20 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        index = 12
+        while index + 8 <= len(data):
+            chunk_type = data[index:index + 4]
+            chunk_size = int.from_bytes(data[index + 4:index + 8], "little")
+            payload = data[index + 8:index + 8 + chunk_size]
+            if len(payload) != chunk_size:
+                break
+            if chunk_type == b"VP8X" and len(payload) >= 10:
+                return (
+                    1 + int.from_bytes(payload[4:7], "little"),
+                    1 + int.from_bytes(payload[7:10], "little"),
+                )
+            if chunk_type == b"VP8L" and len(payload) >= 5 and payload[0] == 0x2F:
+                width = 1 + payload[1] + ((payload[2] & 0x3F) << 8)
+                height = 1 + (payload[2] >> 6) + (payload[3] << 2) + ((payload[4] & 0x0F) << 10)
+                return width, height
+            if chunk_type == b"VP8 " and len(payload) >= 10 and payload[3:6] == b"\x9d\x01\x2a":
+                return (
+                    int.from_bytes(payload[6:8], "little") & 0x3FFF,
+                    int.from_bytes(payload[8:10], "little") & 0x3FFF,
+                )
+            index += 8 + chunk_size + (chunk_size % 2)
     return None, None
 
 
@@ -175,12 +209,25 @@ def _validate_asset(asset: dict, plugin_root: Path, plugin_id: str, field: str) 
     _require_keys(asset, {"id", "path", "alt"}, plugin_id, field)
     _identifier(asset["id"], plugin_id, f"{field}.id")
     _localized_text(asset["alt"], plugin_id, f"{field}.alt")
+    _non_empty_string(asset["path"], plugin_id, f"{field}.path")
     relative = PurePosixPath(asset["path"])
     if relative.is_absolute() or ".." in relative.parts or relative.parts[:1] != ("MarketplaceAssets",):
         _fail(plugin_id, f"{field}.path", "must stay under MarketplaceAssets/")
+    resolved_plugin_root = plugin_root.resolve()
+    asset_root = plugin_root.joinpath("MarketplaceAssets").resolve()
+    try:
+        asset_root.relative_to(resolved_plugin_root)
+    except ValueError:
+        _fail(plugin_id, f"{field}.path", "MarketplaceAssets must stay inside the plugin directory")
     source = plugin_root.joinpath(*relative.parts)
     if not source.is_file():
         _fail(plugin_id, f"{field}.path", f"asset does not exist: {relative}")
+    try:
+        resolved_source = source.resolve(strict=True)
+        resolved_source.relative_to(asset_root)
+    except ValueError:
+        _fail(plugin_id, f"{field}.path", "must resolve inside MarketplaceAssets/")
+    source = resolved_source
     size = source.stat().st_size
     if size <= 0 or size > MAX_ASSET_BYTES:
         _fail(plugin_id, f"{field}.path", f"asset size must be 1...{MAX_ASSET_BYTES} bytes")
@@ -188,14 +235,14 @@ def _validate_asset(asset: dict, plugin_root: Path, plugin_id: str, field: str) 
     if media_type is None:
         _fail(plugin_id, f"{field}.path", "must be PNG, JPEG, or WebP")
     width, height = _image_dimensions(source, media_type)
-    if width is not None and height is not None:
-        if width <= 0 or height <= 0 or width > MAX_ASSET_DIMENSION or height > MAX_ASSET_DIMENSION:
-            _fail(plugin_id, f"{field}.path", f"dimensions must not exceed {MAX_ASSET_DIMENSION}px")
+    if width is None or height is None:
+        _fail(plugin_id, f"{field}.path", "image dimensions could not be parsed")
+    if width <= 0 or height <= 0 or width > MAX_ASSET_DIMENSION or height > MAX_ASSET_DIMENSION:
+        _fail(plugin_id, f"{field}.path", f"dimensions must not exceed {MAX_ASSET_DIMENSION}px")
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
     projected = dict(asset)
     projected.update({"mediaType": media_type, "sha256": digest, "size": size})
-    if width is not None and height is not None:
-        projected.update({"width": width, "height": height})
+    projected.update({"width": width, "height": height})
     return AssetProjection(source=source, catalog=projected)
 
 
@@ -235,8 +282,21 @@ def _validate_action_policy(action: dict, plugin_id: str, field: str) -> None:
         _fail(plugin_id, f"{field}.externalInvocation", "is not supported")
     if not isinstance(action["automaticEligible"], bool):
         _fail(plugin_id, f"{field}.automaticEligible", "must be a boolean")
-    if action["automaticEligible"] and "automatic-rule" not in action["surfaces"]:
-        _fail(plugin_id, field, "automatic actions must include automatic-rule")
+    if "automatic-rule" in action["surfaces"] and (
+        not action["automaticEligible"] or action["risk"] != "safe"
+    ):
+        _fail(plugin_id, field, "automatic-rule requires a safe automatic action")
+    if "app-intent" in action["surfaces"] and (
+        not action["automaticEligible"]
+        or action["risk"] != "safe"
+        or any(parameter["portability"] != "portable" for parameter in action["parameters"])
+        or action.get("localOnlyIdentity") is True
+    ):
+        _fail(plugin_id, field, "app-intent requires a safe, automatic, portable action")
+    has_run_link = "run-link" in action["surfaces"]
+    supports_run_link = action["externalInvocation"] != "unavailable"
+    if has_run_link != supports_run_link:
+        _fail(plugin_id, field, "run-link must match the external invocation policy")
 
 
 def _validate_actions(actions: dict, plugin_id: str) -> None:
@@ -277,6 +337,7 @@ def _validate_actions(actions: dict, plugin_id: str) -> None:
             seen_keys.add(key)
             _localized_text(action["title"], plugin_id, f"{action_field}.title")
             _localized_text(action["description"], plugin_id, f"{action_field}.description")
+            _non_empty_string(action["systemImage"], plugin_id, f"{action_field}.systemImage")
             if "parameterSummary" in action:
                 _localized_text(action["parameterSummary"], plugin_id, f"{action_field}.parameterSummary")
             _validate_parameters(action["parameters"], plugin_id, f"{action_field}.parameters")
@@ -289,11 +350,14 @@ def _validate_actions(actions: dict, plugin_id: str) -> None:
                 "externalInvocation", "keywords"
             }, plugin_id, template_field)
             _identifier(template["id"], plugin_id, f"{template_field}.id")
+            key = (provider["id"], template["id"])
+            if key in seen_keys:
+                _fail(plugin_id, f"{template_field}.id", "duplicates an action or template key")
+            seen_keys.add(key)
             _localized_text(template["title"], plugin_id, f"{template_field}.title")
             _localized_text(template["description"], plugin_id, f"{template_field}.description")
             _localized_text(template["parameterSummary"], plugin_id, f"{template_field}.parameterSummary")
-            if not isinstance(template["entrySource"], str) or not template["entrySource"].strip():
-                _fail(plugin_id, f"{template_field}.entrySource", "must be non-empty")
+            _non_empty_string(template["entrySource"], plugin_id, f"{template_field}.entrySource")
             if not isinstance(template["localOnlyIdentity"], bool):
                 _fail(plugin_id, f"{template_field}.localOnlyIdentity", "must be a boolean")
             _validate_parameters(template["parameters"], plugin_id, f"{template_field}.parameters")
@@ -313,6 +377,7 @@ def validate_and_project_manifest(
     if "category" in manifest and manifest.get("category") not in VALID_CATEGORIES:
         _fail(plugin_id, "category", "is not a supported category")
     if "permissions" in manifest:
+        _unique_strings(manifest["permissions"], plugin_id, "permissions")
         invalid_permissions = sorted(set(manifest["permissions"]) - VALID_PERMISSION_IDS)
         if invalid_permissions:
             _fail(plugin_id, "permissions", "unknown: " + ", ".join(invalid_permissions))
@@ -324,8 +389,12 @@ def validate_and_project_manifest(
             "longDescription", "examples", "screenshots", "publisher", "license"
         }, plugin_id, "presentation")
         _localized_text(presentation["longDescription"], plugin_id, "presentation.longDescription")
+        for key in ("publisher", "license"):
+            _non_empty_string(presentation[key], plugin_id, f"presentation.{key}")
         if not isinstance(presentation["examples"], list) or not isinstance(presentation["screenshots"], list):
             _fail(plugin_id, "presentation", "examples and screenshots must be arrays")
+        if not all(isinstance(example, dict) for example in presentation["examples"]):
+            _fail(plugin_id, "presentation.examples", "must contain objects")
         example_ids = [example.get("id", "") for example in presentation["examples"]]
         _unique_strings(example_ids, plugin_id, "presentation.examples.id")
         for index, example in enumerate(presentation["examples"]):
@@ -349,14 +418,16 @@ def validate_and_project_manifest(
         _unique_strings(discovery["keywords"], plugin_id, "discovery.keywords")
         if not isinstance(discovery["localizedSynonyms"], dict):
             _fail(plugin_id, "discovery.localizedSynonyms", "must be an object")
-        missing_locales = sorted(SUPPORTED_LOCALES - set(discovery["localizedSynonyms"]))
+        missing_locales = sorted(SUPPORTED_LOCALE_SET - set(discovery["localizedSynonyms"]))
         if missing_locales:
             _fail(plugin_id, "discovery.localizedSynonyms", "missing: " + ", ".join(missing_locales))
         for locale, synonyms in discovery["localizedSynonyms"].items():
-            if locale not in SUPPORTED_LOCALES:
+            if locale not in SUPPORTED_LOCALE_SET:
                 _fail(plugin_id, "discovery.localizedSynonyms", f"unsupported locale {locale}")
             _unique_strings(synonyms, plugin_id, f"discovery.localizedSynonyms.{locale}")
         use_case_ids: list[str] = []
+        if not isinstance(discovery["useCases"], list):
+            _fail(plugin_id, "discovery.useCases", "must be an array")
         for index, use_case in enumerate(discovery["useCases"]):
             _require_keys(use_case, {"id", "title"}, plugin_id, f"discovery.useCases[{index}]")
             _identifier(use_case["id"], plugin_id, f"discovery.useCases[{index}].id")
@@ -372,6 +443,8 @@ def validate_and_project_manifest(
             "architectures", "hardware", "applications", "executables", "permissionIDs",
             "setupComplexity", "requiresRelaunch"
         }, plugin_id, "requirements")
+        for key in ("architectures", "hardware", "executables", "permissionIDs"):
+            _unique_strings(requirements[key], plugin_id, f"requirements.{key}")
         invalid_architectures = sorted(set(requirements["architectures"]) - VALID_ARCHITECTURES)
         if invalid_architectures:
             _fail(plugin_id, "requirements.architectures", "unknown: " + ", ".join(invalid_architectures))
@@ -380,6 +453,25 @@ def validate_and_project_manifest(
             _fail(plugin_id, "requirements.permissionIDs", "unknown: " + ", ".join(invalid_permissions))
         if requirements["setupComplexity"] not in VALID_SETUP_COMPLEXITIES:
             _fail(plugin_id, "requirements.setupComplexity", "is not supported")
+        if not isinstance(requirements["requiresRelaunch"], bool):
+            _fail(plugin_id, "requirements.requiresRelaunch", "must be a boolean")
+        if requirements.get("minimumMacOSVersion") is not None and (
+            not isinstance(requirements["minimumMacOSVersion"], str)
+            or not requirements["minimumMacOSVersion"].strip()
+        ):
+            _fail(plugin_id, "requirements.minimumMacOSVersion", "must be a non-empty string")
+        applications = requirements["applications"]
+        if not isinstance(applications, list):
+            _fail(plugin_id, "requirements.applications", "must be an array")
+        application_ids = []
+        for index, application in enumerate(applications):
+            field = f"requirements.applications[{index}]"
+            _require_keys(application, {"bundleID", "name"}, plugin_id, field)
+            for key in ("bundleID", "name"):
+                _non_empty_string(application[key], plugin_id, f"{field}.{key}")
+            application_ids.append(application["bundleID"])
+        if len(application_ids) != len(set(application_ids)):
+            _fail(plugin_id, "requirements.applications", "contains duplicate bundle IDs")
 
     privacy = manifest.get("privacy")
     if privacy is not None:
@@ -387,6 +479,8 @@ def validate_and_project_manifest(
             "dataObserved", "dataPersisted", "retention", "networkUse", "networkDomains",
             "telemetry", "processesSensitiveUserContent", "diagnosticExportsContainUserData"
         }, plugin_id, "privacy")
+        for key in ("dataObserved", "dataPersisted", "networkDomains"):
+            _unique_strings(privacy[key], plugin_id, f"privacy.{key}")
         if privacy["networkUse"] not in VALID_NETWORK_USE:
             _fail(plugin_id, "privacy.networkUse", "is not supported")
         if privacy["telemetry"] not in VALID_TELEMETRY:
@@ -398,6 +492,9 @@ def validate_and_project_manifest(
             privacy["allowsUserConfiguredDomains"], bool
         ):
             _fail(plugin_id, "privacy.allowsUserConfiguredDomains", "must be a boolean")
+        for key in ("processesSensitiveUserContent", "diagnosticExportsContainUserData"):
+            if not isinstance(privacy[key], bool):
+                _fail(plugin_id, f"privacy.{key}", "must be a boolean")
         retention = privacy["retention"]
         if not isinstance(retention, dict) or retention.get("policy") not in VALID_RETENTION:
             _fail(plugin_id, "privacy.retention.policy", "is not supported")
@@ -410,6 +507,8 @@ def validate_and_project_manifest(
     setup = manifest.get("setup")
     if setup is not None:
         _require_keys(setup, {"steps", "optionalSurfaces"}, plugin_id, "setup")
+        if not isinstance(setup["steps"], list):
+            _fail(plugin_id, "setup.steps", "must be an array")
         for index, step in enumerate(setup["steps"]):
             _require_keys(step, {"id", "title", "description"}, plugin_id, f"setup.steps[{index}]")
             _identifier(step["id"], plugin_id, f"setup.steps[{index}].id")
@@ -417,6 +516,9 @@ def validate_and_project_manifest(
             _localized_text(step["description"], plugin_id, f"setup.steps[{index}].description")
         test_action = setup.get("suggestedTestAction")
         if test_action is not None:
+            _require_keys(test_action, {"providerID", "actionID"}, plugin_id, "setup.suggestedTestAction")
+            _identifier(test_action["providerID"], plugin_id, "setup.suggestedTestAction.providerID")
+            _identifier(test_action["actionID"], plugin_id, "setup.suggestedTestAction.actionID")
             key = (test_action.get("providerID"), test_action.get("actionID"))
             static_keys = {
                 (provider["id"], action["id"])
@@ -425,6 +527,7 @@ def validate_and_project_manifest(
             }
             if key not in static_keys:
                 _fail(plugin_id, "setup.suggestedTestAction", "must reference a declared static action")
+        _unique_strings(setup["optionalSurfaces"], plugin_id, "setup.optionalSurfaces")
         invalid_surfaces = sorted(set(setup["optionalSurfaces"]) - VALID_SURFACES)
         if invalid_surfaces:
             _fail(plugin_id, "setup.optionalSurfaces", "unknown: " + ", ".join(invalid_surfaces))
@@ -436,6 +539,8 @@ def validate_and_project_manifest(
         _require_keys(relationships, {
             "relatedPluginIDs", "includedPackIDs", "suggestedRecipeIDs", "supersedesPluginIDs"
         }, plugin_id, "relationships")
+        for key in ("relatedPluginIDs", "includedPackIDs", "suggestedRecipeIDs", "supersedesPluginIDs"):
+            _unique_strings(relationships[key], plugin_id, f"relationships.{key}")
         referenced = set(relationships["relatedPluginIDs"]) | set(relationships["supersedesPluginIDs"])
         missing = sorted(referenced - known_plugin_ids)
         if missing:

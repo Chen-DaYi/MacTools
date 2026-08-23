@@ -199,7 +199,6 @@
               "workflow",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": false,

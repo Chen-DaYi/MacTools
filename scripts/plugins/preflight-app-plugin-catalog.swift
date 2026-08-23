@@ -10,6 +10,7 @@ private struct Options {
     var publicKeyBase64: String?
     var deployedCatalogPath: String?
     var requiredPluginKitVersion: Int?
+    var requiredSchemaVersion: Int?
 }
 
 private enum PreflightError: LocalizedError {
@@ -29,11 +30,11 @@ private struct CatalogRequirement {
     let expectedCatalogPath: String
 }
 
-private let host12Requirement = CatalogRequirement(
-    minimumAppVersion: "1.2.0",
+private let schema3Requirement = CatalogRequirement(
+    minimumAppVersion: "1.2.1",
     pluginKitVersion: 5,
-    url: URL(string: "https://mactools.ggbond.app/plugins/v5/catalog.json")!,
-    expectedCatalogPath: "docs/plugins/v5/catalog.json"
+    url: URL(string: "https://mactools.ggbond.app/plugins/v5/schema3/catalog.json")!,
+    expectedCatalogPath: "docs/plugins/v5/schema3/catalog.json"
 )
 private let productionCatalogID = "com.ggbond.mactools.plugins"
 
@@ -61,6 +62,11 @@ private func parseOptions() throws -> Options {
                 try fail("Invalid PluginKit version: \(value)")
             }
             options.requiredPluginKitVersion = version
+        case "--required-schema-version":
+            guard let version = Int(value), version > 0 else {
+                try fail("Invalid catalog schema version: \(value)")
+            }
+            options.requiredSchemaVersion = version
         default: try fail("Unknown option: \(option)")
         }
     }
@@ -180,12 +186,13 @@ private func validateCatalog(
     targetAppVersion: String,
     expectedCatalogID: String,
     expectedPluginKitVersion: Int,
+    expectedSchemaVersion: Int,
     publicKeyBase64: String
 ) throws -> [String: Any] {
     var catalog = try catalogObject(from: data, label: label)
     guard let schemaVersion = catalog["schemaVersion"] as? Int,
-          schemaVersion == 2 || schemaVersion == 3 else {
-        try fail("\(label) must use catalog schema 2 or 3.")
+          schemaVersion == expectedSchemaVersion else {
+        try fail("\(label) must use catalog schema \(expectedSchemaVersion).")
     }
     guard catalog["pluginKitVersion"] as? Int == expectedPluginKitVersion else {
         try fail("\(label) does not target PluginKit \(expectedPluginKitVersion).")
@@ -250,16 +257,19 @@ private func validateCatalog(
 do {
     let options = try parseOptions()
     let appVersion = options.appVersion!
-    guard try isVersion(appVersion, atLeast: host12Requirement.minimumAppVersion) else {
-        print("Plugin catalog preflight is not required for MacTools \(appVersion).")
-        exit(EXIT_SUCCESS)
+    guard try isVersion(appVersion, atLeast: schema3Requirement.minimumAppVersion) else {
+        try fail(
+            "This source uses catalog schema 3 and cannot be released as MacTools \(appVersion). "
+                + "Raise the app version to \(schema3Requirement.minimumAppVersion) or later."
+        )
     }
 
-    let expectedPath = options.expectedCatalogPath ?? host12Requirement.expectedCatalogPath
-    let catalogURL = options.catalogURL ?? host12Requirement.url
+    let expectedPath = options.expectedCatalogPath ?? schema3Requirement.expectedCatalogPath
+    let catalogURL = options.catalogURL ?? schema3Requirement.url
     let publicKey = try options.publicKeyBase64 ?? releasePublicKey()
     let requiredPluginKitVersion = options.requiredPluginKitVersion
-        ?? host12Requirement.pluginKitVersion
+        ?? schema3Requirement.pluginKitVersion
+    let requiredSchemaVersion = options.requiredSchemaVersion ?? 3
     let expectedData = try readCatalog(at: expectedPath)
     let deployedData = try options.deployedCatalogPath.map(readCatalog(at:)) ?? fetch(catalogURL)
     let expected = try validateCatalog(
@@ -268,6 +278,7 @@ do {
         targetAppVersion: appVersion,
         expectedCatalogID: productionCatalogID,
         expectedPluginKitVersion: requiredPluginKitVersion,
+        expectedSchemaVersion: requiredSchemaVersion,
         publicKeyBase64: publicKey
     )
     let deployed = try validateCatalog(
@@ -276,6 +287,7 @@ do {
         targetAppVersion: appVersion,
         expectedCatalogID: productionCatalogID,
         expectedPluginKitVersion: requiredPluginKitVersion,
+        expectedSchemaVersion: requiredSchemaVersion,
         publicKeyBase64: publicKey
     )
     guard try normalizedJSON(expected) == normalizedJSON(deployed) else {

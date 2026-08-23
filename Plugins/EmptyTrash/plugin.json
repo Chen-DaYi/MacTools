@@ -62,7 +62,9 @@
     "componentPanel": false,
     "settings": "none"
   },
-  "permissions": [],
+  "permissions": [
+    "automation"
+  ],
   "category": "storage",
   "presentation": {
     "longDescription": "@summary",
@@ -140,7 +142,9 @@
     "hardware": [],
     "applications": [],
     "executables": [],
-    "permissionIDs": [],
+    "permissionIDs": [
+      "automation"
+    ],
     "setupComplexity": "none",
     "requiresRelaunch": false
   },
@@ -189,17 +193,17 @@
             "systemImage": "trash",
             "parameters": [],
             "parameterSummary": "@summary",
-            "permissionIDs": [],
+            "permissionIDs": [
+              "automation"
+            ],
             "risk": "confirmationRequired",
             "surfaces": [
               "unified-search",
               "global-shortcut",
               "run-link",
               "workflow",
-              "automatic-rule",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": true,

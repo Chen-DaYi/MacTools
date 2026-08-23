@@ -424,10 +424,6 @@ enum MacToolsSearchIndexBuilder {
         }
 
         items += pluginHost.pluginManagementItems.compactMap { item in
-            guard item.canUninstall else {
-                return nil
-            }
-
             return MacToolsSearchResult(
                 id: "plugin.marketplace.\(item.id)",
                 kind: .navigation,

@@ -29,10 +29,10 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
             release.ROOT_DIR / "docs/plugins/v4/catalog.json",
         )
 
-    def test_plugin_kit5_release_uses_versioned_catalog_path(self) -> None:
+    def test_plugin_kit5_release_uses_schema3_compatibility_path(self) -> None:
         self.assertEqual(
             release.plugin_catalog_path(5),
-            release.ROOT_DIR / "docs/plugins/v5/catalog.json",
+            release.ROOT_DIR / "docs/plugins/v5/schema3/catalog.json",
         )
 
     def test_predeclared_app_version_is_the_default_release_target(self) -> None:

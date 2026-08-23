@@ -39,9 +39,11 @@ struct PluginCatalogProviderConfiguration {
         return URL(string: "https://mactools.ggbond.app/plugins/v\(pluginKitVersion)/catalog.json")!
     }
 
-    static let productionCatalogURL = productionCatalogURL(
-        for: PluginPackageManifestLoader.supportedPluginKitVersion
-    )
+    // Schema 3 lives on its own compatibility endpoint so released PluginKit 5
+    // hosts can keep reading the immutable schema-2 catalog they understand.
+    static let productionCatalogURL = URL(
+        string: "https://mactools.ggbond.app/plugins/v5/schema3/catalog.json"
+    )!
 
     static func defaultSource(environment: [String: String] = ProcessInfo.processInfo.environment) -> PluginCatalogSource {
         #if DEBUG

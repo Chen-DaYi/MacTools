@@ -140,10 +140,10 @@
   "requirements": {
     "minimumMacOSVersion": "14.0",
     "architectures": [
-      "arm64"
+      "arm64",
+      "x86_64"
     ],
     "hardware": [
-      "Apple Silicon Mac",
       "built-in battery"
     ],
     "applications": [],
@@ -223,7 +223,6 @@
               "workflow",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": false,
@@ -253,7 +252,6 @@
               "workflow",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": false,
@@ -283,7 +281,6 @@
               "workflow",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": false,
@@ -313,7 +310,6 @@
               "workflow",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": false,
@@ -352,7 +348,6 @@
               "workflow",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": false,

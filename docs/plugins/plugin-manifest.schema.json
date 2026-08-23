@@ -233,7 +233,7 @@
         "risk": {"enum": ["safe", "confirmationRequired"]},
         "surfaces": {"type": "array", "items": {"$ref": "#/$defs/surface"}, "uniqueItems": true},
         "automaticEligible": {"type": "boolean"},
-        "externalInvocation": {"enum": ["unavailable", "allowed", "confirmAlways"]}
+        "externalInvocation": {"enum": ["unavailable", "allowed", "confirmAlways", "configurable"]}
       }
     },
     "staticAction": {

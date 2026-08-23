@@ -296,7 +296,6 @@
               "action-grid",
               "automatic-rule",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": true,

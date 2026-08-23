@@ -129,7 +129,7 @@ cd "$REPO_ROOT"
 if [[ -z "$MINIMUM_HOST_VERSION" ]]; then
     # This is the catalog schema compatibility floor, not the newest package's
     # host requirement. Individual entries retain their manifest minimums.
-    MINIMUM_HOST_VERSION="1.1.6"
+    MINIMUM_HOST_VERSION="1.2.1"
 fi
 if [[ -z "$MINIMUM_HOST_VERSION" ]]; then
     echo "Unable to determine the catalog minimum host version." >&2

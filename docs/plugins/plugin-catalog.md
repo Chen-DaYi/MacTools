@@ -2,7 +2,7 @@
 
 MacTools dynamic plugins use one catalog-driven flow for both production distribution and local development.
 
-- PluginKit 2 production builds read the legacy `catalog.json` URL. PluginKit 3 and later builds read versioned URLs. MacTools through 1.1.6 remains on the immutable PluginKit v4 catalog at `v4/catalog.json`; MacTools 1.2 and later use the new PluginKit v5 catalog at `v5/catalog.json`.
+- PluginKit 2 production builds read the legacy `catalog.json` URL. PluginKit 3 and later builds read versioned URLs. MacTools through 1.1.6 remains on the immutable PluginKit v4 catalog at `v4/catalog.json`; MacTools 1.2.0 remains on the PluginKit v5/schema-2 catalog at `v5/catalog.json`; schema-3 hosts use `v5/schema3/catalog.json`.
 - Each catalog contains packages for one PluginKit ABI line. The legacy v2 catalog is kept unchanged when a new ABI is released, so older app builds continue to work.
 - `minimumHostVersion` at the catalog root is the oldest host that can parse that catalog schema. Each entry declares its own install requirement; older hosts keep the catalog available and show newer entries as incompatible instead of rejecting the whole marketplace.
 - Local development reads a Debug-only `file://` catalog, usually configured with `MACTOOLS_PLUGIN_CATALOG_URL`.
@@ -63,7 +63,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
 
 Catalog schema 2 follows PluginKit 4 and later manifests: `capabilities.settings` is `none`, `form`, or `workspace`. Schema 1 and its boolean `configuration` capability remain in older ABI catalogs and are not rewritten. A newer host may decode an installed package from an older ABI only far enough to identify and update it; it never loads or renders an incompatible settings API.
 
-Catalog schema 3 is additive. It preserves every schema-2 package field and may also project `presentation`, `discovery`, `requirements`, `privacy`, `actions`, `setup`, and `relationships` from the checked-in source manifest. Current hosts accept both schema 2 and schema 3, so existing sparse catalogs and caches continue to work. The catalog signature covers every enriched field.
+Catalog schema 3 is additive. It preserves every schema-2 package field and may also project `presentation`, `discovery`, `requirements`, `privacy`, `actions`, `setup`, and `relationships` from the checked-in source manifest. Schema-3 hosts accept both schema 2 and schema 3, so existing sparse catalogs and caches continue to work. The schema-3 catalog uses a separate compatibility endpoint and a minimum host version of 1.2.1, leaving the released 1.2.0 endpoint unchanged. The catalog signature covers every enriched field.
 
 ## Product and Capability Metadata
 
@@ -79,13 +79,13 @@ Catalog schema 3 is additive. It preserves every schema-2 package field and may 
 
 Localized product text is a locale-to-string object and must contain `ar`, `de`, `en`, `es`, `fr`, `ja`, `ko`, `pt`, `ru`, `zh-Hans`, and `zh-Hant`. When a field intentionally reuses the plugin's existing localized metadata, source manifests may use `@displayName` or `@summary`; validation expands the reference to all 11 values before package and catalog projection. References never appear in a generated catalog. Every repository plugin publishes the applicable product sections, while `Appearance`, `AppVolume`, `IPOverview`, and `WindowSwitcher` remain useful examples of fully hand-authored copy.
 
-Static action entries describe fixed runtime `ActionDefinition` identities. Dynamic templates describe machine-local entries without putting local application IDs, devices, paths, or other discovered values in the signed catalog. A provider declares `static`, `dynamic`, or `mixed` and must populate the matching collections. Repository-wide XCTest coverage instantiates every canonical action provider and compares static identities and dynamic families, risk, external policy, automation eligibility, system images, and parameter policy against the built runtime definitions. The four hand-authored pilots additionally verify action-specific permission policy.
+Static action entries describe fixed runtime `ActionDefinition` identities. Dynamic templates describe machine-local entries without putting local application IDs, devices, paths, or other discovered values in the signed catalog. A provider declares `static`, `dynamic`, or `mixed` and must populate the matching collections. `automatic-rule` is valid only for safe automatic actions, while `app-intent` additionally requires portable identity and parameters. External invocation is `unavailable`, `allowed`, `confirmAlways`, or `configurable` when each generated action owns the setting. Repository-wide XCTest coverage instantiates every canonical action provider and compares static identities and dynamic families, risk, external policy, automation eligibility, supported unattended surfaces, permissions, system images, and parameter policy against the built runtime definitions.
 
 Screenshot sources live under `Plugins/<PluginName>/MarketplaceAssets/`. The generator rejects traversal, missing or unsupported files, files over 10 MiB, and images over 7680 pixels per dimension. It adds media type, size, dimensions where available, and SHA-256 to the signed projection. Asset bytes are never embedded in `plugin.json`.
 
 Release catalogs must include an Ed25519 signature. Debug local catalogs may omit `signature`, but they still go through package checksum, manifest, staging, and same-team code signature validation. Catalog verification validates every entry's identity and PluginKit ABI without requiring every package to support the current host. Package installation and loading continue to enforce the entry's `minimumHostVersion` strictly.
 
-For an app version that switches to a new production catalog URL, release order is enforced: publish the compatible plugin batch first, wait for Pages to deploy the committed signed catalog, then prepare and publish the app. `scripts/plugins/preflight-app-plugin-catalog.swift` checks that the production URL returns the same nonempty, signed PluginKit catalog committed in the release ref. Both `scripts/release.py --type app` and the final app release workflow run this preflight, so the app cannot be published while its catalog is missing, stale, unsigned, or invalid.
+For an app version that switches to a new production catalog URL, release order is enforced: publish the compatible plugin batch first, wait for Pages to deploy the committed signed catalog, then prepare and publish the app. `scripts/plugins/preflight-app-plugin-catalog.swift` checks that the production URL returns the same nonempty, signed PluginKit catalog committed in the release ref. It also prevents this schema-3 source from being released with the already-shipped 1.2.0 version number. Both `scripts/release.py --type app` and the final app release workflow run this preflight, so the app cannot be published while its catalog is missing, stale, unsigned, or invalid.
 
 ## Versioned Catalog URLs
 
@@ -95,11 +95,12 @@ The catalog URL is selected by the host's supported PluginKit version:
 PluginKit 2 -> https://mactools.ggbond.app/plugins/catalog.json
 PluginKit 3 -> https://mactools.ggbond.app/plugins/v3/catalog.json
 PluginKit 4 -> https://mactools.ggbond.app/plugins/v4/catalog.json
-PluginKit 5 -> https://mactools.ggbond.app/plugins/v5/catalog.json
+PluginKit 5 / schema 2 -> https://mactools.ggbond.app/plugins/v5/catalog.json
+PluginKit 5 / schema 3 -> https://mactools.ggbond.app/plugins/v5/schema3/catalog.json
 PluginKit N -> https://mactools.ggbond.app/plugins/vN/catalog.json
 ```
 
-The first release for a new PluginKit version uses the previous ABI catalog only as a comparison baseline. It publishes a complete catalog containing every rebuilt plugin under the new versioned path. Later releases for the same PluginKit version may use incremental merges within that path. Never overwrite an older ABI catalog with newer packages.
+The first release for a new PluginKit or catalog-schema compatibility line uses the previous catalog only as a comparison baseline. It publishes a complete catalog containing every rebuilt plugin under the new path. Later releases on that compatibility line may use incremental merges. Never overwrite a catalog consumed by hosts that cannot parse the new schema.
 
 ## Local Development
 
@@ -185,7 +186,7 @@ Recommended production flow is an incremental batch plugin release:
 7. If package-relevant files changed inside a plugin or shared PluginKit code changed but that plugin version did not increase, the workflow fails before signing or uploading. A `pluginKitVersion` change automatically becomes a full `mode=all` rebuild and replaces the catalog for that ABI line; other exceptional shared paths can still be supplied explicitly with `--shared-path`.
 8. The workflow builds, signs, zips, and uploads only the selected plugin packages.
 9. For an ABI migration, the workflow generates a complete catalog from all rebuilt packages. For later releases within an ABI line, it generates a delta catalog and merges it into that line's catalog, keeping unchanged entries pointing at their existing assets.
-10. The signed catalog is committed to `docs/plugins/catalog.json` for v2 or `docs/plugins/vN/catalog.json` for PluginKit N >= 3. The current PluginKit v5 catalog is `docs/plugins/v5/catalog.json`.
+10. The signed catalog is committed to its compatibility path. The released PluginKit v5/schema-2 catalog remains at `docs/plugins/v5/catalog.json`; schema 3 is written to `docs/plugins/v5/schema3/catalog.json`.
 11. `Deploy Pages` publishes the signed catalog to GitHub Pages.
 
 The batch tag is stored per plugin entry through `package.url` and `releaseNotesURL`, so one catalog can point different plugins to different release tags without changing host code.
@@ -239,7 +240,7 @@ Generated local output:
 build/PluginRelease/
   Assets/*.mactoolsplugin.zip
   catalog.json
-docs/plugins/v5/catalog.json
+docs/plugins/v5/schema3/catalog.json
 ```
 
 The lower-level scripts are still useful for external plugin repositories. `build-plugin-release-assets.sh` can build all plugins or a subset with repeated `--plugin` arguments:

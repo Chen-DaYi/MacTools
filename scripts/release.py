@@ -416,6 +416,8 @@ def read_plugins() -> dict[str, PluginInfo]:
 def plugin_catalog_path(plugin_kit_version: int) -> Path:
     if plugin_kit_version == 2:
         return LEGACY_PLUGIN_CATALOG
+    if plugin_kit_version == 5:
+        return ROOT_DIR / "docs/plugins/v5/schema3/catalog.json"
     return ROOT_DIR / "docs" / "plugins" / f"v{plugin_kit_version}" / "catalog.json"
 
 

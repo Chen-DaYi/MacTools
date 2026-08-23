@@ -63,6 +63,24 @@ final class PluginListFilterTests: XCTestCase {
         XCTAssertFalse(PluginListFilter.matches(managementItem: item, query: "", filter: .category(.display)))
     }
 
+    func testManagementItemMatchesEnrichedProductKeywords() {
+        let item = makeManagementItem(
+            id: "keep-awake",
+            title: "阻止休眠",
+            summary: "阻止系统空闲休眠",
+            category: "system",
+            productSearchKeywords: ["presentation mode", "caffeine"]
+        )
+
+        XCTAssertTrue(
+            PluginListFilter.matches(
+                managementItem: item,
+                query: "caffeine",
+                filter: .all
+            )
+        )
+    }
+
     func testCountsByFilterAggregatesCorrectly() {
         let items = [
             makeManagementItem(id: "a", title: "深色模式", summary: "切换", category: "display"),
@@ -98,7 +116,8 @@ final class PluginListFilterTests: XCTestCase {
         id: String,
         title: String,
         summary: String?,
-        category: String?
+        category: String?,
+        productSearchKeywords: [String] = []
     ) -> PluginManagementItem {
         PluginManagementItem(
             id: id,
@@ -109,7 +128,8 @@ final class PluginListFilterTests: XCTestCase {
             packageURL: nil,
             requiresRestartToFullyUnload: false,
             releaseNotesURL: nil,
-            category: category
+            category: category,
+            productSearchKeywords: productSearchKeywords
         )
     }
 }

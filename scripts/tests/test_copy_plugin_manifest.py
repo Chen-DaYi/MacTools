@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -130,6 +131,39 @@ class CopyPluginManifestTests(unittest.TestCase):
             description = projected["presentation"]["longDescription"]
             self.assertEqual(description["en"], "Example summary")
             self.assertEqual(description["ar"], "Example summary")
+
+    def test_release_copy_is_stable_across_python_hash_seeds(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "plugin.json"
+            config = root / "AppVersion.xcconfig"
+            source.write_text(json.dumps({
+                "id": "example",
+                "displayName": "示例",
+                "summary": "示例摘要",
+                "localizedMetadata": {
+                    "en": {"displayName": "Example", "summary": "Example summary"},
+                },
+                "presentation": {"longDescription": "@summary"},
+            }), encoding="utf-8")
+            config.write_text("MARKETING_VERSION = 1.2.3\n", encoding="utf-8")
+            outputs = []
+            for seed in ("1", "2"):
+                destination = root / f"copied-{seed}.json"
+                subprocess.run(
+                    [
+                        sys.executable, str(SCRIPT), "copy",
+                        "--source", str(source),
+                        "--destination", str(destination),
+                        "--configuration", "Release",
+                        "--app-version-config", str(config),
+                    ],
+                    check=True,
+                    env={**os.environ, "PYTHONHASHSEED": seed},
+                )
+                outputs.append(destination.read_bytes())
+
+            self.assertEqual(outputs[0], outputs[1])
 
     def test_debug_sync_normalizes_and_caches_packaged_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

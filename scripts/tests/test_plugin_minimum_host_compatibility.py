@@ -113,18 +113,22 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
         ]
         self.assertEqual(incompatible, [])
 
-    def test_plugin_kit5_release_targets_versioned_host_compatible_catalog(self) -> None:
+    def test_plugin_kit5_schema3_release_targets_a_new_compatibility_catalog(self) -> None:
         workflow = PLUGIN_RELEASE_WORKFLOW.read_text(encoding="utf-8")
         makefile = MAKEFILE.read_text(encoding="utf-8")
         self.assertIn(
-            'PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v5/catalog.json"',
+            'PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v5/schema3/catalog.json"',
             workflow,
         )
-        self.assertIn('PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.2.0"', workflow)
+        self.assertIn('PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.2.1"', workflow)
         self.assertIn(
-            "PLUGIN_CATALOG_MINIMUM_HOST_VERSION ?= $(if $(filter 5,$(PLUGIN_KIT_VERSION)),1.2.0,1.1.6)",
+            "PLUGIN_CATALOG_MINIMUM_HOST_VERSION ?= $(if $(filter 5,$(PLUGIN_KIT_VERSION)),1.2.1,1.1.6)",
             makefile,
         )
+        released_catalog = json.loads(
+            (REPO_ROOT / "docs/plugins/v5/catalog.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(released_catalog["schemaVersion"], 2)
 
     def test_every_current_plugin_targets_plugin_kit5_and_mac_tools_1_2(self) -> None:
         incompatible = []

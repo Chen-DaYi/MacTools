@@ -15,6 +15,16 @@ from pathlib import Path
 from plugin_source_manifest import load_known_plugin_ids, validate_and_project_manifest
 
 
+SCHEMA3_MINIMUM_HOST_VERSION = "1.2.1"
+
+
+def version_tuple(value: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(component) for component in value.split("."))
+    except ValueError as error:
+        raise SystemExit(f"Invalid minimum host version: {value}") from error
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("debug", "release"), required=True)
@@ -23,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url")
     parser.add_argument("--release-notes-url")
     parser.add_argument("--catalog-id", default="com.ggbond.mactools.plugins")
-    parser.add_argument("--minimum-host-version", default="1.1.6")
+    parser.add_argument("--minimum-host-version")
     parser.add_argument("--plugin-kit-version", type=int)
     parser.add_argument("--plugins-root", type=Path, default=Path("Plugins"))
     parser.add_argument("--website-output", type=Path)
@@ -92,6 +102,16 @@ def main() -> None:
     args = parse_args()
     if args.mode == "release" and not args.base_url:
         raise SystemExit("--base-url is required in release mode")
+    minimum_host_version = args.minimum_host_version or (
+        SCHEMA3_MINIMUM_HOST_VERSION if args.mode == "release" else "0.1.0"
+    )
+    if args.mode == "release" and version_tuple(minimum_host_version) < version_tuple(
+        SCHEMA3_MINIMUM_HOST_VERSION
+    ):
+        raise SystemExit(
+            "Schema 3 release catalogs require MacTools "
+            f"{SCHEMA3_MINIMUM_HOST_VERSION} or later."
+        )
     known_plugin_ids = load_known_plugin_ids(args.plugins_root) if args.plugins_root.is_dir() else set()
     entries = []
     website_plugins = []
@@ -136,7 +156,7 @@ def main() -> None:
                 "summary": projected.get("summary", projected.get("displayName", plugin_id)),
                 "localizedMetadata": projected.get("localizedMetadata"),
                 "version": packaged_manifest["version"],
-                "minimumHostVersion": packaged_manifest.get("minHostVersion", args.minimum_host_version),
+                "minimumHostVersion": packaged_manifest.get("minHostVersion", minimum_host_version),
                 "pluginKitVersion": manifest_plugin_kit_version,
                 "capabilities": packaged_manifest.get("capabilities", {
                     "primaryPanel": False, "componentPanel": False, "settings": "none"
@@ -173,7 +193,7 @@ def main() -> None:
             "schemaVersion": 3,
             "catalogID": args.catalog_id,
             "generatedAt": args.generated_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-            "minimumHostVersion": args.minimum_host_version,
+            "minimumHostVersion": minimum_host_version,
             "pluginKitVersion": catalog_plugin_kit_version,
             "plugins": sorted(entries, key=lambda entry: entry["id"]),
             "revoked": [],

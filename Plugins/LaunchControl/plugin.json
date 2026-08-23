@@ -210,7 +210,6 @@
               "action-grid",
               "automatic-rule",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": true,
@@ -245,9 +244,7 @@
               "global-shortcut",
               "workflow",
               "action-grid",
-              "automatic-rule",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": true,
@@ -282,9 +279,7 @@
               "global-shortcut",
               "workflow",
               "action-grid",
-              "automatic-rule",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": true,

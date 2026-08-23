@@ -164,7 +164,9 @@
       "policy": "user-controlled"
     },
     "networkUse": "required",
-    "networkDomains": [],
+    "networkDomains": [
+      "api.openai.com"
+    ],
     "allowsUserConfiguredDomains": true,
     "telemetry": "none",
     "processesSensitiveUserContent": true,
@@ -208,8 +210,7 @@
             "parameterSummary": "@summary",
             "permissionIDs": [
               "accessibility",
-              "automation",
-              "screen-recording"
+              "automation"
             ],
             "risk": "safe",
             "surfaces": [
@@ -219,7 +220,6 @@
               "workflow",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": false,
@@ -241,8 +241,6 @@
             "parameters": [],
             "parameterSummary": "@summary",
             "permissionIDs": [
-              "accessibility",
-              "automation",
               "screen-recording"
             ],
             "risk": "safe",
@@ -253,7 +251,6 @@
               "workflow",
               "action-grid",
               "trackpad-gesture",
-              "app-intent",
               "manual"
             ],
             "automaticEligible": false,

@@ -62,6 +62,7 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
                 .flatMap(\.actionDefinitions)
             try assertManifestConsistency(
                 pluginID: registration.pluginID,
+                plugin: try XCTUnwrap(plugins.first),
                 definitions: definitions
             )
         }
@@ -69,6 +70,7 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
 
     private func assertManifestConsistency(
         pluginID: String,
+        plugin: any MacToolsPlugin,
         definitions: [ActionDefinition]
     ) throws {
         let manifest = try sourceManifest(pluginID: pluginID)
@@ -120,16 +122,58 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
                 isStatic = false
             }
             XCTAssertEqual(descriptor["risk"] as? String, definition.risk.rawValue, definition.key.id)
-            XCTAssertEqual(
-                descriptor["externalInvocation"] as? String,
-                definition.externalInvocationPolicy.rawValue,
-                definition.key.id
-            )
+            if descriptor["externalInvocation"] as? String == "configurable" {
+                XCTAssertTrue(
+                    definition.externalInvocationPolicy == .allowed
+                        || definition.externalInvocationPolicy == .unavailable,
+                    definition.key.id
+                )
+            } else {
+                XCTAssertEqual(
+                    descriptor["externalInvocation"] as? String,
+                    definition.externalInvocationPolicy.rawValue,
+                    definition.key.id
+                )
+            }
             XCTAssertEqual(
                 descriptor["automaticEligible"] as? Bool,
                 definition.capabilities.contains(.automatic),
                 definition.key.id
             )
+            let surfaces = Set(descriptor["surfaces"] as? [String] ?? [])
+            let supportsUnattendedExecution = definition.risk == .safe
+                && definition.capabilities.contains(.automatic)
+                && definition.capabilities.contains(.background)
+            XCTAssertEqual(
+                surfaces.contains("automatic-rule"),
+                supportsUnattendedExecution,
+                definition.key.id
+            )
+            let hasOnlyPortableParameters = definition.parameters.allSatisfy {
+                $0.portability == .portable
+            }
+            let hasLocalOnlyIdentity = !isStatic
+                && (descriptor["localOnlyIdentity"] as? Bool) == true
+            let exposurePolicy = (plugin as? any PluginActionExposureProviding)?
+                .exposurePolicy(
+                    for: ActionReference(key: definition.key),
+                    on: .appIntents
+                ) ?? .automatic
+            XCTAssertEqual(
+                surfaces.contains("app-intent"),
+                supportsUnattendedExecution
+                    && hasOnlyPortableParameters
+                    && !hasLocalOnlyIdentity
+                    && exposurePolicy != .excluded,
+                definition.key.id
+            )
+            if let permissionProvider = plugin as? any PluginActionPermissionProviding {
+                XCTAssertEqual(
+                    Set(descriptor["permissionIDs"] as? [String] ?? []),
+                    Set(permissionProvider.permissionRequirementIDs(for: definition.key)),
+                    definition.key.id
+                )
+            }
             if isStatic {
                 XCTAssertEqual(
                     descriptor["systemImage"] as? String,

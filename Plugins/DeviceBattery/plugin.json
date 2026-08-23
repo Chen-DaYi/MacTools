@@ -62,7 +62,9 @@
     "componentPanel": true,
     "settings": "form"
   },
-  "permissions": [],
+  "permissions": [
+    "inputMonitoring"
+  ],
   "category": "monitoring",
   "presentation": {
     "longDescription": "@summary",
@@ -140,7 +142,9 @@
     "hardware": [],
     "applications": [],
     "executables": [],
-    "permissionIDs": [],
+    "permissionIDs": [
+      "inputMonitoring"
+    ],
     "setupComplexity": "none",
     "requiresRelaunch": false
   },
