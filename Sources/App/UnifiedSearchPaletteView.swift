@@ -30,7 +30,19 @@ enum UnifiedSearchPaletteLayout {
 enum UnifiedSearchResultRowLayout {
     static let quickSelectionColumnWidth: CGFloat = 32
     static let primaryActionColumnWidth: CGFloat = 56
-    static let rowVerticalPadding: CGFloat = 9
+    static let rowVerticalPadding: CGFloat = 8
+    static let selectedAccessorySpacing: CGFloat = 5
+    static let minimumShortcutRecorderWidth: CGFloat = 60
+    static let titleSubtitleSpacing: CGFloat = 2
+    static let selectedSubtitleOpacity = 0.64
+
+    static var subtitleFont: Font {
+        .caption
+    }
+
+    static func shortcutRecorderDisplayText(for binding: ShortcutBinding?) -> String {
+        ShortcutFormatter.compactDisplayString(for: binding)
+    }
 
     static func showsInlineActions(
         for action: MacToolsSearchAction,
@@ -949,7 +961,12 @@ struct UnifiedSearchPaletteView: View {
             isSelected: isSelected
         )
 
-        return VStack(alignment: .leading, spacing: showsInlineActions ? 7 : 0) {
+        return VStack(
+            alignment: .leading,
+            spacing: showsInlineActions
+                ? UnifiedSearchResultRowLayout.selectedAccessorySpacing
+                : 0
+        ) {
             Button {
                 selectedResultID = result.id
                 activate(result)
@@ -959,16 +976,23 @@ struct UnifiedSearchPaletteView: View {
                         .frame(width: 18)
                         .foregroundStyle(isSelected ? Color.white : Color.accentColor)
 
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(
+                        alignment: .leading,
+                        spacing: UnifiedSearchResultRowLayout.titleSubtitleSpacing
+                    ) {
                         Text(result.title)
                             .font(PluginSettingsTheme.Typography.rowTitle)
                             .foregroundStyle(isSelected ? Color.white : Color.primary)
                             .lineLimit(1)
 
                         Text(result.subtitle)
-                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .font(UnifiedSearchResultRowLayout.subtitleFont)
                             .foregroundStyle(
-                                isSelected ? Color.white.opacity(0.78) : Color.secondary
+                                isSelected
+                                    ? Color.white.opacity(
+                                        UnifiedSearchResultRowLayout.selectedSubtitleOpacity
+                                    )
+                                    : Color.secondary
                             )
                             .lineLimit(1)
                     }
@@ -1035,8 +1059,10 @@ struct UnifiedSearchPaletteView: View {
             let shortcut = pluginHost.actionShortcutSettingsItem(for: reference)
             PluginShortcutRecorder(
                 title: FeatureL10n.format("%@ 快捷键", result.title),
-                displayText: shortcut?.bindingText ?? "",
-                minWidth: 72,
+                displayText: UnifiedSearchResultRowLayout.shortcutRecorderDisplayText(
+                    for: shortcut?.assignment.binding
+                ),
+                minWidth: UnifiedSearchResultRowLayout.minimumShortcutRecorderWidth,
                 onRecord: { binding in
                     switch pluginHost.setActionShortcutBinding(
                         binding,
@@ -1058,7 +1084,10 @@ struct UnifiedSearchPaletteView: View {
                     }
                 }
             )
-            .frame(width: 72)
+            .controlSize(.mini)
+            .fixedSize(horizontal: true, vertical: false)
+            .help(shortcut?.bindingText ?? FeatureL10n.string("设置快捷键"))
+            .accessibilityValue(Text(shortcut?.bindingText ?? ""))
 
             if shortcut != nil {
                 Button {

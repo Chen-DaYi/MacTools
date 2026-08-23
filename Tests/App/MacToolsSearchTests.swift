@@ -1,4 +1,5 @@
 import Combine
+import Carbon
 import SwiftUI
 import XCTest
 import MacToolsPluginKit
@@ -79,6 +80,30 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertEqual(
             host.actionShortcutCatalogItems.first(where: { $0.reference == reference })?.status,
             .unassigned
+        )
+    }
+
+    func testActionSubtitleKeepsOwnerMetadataCompactAndDistinct() {
+        XCTAssertEqual(
+            MacToolsSearchSupportingText.actionSubtitle(
+                ownerTitle: "MacTools",
+                catalogSubtitle: "  mAcToOlS  "
+            ),
+            "MacTools"
+        )
+        XCTAssertEqual(
+            MacToolsSearchSupportingText.actionSubtitle(
+                ownerTitle: "IP Check",
+                catalogSubtitle: "Copy Address"
+            ),
+            "IP Check · Copy Address"
+        )
+        XCTAssertEqual(
+            MacToolsSearchSupportingText.actionSubtitle(
+                ownerTitle: "MacTools",
+                catalogSubtitle: "  "
+            ),
+            "MacTools"
         )
     }
 
@@ -846,6 +871,16 @@ final class MacToolsSearchTests: XCTestCase {
         ))
         XCTAssertEqual(UnifiedSearchResultRowLayout.quickSelectionColumnWidth, 32)
         XCTAssertEqual(UnifiedSearchResultRowLayout.primaryActionColumnWidth, 56)
+        XCTAssertEqual(UnifiedSearchResultRowLayout.minimumShortcutRecorderWidth, 60)
+
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_K),
+            modifiers: [.control, .option, .shift, .command]
+        )
+        XCTAssertEqual(
+            UnifiedSearchResultRowLayout.shortcutRecorderDisplayText(for: binding),
+            "⌃\u{2009}⌥\u{2009}⇧\u{2009}⌘\u{2009}K"
+        )
     }
 
     func testPluginHostPerformsOnlyDeclaredCommands() {

@@ -93,6 +93,22 @@ enum MacToolsSearchResultID {
     }
 }
 
+enum MacToolsSearchSupportingText {
+    static func actionSubtitle(
+        ownerTitle: String,
+        catalogSubtitle: String?
+    ) -> String {
+        guard let catalogSubtitle else { return ownerTitle }
+        let trimmedSubtitle = catalogSubtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSubtitle.isEmpty,
+            MacToolsSearchResult.normalize(trimmedSubtitle)
+                != MacToolsSearchResult.normalize(ownerTitle) else {
+            return ownerTitle
+        }
+        return "\(ownerTitle) · \(trimmedSubtitle)"
+    }
+}
+
 struct MacToolsSearchIndex {
     let items: [MacToolsSearchResult]
     private let indexedItems: [IndexedItem]
@@ -637,7 +653,10 @@ enum MacToolsSearchIndexBuilder {
                 ? AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools")
                 : pluginTitlesByID[entry.reference.key.providerID]
                     ?? entry.reference.key.providerID
-            let subtitle = entry.subtitle.map { "\(ownerTitle) · \($0)" } ?? ownerTitle
+            let subtitle = MacToolsSearchSupportingText.actionSubtitle(
+                ownerTitle: ownerTitle,
+                catalogSubtitle: entry.subtitle
+            )
             let permissionTitles = pluginHost.actionPermissionTitles(for: entry.reference)
             let permissionSummary = permissionTitles.isEmpty
                 ? nil
