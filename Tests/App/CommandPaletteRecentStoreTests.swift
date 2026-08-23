@@ -82,13 +82,20 @@ final class CommandPaletteRecentStoreTests: XCTestCase {
     func testLateCompletionCannotRestoreHistoryAfterAnotherStoreDisablesIt() {
         let persistence = CommandPaletteRecentTestPersistence()
         let olderStore = CommandPaletteRecentStore(defaults: persistence)
+        let oldAction = reference(actionID: "old")
+        XCTAssertTrue(olderStore.recordSuccessful(oldAction))
         let newerStore = CommandPaletteRecentStore(defaults: persistence)
 
         XCTAssertTrue(newerStore.setEnabled(false))
         XCTAssertFalse(olderStore.recordSuccessful(reference(actionID: "late")))
+        XCTAssertFalse(olderStore.isEnabled)
+        XCTAssertTrue(olderStore.references.isEmpty)
+
+        XCTAssertTrue(olderStore.setEnabled(true))
+        XCTAssertTrue(olderStore.references.isEmpty)
 
         let reloaded = CommandPaletteRecentStore(defaults: persistence)
-        XCTAssertFalse(reloaded.isEnabled)
+        XCTAssertTrue(reloaded.isEnabled)
         XCTAssertTrue(reloaded.references.isEmpty)
     }
 
@@ -105,6 +112,36 @@ final class CommandPaletteRecentStoreTests: XCTestCase {
         XCTAssertEqual(
             persistence.data(forKey: "command-palette.recent-actions.v1"),
             invalidPayload
+        )
+
+        XCTAssertTrue(store.clear())
+        XCTAssertNil(store.loadError)
+        XCTAssertTrue(store.recordSuccessful(reference(actionID: "recovered")))
+        XCTAssertEqual(store.references, [reference(actionID: "recovered")])
+    }
+
+    func testResolvedReferencesPersistMigrationsAndRetainUnavailableIdentities() {
+        let persistence = CommandPaletteRecentTestPersistence()
+        let store = CommandPaletteRecentStore(defaults: persistence)
+        let unavailable = reference(actionID: "unavailable")
+        let old = ActionReference(
+            key: ActionKey(providerID: "plugin", actionID: "migrated"),
+            schemaVersion: 1
+        )
+        let current = ActionReference(key: old.key, schemaVersion: 2)
+
+        XCTAssertTrue(store.recordSuccessful(unavailable))
+        XCTAssertTrue(store.recordSuccessful(old))
+
+        let resolved = store.resolvedReferences { reference in
+            reference == old ? current : nil
+        }
+
+        XCTAssertEqual(resolved, [current])
+        XCTAssertEqual(store.references, [current, unavailable])
+        XCTAssertEqual(
+            CommandPaletteRecentStore(defaults: persistence).references,
+            [current, unavailable]
         )
     }
 

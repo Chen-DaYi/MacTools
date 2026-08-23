@@ -176,7 +176,10 @@ final class MacToolsSearchTests: XCTestCase {
             ),
             appearanceUserDefaults: defaults
         )
-        let model = UnifiedSearchPaletteModel(commandContext: context)
+        let model = UnifiedSearchPaletteModel(
+            commandContext: context,
+            recentStore: CommandPaletteRecentStore(userDefaults: defaults)
+        )
         model.updateQuery(plugin.metadata.title)
         let hideAction = AppHostCommandAction.setPluginVisibility(
             pluginID: plugin.metadata.id,
@@ -236,7 +239,10 @@ final class MacToolsSearchTests: XCTestCase {
             launchAtLoginController: controller,
             appearanceUserDefaults: defaults
         )
-        let model = UnifiedSearchPaletteModel(commandContext: context)
+        let model = UnifiedSearchPaletteModel(
+            commandContext: context,
+            recentStore: CommandPaletteRecentStore(userDefaults: defaults)
+        )
         model.updateQuery("launch at login")
         let (rebuild, cancellable) = expectModelResults(
             model,
@@ -267,6 +273,66 @@ final class MacToolsSearchTests: XCTestCase {
             }
             return definition.action == .setLaunchAtLogin(true)
         })
+    }
+
+    func testModelMigratesPersistedRecentReferencesThroughTheLiveRegistry() {
+        let plugin = MigratingRecentSearchTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let suiteName = "MacToolsSearchRecentMigrationTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = CommandPaletteRecentStore(userDefaults: defaults)
+        let legacyReference = ActionReference(key: plugin.actionKey, schemaVersion: 1)
+        let currentReference = ActionReference(key: plugin.actionKey, schemaVersion: 2)
+        XCTAssertTrue(store.recordSuccessful(legacyReference))
+
+        let model = UnifiedSearchPaletteModel(
+            commandContext: AppHostCommandContext(
+                pluginHost: host,
+                launchAtLoginController: LaunchAtLoginController(
+                    service: SearchTestLaunchAtLoginService()
+                ),
+                appearanceUserDefaults: defaults
+            ),
+            recentStore: store
+        )
+
+        XCTAssertEqual(store.references, [currentReference])
+        XCTAssertEqual(model.sections.first?.kind, .recent)
+        XCTAssertEqual(model.sections.first?.results.count, 1)
+        XCTAssertEqual(
+            model.sections.first?.results.first?.action,
+            .executeAction(currentReference)
+        )
+    }
+
+    func testModelExposesAndCanRepairRejectedRecentPayload() {
+        let suiteName = "MacToolsSearchRecentRepairTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(
+            Data("not-json".utf8),
+            forKey: "command-palette.recent-actions.v1"
+        )
+        let store = CommandPaletteRecentStore(userDefaults: defaults)
+        let model = UnifiedSearchPaletteModel(
+            commandContext: AppHostCommandContext(
+                pluginHost: makePluginHostForTests(plugins: []),
+                launchAtLoginController: LaunchAtLoginController(
+                    service: SearchTestLaunchAtLoginService()
+                ),
+                appearanceUserDefaults: defaults
+            ),
+            recentStore: store
+        )
+
+        XCTAssertTrue(model.recentActionsNeedRepair)
+        XCTAssertFalse(model.hasRecentActions)
+        XCTAssertTrue(model.clearRecentActions())
+        XCTAssertFalse(model.recentActionsNeedRepair)
+        XCTAssertNil(defaults.object(forKey: "command-palette.recent-actions.v1"))
     }
 
     private func expectModelResults(
@@ -1092,6 +1158,56 @@ private final class ActionShortcutSearchTestPlugin:
                 systemImage: "command"
             ),
         ]
+    }
+
+    func handleAction(_ action: PluginPanelAction) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        ActionExecutionHandle { .succeeded() }
+    }
+}
+
+@MainActor
+private final class MigratingRecentSearchTestPlugin: MacToolsPlugin, PluginActionProviding {
+    let metadata = PluginMetadata(
+        id: "migrating-recent-search",
+        title: "Migrating Recent Search",
+        iconName: "arrow.triangle.2.circlepath",
+        iconTint: Color(nsColor: .systemBlue),
+        order: 1,
+        defaultDescription: "Tests recent action migrations"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    var actionKey: ActionKey {
+        ActionKey(providerID: metadata.id, actionID: "migrate")
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: actionKey,
+                parameterSchemaVersion: 2,
+                title: "Migrate Recent Action",
+                description: "Tests recent action migrations.",
+                systemImage: "arrow.triangle.2.circlepath"
+            )
+        ]
+    }
+
+    func migrateActionReference(
+        _ reference: ActionReference,
+        toSchemaVersion schemaVersion: Int
+    ) -> ActionReference? {
+        guard reference.key == actionKey,
+              reference.schemaVersion == 1,
+              schemaVersion == 2,
+              reference.parameters.entries.isEmpty else {
+            return nil
+        }
+        return ActionReference(key: actionKey, schemaVersion: schemaVersion)
     }
 
     func handleAction(_ action: PluginPanelAction) {}

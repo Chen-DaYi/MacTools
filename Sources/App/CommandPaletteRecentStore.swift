@@ -54,10 +54,17 @@ final class CommandPaletteRecentStore: ObservableObject {
     @discardableResult
     func recordSuccessful(_ reference: ActionReference) -> Bool {
         let persistedEnabled = Self.loadEnabledState(defaults: defaults)
-        isEnabled = persistedEnabled
-        guard persistedEnabled,
-              reference.parameters.entries.isEmpty
-        else {
+        if isEnabled != persistedEnabled {
+            isEnabled = persistedEnabled
+        }
+        guard persistedEnabled else {
+            if !references.isEmpty {
+                references.removeAll()
+            }
+            loadError = nil
+            return false
+        }
+        guard reference.parameters.entries.isEmpty else {
             return false
         }
 
@@ -85,6 +92,66 @@ final class CommandPaletteRecentStore: ObservableObject {
     ) -> Bool {
         guard case .completed(.succeeded) = outcome else { return false }
         return recordSuccessful(reference)
+    }
+
+    /// Resolves persisted identities against the current action registry without making
+    /// temporarily unavailable actions executable from stale data. Successful migrations are
+    /// written back while unresolved identities remain available for a future provider reinstall.
+    func resolvedReferences(
+        using resolve: (ActionReference) -> ActionReference?
+    ) -> [ActionReference] {
+        let persistedEnabled = Self.loadEnabledState(defaults: defaults)
+        if isEnabled != persistedEnabled {
+            isEnabled = persistedEnabled
+        }
+        guard persistedEnabled else {
+            if !references.isEmpty {
+                references.removeAll()
+            }
+            loadError = nil
+            return []
+        }
+
+        let loaded = Self.loadReferences(defaults: defaults)
+        guard loaded.error == nil else {
+            if !references.isEmpty {
+                references = []
+            }
+            loadError = loaded.error
+            return []
+        }
+        if references != loaded.references {
+            references = loaded.references
+        }
+        loadError = nil
+
+        var persistedReferences: [ActionReference] = []
+        var resolvedReferences: [ActionReference] = []
+        var persistedSet: Set<ActionReference> = []
+        var resolvedSet: Set<ActionReference> = []
+
+        for reference in loaded.references {
+            guard let resolved = resolve(reference),
+                  resolved.parameters.entries.isEmpty
+            else {
+                if persistedSet.insert(reference).inserted {
+                    persistedReferences.append(reference)
+                }
+                continue
+            }
+
+            if persistedSet.insert(resolved).inserted {
+                persistedReferences.append(resolved)
+            }
+            if resolvedSet.insert(resolved).inserted {
+                resolvedReferences.append(resolved)
+            }
+        }
+
+        if persistedReferences != loaded.references {
+            _ = replaceReferences(persistedReferences)
+        }
+        return resolvedReferences
     }
 
     @discardableResult
@@ -120,7 +187,11 @@ final class CommandPaletteRecentStore: ObservableObject {
         }
 
         isEnabled = enabled
-        if !enabled {
+        if enabled {
+            let loaded = Self.loadReferences(defaults: defaults)
+            references = loaded.references
+            loadError = loaded.error
+        } else {
             references.removeAll()
             loadError = nil
         }

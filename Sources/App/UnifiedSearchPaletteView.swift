@@ -56,7 +56,7 @@ final class UnifiedSearchPaletteModel: ObservableObject {
 
     init(
         commandContext: AppHostCommandContext,
-        recentStore: CommandPaletteRecentStore = CommandPaletteRecentStore()
+        recentStore: CommandPaletteRecentStore
     ) {
         self.commandContext = commandContext
         self.recentStore = recentStore
@@ -64,9 +64,11 @@ final class UnifiedSearchPaletteModel: ObservableObject {
         let index = Self.buildIndex(commandContext: commandContext)
         self.index = index
         let suggestedResults = index.results(matching: "")
-        let recentResults = recentStore.isEnabled
-            ? recentStore.references.compactMap { index.result(for: $0) }
-            : []
+        let recentReferences = Self.resolvedRecentReferences(
+            from: recentStore,
+            registry: commandContext.pluginHost.actionRegistry
+        )
+        let recentResults = recentReferences.compactMap { index.result(for: $0) }
         let sections = MacToolsSearchPresentation.sections(
             query: "",
             results: suggestedResults,
@@ -101,14 +103,22 @@ final class UnifiedSearchPaletteModel: ObservableObject {
         !recentStore.references.isEmpty
     }
 
-    func clearRecentActions() {
-        guard recentStore.clear() else { return }
-        updateResults()
+    var recentActionsNeedRepair: Bool {
+        recentStore.loadError != nil
     }
 
-    func setRecentActionsEnabled(_ enabled: Bool) {
-        guard recentStore.setEnabled(enabled) else { return }
+    @discardableResult
+    func clearRecentActions() -> Bool {
+        guard recentStore.clear() else { return false }
         updateResults()
+        return true
+    }
+
+    @discardableResult
+    func setRecentActionsEnabled(_ enabled: Bool) -> Bool {
+        guard recentStore.setEnabled(enabled) else { return false }
+        updateResults()
+        return true
     }
 
     func actionCompletionObserver(
@@ -180,7 +190,10 @@ final class UnifiedSearchPaletteModel: ObservableObject {
     }
 
     private func updateResults() {
-        let recentReferences = recentStore.isEnabled ? recentStore.references : []
+        let recentReferences = Self.resolvedRecentReferences(
+            from: recentStore,
+            registry: commandContext.pluginHost.actionRegistry
+        )
         let matchingResults = index.results(
             matching: query,
             recentReferences: recentReferences
@@ -192,6 +205,18 @@ final class UnifiedSearchPaletteModel: ObservableObject {
             recentResults: recentResults
         )
         results = sections.flatMap(\.results)
+    }
+
+    private static func resolvedRecentReferences(
+        from store: CommandPaletteRecentStore,
+        registry: ActionRegistry
+    ) -> [ActionReference] {
+        store.resolvedReferences { reference in
+            guard case let .success(migrated) = registry.migrate(reference) else {
+                return nil
+            }
+            return migrated
+        }
     }
 }
 
@@ -672,23 +697,52 @@ struct UnifiedSearchPaletteView: View {
     private var recentActionsMenu: some View {
         Menu {
             if model.recentActionsEnabled {
-                Button {
-                    model.clearRecentActions()
-                } label: {
+                if model.recentActionsNeedRepair {
                     Label(
                         AppL10n.search(
-                            "search.recent.clear",
-                            defaultValue: "清除最近操作"
+                            "search.recent.loadFailed",
+                            defaultValue: "无法加载最近操作"
                         ),
-                        systemImage: "trash"
+                        systemImage: "exclamationmark.triangle"
                     )
+                    .disabled(true)
+
+                    Button {
+                        performRecentActionsUpdate {
+                            model.clearRecentActions()
+                        }
+                    } label: {
+                        Label(
+                            AppL10n.search(
+                                "search.recent.reset",
+                                defaultValue: "重置最近操作"
+                            ),
+                            systemImage: "arrow.counterclockwise"
+                        )
+                    }
+                } else {
+                    Button {
+                        performRecentActionsUpdate {
+                            model.clearRecentActions()
+                        }
+                    } label: {
+                        Label(
+                            AppL10n.search(
+                                "search.recent.clear",
+                                defaultValue: "清除最近操作"
+                            ),
+                            systemImage: "trash"
+                        )
+                    }
+                    .disabled(!model.hasRecentActions)
                 }
-                .disabled(!model.hasRecentActions)
 
                 Divider()
 
                 Button(role: .destructive) {
-                    model.setRecentActionsEnabled(false)
+                    performRecentActionsUpdate {
+                        model.setRecentActionsEnabled(false)
+                    }
                 } label: {
                     Label(
                         AppL10n.search(
@@ -700,7 +754,9 @@ struct UnifiedSearchPaletteView: View {
                 }
             } else {
                 Button {
-                    model.setRecentActionsEnabled(true)
+                    performRecentActionsUpdate {
+                        model.setRecentActionsEnabled(true)
+                    }
                 } label: {
                     Label(
                         AppL10n.search(
@@ -728,6 +784,17 @@ struct UnifiedSearchPaletteView: View {
                 "search.recent.manage",
                 defaultValue: "管理最近操作"
             )
+        )
+    }
+
+    private func performRecentActionsUpdate(_ update: () -> Bool) {
+        guard !update() else {
+            executionFeedback = nil
+            return
+        }
+        executionFeedback = AppL10n.search(
+            "search.recent.updateFailed",
+            defaultValue: "无法更新最近操作。"
         )
     }
 
