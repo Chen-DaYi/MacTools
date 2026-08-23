@@ -416,6 +416,27 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         AppL10n.search("search.title", defaultValue: "搜索 MacTools")
     }
 
+    var focusedWindowLayoutTarget: NSWindow? {
+        guard let settingsWindow,
+              Self.isEligibleFocusedWindowLayoutTarget(
+                  isKeyWindow: settingsWindow.isKeyWindow,
+                  isVisible: settingsWindow.isVisible,
+                  isUnifiedSearchPresented: settingsNavigationCoordinator?.isUnifiedSearchPresented == true
+              )
+        else {
+            return nil
+        }
+        return settingsWindow
+    }
+
+    static func isEligibleFocusedWindowLayoutTarget(
+        isKeyWindow: Bool,
+        isVisible: Bool,
+        isUnifiedSearchPresented: Bool
+    ) -> Bool {
+        isKeyWindow && isVisible && !isUnifiedSearchPresented
+    }
+
     init(
         pluginHost: PluginHost,
         appUpdater: AppUpdater,
@@ -487,6 +508,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     func showUnifiedSearch() {
+        pluginHost.captureCurrentFocusedWindowTarget()
         launchAtLoginController.refreshStatus()
         pluginHost.refreshActionPresentations(providerIDs: ["apple-shortcuts"])
         presentSettings(.settings)
@@ -494,6 +516,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     func windowForActionConfirmation() -> NSWindow? {
+        pluginHost.captureCurrentFocusedWindowTarget()
         presentSettings(.settings)
         return settingsWindow
     }
@@ -518,6 +541,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             return
         }
 
+        pluginHost.captureCurrentFocusedWindowTarget()
         launchAtLoginController.refreshStatus()
         pluginHost.refreshActionPresentations(providerIDs: ["apple-shortcuts"])
         onProgrammaticSettingsPresentation()

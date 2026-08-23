@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import MacToolsAppIntents
+import MacToolsPluginKit
 import SwiftUI
 @preconcurrency import UserNotifications
 
@@ -74,6 +75,16 @@ final class MacToolsAppRuntime {
             appearanceUserDefaults: appearanceUserDefaults
         )
         self.windowRouter = windowRouter
+        pluginHost.installFocusedHostWindowProvider { [weak windowRouter] in
+            windowRouter?.focusedWindowLayoutTarget
+        }
+        pluginHost.actionExecutionFeedbackHandler = { [weak self] source, reference, outcome in
+            self?.presentHeadlessActionFeedback(
+                source: source,
+                reference: reference,
+                outcome: outcome
+            )
+        }
         let actionConfirmationService = AppActionConfirmationService { [weak self] in
             self?.windowRouter?.windowForActionConfirmation()
         }
@@ -82,8 +93,9 @@ final class MacToolsAppRuntime {
         }
         let actionGridOverlayController = ActionGridOverlayController(pluginHost: pluginHost)
         self.actionGridOverlayController = actionGridOverlayController
-        pluginHost.installActionGridPresenter { [weak actionGridOverlayController] entries, source in
-            actionGridOverlayController?.present(entries: entries, source: source) ?? false
+        pluginHost.installActionGridPresenter { [weak self, weak actionGridOverlayController] entries, source in
+            self?.pluginHost.captureCurrentFocusedWindowTarget()
+            return actionGridOverlayController?.present(entries: entries, source: source) ?? false
         }
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,
@@ -113,6 +125,26 @@ final class MacToolsAppRuntime {
         actionGridOverlayController?.close(restoringFocus: false)
         statusItemController?.dismissPanels()
         pluginHost.deactivateAllPlugins()
+    }
+
+    private func presentHeadlessActionFeedback(
+        source: ActionExecutionSource,
+        reference: ActionReference,
+        outcome: ActionExecutionOutcome
+    ) {
+        guard reference.key.providerID == "window-layouts",
+              source == .globalShortcut || source == .trackpadGesture,
+              case let .success(action) = pluginHost.actionRegistry.registeredAction(for: reference)
+        else {
+            return
+        }
+
+        if let feedback = WindowLayoutActionFeedback.feedback(
+            actionTitle: action.definition.title,
+            outcome: outcome
+        ) {
+            runLinkFeedbackPresenter.present(feedback)
+        }
     }
 
     private func bootstrapDynamicPlugins() {
