@@ -561,6 +561,7 @@ if [[ "$synced_count" -gt 0 || "$removed_count" -gt 0 || ! -f "$CATALOG_PATH" ]]
     "$REPO_ROOT/scripts/plugins/generate-plugin-catalog.sh" \
         --mode debug \
         --output "$CATALOG_PATH" \
+        --plugins-root "$SOURCE_DIR" \
         "${catalog_args[@]}"
 fi
 

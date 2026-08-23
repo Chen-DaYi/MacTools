@@ -63,5 +63,112 @@
     "settings": "form"
   },
   "permissions": [],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "right",
+      "click",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "النقر بزر الماوس الأيمن"
+      ],
+      "de": [
+        "Rechtsklick"
+      ],
+      "en": [
+        "Right Click"
+      ],
+      "es": [
+        "Clic derecho"
+      ],
+      "fr": [
+        "Clic droit"
+      ],
+      "ja": [
+        "右クリック"
+      ],
+      "ko": [
+        "오른쪽 클릭"
+      ],
+      "pt": [
+        "Clique direito"
+      ],
+      "ru": [
+        "Правый клик"
+      ],
+      "zh-Hans": [
+        "右键工具"
+      ],
+      "zh-Hant": [
+        "右鍵工具"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "selected-files"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": true,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  }
 }

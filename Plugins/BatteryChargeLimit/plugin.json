@@ -68,5 +68,298 @@
     "settings": "form"
   },
   "permissions": [],
-  "category": "system"
+  "category": "system",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "battery",
+      "charge",
+      "limit",
+      "system"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "حد شحن البطارية"
+      ],
+      "de": [
+        "Batterieladelimit"
+      ],
+      "en": [
+        "Battery Charge Limit"
+      ],
+      "es": [
+        "Límite de carga de batería"
+      ],
+      "fr": [
+        "Limite de charge de la batterie"
+      ],
+      "ja": [
+        "バッテリー充電上限"
+      ],
+      "ko": [
+        "배터리 충전 한도"
+      ],
+      "pt": [
+        "Limite de carga da bateria"
+      ],
+      "ru": [
+        "Лимит заряда батареи"
+      ],
+      "zh-Hans": [
+        "电池充电上限"
+      ],
+      "zh-Hant": [
+        "電池充電上限"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "system"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64"
+    ],
+    "hardware": [
+      "Apple Silicon Mac",
+      "built-in battery"
+    ],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "advanced",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "system-state"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "review-requirements",
+        "title": "@displayName",
+        "description": "@summary"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "battery-charge-limit",
+        "kind": "mixed",
+        "staticActions": [
+          {
+            "id": "set-enabled",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "电池充电上限",
+              "限制电池充电至指定上限",
+              "battery",
+              "charge",
+              "limit",
+              "set",
+              "enabled"
+            ],
+            "systemImage": "battery.100.bolt",
+            "parameters": [
+              {
+                "id": "enabled",
+                "kind": "boolean",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "confirmAlways"
+          },
+          {
+            "id": "hold",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "电池充电上限",
+              "停止充电",
+              "battery",
+              "charge",
+              "limit",
+              "hold"
+            ],
+            "systemImage": "bolt.slash.fill",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "confirmAlways"
+          },
+          {
+            "id": "resume",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "电池充电上限",
+              "开始充电",
+              "battery",
+              "charge",
+              "limit",
+              "resume"
+            ],
+            "systemImage": "bolt.fill",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "confirmAlways"
+          },
+          {
+            "id": "discharge",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "电池充电上限",
+              "强制放电至 80%",
+              "battery",
+              "charge",
+              "limit",
+              "discharge"
+            ],
+            "systemImage": "minus.circle",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "confirmationRequired",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "confirmAlways"
+          }
+        ],
+        "dynamicTemplates": [
+          {
+            "id": "set-limit",
+            "title": "@displayName",
+            "description": "@summary",
+            "entrySource": "charge-limit-presets",
+            "parameters": [
+              {
+                "id": "limit",
+                "kind": "integer",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "localOnlyIdentity": false,
+            "keywords": [
+              "battery",
+              "charge",
+              "limit",
+              "set",
+              "presets"
+            ],
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "confirmAlways"
+          }
+        ]
+      }
+    ]
+  }
 }

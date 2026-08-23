@@ -63,5 +63,189 @@
     "settings": "none"
   },
   "permissions": [],
-  "category": "display"
+  "category": "display",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "night",
+      "shift",
+      "display"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "Night Shift"
+      ],
+      "de": [
+        "Night Shift"
+      ],
+      "en": [
+        "Night Shift"
+      ],
+      "es": [
+        "Night Shift"
+      ],
+      "fr": [
+        "Night Shift"
+      ],
+      "ja": [
+        "Night Shift"
+      ],
+      "ko": [
+        "Night Shift"
+      ],
+      "pt": [
+        "Night Shift"
+      ],
+      "ru": [
+        "Night Shift"
+      ],
+      "zh-Hans": [
+        "夜览"
+      ],
+      "zh-Hant": [
+        "Night Shift"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "display"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "display-state"
+    ],
+    "dataPersisted": [],
+    "retention": {
+      "policy": "none"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "night-shift",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "toggle",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "夜览",
+              "降低蓝光，使屏幕颜色更暖",
+              "night",
+              "shift",
+              "toggle"
+            ],
+            "systemImage": "lamp.floor",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          },
+          {
+            "id": "set-enabled",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "夜览",
+              "降低蓝光，使屏幕颜色更暖",
+              "night",
+              "shift",
+              "set",
+              "enabled"
+            ],
+            "systemImage": "lamp.floor",
+            "parameters": [
+              {
+                "id": "enabled",
+                "kind": "boolean",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

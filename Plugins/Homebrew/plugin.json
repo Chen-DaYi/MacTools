@@ -63,5 +63,253 @@
     "settings": "workspace"
   },
   "permissions": [],
-  "category": "system"
+  "category": "system",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "homebrew",
+      "manager",
+      "system"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "Homebrew"
+      ],
+      "de": [
+        "Homebrew"
+      ],
+      "en": [
+        "Homebrew Manager"
+      ],
+      "es": [
+        "Homebrew"
+      ],
+      "fr": [
+        "Homebrew"
+      ],
+      "ja": [
+        "Homebrew"
+      ],
+      "ko": [
+        "Homebrew"
+      ],
+      "pt": [
+        "Homebrew"
+      ],
+      "ru": [
+        "Homebrew"
+      ],
+      "zh-Hans": [
+        "Homebrew 管理"
+      ],
+      "zh-Hant": [
+        "Homebrew 管理"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "system"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [
+      "brew"
+    ],
+    "permissionIDs": [],
+    "setupComplexity": "advanced",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "system-state"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "required",
+    "networkDomains": [
+      "brew.sh",
+      "formulae.brew.sh",
+      "github.com",
+      "githubusercontent.com"
+    ],
+    "allowsUserConfiguredDomains": true,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "review-requirements",
+        "title": "@displayName",
+        "description": "@summary"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "homebrew",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "update",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "Homebrew",
+              "更新软件源",
+              "brew",
+              "homebrew",
+              "update"
+            ],
+            "systemImage": "arrow.clockwise.circle.fill",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          },
+          {
+            "id": "upgrade-all",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "Homebrew",
+              "更新所有包",
+              "brew",
+              "homebrew",
+              "upgrade",
+              "all"
+            ],
+            "systemImage": "arrow.up.circle.fill",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "confirmationRequired",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          },
+          {
+            "id": "doctor",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "Homebrew",
+              "运行诊断",
+              "brew",
+              "homebrew",
+              "doctor"
+            ],
+            "systemImage": "heart.text.square.fill",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          },
+          {
+            "id": "cleanup",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "Homebrew",
+              "清理缓存",
+              "brew",
+              "homebrew",
+              "cleanup"
+            ],
+            "systemImage": "trash.circle.fill",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "confirmationRequired",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

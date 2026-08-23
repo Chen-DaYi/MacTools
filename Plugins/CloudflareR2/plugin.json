@@ -63,5 +63,156 @@
     "settings": "workspace"
   },
   "permissions": [],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "cloudflare",
+      "r2",
+      "upload",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "الرفع إلى Cloudflare R2"
+      ],
+      "de": [
+        "Cloudflare R2-Upload"
+      ],
+      "en": [
+        "Cloudflare R2 Upload"
+      ],
+      "es": [
+        "Carga en Cloudflare R2"
+      ],
+      "fr": [
+        "Envoi vers Cloudflare R2"
+      ],
+      "ja": [
+        "Cloudflare R2 アップロード"
+      ],
+      "ko": [
+        "Cloudflare R2 업로드"
+      ],
+      "pt": [
+        "Upload para o Cloudflare R2"
+      ],
+      "ru": [
+        "Загрузка в Cloudflare R2"
+      ],
+      "zh-Hans": [
+        "Cloudflare R2 上传"
+      ],
+      "zh-Hant": [
+        "Cloudflare R2 上傳"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "selected-files",
+      "upload-configuration"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "required",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": true,
+    "telemetry": "none",
+    "processesSensitiveUserContent": true,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "cloudflare-r2",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "upload-file",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "R2",
+              "S3",
+              "Cloudflare",
+              "上传",
+              "cloudflare",
+              "r2",
+              "upload",
+              "file"
+            ],
+            "systemImage": "icloud.and.arrow.up.fill",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "unavailable"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

@@ -65,5 +65,245 @@
   "permissions": [
     "accessibility"
   ],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "auto",
+      "input",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "تبديل مصادر الإدخال تلقائيًا"
+      ],
+      "de": [
+        "Eingabequelle automatisch wechseln"
+      ],
+      "en": [
+        "Auto Input"
+      ],
+      "es": [
+        "Cambio automático de entrada"
+      ],
+      "fr": [
+        "Changement automatique de saisie"
+      ],
+      "ja": [
+        "入力ソースの自動切り替え"
+      ],
+      "ko": [
+        "입력 소스 자동 전환"
+      ],
+      "pt": [
+        "Troca automática de entrada"
+      ],
+      "ru": [
+        "Автопереключение источника ввода"
+      ],
+      "zh-Hans": [
+        "自动切换输入法"
+      ],
+      "zh-Hant": [
+        "自動切換輸入法"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [
+      "accessibility"
+    ],
+    "setupComplexity": "guided",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "foreground-application",
+      "input-source"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "review-requirements",
+        "title": "@displayName",
+        "description": "@summary"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "auto-input",
+        "kind": "mixed",
+        "staticActions": [
+          {
+            "id": "toggle",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "自动切换输入法",
+              "按应用记住并自动切换输入法",
+              "auto",
+              "input",
+              "toggle"
+            ],
+            "systemImage": "keyboard",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [
+              "accessibility"
+            ],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          },
+          {
+            "id": "set-enabled",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "自动切换输入法",
+              "按应用记住并自动切换输入法",
+              "auto",
+              "input",
+              "set",
+              "enabled"
+            ],
+            "systemImage": "keyboard",
+            "parameters": [
+              {
+                "id": "enabled",
+                "kind": "boolean",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "permissionIDs": [
+              "accessibility"
+            ],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          }
+        ],
+        "dynamicTemplates": [
+          {
+            "id": "select-input-source",
+            "title": "@displayName",
+            "description": "@summary",
+            "entrySource": "installed-input-sources",
+            "parameters": [
+              {
+                "id": "inputSourceID",
+                "kind": "string",
+                "isRequired": true,
+                "portability": "localOnly"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "localOnlyIdentity": true,
+            "keywords": [
+              "auto",
+              "input",
+              "select",
+              "source",
+              "installed",
+              "sources"
+            ],
+            "permissionIDs": [
+              "accessibility"
+            ],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          }
+        ]
+      }
+    ]
+  }
 }

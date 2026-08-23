@@ -76,6 +76,8 @@ In this repository, plugin Xcode targets are generated before XcodeGen runs. The
 
 The manifest ID is the stable identity of the package. It must match the runtime `PluginMetadata.id`, and a package must return exactly one plugin instance. Use lower-case, readable IDs such as `display-brightness` unless there is a strong reason to use a reverse-DNS identifier. The ID `marketplace` is reserved for the host-owned URL route and is not a valid plugin ID.
 
+The same source manifest may add optional product metadata for pre-install discovery, requirements, privacy, actions, setup, and plugin relationships. Follow [`plugin-manifest.schema.json`](plugin-manifest.schema.json); do not create a second marketplace metadata file. Localized product fields can reuse the manifest's complete `localizedMetadata` with `@displayName` or `@summary`; packaging and catalog generation expand those references before distribution. Keep screenshots under `MarketplaceAssets/`, and describe dynamic machine-local action entries with templates instead of enumerating local values. The catalog generator validates localization, identifiers, permission and surface values, references, domains, assets, and action completeness before projection.
+
 When a plugin uses a private Apple framework, it must load that framework dynamically at runtime and validate every required class and selector before use. Do not add a static framework link: unsupported systems must present a clear plugin error instead of crashing.
 
 ## Development Steps

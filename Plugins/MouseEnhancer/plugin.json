@@ -66,5 +66,121 @@
     "accessibility",
     "inputMonitoring"
   ],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "mouse",
+      "enhancer",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "محسّن الماوس"
+      ],
+      "de": [
+        "Maus-Erweiterung"
+      ],
+      "en": [
+        "Mouse Enhancer"
+      ],
+      "es": [
+        "Mejoras para el ratón"
+      ],
+      "fr": [
+        "Amélioration de la souris"
+      ],
+      "ja": [
+        "マウス機能拡張"
+      ],
+      "ko": [
+        "마우스 기능 향상"
+      ],
+      "pt": [
+        "Aprimoramento do mouse"
+      ],
+      "ru": [
+        "Расширение мыши"
+      ],
+      "zh-Hans": [
+        "鼠标增强"
+      ],
+      "zh-Hant": [
+        "滑鼠增強"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [
+      "accessibility",
+      "inputMonitoring"
+    ],
+    "setupComplexity": "guided",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "input-events"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "review-requirements",
+        "title": "@displayName",
+        "description": "@summary"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  }
 }

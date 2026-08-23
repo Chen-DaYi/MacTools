@@ -66,5 +66,120 @@
     "calendarFullAccess",
     "automation"
   ],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "calendar",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "التقويم"
+      ],
+      "de": [
+        "Kalender"
+      ],
+      "en": [
+        "Calendar"
+      ],
+      "es": [
+        "Calendario"
+      ],
+      "fr": [
+        "Calendrier"
+      ],
+      "ja": [
+        "カレンダー"
+      ],
+      "ko": [
+        "캘린더"
+      ],
+      "pt": [
+        "Calendário"
+      ],
+      "ru": [
+        "Календарь"
+      ],
+      "zh-Hans": [
+        "日历"
+      ],
+      "zh-Hant": [
+        "行事曆"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [
+      "calendarFullAccess",
+      "automation"
+    ],
+    "setupComplexity": "guided",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "calendar-events"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": true,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "review-requirements",
+        "title": "@displayName",
+        "description": "@summary"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  }
 }

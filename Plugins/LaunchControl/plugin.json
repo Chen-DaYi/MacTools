@@ -63,5 +63,235 @@
     "settings": "workspace"
   },
   "permissions": [],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "launch",
+      "control",
+      "items",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "عناصر التشغيل"
+      ],
+      "de": [
+        "Startelemente"
+      ],
+      "en": [
+        "Launch Items"
+      ],
+      "es": [
+        "Elementos de inicio"
+      ],
+      "fr": [
+        "Éléments de lancement"
+      ],
+      "ja": [
+        "起動項目"
+      ],
+      "ko": [
+        "시작 항목"
+      ],
+      "pt": [
+        "Itens de inicialização"
+      ],
+      "ru": [
+        "Элементы запуска"
+      ],
+      "zh-Hans": [
+        "启动项"
+      ],
+      "zh-Hant": [
+        "啟動項目"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "productivity-state"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "launch-control",
+        "kind": "dynamic",
+        "staticActions": [],
+        "dynamicTemplates": [
+          {
+            "id": "start-favorite",
+            "title": "@displayName",
+            "description": "@summary",
+            "entrySource": "favorite-launch-items",
+            "parameters": [
+              {
+                "id": "item-id",
+                "kind": "string",
+                "isRequired": true,
+                "portability": "localOnly"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "localOnlyIdentity": true,
+            "keywords": [
+              "launch",
+              "control",
+              "start",
+              "favorite",
+              "items"
+            ],
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          },
+          {
+            "id": "stop-favorite",
+            "title": "@displayName",
+            "description": "@summary",
+            "entrySource": "favorite-launch-items",
+            "parameters": [
+              {
+                "id": "item-id",
+                "kind": "string",
+                "isRequired": true,
+                "portability": "localOnly"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "localOnlyIdentity": true,
+            "keywords": [
+              "launch",
+              "control",
+              "stop",
+              "favorite",
+              "items"
+            ],
+            "permissionIDs": [],
+            "risk": "confirmationRequired",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          },
+          {
+            "id": "restart-favorite",
+            "title": "@displayName",
+            "description": "@summary",
+            "entrySource": "favorite-launch-items",
+            "parameters": [
+              {
+                "id": "item-id",
+                "kind": "string",
+                "isRequired": true,
+                "portability": "localOnly"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "localOnlyIdentity": true,
+            "keywords": [
+              "launch",
+              "control",
+              "restart",
+              "favorite",
+              "items"
+            ],
+            "permissionIDs": [],
+            "risk": "confirmationRequired",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          }
+        ]
+      }
+    ]
+  }
 }

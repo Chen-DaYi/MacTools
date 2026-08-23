@@ -4,6 +4,16 @@ import MacToolsPluginKit
 
 @MainActor
 final class AppearancePluginTests: XCTestCase {
+    func testManifestActionsMatchRuntimePolicy() throws {
+        let plugin = AppearancePlugin()
+
+        try PluginManifestActionAssertions.assertConsistency(
+            pluginDirectoryName: "Appearance",
+            definitions: plugin.actionDefinitions,
+            permissionIDs: { _ in [] }
+        )
+    }
+
     func testPublishesIdempotentLightAndDarkActions() {
         let plugin = AppearancePlugin()
 

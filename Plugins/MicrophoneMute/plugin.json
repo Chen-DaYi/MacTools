@@ -63,5 +63,189 @@
     "settings": "none"
   },
   "permissions": [],
-  "category": "audio"
+  "category": "audio",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "microphone",
+      "mute",
+      "audio"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "كتم الميكروفون"
+      ],
+      "de": [
+        "Mikrofon stummschalten"
+      ],
+      "en": [
+        "Microphone Mute"
+      ],
+      "es": [
+        "Silenciar micrófono"
+      ],
+      "fr": [
+        "Couper le micro"
+      ],
+      "ja": [
+        "マイクをミュート"
+      ],
+      "ko": [
+        "마이크 음소거"
+      ],
+      "pt": [
+        "Silenciar microfone"
+      ],
+      "ru": [
+        "Отключить микрофон"
+      ],
+      "zh-Hans": [
+        "麦克风静音"
+      ],
+      "zh-Hant": [
+        "麥克風靜音"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "audio"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "audio-state"
+    ],
+    "dataPersisted": [],
+    "retention": {
+      "policy": "none"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "microphone-mute",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "toggle",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "麦克风静音",
+              "快速静音或恢复默认麦克风输入",
+              "microphone",
+              "mute",
+              "toggle"
+            ],
+            "systemImage": "mic.slash",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "confirmAlways"
+          },
+          {
+            "id": "set-enabled",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "麦克风静音",
+              "快速静音或恢复默认麦克风输入",
+              "microphone",
+              "mute",
+              "set",
+              "enabled"
+            ],
+            "systemImage": "mic.slash",
+            "parameters": [
+              {
+                "id": "enabled",
+                "kind": "boolean",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "confirmAlways"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

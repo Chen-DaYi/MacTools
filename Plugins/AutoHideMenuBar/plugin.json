@@ -63,5 +63,195 @@
     "settings": "none"
   },
   "permissions": [],
-  "category": "display"
+  "category": "display",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "auto",
+      "hide",
+      "menu",
+      "bar",
+      "display"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "إخفاء شريط القوائم تلقائيًا"
+      ],
+      "de": [
+        "Menüleiste automatisch ausblenden"
+      ],
+      "en": [
+        "Auto-hide Menu Bar"
+      ],
+      "es": [
+        "Ocultar barra de menús automáticamente"
+      ],
+      "fr": [
+        "Masquer la barre des menus automatiquement"
+      ],
+      "ja": [
+        "メニューバーを自動的に隠す"
+      ],
+      "ko": [
+        "메뉴 막대 자동 숨기기"
+      ],
+      "pt": [
+        "Ocultar barra de menus automaticamente"
+      ],
+      "ru": [
+        "Автоскрытие строки меню"
+      ],
+      "zh-Hans": [
+        "自动隐藏菜单栏"
+      ],
+      "zh-Hant": [
+        "自動隱藏選單列"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "display"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "display-state"
+    ],
+    "dataPersisted": [],
+    "retention": {
+      "policy": "none"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "auto-hide-menu-bar",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "toggle",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "自动隐藏菜单栏",
+              "自动隐藏菜单栏，提供更完整的屏幕显示空间",
+              "auto",
+              "hide",
+              "menu",
+              "bar",
+              "toggle"
+            ],
+            "systemImage": "menubar.rectangle",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          },
+          {
+            "id": "set-enabled",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "自动隐藏菜单栏",
+              "自动隐藏菜单栏，提供更完整的屏幕显示空间",
+              "auto",
+              "hide",
+              "menu",
+              "bar",
+              "set",
+              "enabled"
+            ],
+            "systemImage": "menubar.rectangle",
+            "parameters": [
+              {
+                "id": "enabled",
+                "kind": "boolean",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

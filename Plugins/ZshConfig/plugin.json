@@ -63,5 +63,112 @@
     "settings": "workspace"
   },
   "permissions": [],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "zsh",
+      "config",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "إعدادات zsh"
+      ],
+      "de": [
+        "zsh-Konfig."
+      ],
+      "en": [
+        "zsh Config"
+      ],
+      "es": [
+        "Config. zsh"
+      ],
+      "fr": [
+        "Config. zsh"
+      ],
+      "ja": [
+        "zsh 設定"
+      ],
+      "ko": [
+        "zsh 설정"
+      ],
+      "pt": [
+        "Config. zsh"
+      ],
+      "ru": [
+        "Настройки zsh"
+      ],
+      "zh-Hans": [
+        "zsh 配置"
+      ],
+      "zh-Hant": [
+        "zsh 設定"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "shell-configuration"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": true,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  }
 }

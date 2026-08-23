@@ -440,7 +440,8 @@ enum MacToolsSearchIndexBuilder {
                 keywords: pluginMetadataKeywords(
                     pluginID: item.id,
                     category: item.category,
-                    releaseChannel: item.releaseChannel
+                    releaseChannel: item.releaseChannel,
+                    additionalKeywords: item.productSearchKeywords
                 ) + [item.statusText, item.version] + [item.summary].compactMap { $0 },
                 systemImage: "shippingbox",
                 action: .navigate(
@@ -905,9 +906,10 @@ enum MacToolsSearchIndexBuilder {
     static func pluginMetadataKeywords(
         pluginID: String,
         category: String?,
-        releaseChannel: String?
+        releaseChannel: String?,
+        additionalKeywords: [String] = []
     ) -> [String] {
-        var keywords = [pluginID]
+        var keywords = [pluginID] + additionalKeywords
 
         if let category = nonEmptyMetadataValue(category) {
             keywords.append(category)

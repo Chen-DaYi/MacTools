@@ -63,5 +63,189 @@
     "settings": "none"
   },
   "permissions": [],
-  "category": "display"
+  "category": "display",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "hide",
+      "notch",
+      "display"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "إخفاء النتوء"
+      ],
+      "de": [
+        "Notch ausblenden"
+      ],
+      "en": [
+        "Hide Notch"
+      ],
+      "es": [
+        "Ocultar muesca"
+      ],
+      "fr": [
+        "Masquer l’encoche"
+      ],
+      "ja": [
+        "ノッチを隠す"
+      ],
+      "ko": [
+        "노치 숨기기"
+      ],
+      "pt": [
+        "Ocultar entalhe"
+      ],
+      "ru": [
+        "Скрыть вырез"
+      ],
+      "zh-Hans": [
+        "隐藏刘海"
+      ],
+      "zh-Hant": [
+        "隱藏瀏海"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "display"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "display-state"
+    ],
+    "dataPersisted": [],
+    "retention": {
+      "policy": "none"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "hide-notch",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "toggle",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "隐藏刘海",
+              "自动遮挡刘海屏顶部区域",
+              "notch",
+              "hide",
+              "toggle"
+            ],
+            "systemImage": "rectangle.topthird.inset.filled",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          },
+          {
+            "id": "set-enabled",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "隐藏刘海",
+              "自动遮挡刘海屏顶部区域",
+              "notch",
+              "hide",
+              "set",
+              "enabled"
+            ],
+            "systemImage": "rectangle.topthird.inset.filled",
+            "parameters": [
+              {
+                "id": "enabled",
+                "kind": "boolean",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

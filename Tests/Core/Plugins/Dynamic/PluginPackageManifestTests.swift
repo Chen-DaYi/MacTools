@@ -242,6 +242,61 @@ final class PluginPackageManifestTests: XCTestCase {
         XCTAssertNil(manifest.releaseChannel)
     }
 
+    func testRichPilotManifestDecodesProductMetadata() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let manifest = try JSONDecoder().decode(
+            PluginPackageManifest.self,
+            from: Data(contentsOf: repositoryRoot.appendingPathComponent("Plugins/Appearance/plugin.json"))
+        )
+
+        XCTAssertEqual(manifest.presentation?.publisher, "MacTools")
+        XCTAssertEqual(
+            manifest.presentation?.longDescription.localizedValue(preferredLanguages: ["en-US"]),
+            "Switch macOS between light and dark appearance from any MacTools action surface."
+        )
+        XCTAssertEqual(manifest.actions?.providers.first?.kind, "static")
+        XCTAssertEqual(
+            manifest.actions?.providers.first?.staticActions.map(\.id),
+            ["toggle", "set-enabled"]
+        )
+        XCTAssertEqual(manifest.requirements?.architectures, ["arm64", "x86_64"])
+        XCTAssertEqual(manifest.privacy?.networkUse, "none")
+        let searchKeywords = PluginProductMetadata.searchKeywords(
+            presentation: manifest.presentation,
+            discovery: manifest.discovery,
+            requirements: manifest.requirements,
+            privacy: manifest.privacy,
+            actions: manifest.actions,
+            setup: manifest.setup,
+            relationships: manifest.relationships
+        )
+        XCTAssertTrue(searchKeywords.contains("Toggle Appearance"))
+        XCTAssertTrue(searchKeywords.contains("night-shift"))
+    }
+
+    func testUnknownOptionalProductFieldDoesNotBreakRuntimeDecoding() throws {
+        let json = """
+        {
+          "id": "demo",
+          "displayName": "Demo",
+          "version": "1.0.0",
+          "minHostVersion": "1.0.0",
+          "pluginKitVersion": 4,
+          "bundleRelativePath": "Demo.bundle",
+          "capabilities": {"primaryPanel": false, "componentPanel": false, "settings": "none"},
+          "permissions": [],
+          "futureProductSection": {"newField": true}
+        }
+        """.data(using: .utf8)!
+
+        XCTAssertNoThrow(try JSONDecoder().decode(PluginPackageManifest.self, from: json))
+    }
+
     func testLocalizedMetadataMatchesPreferredLanguageAndFallbacks() {
         let metadata = [
             "en": PluginLocalizedMetadata(displayName: "Calendar", summary: "Events"),

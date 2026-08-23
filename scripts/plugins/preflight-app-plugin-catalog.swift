@@ -183,8 +183,9 @@ private func validateCatalog(
     publicKeyBase64: String
 ) throws -> [String: Any] {
     var catalog = try catalogObject(from: data, label: label)
-    guard catalog["schemaVersion"] as? Int == 2 else {
-        try fail("\(label) must use catalog schema 2.")
+    guard let schemaVersion = catalog["schemaVersion"] as? Int,
+          schemaVersion == 2 || schemaVersion == 3 else {
+        try fail("\(label) must use catalog schema 2 or 3.")
     }
     guard catalog["pluginKitVersion"] as? Int == expectedPluginKitVersion else {
         try fail("\(label) does not target PluginKit \(expectedPluginKitVersion).")

@@ -81,6 +81,25 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
+    func testLocalDevelopmentAcceptsSchema3EnrichedCatalog() throws {
+        let manifest = try appearanceManifest()
+        let catalog = makeCatalog(
+            schemaVersion: 3,
+            plugins: [makeEntry(from: manifest)]
+        )
+        let verifier = PluginCatalogVerifier.localDevelopment(hostVersion: "1.2.0")
+
+        XCTAssertNoThrow(
+            try verifier.verify(catalog, sourceKind: .localDevelopment)
+        )
+        XCTAssertEqual(
+            catalog.plugins.first?.presentation?.longDescription.localizedValue(
+                preferredLanguages: ["en-US"]
+            ),
+            "Switch macOS between light and dark appearance from any MacTools action surface."
+        )
+    }
+
     func testProductionCatalogRequiresSignature() throws {
         let catalog = makeCatalog()
         let verifier = PluginCatalogVerifier.production(hostVersion: "1.0.0", publicKey: nil)
@@ -163,6 +182,54 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
+    func testEnrichedMetadataIsCoveredByCatalogSignature() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let manifest = try appearanceManifest()
+        let entry = makeEntry(from: manifest)
+        let unsignedCatalog = makeCatalog(schemaVersion: 3, plugins: [entry])
+        let unsignedData = try PluginCatalogCoding.encoder.encode(unsignedCatalog)
+        let payload = try PluginCatalogSigning.signedPayload(fromCatalogData: unsignedData)
+        let signature = try privateKey.signature(for: payload).base64EncodedString()
+        let signedCatalog = makeCatalog(
+            schemaVersion: 3,
+            plugins: [entry],
+            signature: PluginCatalog.Signature(algorithm: "ed25519", value: signature)
+        )
+        let signedData = try PluginCatalogCoding.encoder.encode(signedCatalog)
+        let verifier = PluginCatalogVerifier.production(
+            hostVersion: "1.2.0",
+            publicKey: privateKey.publicKey
+        )
+
+        XCTAssertNoThrow(
+            try verifier.verify(signedCatalog, sourceKind: .production, rawData: signedData)
+        )
+
+        let presentation = try XCTUnwrap(manifest.presentation)
+        let tamperedPresentation = PluginProductMetadata.Presentation(
+            longDescription: presentation.longDescription,
+            examples: presentation.examples,
+            screenshots: presentation.screenshots,
+            documentationURL: presentation.documentationURL,
+            supportURL: presentation.supportURL,
+            publisher: "Tampered Publisher",
+            license: presentation.license
+        )
+        let tamperedEntry = makeEntry(from: manifest, presentation: tamperedPresentation)
+        let tamperedCatalog = makeCatalog(
+            schemaVersion: 3,
+            plugins: [tamperedEntry],
+            signature: PluginCatalog.Signature(algorithm: "ed25519", value: signature)
+        )
+        let tamperedData = try PluginCatalogCoding.encoder.encode(tamperedCatalog)
+
+        XCTAssertThrowsError(
+            try verifier.verify(tamperedCatalog, sourceKind: .production, rawData: tamperedData)
+        ) { error in
+            XCTAssertEqual(error as? PluginCatalogVerifierError, .invalidSignature)
+        }
+    }
+
     private func makeCatalog(
         schemaVersion: Int = 2,
         minimumHostVersion: String = "0.1.0",
@@ -198,6 +265,49 @@ final class PluginCatalogTests: XCTestCase {
                 sha256: String(repeating: "a", count: 64),
                 size: 42
             )
+        )
+    }
+
+    private func makeEntry(
+        from manifest: PluginPackageManifest,
+        presentation: PluginProductMetadata.Presentation? = nil
+    ) -> PluginCatalogEntry {
+        PluginCatalogEntry(
+            id: manifest.id,
+            displayName: manifest.displayName,
+            summary: manifest.localizedMetadata?["en"]?.summary ?? manifest.displayName,
+            version: manifest.version,
+            minimumHostVersion: manifest.minHostVersion,
+            pluginKitVersion: manifest.pluginKitVersion,
+            capabilities: manifest.capabilities,
+            permissions: manifest.permissions,
+            package: PluginCatalogPackage(
+                url: URL(fileURLWithPath: "/tmp/\(manifest.id).mactoolsplugin"),
+                sha256: String(repeating: "a", count: 64),
+                size: 42
+            ),
+            category: manifest.category,
+            localizedMetadata: manifest.localizedMetadata,
+            presentation: presentation ?? manifest.presentation,
+            discovery: manifest.discovery,
+            requirements: manifest.requirements,
+            privacy: manifest.privacy,
+            actions: manifest.actions,
+            setup: manifest.setup,
+            relationships: manifest.relationships
+        )
+    }
+
+    private func appearanceManifest() throws -> PluginPackageManifest {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try JSONDecoder().decode(
+            PluginPackageManifest.self,
+            from: Data(contentsOf: repositoryRoot.appendingPathComponent("Plugins/Appearance/plugin.json"))
         )
     }
 }

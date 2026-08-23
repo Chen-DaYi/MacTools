@@ -41,7 +41,41 @@ class CopyPluginManifestTests(unittest.TestCase):
                 "1.2.3",
             )
 
-    def test_release_copy_preserves_manifest_bytes(self) -> None:
+    def test_release_copy_projects_out_build_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "plugin.json"
+            destination = root / "copied.json"
+            config = root / "AppVersion.xcconfig"
+            original = json.dumps({
+                "id": "example",
+                "minHostVersion": "2.0",
+                "build": {"project": "../../MacTools.xcodeproj", "scheme": "Example"},
+                "package": {"signPaths": ["Example.bundle/Contents/Resources/helper"]},
+                "presentation": {"publisher": "Example"},
+            }).encode() + b"\n"
+            source.write_bytes(original)
+            config.write_text("MARKETING_VERSION = 1.2.3\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), "copy",
+                    "--source", str(source),
+                    "--destination", str(destination),
+                    "--configuration", "Release",
+                    "--app-version-config", str(config),
+                ],
+                check=True,
+            )
+
+            projected = json.loads(destination.read_text(encoding="utf-8"))
+            self.assertNotIn("build", projected)
+            self.assertEqual(projected["package"], {
+                "signPaths": ["Example.bundle/Contents/Resources/helper"],
+            })
+            self.assertEqual(projected["presentation"], {"publisher": "Example"})
+
+    def test_release_copy_preserves_sparse_manifest_bytes_without_build_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)
             source = root / "plugin.json"
@@ -63,6 +97,39 @@ class CopyPluginManifestTests(unittest.TestCase):
             )
 
             self.assertEqual(destination.read_bytes(), original)
+
+    def test_release_copy_expands_source_localization_references(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "plugin.json"
+            destination = root / "copied.json"
+            config = root / "AppVersion.xcconfig"
+            source.write_text(json.dumps({
+                "id": "example",
+                "displayName": "示例",
+                "summary": "示例摘要",
+                "localizedMetadata": {
+                    "en": {"displayName": "Example", "summary": "Example summary"},
+                },
+                "presentation": {"longDescription": "@summary"},
+            }), encoding="utf-8")
+            config.write_text("MARKETING_VERSION = 1.2.3\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), "copy",
+                    "--source", str(source),
+                    "--destination", str(destination),
+                    "--configuration", "Release",
+                    "--app-version-config", str(config),
+                ],
+                check=True,
+            )
+
+            projected = json.loads(destination.read_text(encoding="utf-8"))
+            description = projected["presentation"]["longDescription"]
+            self.assertEqual(description["en"], "Example summary")
+            self.assertEqual(description["ar"], "Example summary")
 
     def test_debug_sync_normalizes_and_caches_packaged_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

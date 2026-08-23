@@ -9,6 +9,8 @@ import pathlib
 import re
 import shutil
 
+from plugin_source_manifest import expand_localized_references
+
 
 MARKETING_VERSION_PATTERN = re.compile(
     r"^\s*MARKETING_VERSION\s*=\s*(\S+)\s*$",
@@ -29,12 +31,19 @@ def copy_manifest(
     configuration: str,
     app_version_config: pathlib.Path,
 ) -> None:
-    if configuration != "Debug":
+    manifest = json.loads(source.read_text(encoding="utf-8"))
+    had_build_metadata = "build" in manifest
+    manifest.pop("build", None)
+    expanded_manifest = expand_localized_references(manifest)
+    had_localization_references = expanded_manifest != manifest
+    manifest = expanded_manifest
+
+    if configuration != "Debug" and not had_build_metadata and not had_localization_references:
         shutil.copy2(source, destination)
         return
 
-    manifest = json.loads(source.read_text(encoding="utf-8"))
-    manifest["minHostVersion"] = development_host_version(app_version_config)
+    if configuration == "Debug":
+        manifest["minHostVersion"] = development_host_version(app_version_config)
     destination.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

@@ -63,5 +63,192 @@
     "settings": "none"
   },
   "permissions": [],
-  "category": "display"
+  "category": "display",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "auto",
+      "hide",
+      "dock",
+      "display"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "إخفاء Dock تلقائيًا"
+      ],
+      "de": [
+        "Dock automatisch ausblenden"
+      ],
+      "en": [
+        "Auto-hide Dock"
+      ],
+      "es": [
+        "Ocultar Dock automáticamente"
+      ],
+      "fr": [
+        "Masquer le Dock automatiquement"
+      ],
+      "ja": [
+        "Dockを自動的に隠す"
+      ],
+      "ko": [
+        "Dock 자동 숨기기"
+      ],
+      "pt": [
+        "Ocultar Dock automaticamente"
+      ],
+      "ru": [
+        "Автоскрытие Dock"
+      ],
+      "zh-Hans": [
+        "自动隐藏程序坞"
+      ],
+      "zh-Hant": [
+        "自動隱藏 Dock"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "display"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "display-state"
+    ],
+    "dataPersisted": [],
+    "retention": {
+      "policy": "none"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "auto-hide-dock",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "toggle",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "自动隐藏程序坞",
+              "Dock",
+              "auto",
+              "hide",
+              "dock",
+              "toggle"
+            ],
+            "systemImage": "rectangle.bottomthird.inset.filled",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          },
+          {
+            "id": "set-enabled",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "自动隐藏程序坞",
+              "Dock",
+              "auto",
+              "hide",
+              "dock",
+              "set",
+              "enabled"
+            ],
+            "systemImage": "rectangle.bottomthird.inset.filled",
+            "parameters": [
+              {
+                "id": "enabled",
+                "kind": "boolean",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

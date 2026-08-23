@@ -66,5 +66,121 @@
     "accessibility",
     "inputMonitoring"
   ],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "trackpad",
+      "gestures",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "إيماءات لوحة التتبع"
+      ],
+      "de": [
+        "Trackpad-Gesten"
+      ],
+      "en": [
+        "Trackpad Gestures"
+      ],
+      "es": [
+        "Gestos del trackpad"
+      ],
+      "fr": [
+        "Gestes du trackpad"
+      ],
+      "ja": [
+        "トラックパッドジェスチャ"
+      ],
+      "ko": [
+        "트랙패드 제스처"
+      ],
+      "pt": [
+        "Gestos do trackpad"
+      ],
+      "ru": [
+        "Жесты трекпада"
+      ],
+      "zh-Hans": [
+        "触控板手势"
+      ],
+      "zh-Hant": [
+        "觸控板手勢"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [
+      "accessibility",
+      "inputMonitoring"
+    ],
+    "setupComplexity": "guided",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "input-events"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "review-requirements",
+        "title": "@displayName",
+        "description": "@summary"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  }
 }

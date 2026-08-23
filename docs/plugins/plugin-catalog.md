@@ -8,7 +8,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
 - Local development reads a Debug-only `file://` catalog, usually configured with `MACTOOLS_PLUGIN_CATALOG_URL`.
 - Both flows resolve catalog entries into local staged packages, verify checksum and manifest compatibility, then install through the same package store. The marketplace can update one plugin at a time or run a batch update for every currently updateable plugin.
 
-## Catalog v2
+## Catalog v2 and v3
 
 ```json
 {
@@ -63,6 +63,26 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
 
 Catalog schema 2 follows PluginKit 4 and later manifests: `capabilities.settings` is `none`, `form`, or `workspace`. Schema 1 and its boolean `configuration` capability remain in older ABI catalogs and are not rewritten. A newer host may decode an installed package from an older ABI only far enough to identify and update it; it never loads or renders an incompatible settings API.
 
+Catalog schema 3 is additive. It preserves every schema-2 package field and may also project `presentation`, `discovery`, `requirements`, `privacy`, `actions`, `setup`, and `relationships` from the checked-in source manifest. Current hosts accept both schema 2 and schema 3, so existing sparse catalogs and caches continue to work. The catalog signature covers every enriched field.
+
+## Product and Capability Metadata
+
+`Plugins/<PluginName>/plugin.json` is the only checked-in metadata source. Do not add a parallel marketplace manifest. The optional product sections are ignored safely by package loaders that only need the runtime envelope and are validated by the catalog generator:
+
+- `presentation`: localized long description and examples, screenshot references, documentation and support URLs, publisher, and license.
+- `discovery`: keywords, localized synonyms, use cases, goal categories, related plugins, and genuine alternatives.
+- `requirements`: macOS, architecture, hardware, application, executable, permission, setup-complexity, and relaunch requirements.
+- `privacy`: observed and persisted data, retention, network use and domains, telemetry, sensitive-content processing, and diagnostic-export disclosure.
+- `actions`: static descriptors, dynamic templates, parameters, permissions, risk, supported surfaces, automatic eligibility, and external-invocation policy.
+- `setup`: localized first-use steps, a suggested static test action, optional next surfaces, and missing-dependency help.
+- `relationships`: related plugins, packs, recipes, and superseded plugin IDs.
+
+Localized product text is a locale-to-string object and must contain `ar`, `de`, `en`, `es`, `fr`, `ja`, `ko`, `pt`, `ru`, `zh-Hans`, and `zh-Hant`. When a field intentionally reuses the plugin's existing localized metadata, source manifests may use `@displayName` or `@summary`; validation expands the reference to all 11 values before package and catalog projection. References never appear in a generated catalog. Every repository plugin publishes the applicable product sections, while `Appearance`, `AppVolume`, `IPOverview`, and `WindowSwitcher` remain useful examples of fully hand-authored copy.
+
+Static action entries describe fixed runtime `ActionDefinition` identities. Dynamic templates describe machine-local entries without putting local application IDs, devices, paths, or other discovered values in the signed catalog. A provider declares `static`, `dynamic`, or `mixed` and must populate the matching collections. Repository-wide XCTest coverage instantiates every canonical action provider and compares static identities and dynamic families, risk, external policy, automation eligibility, system images, and parameter policy against the built runtime definitions. The four hand-authored pilots additionally verify action-specific permission policy.
+
+Screenshot sources live under `Plugins/<PluginName>/MarketplaceAssets/`. The generator rejects traversal, missing or unsupported files, files over 10 MiB, and images over 7680 pixels per dimension. It adds media type, size, dimensions where available, and SHA-256 to the signed projection. Asset bytes are never embedded in `plugin.json`.
+
 Release catalogs must include an Ed25519 signature. Debug local catalogs may omit `signature`, but they still go through package checksum, manifest, staging, and same-team code signature validation. Catalog verification validates every entry's identity and PluginKit ABI without requiring every package to support the current host. Package installation and loading continue to enforce the entry's `minimumHostVersion` strictly.
 
 For an app version that switches to a new production catalog URL, release order is enforced: publish the compatible plugin batch first, wait for Pages to deploy the committed signed catalog, then prepare and publish the app. `scripts/plugins/preflight-app-plugin-catalog.swift` checks that the production URL returns the same nonempty, signed PluginKit catalog committed in the release ref. Both `scripts/release.py --type app` and the final app release workflow run this preflight, so the app cannot be published while its catalog is missing, stale, unsigned, or invalid.
@@ -106,7 +126,7 @@ MacToolsPlugins/
     Tests/
 ```
 
-`plugin.json` declares the plugin ID, version, capabilities, bundle path, optional `releaseChannel`, and build scheme. In this repository `make generate`, `make build`, `make run`, and `make build-plugin` first scan `Plugins/*/plugin.json` and generate the local XcodeGen plugin targets. External repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The built package contains only `plugin.json` and the signed `.bundle`; extra executables must already be copied into the bundle resources and listed in `plugin.json.package.signPaths` when they require an individual code signature.
+`plugin.json` declares the plugin ID, version, capabilities, bundle path, optional `releaseChannel`, and build scheme. In this repository `make generate`, `make build`, `make run`, and `make build-plugin` first scan `Plugins/*/plugin.json` and generate the local XcodeGen plugin targets. External repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The package projection removes the source-only `build` section while retaining the runtime envelope, signing paths, and optional product metadata. The built package contains only that projected `plugin.json` and the signed `.bundle`; extra executables must already be copied into the bundle resources and listed in `plugin.json.package.signPaths` when they require an individual code signature.
 
 From the MacTools repository, build all local plugins and generate the Debug catalog:
 
@@ -246,6 +266,8 @@ scripts/plugins/generate-plugin-catalog.sh \
   --mode release \
   --base-url https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.1 \
   --output dist/catalog.json \
+  --plugins-root Plugins \
+  --website-output dist/website/plugins.json \
   --package dist/Demo.mactoolsplugin.zip \
   --release-notes-url https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.1
 
@@ -254,6 +276,8 @@ scripts/plugins/sign-plugin-catalog.sh \
   --output docs/plugins/v3/catalog.json \
   --private-key-base64 "$PLUGIN_CATALOG_PRIVATE_KEY_BASE64"
 ```
+
+`--website-output` writes a package-URL-free deterministic projection for website builds. Referenced screenshots are copied beside it under `assets/` with checksum-based names. Use `--generated-at` in fixtures or reproducibility checks when the catalog timestamp must also be stable.
 
 The catalog private key, Developer ID identity, and GitHub token must come from local environment variables or CI secrets. Do not commit them. The catalog public key is safe to embed in the app as `PLUGIN_CATALOG_PUBLIC_KEY`.
 

@@ -63,5 +63,163 @@
     "settings": "form"
   },
   "permissions": [],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "app",
+      "hotkey",
+      "hotkeys",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "اختصارات التطبيقات"
+      ],
+      "de": [
+        "App-Kurzbefehle"
+      ],
+      "en": [
+        "App Hotkeys"
+      ],
+      "es": [
+        "Atajos de apps"
+      ],
+      "fr": [
+        "Raccourcis d’apps"
+      ],
+      "ja": [
+        "アプリショートカット"
+      ],
+      "ko": [
+        "앱 단축키"
+      ],
+      "pt": [
+        "Atalhos de apps"
+      ],
+      "ru": [
+        "Горячие клавиши приложений"
+      ],
+      "zh-Hans": [
+        "应用快捷键"
+      ],
+      "zh-Hant": [
+        "應用程式快速鍵"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "installed-applications",
+      "foreground-application"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "app-hotkey",
+        "kind": "dynamic",
+        "staticActions": [],
+        "dynamicTemplates": [
+          {
+            "id": "launch",
+            "title": "@displayName",
+            "description": "@summary",
+            "entrySource": "installed-applications",
+            "parameters": [
+              {
+                "id": "entryID",
+                "kind": "string",
+                "isRequired": true,
+                "portability": "localOnly"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "localOnlyIdentity": true,
+            "keywords": [
+              "app",
+              "hotkey",
+              "launch",
+              "installed",
+              "applications"
+            ],
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          }
+        ]
+      }
+    ]
+  }
 }

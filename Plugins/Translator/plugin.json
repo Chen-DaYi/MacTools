@@ -67,5 +67,201 @@
     "automation",
     "screen-recording"
   ],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "translator",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "المترجم"
+      ],
+      "de": [
+        "Übersetzer"
+      ],
+      "en": [
+        "Translator"
+      ],
+      "es": [
+        "Traductor"
+      ],
+      "fr": [
+        "Traducteur"
+      ],
+      "ja": [
+        "翻訳"
+      ],
+      "ko": [
+        "번역"
+      ],
+      "pt": [
+        "Tradutor"
+      ],
+      "ru": [
+        "Переводчик"
+      ],
+      "zh-Hans": [
+        "翻译"
+      ],
+      "zh-Hant": [
+        "翻譯"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [
+      "accessibility",
+      "automation",
+      "screen-recording"
+    ],
+    "setupComplexity": "guided",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "selected-text",
+      "screenshots",
+      "translation-requests"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "required",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": true,
+    "telemetry": "none",
+    "processesSensitiveUserContent": true,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "review-requirements",
+        "title": "@displayName",
+        "description": "@summary"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "translator",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "select-translation",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "翻译",
+              "划词翻译",
+              "translator",
+              "select",
+              "translation"
+            ],
+            "systemImage": "text.cursor",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [
+              "accessibility",
+              "automation",
+              "screen-recording"
+            ],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "allowed"
+          },
+          {
+            "id": "screenshot-translation",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "翻译",
+              "截图翻译",
+              "OCR",
+              "translator",
+              "screenshot",
+              "translation"
+            ],
+            "systemImage": "viewfinder",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [
+              "accessibility",
+              "automation",
+              "screen-recording"
+            ],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "allowed"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

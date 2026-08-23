@@ -179,6 +179,7 @@ catalog_args=(
     --mode release
     --base-url "$BASE_URL"
     --output "$CATALOG_OUTPUT"
+    --plugins-root "$SOURCE_DIR"
     --minimum-host-version "$MINIMUM_HOST_VERSION"
 )
 if [[ -n "$RELEASE_NOTES_URL" ]]; then

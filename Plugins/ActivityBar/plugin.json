@@ -63,5 +63,195 @@
     "settings": "form"
   },
   "permissions": [],
-  "category": "monitoring"
+  "category": "monitoring",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "activity",
+      "bar",
+      "stats",
+      "monitoring"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "إحصاءات النشاط"
+      ],
+      "de": [
+        "Aktivitätsstatistik"
+      ],
+      "en": [
+        "Activity Stats"
+      ],
+      "es": [
+        "Estadísticas de actividad"
+      ],
+      "fr": [
+        "Statistiques d’activité"
+      ],
+      "ja": [
+        "アクティビティ統計"
+      ],
+      "ko": [
+        "활동 통계"
+      ],
+      "pt": [
+        "Estatísticas de atividade"
+      ],
+      "ru": [
+        "Статистика активности"
+      ],
+      "zh-Hans": [
+        "活动统计"
+      ],
+      "zh-Hant": [
+        "活動統計"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "monitoring"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "foreground-application",
+      "input-events",
+      "usage-statistics"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "activity-bar",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "set-tracking-enabled",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "活动统计",
+              "统计输入、前台应用使用时长和 AI 编程活动",
+              "activity",
+              "bar",
+              "set",
+              "tracking",
+              "enabled"
+            ],
+            "systemImage": "chart.bar.xaxis",
+            "parameters": [
+              {
+                "id": "enabled",
+                "kind": "boolean",
+                "isRequired": true,
+                "portability": "portable"
+              }
+            ],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "run-link",
+              "workflow",
+              "automatic-rule",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "allowed"
+          },
+          {
+            "id": "reset-today",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "活动统计",
+              "清空今日统计",
+              "activity",
+              "bar",
+              "reset",
+              "today"
+            ],
+            "systemImage": "arrow.counterclockwise",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "confirmationRequired",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "automatic-rule",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": true,
+            "externalInvocation": "unavailable"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

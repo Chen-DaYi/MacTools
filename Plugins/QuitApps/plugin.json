@@ -63,5 +63,149 @@
     "settings": "none"
   },
   "permissions": [],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "quit",
+      "apps",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "إنهاء التطبيقات"
+      ],
+      "de": [
+        "Apps beenden"
+      ],
+      "en": [
+        "Quit Apps"
+      ],
+      "es": [
+        "Salir de apps"
+      ],
+      "fr": [
+        "Quitter les apps"
+      ],
+      "ja": [
+        "アプリを終了"
+      ],
+      "ko": [
+        "앱 종료"
+      ],
+      "pt": [
+        "Encerrar apps"
+      ],
+      "ru": [
+        "Закрыть приложения"
+      ],
+      "zh-Hans": [
+        "退出应用"
+      ],
+      "zh-Hant": [
+        "結束 App"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "productivity-state"
+    ],
+    "dataPersisted": [],
+    "retention": {
+      "policy": "none"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "quit-apps",
+        "kind": "static",
+        "staticActions": [
+          {
+            "id": "choose-apps",
+            "title": "@displayName",
+            "description": "@summary",
+            "keywords": [
+              "退出应用",
+              "选择并退出正在运行的应用",
+              "quit",
+              "apps",
+              "choose"
+            ],
+            "systemImage": "power",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "unavailable"
+          }
+        ],
+        "dynamicTemplates": []
+      }
+    ]
+  }
 }

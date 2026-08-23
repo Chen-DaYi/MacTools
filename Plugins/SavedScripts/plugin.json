@@ -63,5 +63,152 @@
     "settings": "workspace"
   },
   "permissions": [],
-  "category": "productivity"
+  "category": "productivity",
+  "presentation": {
+    "longDescription": "@summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "Apache-2.0"
+  },
+  "discovery": {
+    "keywords": [
+      "saved",
+      "scripts",
+      "productivity"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "البرامج النصية المحفوظة"
+      ],
+      "de": [
+        "Gespeicherte Skripte"
+      ],
+      "en": [
+        "Saved Scripts"
+      ],
+      "es": [
+        "Scripts guardados"
+      ],
+      "fr": [
+        "Scripts enregistrés"
+      ],
+      "ja": [
+        "保存済みスクリプト"
+      ],
+      "ko": [
+        "저장된 스크립트"
+      ],
+      "pt": [
+        "Scripts salvos"
+      ],
+      "ru": [
+        "Сохранённые скрипты"
+      ],
+      "zh-Hans": [
+        "已存脚本"
+      ],
+      "zh-Hant": [
+        "已儲存腳本"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@displayName"
+      }
+    ],
+    "goalCategories": [
+      "productivity"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "script-content",
+      "script-output"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": true,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  },
+  "actions": {
+    "providers": [
+      {
+        "id": "saved-scripts",
+        "kind": "dynamic",
+        "staticActions": [],
+        "dynamicTemplates": [
+          {
+            "id": "run-script",
+            "title": "@displayName",
+            "description": "@summary",
+            "entrySource": "saved-scripts",
+            "parameters": [],
+            "parameterSummary": "@summary",
+            "localOnlyIdentity": true,
+            "keywords": [
+              "saved",
+              "scripts",
+              "run",
+              "script"
+            ],
+            "permissionIDs": [],
+            "risk": "safe",
+            "surfaces": [
+              "unified-search",
+              "global-shortcut",
+              "workflow",
+              "action-grid",
+              "trackpad-gesture",
+              "app-intent",
+              "manual"
+            ],
+            "automaticEligible": false,
+            "externalInvocation": "unavailable"
+          }
+        ]
+      }
+    ]
+  }
 }
