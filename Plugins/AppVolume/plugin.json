@@ -169,7 +169,7 @@
     "settings": "form"
   },
   "permissions": [
-    "screen-recording"
+    "system-audio-recording"
   ],
   "category": "audio",
   "presentation": {

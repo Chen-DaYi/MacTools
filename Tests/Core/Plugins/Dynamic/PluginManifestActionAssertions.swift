@@ -3,6 +3,19 @@ import XCTest
 import MacToolsPluginKit
 
 enum PluginManifestActionAssertions {
+    static func dynamicTemplate(
+        pluginDirectoryName: String,
+        id: String
+    ) throws -> [String: Any] {
+        let manifest = try sourceManifest(pluginDirectoryName: pluginDirectoryName)
+        let actions = try XCTUnwrap(manifest["actions"] as? [String: Any])
+        let providers = try XCTUnwrap(actions["providers"] as? [[String: Any]])
+        let templates = providers.flatMap {
+            $0["dynamicTemplates"] as? [[String: Any]] ?? []
+        }
+        return try XCTUnwrap(templates.first { $0["id"] as? String == id })
+    }
+
     @MainActor
     static func assertConsistency(
         pluginDirectoryName: String,

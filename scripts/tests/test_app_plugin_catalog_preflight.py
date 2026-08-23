@@ -70,13 +70,29 @@ class AppPluginCatalogPreflightTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Verified signed PluginKit 4 catalog", result.stdout)
 
-    def test_schema3_hosts_default_to_the_new_plugin_kit5_compatibility_line(self) -> None:
+    def test_schema3_hosts_derive_the_current_plugin_kit_compatibility_line(self) -> None:
         source = SCRIPT_PATH.read_text(encoding="utf-8")
-        self.assertIn('pluginKitVersion: 5', source)
+        self.assertIn('sourcePluginKitVersion()', source)
+        self.assertIn('v5/schema3/catalog.json', source)
         self.assertIn('requiredSchemaVersion ?? 3', source)
 
+    def test_future_plugin_kit_defaults_to_its_own_catalog(self) -> None:
+        result = subprocess.run(
+            [
+                str(self.executable),
+                "--required-plugin-kit-version", "6",
+                "--app-version", "1.3.0",
+            ],
+            cwd=ROOT_DIR,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("docs/plugins/v6/catalog.json", result.stderr)
+
     def test_default_preflight_rejects_schema2_on_the_schema3_line(self) -> None:
-        source = SCRIPT_PATH.read_text(encoding="utf-8")
         result = subprocess.run(
             [
                 str(self.executable),
@@ -93,7 +109,6 @@ class AppPluginCatalogPreflightTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("must use catalog schema 3", result.stderr)
-        self.assertIn('plugins/v5/schema3/catalog.json', source)
 
     def test_missing_catalog_fails_with_release_order_guidance(self) -> None:
         missing = Path(self.temporary_directory.name) / "missing.json"

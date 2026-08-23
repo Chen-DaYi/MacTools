@@ -66,7 +66,9 @@
     "componentPanel": false,
     "settings": "workspace"
   },
-  "permissions": [],
+  "permissions": [
+    "automation"
+  ],
   "category": "productivity",
   "presentation": {
     "longDescription": "@productStrings.summary",
@@ -144,7 +146,9 @@
     "hardware": [],
     "applications": [],
     "executables": [],
-    "permissionIDs": [],
+    "permissionIDs": [
+      "automation"
+    ],
     "setupComplexity": "none",
     "requiresRelaunch": false
   },

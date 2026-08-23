@@ -2323,6 +2323,75 @@
           }
         }
       }
+    },
+    "permission.automation.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading shortcut icons requires controlling Apple Shortcuts."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取快捷指令图标时需要控制 Apple“快捷指令”。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀取捷徑圖示時需要控制 Apple「捷徑」。"
+          }
+        }
+      }
+    },
+    "permission.automation.footnote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS will request Automation access the first time shortcut icons are loaded."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS 会在首次读取快捷指令图标时请求自动化授权。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS 會在首次讀取捷徑圖示時要求自動化授權。"
+          }
+        }
+      }
+    },
+    "permission.automation.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automation"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动化"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動化"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

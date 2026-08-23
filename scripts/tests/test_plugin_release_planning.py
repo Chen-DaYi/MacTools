@@ -35,6 +35,13 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
             release.ROOT_DIR / "docs/plugins/v5/schema3/catalog.json",
         )
 
+    def test_legacy_plugin_kit_release_is_rejected_before_tagging(self) -> None:
+        with self.assertRaisesRegex(release.ReleaseError, "catalog 已冻结"):
+            release.ensure_plugin_kit_releasable(4)
+
+        release.ensure_plugin_kit_releasable(5)
+        release.ensure_plugin_kit_releasable(6)
+
     def test_predeclared_app_version_is_the_default_release_target(self) -> None:
         with mock.patch.object(release, "choose_level") as choose_level:
             target, level, uses_declared_version = release.resolve_app_release_target(

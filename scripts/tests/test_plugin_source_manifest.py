@@ -4,6 +4,7 @@ import base64
 import copy
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -102,9 +103,16 @@ class PluginSourceManifestTests(unittest.TestCase):
 
     def test_reviewed_runtime_requirements_and_disclosures_stay_accurate(self) -> None:
         expected_permissions = {
+            "ActivityBar": ["inputMonitoring"],
+            "AppVolume": ["system-audio-recording"],
+            "Appearance": ["automation"],
+            "AppleShortcuts": ["automation"],
+            "AutoHideDock": ["automation"],
+            "AutoHideMenuBar": ["automation"],
             "EmptyTrash": ["automation"],
             "RightClick": ["automation"],
             "DeviceBattery": ["inputMonitoring"],
+            "ZshConfig": ["automation"],
         }
         for directory, permissions in expected_permissions.items():
             manifest = json.loads(
@@ -142,12 +150,149 @@ class PluginSourceManifestTests(unittest.TestCase):
             },
         )
 
+        activity = json.loads(
+            (PLUGINS_ROOT / "ActivityBar" / "plugin.json").read_text(encoding="utf-8")
+        )
+        self.assertTrue(activity["privacy"]["processesSensitiveUserContent"])
+        self.assertTrue(
+            {"ai-prompt-content", "project-working-directories"}.issubset(
+                activity["privacy"]["dataObserved"]
+            )
+        )
+        self.assertTrue(
+            {"usage-statistics", "coding-session-statistics"}.issubset(
+                activity["privacy"]["dataPersisted"]
+            )
+        )
+
+        shortcuts = json.loads(
+            (PLUGINS_ROOT / "AppleShortcuts" / "plugin.json").read_text(encoding="utf-8")
+        )["actions"]["providers"][0]["dynamicTemplates"][0]
+        self.assertTrue(shortcuts["riskVariesByEntry"])
+        self.assertNotIn("automaticEligibilityVariesByEntry", shortcuts)
+        self.assertEqual(shortcuts["risk"], "confirmationRequired")
+        self.assertEqual(shortcuts["externalInvocation"], "confirmAlways")
+        self.assertIn("run-link", shortcuts["surfaces"])
+
+        scripts = json.loads(
+            (PLUGINS_ROOT / "SavedScripts" / "plugin.json").read_text(encoding="utf-8")
+        )["actions"]["providers"][0]["dynamicTemplates"][0]
+        self.assertTrue(scripts["riskVariesByEntry"])
+        self.assertTrue(scripts["automaticEligibilityVariesByEntry"])
+        self.assertEqual(scripts["risk"], "confirmationRequired")
+        self.assertEqual(scripts["externalInvocation"], "configurable")
+        self.assertTrue({"run-link", "automatic-rule"}.issubset(scripts["surfaces"]))
+
         layouts = json.loads(
             (PLUGINS_ROOT / "WindowLayouts" / "plugin.json").read_text(encoding="utf-8")
         )
         custom = layouts["actions"]["providers"][0]["dynamicTemplates"][0]
         self.assertEqual(custom["externalInvocation"], "configurable")
         self.assertIn("run-link", custom["surfaces"])
+
+    def test_automation_permission_runtime_copy_is_fully_localized(self) -> None:
+        expected_keys = {
+            "permission.automation.title",
+            "permission.automation.description",
+            "permission.automation.footnote",
+        }
+        expected_locales = {
+            "Appearance": SUPPORTED_LOCALES,
+            "AppleShortcuts": {"en", "zh-Hans", "zh-Hant"},
+            "AutoHideDock": SUPPORTED_LOCALES,
+            "AutoHideMenuBar": SUPPORTED_LOCALES,
+            "ZshConfig": SUPPORTED_LOCALES,
+        }
+
+        for directory, locales in expected_locales.items():
+            source = "\n".join(
+                path.read_text(encoding="utf-8")
+                for path in sorted((PLUGINS_ROOT / directory / "Sources").glob("*.swift"))
+            )
+            source_keys = set(
+                re.findall(r'localization\.string\(\s*"(permission\.automation\.[^"]+)"', source)
+            )
+            catalog = json.loads(
+                (PLUGINS_ROOT / directory / "Resources" / "Localizable.xcstrings").read_text(
+                    encoding="utf-8"
+                )
+            )["strings"]
+
+            with self.subTest(plugin=directory):
+                self.assertEqual(source_keys, expected_keys)
+                for key in expected_keys:
+                    self.assertIn(key, catalog)
+                    self.assertEqual(set(catalog[key]["localizations"]), locales)
+
+    def test_action_permissions_must_be_declared_by_plugin_and_requirements(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+
+        missing_top_level = copy.deepcopy(manifest)
+        missing_top_level["permissions"] = []
+        with self.assertRaisesRegex(ManifestValidationError, "top-level permissions"):
+            validate_and_project_manifest(missing_top_level, path, known_ids)
+
+        missing_requirements = copy.deepcopy(manifest)
+        missing_requirements["requirements"]["permissionIDs"] = []
+        with self.assertRaisesRegex(ManifestValidationError, "requirements.permissionIDs"):
+            validate_and_project_manifest(missing_requirements, path, known_ids)
+
+    def test_optional_urls_reject_explicit_null(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+        for key in ("documentationURL", "supportURL"):
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["presentation"][key] = None
+            with self.subTest(field=key), self.assertRaisesRegex(
+                ManifestValidationError,
+                "must be an HTTPS URL",
+            ):
+                validate_and_project_manifest(manifest, path, known_ids)
+
+    def test_presentation_example_ids_match_json_schema(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["presentation"]["examples"][0]["id"] = "bad/example"
+
+        with self.assertRaisesRegex(ManifestValidationError, "stable identifier"):
+            validate_and_project_manifest(
+                manifest,
+                path,
+                load_known_plugin_ids(PLUGINS_ROOT),
+            )
+
+    def test_versions_match_json_schema_shape(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+        schema = json.loads(
+            (REPO_ROOT / "docs" / "plugins" / "plugin-manifest.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(schema["$defs"]["version"]["pattern"], r"^[0-9]+(?:\.[0-9]+){0,2}$")
+
+        for field, value in (
+            ("version", "1.2.3.4"),
+            ("minHostVersion", "v1.2"),
+        ):
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(
+                ManifestValidationError,
+                "numeric version components",
+            ):
+                validate_and_project_manifest(manifest, path, known_ids)
+
+        for value in (None, "14.0.0.1", "macOS 14"):
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["requirements"]["minimumMacOSVersion"] = value
+            with self.subTest(minimum=value), self.assertRaisesRegex(
+                ManifestValidationError,
+                "numeric version components",
+            ):
+                validate_and_project_manifest(manifest, path, known_ids)
 
     def test_sparse_legacy_manifest_remains_valid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -237,6 +382,26 @@ class PluginSourceManifestTests(unittest.TestCase):
         with self.assertRaisesRegex(ManifestValidationError, "run-link must match"):
             validate_and_project_manifest(missing_run_link, path, known_ids)
 
+        shortcuts_path = PLUGINS_ROOT / "AppleShortcuts" / "plugin.json"
+        for surface in ("automatic-rule", "app-intent"):
+            shortcuts = json.loads(shortcuts_path.read_text(encoding="utf-8"))
+            shortcuts["actions"]["providers"][0]["dynamicTemplates"][0]["surfaces"].append(
+                surface
+            )
+            with self.subTest(surface=surface), self.assertRaisesRegex(
+                ManifestValidationError,
+                f"{surface} requires",
+            ):
+                validate_and_project_manifest(shortcuts, shortcuts_path, known_ids)
+
+        saved_scripts_path = PLUGINS_ROOT / "SavedScripts" / "plugin.json"
+        saved_scripts = json.loads(saved_scripts_path.read_text(encoding="utf-8"))
+        saved_scripts["actions"]["providers"][0]["dynamicTemplates"][0]["surfaces"].append(
+            "app-intent"
+        )
+        with self.assertRaisesRegex(ManifestValidationError, "app-intent requires"):
+            validate_and_project_manifest(saved_scripts, saved_scripts_path, known_ids)
+
     def test_rejects_values_that_do_not_match_the_catalog_codable_shape(self) -> None:
         path = PLUGINS_ROOT / "Appearance" / "plugin.json"
         manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -277,6 +442,8 @@ class PluginSourceManifestTests(unittest.TestCase):
         )
         template["id"] = "set-device-value"
         provider["dynamicTemplates"] = [template]
+        mixed["permissions"].append("system-audio-recording")
+        mixed["requirements"]["permissionIDs"].append("system-audio-recording")
         for field in ("title", "description", "parameterSummary"):
             key = template[field].removeprefix("@productStrings.")
             mixed["productStrings"][key] = app_volume["productStrings"][key]

@@ -104,7 +104,7 @@ Localized product copy is declared once in the source-only `productStrings` tabl
 }
 ```
 
-Static action entries describe fixed runtime `ActionDefinition` identities. Dynamic templates describe machine-local entries without putting local application IDs, devices, paths, or other discovered values in the signed catalog. A provider declares `static`, `dynamic`, or `mixed` and must populate the matching collections. `automatic-rule` is valid only for safe automatic actions, while `app-intent` additionally requires portable identity and parameters. External invocation is `unavailable`, `allowed`, `confirmAlways`, or `configurable` when each generated action owns the setting. Repository-wide XCTest coverage instantiates every canonical action provider and compares static identities and dynamic families, risk, external policy, automation eligibility, supported unattended surfaces, permissions, system images, and parameter policy against the built runtime definitions.
+Static action entries describe fixed runtime `ActionDefinition` identities. Dynamic templates describe machine-local entries without putting local application IDs, devices, paths, or other discovered values in the signed catalog. A provider declares `static`, `dynamic`, or `mixed` and must populate the matching collections. `automatic-rule` is valid only for safe automatic actions, while `app-intent` additionally requires portable identity and parameters. External invocation is `unavailable`, `allowed`, `confirmAlways`, or `configurable` when each generated action owns the setting. A dynamic template whose generated entries can differ in risk or automatic eligibility declares `riskVariesByEntry` or `automaticEligibilityVariesByEntry`; its surfaces are the complete set that any generated entry may support, while fixed fields remain exact. Repository-wide XCTest coverage compares static identities and dynamic families, fixed and variable safety policy, external policy, supported surfaces, permissions, system images, and parameter policy against runtime definitions and focused dynamic-provider fixtures.
 
 Screenshot sources live under `Plugins/<PluginName>/MarketplaceAssets/`. The generator rejects traversal, missing or unsupported files, files over 10 MiB, and images over 7680 pixels per dimension. It adds media type, size, dimensions where available, and SHA-256 to the signed projection. Asset bytes are never embedded in `plugin.json`.
 
@@ -114,7 +114,7 @@ For an app version that switches to a new production catalog URL, release order 
 
 ## Versioned Catalog URLs
 
-The catalog URL is selected by the host's supported PluginKit version:
+The catalog URL is selected by the host's supported PluginKit and catalog-schema version. In particular, MacTools 1.2.0 remains on the v5/schema-2 endpoint, while hosts from 1.2.1 use v5/schema 3:
 
 ```text
 PluginKit 2 -> https://mactools.ggbond.app/plugins/catalog.json
@@ -125,7 +125,7 @@ PluginKit 5 / schema 3 -> https://mactools.ggbond.app/plugins/v5/schema3/catalog
 PluginKit N -> https://mactools.ggbond.app/plugins/vN/catalog.json
 ```
 
-The first release for a new PluginKit or catalog-schema compatibility line uses the previous catalog only as a comparison baseline. It publishes a complete catalog containing every rebuilt plugin under the new path. Later releases on that compatibility line may use incremental merges. Never overwrite a catalog consumed by hosts that cannot parse the new schema.
+The first release for a new PluginKit or catalog-schema compatibility line uses the previous catalog only as a comparison baseline. It publishes a complete catalog containing every rebuilt plugin under the new path. Later releases on that compatibility line may use incremental merges. Legacy PluginKit lines below v5 are immutable and the schema-3 release workflow rejects attempts to republish them. Never overwrite a catalog consumed by hosts that cannot parse the new schema.
 
 ## Local Development
 

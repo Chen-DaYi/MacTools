@@ -32,10 +32,27 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
-    func testCurrentHostUsesSchema3CompatibilityCatalogURL() throws {
+    func testReleasedVersionKeepsSchema2CompatibilityCatalogURL() throws {
         XCTAssertEqual(
-            PluginCatalogProviderConfiguration.productionCatalogURL,
+            PluginCatalogProviderConfiguration.productionCatalogURL(forHostVersion: "1.2.0"),
+            URL(string: "https://mactools.ggbond.app/plugins/v5/catalog.json")
+        )
+    }
+
+    func testSchema3HostUsesSchema3CompatibilityCatalogURL() throws {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.productionCatalogURL(forHostVersion: "1.2.1"),
             URL(string: "https://mactools.ggbond.app/plugins/v5/schema3/catalog.json")
+        )
+    }
+
+    func testFuturePluginKitUsesItsOwnVersionedCatalogURL() throws {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.productionCatalogURL(
+                forHostVersion: "1.3.0",
+                pluginKitVersion: 6
+            ),
+            URL(string: "https://mactools.ggbond.app/plugins/v6/catalog.json")
         )
     }
 
@@ -306,15 +323,9 @@ final class PluginCatalogTests: XCTestCase {
     }
 
     private func appearanceManifest() throws -> PluginPackageManifest {
-        let repositoryRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
         return try JSONDecoder().decode(
             PluginPackageManifest.self,
-            from: Data(contentsOf: repositoryRoot.appendingPathComponent("Plugins/Appearance/plugin.json"))
+            from: PluginSourceManifestTestProjection.data(pluginDirectoryName: "Appearance")
         )
     }
 }

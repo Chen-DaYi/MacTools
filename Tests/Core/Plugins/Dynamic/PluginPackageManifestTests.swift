@@ -119,7 +119,9 @@ final class PluginPackageManifestTests: XCTestCase {
             let manifestURL = repositoryRoot.appendingPathComponent(relativePath)
             let manifest = try JSONDecoder().decode(
                 PluginPackageManifest.self,
-                from: Data(contentsOf: manifestURL)
+                from: PluginSourceManifestTestProjection.data(
+                    pluginDirectoryName: manifestURL.deletingLastPathComponent().lastPathComponent
+                )
             )
 
             XCTAssertEqual(manifest.minHostVersion, expectation.minimum)
@@ -179,7 +181,9 @@ final class PluginPackageManifestTests: XCTestCase {
             guard FileManager.default.fileExists(atPath: manifestURL.path) else { continue }
             let manifest = try JSONDecoder().decode(
                 PluginPackageManifest.self,
-                from: Data(contentsOf: manifestURL)
+                from: PluginSourceManifestTestProjection.data(
+                    pluginDirectoryName: pluginURL.lastPathComponent
+                )
             )
 
             XCTAssertNoThrow(
@@ -242,16 +246,10 @@ final class PluginPackageManifestTests: XCTestCase {
         XCTAssertNil(manifest.releaseChannel)
     }
 
-    func testRichPilotManifestDecodesProductMetadata() throws {
-        let repositoryRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+    func testRichProjectedManifestDecodesProductMetadata() throws {
         let manifest = try JSONDecoder().decode(
             PluginPackageManifest.self,
-            from: Data(contentsOf: repositoryRoot.appendingPathComponent("Plugins/Appearance/plugin.json"))
+            from: PluginSourceManifestTestProjection.data(pluginDirectoryName: "Appearance")
         )
 
         XCTAssertEqual(manifest.presentation?.publisher, "MacTools")
@@ -324,6 +322,86 @@ final class PluginPackageManifestTests: XCTestCase {
                 preferredLanguages: ["fr-FR"]
             )?.displayName,
             "Calendar"
+        )
+    }
+}
+
+enum PluginSourceManifestTestProjection {
+    private static let productSections = [
+        "presentation", "discovery", "requirements", "privacy", "actions", "setup",
+        "relationships",
+    ]
+    private static let referencePrefix = "@productStrings."
+
+    static func data(pluginDirectoryName: String) throws -> Data {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repositoryRoot
+            .appendingPathComponent("Plugins", isDirectory: true)
+            .appendingPathComponent(pluginDirectoryName, isDirectory: true)
+            .appendingPathComponent("plugin.json")
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: sourceURL))
+        guard var manifest = object as? [String: Any],
+              let productStrings = manifest["productStrings"] as? [String: Any],
+              let localizedMetadata = manifest["localizedMetadata"] as? [String: [String: String]] else {
+            throw projectionError("Missing source localization metadata in \(sourceURL.path)")
+        }
+
+        let resolvedStrings = try Dictionary(uniqueKeysWithValues: productStrings.map { key, value in
+            if let reference = value as? String,
+               reference == "@displayName" || reference == "@summary" {
+                let field = String(reference.dropFirst())
+                let localized = try Dictionary(uniqueKeysWithValues: localizedMetadata.map { locale, values in
+                    guard let text = values[field], !text.isEmpty else {
+                        throw projectionError("Missing \(locale).\(field) for \(key)")
+                    }
+                    return (locale, text)
+                })
+                return (key, localized as Any)
+            }
+            guard let localized = value as? [String: String] else {
+                throw projectionError("Invalid product string \(key)")
+            }
+            return (key, localized as Any)
+        })
+
+        func expand(_ value: Any) throws -> Any {
+            if let reference = value as? String, reference.hasPrefix(referencePrefix) {
+                let key = String(reference.dropFirst(referencePrefix.count))
+                guard let localized = resolvedStrings[key] else {
+                    throw projectionError("Missing product string \(key)")
+                }
+                return localized
+            }
+            if let values = value as? [Any] {
+                return try values.map(expand)
+            }
+            if let values = value as? [String: Any] {
+                return try Dictionary(uniqueKeysWithValues: values.map { key, item in
+                    (key, try expand(item))
+                })
+            }
+            return value
+        }
+
+        for section in productSections where manifest[section] != nil {
+            manifest[section] = try expand(manifest[section] as Any)
+        }
+        manifest.removeValue(forKey: "productStrings")
+        manifest.removeValue(forKey: "build")
+        manifest.removeValue(forKey: "package")
+        return try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
+    }
+
+    private static func projectionError(_ message: String) -> NSError {
+        NSError(
+            domain: "PluginSourceManifestTestProjection",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: message]
         )
     }
 }

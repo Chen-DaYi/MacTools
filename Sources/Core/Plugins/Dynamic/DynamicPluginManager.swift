@@ -68,7 +68,11 @@ struct PluginManagementItem: Identifiable, Equatable {
     let category: String?
     let releaseChannel: String?
     let capabilities: PluginPackageManifest.Capabilities?
-    let productSearchKeywords: [String]
+    let productMetadata: PluginProductMetadata?
+
+    var productSearchKeywords: [String] {
+        productMetadata?.searchKeywords ?? []
+    }
 
     init(
         id: String,
@@ -82,7 +86,7 @@ struct PluginManagementItem: Identifiable, Equatable {
         category: String? = nil,
         releaseChannel: String? = nil,
         capabilities: PluginPackageManifest.Capabilities? = nil,
-        productSearchKeywords: [String] = []
+        productMetadata: PluginProductMetadata? = nil
     ) {
         self.id = id
         self.title = title
@@ -95,7 +99,7 @@ struct PluginManagementItem: Identifiable, Equatable {
         self.category = category
         self.releaseChannel = releaseChannel
         self.capabilities = capabilities
-        self.productSearchKeywords = productSearchKeywords
+        self.productMetadata = productMetadata
     }
 
     var statusText: String {
@@ -975,7 +979,7 @@ final class DynamicPluginManager: ObservableObject {
                         category: entry.category,
                         releaseChannel: entry.releaseChannel,
                         capabilities: entry.capabilities,
-                        productSearchKeywords: PluginProductMetadata.searchKeywords(
+                        productMetadata: PluginProductMetadata(
                             presentation: entry.presentation,
                             discovery: entry.discovery,
                             requirements: entry.requirements,
@@ -1048,7 +1052,7 @@ final class DynamicPluginManager: ObservableObject {
             category: catalogEntry?.category ?? record.manifest.category,
             releaseChannel: catalogEntry?.releaseChannel ?? record.manifest.releaseChannel,
             capabilities: catalogEntry?.capabilities ?? record.manifest.capabilities,
-            productSearchKeywords: PluginProductMetadata.searchKeywords(
+            productMetadata: PluginProductMetadata(
                 presentation: catalogEntry?.presentation ?? record.manifest.presentation,
                 discovery: catalogEntry?.discovery ?? record.manifest.discovery,
                 requirements: catalogEntry?.requirements ?? record.manifest.requirements,

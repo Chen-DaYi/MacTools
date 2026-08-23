@@ -119,7 +119,23 @@ final class PluginListFilterTests: XCTestCase {
         category: String?,
         productSearchKeywords: [String] = []
     ) -> PluginManagementItem {
-        PluginManagementItem(
+        let productMetadata = productSearchKeywords.isEmpty ? nil : PluginProductMetadata(
+            presentation: nil,
+            discovery: PluginProductMetadata.Discovery(
+                keywords: productSearchKeywords,
+                localizedSynonyms: [:],
+                useCases: [],
+                goalCategories: [],
+                relatedPluginIDs: [],
+                alternativePluginIDs: []
+            ),
+            requirements: nil,
+            privacy: nil,
+            actions: nil,
+            setup: nil,
+            relationships: nil
+        )
+        return PluginManagementItem(
             id: id,
             title: title,
             summary: summary,
@@ -129,7 +145,7 @@ final class PluginListFilterTests: XCTestCase {
             requiresRestartToFullyUnload: false,
             releaseNotesURL: nil,
             category: category,
-            productSearchKeywords: productSearchKeywords
+            productMetadata: productMetadata
         )
     }
 }

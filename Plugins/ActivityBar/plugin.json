@@ -66,7 +66,9 @@
     "componentPanel": true,
     "settings": "form"
   },
-  "permissions": [],
+  "permissions": [
+    "inputMonitoring"
+  ],
   "category": "monitoring",
   "presentation": {
     "longDescription": "@productStrings.summary",
@@ -145,7 +147,9 @@
     "hardware": [],
     "applications": [],
     "executables": [],
-    "permissionIDs": [],
+    "permissionIDs": [
+      "inputMonitoring"
+    ],
     "setupComplexity": "none",
     "requiresRelaunch": false
   },
@@ -153,10 +157,14 @@
     "dataObserved": [
       "foreground-application",
       "input-events",
-      "usage-statistics"
+      "usage-statistics",
+      "ai-prompt-content",
+      "project-working-directories"
     ],
     "dataPersisted": [
-      "plugin-configuration"
+      "plugin-configuration",
+      "usage-statistics",
+      "coding-session-statistics"
     ],
     "retention": {
       "policy": "user-controlled"
@@ -165,7 +173,7 @@
     "networkDomains": [],
     "allowsUserConfiguredDomains": false,
     "telemetry": "none",
-    "processesSensitiveUserContent": false,
+    "processesSensitiveUserContent": true,
     "diagnosticExportsContainUserData": false
   },
   "setup": {
@@ -207,7 +215,9 @@
               }
             ],
             "parameterSummary": "@productStrings.summary",
-            "permissionIDs": [],
+            "permissionIDs": [
+              "inputMonitoring"
+            ],
             "risk": "safe",
             "surfaces": [
               "unified-search",

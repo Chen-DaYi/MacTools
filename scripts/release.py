@@ -463,6 +463,13 @@ def current_plugin_kit_version(plugins: dict[str, PluginInfo]) -> int:
     return versions[0]
 
 
+def ensure_plugin_kit_releasable(plugin_kit_version: int) -> None:
+    if plugin_kit_version < 5:
+        fail(
+            "PluginKit 5 之前的 catalog 已冻结，不能使用当前 schema-3 流程发布。"
+        )
+
+
 def plugin_release_tag(entry: dict) -> str | None:
     package = entry.get("package") or {}
     candidates = [package.get("url") or "", entry.get("releaseNotesURL") or ""]
@@ -1093,8 +1100,9 @@ def release_app(args: argparse.Namespace) -> None:
 def release_plugin(args: argparse.Namespace) -> None:
     mode, raw_selection = choose_plugin_mode(args.plugin_mode, args.plugin)
     plugins = read_plugins()
-    previous_catalog = read_previous_catalog()
     current_plugin_kit = current_plugin_kit_version(plugins)
+    ensure_plugin_kit_releasable(current_plugin_kit)
+    previous_catalog = read_previous_catalog()
     previous_plugin_kit = previous_catalog.get("pluginKitVersion")
     if mode == "auto" and previous_plugin_kit is not None and previous_plugin_kit != current_plugin_kit:
         mode = "all"

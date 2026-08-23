@@ -43,6 +43,7 @@ VALID_RETENTION = {"none", "session", "until-disabled", "until-uninstalled", "us
 MAX_ASSET_BYTES = 10 * 1024 * 1024
 MAX_ASSET_DIMENSION = 7680
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+VERSION_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+){0,2}$")
 DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
     r"[A-Za-z]{2,63}$"
@@ -260,9 +261,12 @@ def _identifier(value: object, plugin_id: str, field: str) -> None:
         _fail(plugin_id, field, "must be a stable identifier")
 
 
+def _version(value: object, plugin_id: str, field: str) -> None:
+    if not isinstance(value, str) or not VERSION_PATTERN.fullmatch(value):
+        _fail(plugin_id, field, "must contain one to three numeric version components")
+
+
 def _https_url(value: object, plugin_id: str, field: str) -> None:
-    if value is None:
-        return
     parsed = urlparse(value) if isinstance(value, str) else None
     if parsed is None or parsed.scheme != "https" or not parsed.netloc:
         _fail(plugin_id, field, "must be an HTTPS URL")
@@ -395,7 +399,13 @@ def _validate_parameters(parameters: object, plugin_id: str, field: str) -> None
             _fail(plugin_id, f"{item_field}.isRequired", "must be a boolean")
 
 
-def _validate_action_policy(action: dict, plugin_id: str, field: str) -> None:
+def _validate_action_policy(
+    action: dict,
+    plugin_id: str,
+    field: str,
+    risk_varies_by_entry: bool = False,
+    automatic_eligibility_varies_by_entry: bool = False,
+) -> None:
     for key in ("permissionIDs", "surfaces", "keywords"):
         _unique_strings(action[key], plugin_id, f"{field}.{key}")
     invalid_permissions = sorted(set(action["permissionIDs"]) - VALID_PERMISSION_IDS)
@@ -410,17 +420,21 @@ def _validate_action_policy(action: dict, plugin_id: str, field: str) -> None:
         _fail(plugin_id, f"{field}.externalInvocation", "is not supported")
     if not isinstance(action["automaticEligible"], bool):
         _fail(plugin_id, f"{field}.automaticEligible", "must be a boolean")
-    if "automatic-rule" in action["surfaces"] and (
-        not action["automaticEligible"] or action["risk"] != "safe"
+    can_be_safe = action["risk"] == "safe" or risk_varies_by_entry
+    can_be_automatic = (
+        action["automaticEligible"] or automatic_eligibility_varies_by_entry
+    )
+    if "automatic-rule" in action["surfaces"] and not (
+        can_be_safe and can_be_automatic
     ):
-        _fail(plugin_id, field, "automatic-rule requires a safe automatic action")
+        _fail(plugin_id, field, "automatic-rule requires a potentially safe automatic action")
     if "app-intent" in action["surfaces"] and (
-        not action["automaticEligible"]
-        or action["risk"] != "safe"
+        not can_be_safe
+        or not can_be_automatic
         or any(parameter["portability"] != "portable" for parameter in action["parameters"])
         or action.get("localOnlyIdentity") is True
     ):
-        _fail(plugin_id, field, "app-intent requires a safe, automatic, portable action")
+        _fail(plugin_id, field, "app-intent requires a potentially safe, automatic, portable action")
     has_run_link = "run-link" in action["surfaces"]
     supports_run_link = action["externalInvocation"] != "unavailable"
     if has_run_link != supports_run_link:
@@ -488,8 +502,29 @@ def _validate_actions(actions: dict, plugin_id: str) -> None:
             _non_empty_string(template["entrySource"], plugin_id, f"{template_field}.entrySource")
             if not isinstance(template["localOnlyIdentity"], bool):
                 _fail(plugin_id, f"{template_field}.localOnlyIdentity", "must be a boolean")
+            risk_varies_by_entry = template.get("riskVariesByEntry", False)
+            if not isinstance(risk_varies_by_entry, bool):
+                _fail(plugin_id, f"{template_field}.riskVariesByEntry", "must be a boolean")
+            automatic_eligibility_varies_by_entry = template.get(
+                "automaticEligibilityVariesByEntry",
+                False,
+            )
+            if not isinstance(automatic_eligibility_varies_by_entry, bool):
+                _fail(
+                    plugin_id,
+                    f"{template_field}.automaticEligibilityVariesByEntry",
+                    "must be a boolean",
+                )
             _validate_parameters(template["parameters"], plugin_id, f"{template_field}.parameters")
-            _validate_action_policy(template, plugin_id, template_field)
+            _validate_action_policy(
+                template,
+                plugin_id,
+                template_field,
+                risk_varies_by_entry=risk_varies_by_entry,
+                automatic_eligibility_varies_by_entry=(
+                    automatic_eligibility_varies_by_entry
+                ),
+            )
 
 
 def validate_and_project_manifest(
@@ -499,6 +534,9 @@ def validate_and_project_manifest(
 ) -> tuple[dict, list[AssetProjection]]:
     manifest = expand_localized_references(manifest)
     plugin_id = manifest.get("id", manifest_path.parent.name)
+    for key in ("version", "minHostVersion"):
+        if key in manifest:
+            _version(manifest[key], plugin_id, key)
     for section in ("presentation", "discovery", "requirements", "privacy", "actions", "setup", "relationships"):
         if section in manifest and not isinstance(manifest[section], dict):
             _fail(plugin_id, section, "must be an object")
@@ -526,6 +564,7 @@ def validate_and_project_manifest(
         example_ids = [example.get("id", "") for example in presentation["examples"]]
         _unique_strings(example_ids, plugin_id, "presentation.examples.id")
         for index, example in enumerate(presentation["examples"]):
+            _identifier(example.get("id"), plugin_id, f"presentation.examples[{index}].id")
             _localized_text(example.get("text"), plugin_id, f"presentation.examples[{index}].text")
         seen_asset_ids: set[str] = set()
         for index, asset in enumerate(presentation["screenshots"]):
@@ -535,7 +574,8 @@ def validate_and_project_manifest(
             seen_asset_ids.add(projected.catalog["id"])
             assets.append(projected)
         for key in ("documentationURL", "supportURL"):
-            _https_url(presentation.get(key), plugin_id, f"presentation.{key}")
+            if key in presentation:
+                _https_url(presentation[key], plugin_id, f"presentation.{key}")
 
     discovery = manifest.get("discovery")
     if discovery is not None:
@@ -583,11 +623,12 @@ def validate_and_project_manifest(
             _fail(plugin_id, "requirements.setupComplexity", "is not supported")
         if not isinstance(requirements["requiresRelaunch"], bool):
             _fail(plugin_id, "requirements.requiresRelaunch", "must be a boolean")
-        if requirements.get("minimumMacOSVersion") is not None and (
-            not isinstance(requirements["minimumMacOSVersion"], str)
-            or not requirements["minimumMacOSVersion"].strip()
-        ):
-            _fail(plugin_id, "requirements.minimumMacOSVersion", "must be a non-empty string")
+        if "minimumMacOSVersion" in requirements:
+            _version(
+                requirements["minimumMacOSVersion"],
+                plugin_id,
+                "requirements.minimumMacOSVersion",
+            )
         applications = requirements["applications"]
         if not isinstance(applications, list):
             _fail(plugin_id, "requirements.applications", "must be an array")
@@ -631,6 +672,34 @@ def validate_and_project_manifest(
 
     if manifest.get("actions") is not None:
         _validate_actions(manifest["actions"], plugin_id)
+        declared_permissions = set(manifest.get("permissions", []))
+        requirement_permissions = set(
+            manifest.get("requirements", {}).get("permissionIDs", [])
+        )
+        for provider_index, provider in enumerate(manifest["actions"]["providers"]):
+            for collection_name in ("staticActions", "dynamicTemplates"):
+                for action_index, action in enumerate(provider[collection_name]):
+                    field = (
+                        f"actions.providers[{provider_index}].{collection_name}"
+                        f"[{action_index}].permissionIDs"
+                    )
+                    action_permissions = set(action["permissionIDs"])
+                    missing_top_level = sorted(action_permissions - declared_permissions)
+                    if missing_top_level:
+                        _fail(
+                            plugin_id,
+                            field,
+                            "must also appear in top-level permissions: "
+                            + ", ".join(missing_top_level),
+                        )
+                    missing_requirements = sorted(action_permissions - requirement_permissions)
+                    if missing_requirements:
+                        _fail(
+                            plugin_id,
+                            field,
+                            "must also appear in requirements.permissionIDs: "
+                            + ", ".join(missing_requirements),
+                        )
 
     setup = manifest.get("setup")
     if setup is not None:

@@ -89,15 +89,15 @@ jobs:
           print(next(iter(versions)))
           PY
           )"
-          if [[ "$PLUGIN_KIT_VERSION" == "2" ]]; then
-            PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/catalog.json"
-            PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.1.6"
+          if (( PLUGIN_KIT_VERSION < 5 )); then
+            echo "PluginKit versions below 5 use immutable legacy catalogs and cannot be released by the schema-3 workflow." >&2
+            exit 1
           elif [[ "$PLUGIN_KIT_VERSION" == "5" ]]; then
             PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v5/schema3/catalog.json"
             PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.2.1"
           else
             PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v${PLUGIN_KIT_VERSION}/catalog.json"
-            PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.1.6"
+            PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.2.1"
           fi
           {
             echo "TAG=$TAG"

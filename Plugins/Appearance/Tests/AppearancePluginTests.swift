@@ -10,7 +10,7 @@ final class AppearancePluginTests: XCTestCase {
         try PluginManifestActionAssertions.assertConsistency(
             pluginDirectoryName: "Appearance",
             definitions: plugin.actionDefinitions,
-            permissionIDs: { _ in [] }
+            permissionIDs: plugin.permissionRequirementIDs(for:)
         )
     }
 

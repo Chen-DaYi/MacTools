@@ -198,17 +198,21 @@
               "script"
             ],
             "permissionIDs": [],
-            "risk": "safe",
+            "risk": "confirmationRequired",
             "surfaces": [
               "unified-search",
               "global-shortcut",
+              "run-link",
               "workflow",
+              "automatic-rule",
               "action-grid",
               "trackpad-gesture",
               "manual"
             ],
             "automaticEligible": false,
-            "externalInvocation": "unavailable"
+            "externalInvocation": "configurable",
+            "riskVariesByEntry": true,
+            "automaticEligibilityVariesByEntry": true
           }
         ]
       }

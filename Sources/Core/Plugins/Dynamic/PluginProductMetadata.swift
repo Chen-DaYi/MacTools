@@ -154,6 +154,8 @@ struct PluginProductMetadata: Codable, Equatable {
             let parameters: [Parameter]
             let parameterSummary: PluginLocalizedText
             let localOnlyIdentity: Bool
+            let riskVariesByEntry: Bool?
+            let automaticEligibilityVariesByEntry: Bool?
             let permissionIDs: [String]
             let risk: String
             let surfaces: [String]
@@ -203,6 +205,18 @@ struct PluginProductMetadata: Codable, Equatable {
     let actions: Actions?
     let setup: Setup?
     let relationships: Relationships?
+
+    var searchKeywords: [String] {
+        Self.searchKeywords(
+            presentation: presentation,
+            discovery: discovery,
+            requirements: requirements,
+            privacy: privacy,
+            actions: actions,
+            setup: setup,
+            relationships: relationships
+        )
+    }
 
     static func searchKeywords(
         presentation: Presentation?,

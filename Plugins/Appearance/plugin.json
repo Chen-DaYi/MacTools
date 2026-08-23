@@ -168,7 +168,9 @@
     "componentPanel": false,
     "settings": "none"
   },
-  "permissions": [],
+  "permissions": [
+    "automation"
+  ],
   "category": "display",
   "presentation": {
     "longDescription": "@productStrings.long-description",
@@ -260,7 +262,9 @@
     "hardware": [],
     "applications": [],
     "executables": [],
-    "permissionIDs": [],
+    "permissionIDs": [
+      "automation"
+    ],
     "setupComplexity": "none",
     "requiresRelaunch": false
   },
@@ -296,7 +300,9 @@
             ],
             "systemImage": "circle.lefthalf.filled",
             "parameters": [],
-            "permissionIDs": [],
+            "permissionIDs": [
+              "automation"
+            ],
             "risk": "safe",
             "surfaces": [
               "unified-search",
@@ -331,7 +337,9 @@
               }
             ],
             "parameterSummary": "@productStrings.action-appearance-set-enabled-parameter-summary",
-            "permissionIDs": [],
+            "permissionIDs": [
+              "automation"
+            ],
             "risk": "safe",
             "surfaces": [
               "unified-search",

@@ -122,13 +122,25 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
         )
         self.assertIn('PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.2.1"', workflow)
         self.assertIn(
-            "PLUGIN_CATALOG_MINIMUM_HOST_VERSION ?= $(if $(filter 5,$(PLUGIN_KIT_VERSION)),1.2.1,1.1.6)",
+            "PLUGIN_CATALOG_MINIMUM_HOST_VERSION ?= 1.2.1",
             makefile,
         )
         released_catalog = json.loads(
             (REPO_ROOT / "docs/plugins/v5/catalog.json").read_text(encoding="utf-8")
         )
         self.assertEqual(released_catalog["schemaVersion"], 2)
+
+    def test_schema3_release_floor_applies_to_future_plugin_kit_versions(self) -> None:
+        workflow = PLUGIN_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        makefile = MAKEFILE.read_text(encoding="utf-8")
+        self.assertIn(
+            'PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v${PLUGIN_KIT_VERSION}/catalog.json"',
+            workflow,
+        )
+        self.assertGreaterEqual(workflow.count('PLUGIN_CATALOG_MINIMUM_HOST_VERSION="1.2.1"'), 2)
+        self.assertIn("PluginKit versions below 5 use immutable legacy catalogs", workflow)
+        self.assertIn("if (( PLUGIN_KIT_VERSION < 5 )); then", workflow)
+        self.assertIn('case " 1 2 3 4 " in', makefile)
 
     def test_every_current_plugin_targets_plugin_kit5_and_mac_tools_1_2(self) -> None:
         incompatible = []

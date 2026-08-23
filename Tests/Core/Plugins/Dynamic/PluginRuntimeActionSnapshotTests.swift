@@ -121,10 +121,16 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
                 )
                 isStatic = false
             }
-            XCTAssertEqual(descriptor["risk"] as? String, definition.risk.rawValue, definition.key.id)
+            let riskVariesByEntry = descriptor["riskVariesByEntry"] as? Bool == true
+            let automaticEligibilityVariesByEntry =
+                descriptor["automaticEligibilityVariesByEntry"] as? Bool == true
+            if !riskVariesByEntry {
+                XCTAssertEqual(descriptor["risk"] as? String, definition.risk.rawValue, definition.key.id)
+            }
             if descriptor["externalInvocation"] as? String == "configurable" {
                 XCTAssertTrue(
                     definition.externalInvocationPolicy == .allowed
+                        || definition.externalInvocationPolicy == .confirmAlways
                         || definition.externalInvocationPolicy == .unavailable,
                     definition.key.id
                 )
@@ -135,20 +141,33 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
                     definition.key.id
                 )
             }
-            XCTAssertEqual(
-                descriptor["automaticEligible"] as? Bool,
-                definition.capabilities.contains(.automatic),
-                definition.key.id
-            )
+            if !automaticEligibilityVariesByEntry {
+                XCTAssertEqual(
+                    descriptor["automaticEligible"] as? Bool,
+                    definition.capabilities.contains(.automatic),
+                    definition.key.id
+                )
+            }
             let surfaces = Set(descriptor["surfaces"] as? [String] ?? [])
             let supportsUnattendedExecution = definition.risk == .safe
                 && definition.capabilities.contains(.automatic)
                 && definition.capabilities.contains(.background)
-            XCTAssertEqual(
-                surfaces.contains("automatic-rule"),
-                supportsUnattendedExecution,
-                definition.key.id
-            )
+            let canBeSafe = descriptor["risk"] as? String == "safe" || riskVariesByEntry
+            let canBeAutomatic = descriptor["automaticEligible"] as? Bool == true
+                || automaticEligibilityVariesByEntry
+            if !canBeSafe || !canBeAutomatic {
+                XCTAssertFalse(surfaces.contains("automatic-rule"), definition.key.id)
+            } else if riskVariesByEntry || automaticEligibilityVariesByEntry {
+                if supportsUnattendedExecution {
+                    XCTAssertTrue(surfaces.contains("automatic-rule"), definition.key.id)
+                }
+            } else {
+                XCTAssertEqual(
+                    surfaces.contains("automatic-rule"),
+                    supportsUnattendedExecution,
+                    definition.key.id
+                )
+            }
             let hasOnlyPortableParameters = definition.parameters.allSatisfy {
                 $0.portability == .portable
             }
@@ -159,14 +178,23 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
                     for: ActionReference(key: definition.key),
                     on: .appIntents
                 ) ?? .automatic
-            XCTAssertEqual(
-                surfaces.contains("app-intent"),
-                supportsUnattendedExecution
-                    && hasOnlyPortableParameters
-                    && !hasLocalOnlyIdentity
-                    && exposurePolicy != .excluded,
-                definition.key.id
-            )
+            let supportsAppIntent = supportsUnattendedExecution
+                && hasOnlyPortableParameters
+                && !hasLocalOnlyIdentity
+                && exposurePolicy != .excluded
+            if !canBeSafe || !canBeAutomatic || !hasOnlyPortableParameters || hasLocalOnlyIdentity {
+                XCTAssertFalse(surfaces.contains("app-intent"), definition.key.id)
+            } else if riskVariesByEntry || automaticEligibilityVariesByEntry {
+                if supportsAppIntent {
+                    XCTAssertTrue(surfaces.contains("app-intent"), definition.key.id)
+                }
+            } else {
+                XCTAssertEqual(
+                    surfaces.contains("app-intent"),
+                    supportsAppIntent,
+                    definition.key.id
+                )
+            }
             if let permissionProvider = plugin as? any PluginActionPermissionProviding {
                 XCTAssertEqual(
                     Set(descriptor["permissionIDs"] as? [String] ?? []),
