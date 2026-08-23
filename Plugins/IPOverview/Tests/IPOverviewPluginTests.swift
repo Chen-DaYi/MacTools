@@ -4,7 +4,7 @@ import MacToolsPluginKit
 
 @MainActor
 final class IPOverviewPluginTests: XCTestCase {
-    func testCanonicalCopyActionsRefreshAndCopyCurrentAddresses() async throws {
+    func testCanonicalCopyActionsRefreshOnlyWhenAnAddressIsMissing() async throws {
         let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
         let snapshot = IPOverviewSnapshot(
             publicIPv4: IPOverviewPublicIPResult(
@@ -47,7 +47,36 @@ final class IPOverviewPluginTests: XCTestCase {
             XCTAssertEqual(pasteboard.string(forType: .string), expected)
         }
         let callCounts = await provider.callCounts()
-        XCTAssertEqual(callCounts.addresses, 2)
+        XCTAssertEqual(callCounts.addresses, 1)
+    }
+
+    func testCopyPublicIPUsesAnAvailableSnapshotWithoutAnotherExternalRefresh() async throws {
+        let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
+        let provider = IPOverviewProviderSpy(
+            publicSnapshot: testSnapshot(ip: "203.0.113.8", lastUpdated: Date())
+        )
+        let viewModel = IPOverviewViewModel(
+            provider: provider,
+            storage: IPOverviewPluginTestStorage(),
+            pasteboard: pasteboard
+        )
+        let initialRefresh = try XCTUnwrap(viewModel.refreshAddresses())
+        await initialRefresh.value
+        let plugin = IPOverviewPlugin(viewModel: viewModel)
+        let publicReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.map(\.reference).first {
+                $0.key.actionID == "copy-public-ipv4"
+            }
+        )
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: publicReference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(pasteboard.string(forType: .string), "203.0.113.8")
+        let callCounts = await provider.callCounts()
+        XCTAssertEqual(callCounts.addresses, 1)
     }
 
     func testPrimaryPanelButtonRequestsConfigurationPresentation() {

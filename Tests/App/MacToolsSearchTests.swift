@@ -742,6 +742,41 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
+    func testUnifiedSearchFocusRetriesUntilFocusCanBeClaimed() {
+        let parent = UnifiedSearchTextField(
+            text: .constant(""),
+            placeholder: "Search",
+            accessibilityLabel: "Search",
+            focusRequestID: 1,
+            onCommand: { _ in }
+        )
+        var focusAttempts = 0
+        let coordinator = UnifiedSearchTextField.Coordinator(
+            parent: parent,
+            focusClaim: { _ in
+                focusAttempts += 1
+                return focusAttempts == 3
+            }
+        )
+        let field = UnifiedSearchTextField.SearchTextField(
+            frame: NSRect(x: 0, y: 0, width: 320, height: 28)
+        )
+        defer {
+            coordinator.cancelPendingFocus()
+        }
+
+        coordinator.focus(field, for: 1)
+        for _ in 0 ..< 100 where focusAttempts < 3 {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+
+        XCTAssertEqual(focusAttempts, 3)
+
+        coordinator.focus(field, for: 1)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+        XCTAssertEqual(focusAttempts, 3)
+    }
+
     func testUnifiedSearchShowsCommandAccessoriesOnlyForSelectedActionRows() {
         let action = MacToolsSearchAction.executeAction(
             ActionReference(key: ActionKey(providerID: "sidecar", actionID: "connect"))

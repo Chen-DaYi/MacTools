@@ -266,6 +266,10 @@ struct UnifiedSearchTextField: NSViewRepresentable {
         context.coordinator.focus(field, for: focusRequestID)
     }
 
+    static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) {
+        coordinator.cancelPendingFocus()
+    }
+
     static func command(
         for selector: Selector,
         hasMarkedText: Bool,
@@ -317,11 +321,21 @@ struct UnifiedSearchTextField: NSViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: UnifiedSearchTextField
-        private var lastFocusRequestID: UInt?
+        private static let maximumFocusAttemptCount = 25
+        private static let focusRetryDelay = Duration.milliseconds(20)
 
-        init(parent: UnifiedSearchTextField) {
+        var parent: UnifiedSearchTextField
+        private var completedFocusRequestID: UInt?
+        private var pendingFocusRequestID: UInt?
+        private var focusTask: Task<Void, Never>?
+        private let focusClaim: @MainActor (NSTextField) -> Bool
+
+        init(
+            parent: UnifiedSearchTextField,
+            focusClaim: (@MainActor (NSTextField) -> Bool)? = nil
+        ) {
             self.parent = parent
+            self.focusClaim = focusClaim ?? Self.claimFocus
         }
 
         func controlTextDidChange(_ notification: Notification) {
@@ -350,14 +364,60 @@ struct UnifiedSearchTextField: NSViewRepresentable {
         }
 
         func focus(_ field: NSTextField, for requestID: UInt) {
-            guard lastFocusRequestID != requestID else {
+            guard completedFocusRequestID != requestID,
+                  pendingFocusRequestID != requestID else {
                 return
             }
 
-            lastFocusRequestID = requestID
-            DispatchQueue.main.async { [weak field] in
-                field?.window?.makeFirstResponder(field)
+            focusTask?.cancel()
+            pendingFocusRequestID = requestID
+            focusTask = Task { @MainActor [weak self, weak field] in
+                guard let self, let field else { return }
+
+                for attempt in 0 ..< Self.maximumFocusAttemptCount {
+                    guard !Task.isCancelled,
+                          pendingFocusRequestID == requestID else {
+                        return
+                    }
+
+                    if focusClaim(field) {
+                        completedFocusRequestID = requestID
+                        pendingFocusRequestID = nil
+                        focusTask = nil
+                        return
+                    }
+
+                    guard attempt + 1 < Self.maximumFocusAttemptCount else {
+                        break
+                    }
+                    if attempt == 0 {
+                        await Task.yield()
+                    } else {
+                        try? await Task.sleep(for: Self.focusRetryDelay)
+                    }
+                }
+
+                if pendingFocusRequestID == requestID {
+                    pendingFocusRequestID = nil
+                    focusTask = nil
+                }
             }
+        }
+
+        func cancelPendingFocus() {
+            focusTask?.cancel()
+            focusTask = nil
+            pendingFocusRequestID = nil
+        }
+
+        private static func claimFocus(for field: NSTextField) -> Bool {
+            guard let window = field.window,
+                  window.isVisible,
+                  window.isKeyWindow,
+                  window.makeFirstResponder(field) else {
+                return false
+            }
+            return field.currentEditor() != nil
         }
     }
 }
@@ -747,7 +807,7 @@ struct UnifiedSearchPaletteView: View {
                     Label(
                         AppL10n.search(
                             "search.recent.disable",
-                            defaultValue: "关闭并清除最近操作"
+                            defaultValue: "停止记录并清除最近操作"
                         ),
                         systemImage: "clock.badge.xmark"
                     )
@@ -917,6 +977,10 @@ struct UnifiedSearchPaletteView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
+            // Selection is owned by `selectedResultID`. Keeping the primary row button out of
+            // the focus ring prevents AppKit from rendering a second, conflicting highlight;
+            // keyboard activation continues through the search field's Return handling.
+            .focusable(false)
 
             if showsInlineActions {
                 HStack(spacing: 8) {
