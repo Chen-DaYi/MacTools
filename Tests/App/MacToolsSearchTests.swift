@@ -683,7 +683,26 @@ final class MacToolsSearchTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(result.id, "action.searchable/sleep")
+        XCTAssertEqual(result.id, "action.parameterless.searchable/sleep")
+    }
+
+    func testParameterizedAndParameterlessActionResultIDsUseDisjointNamespaces() throws {
+        let parameterized = ActionReference(
+            key: ActionKey(providerID: "foo", actionID: "bar"),
+            parameters: try ActionParameterSet(["value": .boolean(true)])
+        )
+        let parameterless = ActionReference(
+            key: ActionKey(providerID: "foo", actionID: "bar.0")
+        )
+
+        XCTAssertNotEqual(
+            MacToolsSearchResultID.action(reference: parameterized, catalogIndex: 0),
+            MacToolsSearchResultID.action(reference: parameterless, catalogIndex: 1)
+        )
+        XCTAssertEqual(
+            MacToolsSearchResultID.action(reference: parameterless, catalogIndex: 99),
+            "action.parameterless.foo/bar.0"
+        )
     }
 
     func testSearchIndexUsesUniqueStableIdentifiers() {

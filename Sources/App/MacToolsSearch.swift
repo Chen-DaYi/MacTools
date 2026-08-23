@@ -81,6 +81,18 @@ struct MacToolsSearchResult: Identifiable, Hashable {
     }
 }
 
+enum MacToolsSearchResultID {
+    static func action(
+        reference: ActionReference,
+        catalogIndex: Int
+    ) -> String {
+        if reference.parameters.entries.isEmpty {
+            return "action.parameterless.\(reference.key.id)"
+        }
+        return "action.parameterized.\(reference.key.id).\(catalogIndex)"
+    }
+}
+
 struct MacToolsSearchIndex {
     let items: [MacToolsSearchResult]
     private let indexedItems: [IndexedItem]
@@ -641,11 +653,11 @@ enum MacToolsSearchIndexBuilder {
                 for: entry.reference
             )?.bindingText
 
-            let stableParameterlessID = "action.\(entry.reference.key.id)"
             return MacToolsSearchResult(
-                id: entry.reference.parameters.entries.isEmpty
-                    ? stableParameterlessID
-                    : "\(stableParameterlessID).\(index)",
+                id: MacToolsSearchResultID.action(
+                    reference: entry.reference,
+                    catalogIndex: index
+                ),
                 kind: .command,
                 title: entry.title,
                 subtitle: subtitle,
