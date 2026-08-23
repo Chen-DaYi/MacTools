@@ -27,7 +27,7 @@ final class CommandPaletteRecentStore: ObservableObject {
     static let currentFormatVersion = 1
     static let maximumReferenceCount = 30
     static let maximumPayloadByteCount = 64 * 1_024
-    static let maximumVisibleReferenceCount = 5
+    nonisolated static let maximumVisibleReferenceCount = 5
 
     @Published private(set) var references: [ActionReference]
     @Published private(set) var isEnabled: Bool
@@ -41,11 +41,12 @@ final class CommandPaletteRecentStore: ObservableObject {
 
     init(defaults: any CommandPaletteRecentPersisting) {
         self.defaults = defaults
-        isEnabled = Self.loadEnabledState(defaults: defaults)
+        let enabled = Self.loadEnabledState(defaults: defaults)
+        isEnabled = enabled
         let loaded = Self.loadReferences(defaults: defaults)
-        references = isEnabled ? loaded.references : []
-        loadError = isEnabled ? loaded.error : nil
-        if !isEnabled {
+        references = enabled ? loaded.references : []
+        loadError = enabled ? loaded.error : nil
+        if !enabled {
             defaults.removeObject(forKey: DefaultsKey.references)
         }
     }
