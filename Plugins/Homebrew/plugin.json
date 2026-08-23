@@ -48,6 +48,10 @@
       "summary": "管理 Homebrew 包、軟體倉庫並執行系統診斷"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -65,11 +69,11 @@
   "permissions": [],
   "category": "system",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -122,7 +126,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -172,8 +176,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@displayName",
-        "description": "@summary"
+        "title": "@productStrings.display-name",
+        "description": "@productStrings.summary"
       }
     ],
     "optionalSurfaces": []
@@ -192,8 +196,8 @@
         "staticActions": [
           {
             "id": "update",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "Homebrew",
               "更新软件源",
@@ -203,7 +207,7 @@
             ],
             "systemImage": "arrow.clockwise.circle.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -221,8 +225,8 @@
           },
           {
             "id": "upgrade-all",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "Homebrew",
               "更新所有包",
@@ -233,7 +237,7 @@
             ],
             "systemImage": "arrow.up.circle.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [
@@ -249,8 +253,8 @@
           },
           {
             "id": "doctor",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "Homebrew",
               "运行诊断",
@@ -260,7 +264,7 @@
             ],
             "systemImage": "heart.text.square.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -278,8 +282,8 @@
           },
           {
             "id": "cleanup",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "Homebrew",
               "清理缓存",
@@ -289,7 +293,7 @@
             ],
             "systemImage": "trash.circle.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [

@@ -48,6 +48,10 @@
       "summary": "在指標附近開啟使用者設定的常用操作網格。"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.0.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -65,11 +69,11 @@
   "permissions": [],
   "category": "system",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -122,7 +126,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -179,8 +183,8 @@
         "staticActions": [
           {
             "id": "show",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "操作网格",
               "显示操作网格",
@@ -191,7 +195,7 @@
             ],
             "systemImage": "square.grid.3x3",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

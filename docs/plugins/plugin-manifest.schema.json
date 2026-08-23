@@ -27,6 +27,17 @@
     "permissions": {"type": "array", "items": {"$ref": "#/$defs/permission"}, "uniqueItems": true},
     "category": {"enum": ["display", "audio", "system", "storage", "productivity", "monitoring", "other"]},
     "localizedMetadata": {"type": "object"},
+    "productStrings": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/identifier"},
+      "additionalProperties": {
+        "oneOf": [
+          {"enum": ["@displayName", "@summary"]},
+          {"$ref": "#/$defs/completeLocalizedText"}
+        ]
+      }
+    },
     "presentation": {
       "type": "object",
       "required": ["longDescription", "examples", "screenshots", "publisher", "license"],
@@ -196,22 +207,21 @@
     "version": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+){0,2}$"},
     "uniqueStrings": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
     "localizedText": {
-      "oneOf": [
-        {"enum": ["@displayName", "@summary"]},
-        {
-          "type": "object",
-          "required": ["ar", "de", "en", "es", "fr", "ja", "ko", "pt", "ru", "zh-Hans", "zh-Hant"],
-          "properties": {
-            "ar": {"type": "string", "minLength": 1}, "de": {"type": "string", "minLength": 1},
-            "en": {"type": "string", "minLength": 1}, "es": {"type": "string", "minLength": 1},
-            "fr": {"type": "string", "minLength": 1}, "ja": {"type": "string", "minLength": 1},
-            "ko": {"type": "string", "minLength": 1}, "pt": {"type": "string", "minLength": 1},
-            "ru": {"type": "string", "minLength": 1}, "zh-Hans": {"type": "string", "minLength": 1},
-            "zh-Hant": {"type": "string", "minLength": 1}
-          },
-          "additionalProperties": false
-        }
-      ]
+      "type": "string",
+      "pattern": "^@productStrings\\.[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "completeLocalizedText": {
+      "type": "object",
+      "required": ["ar", "de", "en", "es", "fr", "ja", "ko", "pt", "ru", "zh-Hans", "zh-Hant"],
+      "properties": {
+        "ar": {"type": "string", "minLength": 1}, "de": {"type": "string", "minLength": 1},
+        "en": {"type": "string", "minLength": 1}, "es": {"type": "string", "minLength": 1},
+        "fr": {"type": "string", "minLength": 1}, "ja": {"type": "string", "minLength": 1},
+        "ko": {"type": "string", "minLength": 1}, "pt": {"type": "string", "minLength": 1},
+        "ru": {"type": "string", "minLength": 1}, "zh-Hans": {"type": "string", "minLength": 1},
+        "zh-Hant": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
     },
     "permission": {"enum": ["accessibility", "automation", "calendarFullAccess", "inputMonitoring", "screen-recording", "system-audio-recording"]},
     "surface": {"enum": ["unified-search", "global-shortcut", "run-link", "workflow", "automatic-rule", "action-grid", "trackpad-gesture", "app-intent", "manual"]},

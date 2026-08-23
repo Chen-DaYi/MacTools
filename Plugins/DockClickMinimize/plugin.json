@@ -48,6 +48,10 @@
       "summary": "點擊使用中 App 的 Dock 圖示即可將其隱藏（如 Windows）。"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.0.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -68,11 +72,11 @@
   ],
   "category": "productivity",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -130,7 +134,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -176,8 +180,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@displayName",
-        "description": "@summary"
+        "title": "@productStrings.display-name",
+        "description": "@productStrings.summary"
       }
     ],
     "optionalSurfaces": []

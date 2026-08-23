@@ -48,6 +48,10 @@
       "summary": "用全域快速鍵或選單列打開 App 網格，搜尋並啟動。"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.2.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -65,11 +69,11 @@
   "permissions": [],
   "category": "system",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -121,7 +125,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -178,8 +182,8 @@
         "staticActions": [
           {
             "id": "toggleLaunchpad",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "启动台",
               "打开启动台",
@@ -189,7 +193,7 @@
             ],
             "systemImage": "square.grid.3x3.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

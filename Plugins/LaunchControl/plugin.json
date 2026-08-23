@@ -48,6 +48,10 @@
       "summary": "查看和管理 launchctl 啟動項"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -65,11 +69,11 @@
   "permissions": [],
   "category": "productivity",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -123,7 +127,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -181,8 +185,8 @@
         "dynamicTemplates": [
           {
             "id": "start-favorite",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "entrySource": "favorite-launch-items",
             "parameters": [
               {
@@ -192,7 +196,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "localOnlyIdentity": true,
             "keywords": [
               "launch",
@@ -217,8 +221,8 @@
           },
           {
             "id": "stop-favorite",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "entrySource": "favorite-launch-items",
             "parameters": [
               {
@@ -228,7 +232,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "localOnlyIdentity": true,
             "keywords": [
               "launch",
@@ -252,8 +256,8 @@
           },
           {
             "id": "restart-favorite",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "entrySource": "favorite-launch-items",
             "parameters": [
               {
@@ -263,7 +267,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "localOnlyIdentity": true,
             "keywords": [
               "launch",

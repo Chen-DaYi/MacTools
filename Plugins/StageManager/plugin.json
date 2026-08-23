@@ -48,6 +48,10 @@
       "summary": "開啟幕前調度，集中顯示當前窗口並把其他窗口收納到側邊"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -65,11 +69,11 @@
   "permissions": [],
   "category": "display",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -122,7 +126,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -177,8 +181,8 @@
         "staticActions": [
           {
             "id": "toggle",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "台前调度",
               "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
@@ -189,7 +193,7 @@
             ],
             "systemImage": "sidebar.squares.leading",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -208,8 +212,8 @@
           },
           {
             "id": "set-enabled",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "台前调度",
               "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
@@ -228,7 +232,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

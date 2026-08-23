@@ -48,6 +48,10 @@
       "summary": "為常用應用綁定全局快速鍵，快速打開或切換到前臺"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -65,11 +69,11 @@
   "permissions": [],
   "category": "productivity",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -123,7 +127,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -182,8 +186,8 @@
         "dynamicTemplates": [
           {
             "id": "launch",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "entrySource": "installed-applications",
             "parameters": [
               {
@@ -193,7 +197,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "localOnlyIdentity": true,
             "keywords": [
               "app",

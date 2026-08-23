@@ -48,6 +48,10 @@
       "summary": "設定電池充電上限，達到上限後停止充電；不自動恢復，由用戶決定何時繼續充電"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -70,11 +74,11 @@
   "permissions": [],
   "category": "system",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -128,7 +132,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -173,8 +177,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@displayName",
-        "description": "@summary"
+        "title": "@productStrings.display-name",
+        "description": "@productStrings.summary"
       }
     ],
     "optionalSurfaces": []
@@ -193,8 +197,8 @@
         "staticActions": [
           {
             "id": "set-enabled",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "电池充电上限",
               "限制电池充电至指定上限",
@@ -213,7 +217,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -230,8 +234,8 @@
           },
           {
             "id": "hold",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "电池充电上限",
               "停止充电",
@@ -242,7 +246,7 @@
             ],
             "systemImage": "bolt.slash.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -259,8 +263,8 @@
           },
           {
             "id": "resume",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "电池充电上限",
               "开始充电",
@@ -271,7 +275,7 @@
             ],
             "systemImage": "bolt.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -288,8 +292,8 @@
           },
           {
             "id": "discharge",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "电池充电上限",
               "强制放电至 80%",
@@ -300,7 +304,7 @@
             ],
             "systemImage": "minus.circle",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [
@@ -319,8 +323,8 @@
         "dynamicTemplates": [
           {
             "id": "set-limit",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "entrySource": "charge-limit-presets",
             "parameters": [
               {
@@ -330,7 +334,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "localOnlyIdentity": false,
             "keywords": [
               "battery",

@@ -48,6 +48,10 @@
       "summary": "重新啟動 macOS 使用者服務，嘗試恢復常見執行階段異常"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.0.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -70,11 +74,11 @@
   "permissions": [],
   "category": "system",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -127,7 +131,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -184,8 +188,8 @@
         "staticActions": [
           {
             "id": "restart-user-services",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "系统软重启",
               "soft restart",
@@ -201,7 +205,7 @@
             ],
             "systemImage": "arrow.clockwise.circle.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [

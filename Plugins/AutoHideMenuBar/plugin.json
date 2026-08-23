@@ -48,6 +48,10 @@
       "summary": "自動隱藏選單列，提供更完整的螢幕顯示空間"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -65,11 +69,11 @@
   "permissions": [],
   "category": "display",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -124,7 +128,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -179,8 +183,8 @@
         "staticActions": [
           {
             "id": "toggle",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "自动隐藏菜单栏",
               "自动隐藏菜单栏，提供更完整的屏幕显示空间",
@@ -192,7 +196,7 @@
             ],
             "systemImage": "menubar.rectangle",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -211,8 +215,8 @@
           },
           {
             "id": "set-enabled",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "自动隐藏菜单栏",
               "自动隐藏菜单栏，提供更完整的屏幕显示空间",
@@ -232,7 +236,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

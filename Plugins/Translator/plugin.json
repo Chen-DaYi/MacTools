@@ -48,6 +48,10 @@
       "summary": "透過快速鍵翻譯選取文字或截圖區域。"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "0.2.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -69,11 +73,11 @@
   ],
   "category": "productivity",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -125,7 +129,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -176,8 +180,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@displayName",
-        "description": "@summary"
+        "title": "@productStrings.display-name",
+        "description": "@productStrings.summary"
       }
     ],
     "optionalSurfaces": []
@@ -196,8 +200,8 @@
         "staticActions": [
           {
             "id": "select-translation",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "翻译",
               "划词翻译",
@@ -207,7 +211,7 @@
             ],
             "systemImage": "text.cursor",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility",
               "automation"
@@ -227,8 +231,8 @@
           },
           {
             "id": "screenshot-translation",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "翻译",
               "截图翻译",
@@ -239,7 +243,7 @@
             ],
             "systemImage": "viewfinder",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "screen-recording"
             ],

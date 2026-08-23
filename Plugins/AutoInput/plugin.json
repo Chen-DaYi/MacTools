@@ -48,6 +48,10 @@
       "summary": "按應用程式記住並自動切換輸入法"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -67,11 +71,11 @@
   ],
   "category": "productivity",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -124,7 +128,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -170,8 +174,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@displayName",
-        "description": "@summary"
+        "title": "@productStrings.display-name",
+        "description": "@productStrings.summary"
       }
     ],
     "optionalSurfaces": []
@@ -190,8 +194,8 @@
         "staticActions": [
           {
             "id": "toggle",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "自动切换输入法",
               "按应用记住并自动切换输入法",
@@ -201,7 +205,7 @@
             ],
             "systemImage": "keyboard",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -222,8 +226,8 @@
           },
           {
             "id": "set-enabled",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "自动切换输入法",
               "按应用记住并自动切换输入法",
@@ -241,7 +245,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -264,8 +268,8 @@
         "dynamicTemplates": [
           {
             "id": "select-input-source",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "entrySource": "installed-input-sources",
             "parameters": [
               {
@@ -275,7 +279,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "localOnlyIdentity": true,
             "keywords": [
               "auto",

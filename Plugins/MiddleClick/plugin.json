@@ -48,6 +48,10 @@
       "summary": "觸控板輕點 → 模擬滑鼠中鍵"
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
   "version": "1.0.16",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -67,11 +71,11 @@
   ],
   "category": "productivity",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -124,7 +128,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -169,8 +173,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@displayName",
-        "description": "@summary"
+        "title": "@productStrings.display-name",
+        "description": "@productStrings.summary"
       }
     ],
     "optionalSurfaces": []
@@ -189,8 +193,8 @@
         "staticActions": [
           {
             "id": "toggle",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "模拟鼠标中键",
               "触控板轻点 → 模拟鼠标中键",
@@ -200,7 +204,7 @@
             ],
             "systemImage": "hand.tap",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],

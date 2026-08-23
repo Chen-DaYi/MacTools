@@ -17,7 +17,8 @@ SUPPORTED_LOCALE_ORDER = (
 )
 SUPPORTED_LOCALES = frozenset(SUPPORTED_LOCALE_ORDER)
 SUPPORTED_LOCALE_SET = SUPPORTED_LOCALES
-LOCALIZED_REFERENCES = {"@displayName", "@summary"}
+BASE_LOCALIZED_REFERENCES = {"@displayName", "@summary"}
+PRODUCT_STRING_REFERENCE_PREFIX = "@productStrings."
 VALID_CATEGORIES = {
     "display", "audio", "system", "storage", "productivity", "monitoring", "other"
 }
@@ -58,21 +59,147 @@ class AssetProjection:
     catalog: dict
 
 
+def _localized_source_fields(manifest: dict):
+    presentation = manifest.get("presentation")
+    if isinstance(presentation, dict):
+        if "longDescription" in presentation:
+            yield "presentation.longDescription", presentation["longDescription"]
+        examples = presentation.get("examples")
+        if isinstance(examples, list):
+            for index, example in enumerate(examples):
+                if isinstance(example, dict) and "text" in example:
+                    yield f"presentation.examples[{index}].text", example["text"]
+        screenshots = presentation.get("screenshots")
+        if isinstance(screenshots, list):
+            for index, screenshot in enumerate(screenshots):
+                if isinstance(screenshot, dict) and "alt" in screenshot:
+                    yield f"presentation.screenshots[{index}].alt", screenshot["alt"]
+
+    discovery = manifest.get("discovery")
+    if isinstance(discovery, dict):
+        use_cases = discovery.get("useCases")
+        if isinstance(use_cases, list):
+            for index, use_case in enumerate(use_cases):
+                if isinstance(use_case, dict) and "title" in use_case:
+                    yield f"discovery.useCases[{index}].title", use_case["title"]
+
+    privacy = manifest.get("privacy")
+    if isinstance(privacy, dict):
+        retention = privacy.get("retention")
+        if isinstance(retention, dict) and "description" in retention:
+            yield "privacy.retention.description", retention["description"]
+
+    actions = manifest.get("actions")
+    if isinstance(actions, dict):
+        providers = actions.get("providers")
+        if isinstance(providers, list):
+            for provider_index, provider in enumerate(providers):
+                if not isinstance(provider, dict):
+                    continue
+                for collection_name in ("staticActions", "dynamicTemplates"):
+                    entries = provider.get(collection_name)
+                    if not isinstance(entries, list):
+                        continue
+                    for entry_index, entry in enumerate(entries):
+                        if not isinstance(entry, dict):
+                            continue
+                        for field in ("title", "description", "parameterSummary"):
+                            if field in entry:
+                                yield (
+                                    f"actions.providers[{provider_index}].{collection_name}"
+                                    f"[{entry_index}].{field}",
+                                    entry[field],
+                                )
+
+    setup = manifest.get("setup")
+    if isinstance(setup, dict):
+        steps = setup.get("steps")
+        if isinstance(steps, list):
+            for index, step in enumerate(steps):
+                if not isinstance(step, dict):
+                    continue
+                for field in ("title", "description"):
+                    if field in step:
+                        yield f"setup.steps[{index}].{field}", step[field]
+        if "missingDependencyHelp" in setup:
+            yield "setup.missingDependencyHelp", setup["missingDependencyHelp"]
+
+
 def expand_localized_references(manifest: dict) -> dict:
-    """Expand source-only localization references for catalog and package projection."""
+    """Expand source-only product-string references for catalog and package projection."""
     projected = json.loads(json.dumps(manifest))
-    metadata = projected.get("localizedMetadata", {})
+    localized_fields = list(_localized_source_fields(projected))
+    product_strings = projected.get("productStrings")
+    plugin_id = projected.get("id", "unknown-plugin")
+
+    if not localized_fields:
+        if product_strings is not None:
+            _fail(plugin_id, "productStrings", "is not allowed without localized product fields")
+        return projected
+    if not isinstance(product_strings, dict) or not product_strings:
+        _fail(plugin_id, "productStrings", "must be a non-empty object")
+
+    metadata = projected.get("localizedMetadata")
     reference_values = {}
-    for field in ("displayName", "summary"):
-        fallback = metadata.get("en", {}).get(field) or projected.get(field)
-        reference_values[f"@{field}"] = {
-            locale: metadata.get(locale, {}).get(field, fallback)
-            for locale in SUPPORTED_LOCALE_ORDER
-        }
+    used_product_strings = set()
+    for key, value in product_strings.items():
+        _identifier(key, plugin_id, f"productStrings.{key}")
+        if isinstance(value, str) and value in BASE_LOCALIZED_REFERENCES:
+            field = value.removeprefix("@")
+            if not isinstance(metadata, dict) or set(metadata) != SUPPORTED_LOCALE_SET:
+                _fail(
+                    plugin_id,
+                    f"productStrings.{key}",
+                    f"{value} requires localizedMetadata for all supported locales",
+                )
+            localized_value = {}
+            for locale in SUPPORTED_LOCALE_ORDER:
+                locale_metadata = metadata.get(locale)
+                if not isinstance(locale_metadata, dict):
+                    _fail(plugin_id, f"localizedMetadata.{locale}", "must be an object")
+                text = locale_metadata.get(field)
+                if not isinstance(text, str) or not text.strip():
+                    _fail(
+                        plugin_id,
+                        f"localizedMetadata.{locale}.{field}",
+                        "must be a non-empty string",
+                    )
+                localized_value[locale] = text
+            reference_values[key] = localized_value
+        elif isinstance(value, dict):
+            _localized_text(value, plugin_id, f"productStrings.{key}")
+            reference_values[key] = dict(value)
+        else:
+            _fail(
+                plugin_id,
+                f"productStrings.{key}",
+                "must be @displayName, @summary, or a complete locale-to-string object",
+            )
+
+    for field, value in localized_fields:
+        if not isinstance(value, str) or not value.startswith(PRODUCT_STRING_REFERENCE_PREFIX):
+            _fail(
+                plugin_id,
+                field,
+                f"must reference {PRODUCT_STRING_REFERENCE_PREFIX}<key>; inline localized text is not allowed",
+            )
+        key = value.removeprefix(PRODUCT_STRING_REFERENCE_PREFIX)
+        if key not in reference_values:
+            _fail(plugin_id, field, f"references missing productStrings entry {key}")
+        used_product_strings.add(key)
+
+    unused_product_strings = sorted(set(reference_values) - used_product_strings)
+    if unused_product_strings:
+        _fail(
+            plugin_id,
+            "productStrings",
+            "contains unused entries: " + ", ".join(unused_product_strings),
+        )
 
     def expand(value: object) -> object:
-        if isinstance(value, str) and value in reference_values:
-            return dict(reference_values[value])
+        if isinstance(value, str) and value.startswith(PRODUCT_STRING_REFERENCE_PREFIX):
+            key = value.removeprefix(PRODUCT_STRING_REFERENCE_PREFIX)
+            return dict(reference_values[key])
         if isinstance(value, list):
             return [expand(item) for item in value]
         if isinstance(value, dict):
@@ -84,6 +211,7 @@ def expand_localized_references(manifest: dict) -> dict:
     ):
         if section in projected:
             projected[section] = expand(projected[section])
+    projected.pop("productStrings", None)
     return projected
 
 

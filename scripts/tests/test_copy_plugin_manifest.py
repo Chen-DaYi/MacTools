@@ -11,6 +11,9 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts/plugins/copy-plugin-manifest.py"
 SYNC_SCRIPT = REPO_ROOT / "scripts/plugins/sync-debug-plugins.sh"
 APP_VERSION_CONFIG = REPO_ROOT / "Configs/AppVersion.xcconfig"
+SUPPORTED_LOCALES = (
+    "ar", "de", "en", "es", "fr", "ja", "ko", "pt", "ru", "zh-Hans", "zh-Hant"
+)
 
 
 class CopyPluginManifestTests(unittest.TestCase):
@@ -105,14 +108,17 @@ class CopyPluginManifestTests(unittest.TestCase):
             source = root / "plugin.json"
             destination = root / "copied.json"
             config = root / "AppVersion.xcconfig"
+            localized_metadata = {
+                locale: {"displayName": "Example", "summary": "Example summary"}
+                for locale in SUPPORTED_LOCALES
+            }
             source.write_text(json.dumps({
                 "id": "example",
                 "displayName": "示例",
                 "summary": "示例摘要",
-                "localizedMetadata": {
-                    "en": {"displayName": "Example", "summary": "Example summary"},
-                },
-                "presentation": {"longDescription": "@summary"},
+                "localizedMetadata": localized_metadata,
+                "productStrings": {"summary": "@summary"},
+                "presentation": {"longDescription": "@productStrings.summary"},
             }), encoding="utf-8")
             config.write_text("MARKETING_VERSION = 1.2.3\n", encoding="utf-8")
 
@@ -131,20 +137,24 @@ class CopyPluginManifestTests(unittest.TestCase):
             description = projected["presentation"]["longDescription"]
             self.assertEqual(description["en"], "Example summary")
             self.assertEqual(description["ar"], "Example summary")
+            self.assertNotIn("productStrings", projected)
 
     def test_release_copy_is_stable_across_python_hash_seeds(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)
             source = root / "plugin.json"
             config = root / "AppVersion.xcconfig"
+            localized_metadata = {
+                locale: {"displayName": "Example", "summary": "Example summary"}
+                for locale in SUPPORTED_LOCALES
+            }
             source.write_text(json.dumps({
                 "id": "example",
                 "displayName": "示例",
                 "summary": "示例摘要",
-                "localizedMetadata": {
-                    "en": {"displayName": "Example", "summary": "Example summary"},
-                },
-                "presentation": {"longDescription": "@summary"},
+                "localizedMetadata": localized_metadata,
+                "productStrings": {"summary": "@summary"},
+                "presentation": {"longDescription": "@productStrings.summary"},
             }), encoding="utf-8")
             config.write_text("MARKETING_VERSION = 1.2.3\n", encoding="utf-8")
             outputs = []

@@ -77,7 +77,32 @@ Catalog schema 3 is additive. It preserves every schema-2 package field and may 
 - `setup`: localized first-use steps, a suggested static test action, optional next surfaces, and missing-dependency help.
 - `relationships`: related plugins, packs, recipes, and superseded plugin IDs.
 
-Localized product text is a locale-to-string object and must contain `ar`, `de`, `en`, `es`, `fr`, `ja`, `ko`, `pt`, `ru`, `zh-Hans`, and `zh-Hant`. When a field intentionally reuses the plugin's existing localized metadata, source manifests may use `@displayName` or `@summary`; validation expands the reference to all 11 values before package and catalog projection. References never appear in a generated catalog. Every repository plugin publishes the applicable product sections, while `Appearance`, `AppVolume`, `IPOverview`, and `WindowSwitcher` remain useful examples of fully hand-authored copy.
+Localized product copy is declared once in the source-only `productStrings` table. Each entry either contains `ar`, `de`, `en`, `es`, `fr`, `ja`, `ko`, `pt`, `ru`, `zh-Hans`, and `zh-Hant`, or reuses the plugin's complete localized metadata with `@displayName` or `@summary`. Every localized field in `presentation`, `discovery`, `privacy`, `actions`, and `setup` references `@productStrings.<key>`; inline locale objects and direct base references are rejected. Validation expands these references before package and catalog projection, rejects missing and unused entries, and removes `productStrings` from generated artifacts. Every repository plugin follows this source shape, while `Appearance`, `AppVolume`, `IPOverview`, and `WindowSwitcher` remain useful examples of fully hand-authored entries rather than inherited baseline copy.
+
+```json
+{
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary",
+    "long-description": {
+      "ar": "…",
+      "de": "…",
+      "en": "Detailed product copy",
+      "es": "…",
+      "fr": "…",
+      "ja": "…",
+      "ko": "…",
+      "pt": "…",
+      "ru": "…",
+      "zh-Hans": "…",
+      "zh-Hant": "…"
+    }
+  },
+  "presentation": {
+    "longDescription": "@productStrings.long-description"
+  }
+}
+```
 
 Static action entries describe fixed runtime `ActionDefinition` identities. Dynamic templates describe machine-local entries without putting local application IDs, devices, paths, or other discovered values in the signed catalog. A provider declares `static`, `dynamic`, or `mixed` and must populate the matching collections. `automatic-rule` is valid only for safe automatic actions, while `app-intent` additionally requires portable identity and parameters. External invocation is `unavailable`, `allowed`, `confirmAlways`, or `configurable` when each generated action owns the setting. Repository-wide XCTest coverage instantiates every canonical action provider and compares static identities and dynamic families, risk, external policy, automation eligibility, supported unattended surfaces, permissions, system images, and parameter policy against the built runtime definitions.
 

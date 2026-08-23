@@ -54,7 +54,11 @@ class PluginSourceManifestTests(unittest.TestCase):
         path = PLUGINS_ROOT / "ActivityBar" / "plugin.json"
         manifest = json.loads(path.read_text(encoding="utf-8"))
 
-        self.assertEqual(manifest["presentation"]["longDescription"], "@summary")
+        self.assertEqual(
+            manifest["presentation"]["longDescription"],
+            "@productStrings.summary",
+        )
+        self.assertEqual(manifest["productStrings"]["summary"], "@summary")
         projected, _ = validate_and_project_manifest(
             manifest,
             path,
@@ -65,6 +69,36 @@ class PluginSourceManifestTests(unittest.TestCase):
             projected["presentation"]["longDescription"]["en"],
             manifest["localizedMetadata"]["en"]["summary"],
         )
+        self.assertNotIn("productStrings", projected)
+
+    def test_repository_product_text_uses_only_declared_product_string_references(self) -> None:
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+        for path in sorted(PLUGINS_ROOT.glob("*/plugin.json")):
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            with self.subTest(plugin=manifest["id"]):
+                self.assertTrue(manifest["productStrings"])
+                projected, _ = validate_and_project_manifest(manifest, path, known_ids)
+                self.assertNotIn("productStrings", projected)
+
+    def test_inline_missing_and_unused_product_strings_are_rejected(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+
+        inline = copy.deepcopy(manifest)
+        inline["presentation"]["longDescription"] = inline["productStrings"]["long-description"]
+        with self.assertRaisesRegex(ManifestValidationError, "inline localized text is not allowed"):
+            validate_and_project_manifest(inline, path, known_ids)
+
+        missing = copy.deepcopy(manifest)
+        missing["presentation"]["longDescription"] = "@productStrings.missing"
+        with self.assertRaisesRegex(ManifestValidationError, "references missing productStrings entry"):
+            validate_and_project_manifest(missing, path, known_ids)
+
+        unused = copy.deepcopy(manifest)
+        unused["productStrings"]["unused"] = "@summary"
+        with self.assertRaisesRegex(ManifestValidationError, "contains unused entries: unused"):
+            validate_and_project_manifest(unused, path, known_ids)
 
     def test_reviewed_runtime_requirements_and_disclosures_stay_accurate(self) -> None:
         expected_permissions = {
@@ -153,7 +187,7 @@ class PluginSourceManifestTests(unittest.TestCase):
         known_ids = load_known_plugin_ids(PLUGINS_ROOT)
 
         missing_locale = copy.deepcopy(manifest)
-        missing_locale["presentation"]["longDescription"].pop("fr")
+        missing_locale["productStrings"]["long-description"].pop("fr")
         with self.assertRaisesRegex(ManifestValidationError, "missing locale fallback"):
             validate_and_project_manifest(missing_locale, path, known_ids)
 
@@ -243,6 +277,9 @@ class PluginSourceManifestTests(unittest.TestCase):
         )
         template["id"] = "set-device-value"
         provider["dynamicTemplates"] = [template]
+        for field in ("title", "description", "parameterSummary"):
+            key = template[field].removeprefix("@productStrings.")
+            mixed["productStrings"][key] = app_volume["productStrings"][key]
 
         validate_and_project_manifest(mixed, appearance_path, known_ids)
 
@@ -292,7 +329,10 @@ class PluginSourceManifestTests(unittest.TestCase):
         self.assertEqual(projected["futureProductField"], {"enabled": True})
 
         incomplete = copy.deepcopy(manifest)
-        del incomplete["actions"]["providers"][0]["dynamicTemplates"][0]["parameterSummary"]
+        template = incomplete["actions"]["providers"][0]["dynamicTemplates"][0]
+        key = template["parameterSummary"].removeprefix("@productStrings.")
+        del template["parameterSummary"]
+        del incomplete["productStrings"][key]
         with self.assertRaisesRegex(ManifestValidationError, "missing parameterSummary"):
             validate_and_project_manifest(incomplete, path, known_ids)
 
@@ -308,11 +348,14 @@ class PluginSourceManifestTests(unittest.TestCase):
             manifest = {
                 "id": "asset-demo",
                 "category": "other",
+                "productStrings": {"preview": localized},
                 "presentation": {
-                    "longDescription": localized,
+                    "longDescription": "@productStrings.preview",
                     "examples": [],
                     "screenshots": [{
-                        "id": "main", "path": "MarketplaceAssets/preview.png", "alt": localized,
+                        "id": "main",
+                        "path": "MarketplaceAssets/preview.png",
+                        "alt": "@productStrings.preview",
                     }],
                     "publisher": "Example",
                     "license": "Apache-2.0",
@@ -337,10 +380,15 @@ class PluginSourceManifestTests(unittest.TestCase):
             return {
                 "id": "asset-demo",
                 "category": "other",
+                "productStrings": {"preview": localized},
                 "presentation": {
-                    "longDescription": localized,
+                    "longDescription": "@productStrings.preview",
                     "examples": [],
-                    "screenshots": [{"id": "main", "path": path, "alt": localized}],
+                    "screenshots": [{
+                        "id": "main",
+                        "path": path,
+                        "alt": "@productStrings.preview",
+                    }],
                     "publisher": "Example",
                     "license": "Apache-2.0",
                 },
@@ -411,12 +459,14 @@ class PluginSourceManifestTests(unittest.TestCase):
             self.assertEqual(first_website.read_bytes(), second_website.read_bytes())
             self.assertNotIn("@summary", first_catalog.read_text(encoding="utf-8"))
             self.assertNotIn("@displayName", first_catalog.read_text(encoding="utf-8"))
+            self.assertNotIn("@productStrings", first_catalog.read_text(encoding="utf-8"))
             catalog = json.loads(first_catalog.read_text(encoding="utf-8"))
             self.assertEqual(catalog["schemaVersion"], 3)
             self.assertEqual(catalog["minimumHostVersion"], "0.1.0")
             entry = catalog["plugins"][0]
             self.assertIn("actions", entry)
             self.assertNotIn("build", entry)
+            self.assertNotIn("productStrings", entry)
             website = json.loads(first_website.read_text(encoding="utf-8"))
             self.assertNotIn("package", website["plugins"][0])
 

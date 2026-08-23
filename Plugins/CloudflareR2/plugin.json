@@ -48,6 +48,23 @@
       "summary": "ارفع الملفات إلى Cloudflare R2."
     }
   },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary",
+    "setup-configure-r2-credentials-description": {
+      "ar": "أدخل معرّف الحساب والحاوية ومفتاح الوصول والسر المحفوظ في سلسلة المفاتيح قبل أول رفع.",
+      "de": "Gib vor dem ersten Upload Konto-ID, Bucket, Zugriffsschlüssel und das im Schlüsselbund gespeicherte Geheimnis ein.",
+      "en": "Before the first upload, enter the account ID, bucket, access key, and Keychain-stored secret.",
+      "es": "Antes de la primera carga, introduce el ID de cuenta, el bucket, la clave de acceso y el secreto guardado en el llavero.",
+      "fr": "Avant le premier envoi, saisissez l’identifiant du compte, le bucket, la clé d’accès et le secret stocké dans le trousseau.",
+      "ja": "初回アップロード前に、アカウント ID、バケット、アクセスキー、キーチェーンに保存するシークレットを入力します。",
+      "ko": "처음 업로드하기 전에 계정 ID, 버킷, 액세스 키와 키체인에 저장할 비밀 키를 입력하세요.",
+      "pt": "Antes do primeiro envio, introduza o ID da conta, o bucket, a chave de acesso e o segredo guardado no Porta‑Chaves.",
+      "ru": "Перед первой загрузкой укажите ID учётной записи, бакет, ключ доступа и секрет, сохранённый в Связке ключей.",
+      "zh-Hans": "首次上传前，请填写账户 ID、存储桶、访问密钥，并将密钥安全地存入钥匙串。",
+      "zh-Hant": "首次上傳前，請填寫帳戶 ID、儲存貯體、存取金鑰，並將密鑰安全地存入鑰匙圈。"
+    }
+  },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
   "pluginKitVersion": 5,
@@ -65,11 +82,11 @@
   "permissions": [],
   "category": "productivity",
   "presentation": {
-    "longDescription": "@summary",
+    "longDescription": "@productStrings.summary",
     "examples": [
       {
         "id": "primary-use",
-        "text": "@summary"
+        "text": "@productStrings.summary"
       }
     ],
     "screenshots": [],
@@ -123,7 +140,7 @@
     "useCases": [
       {
         "id": "primary-use",
-        "title": "@displayName"
+        "title": "@productStrings.display-name"
       }
     ],
     "goalCategories": [
@@ -167,20 +184,8 @@
     "steps": [
       {
         "id": "configure-r2-credentials",
-        "title": "@displayName",
-        "description": {
-          "ar": "أدخل معرّف الحساب والحاوية ومفتاح الوصول والسر المحفوظ في سلسلة المفاتيح قبل أول رفع.",
-          "de": "Gib vor dem ersten Upload Konto-ID, Bucket, Zugriffsschlüssel und das im Schlüsselbund gespeicherte Geheimnis ein.",
-          "en": "Before the first upload, enter the account ID, bucket, access key, and Keychain-stored secret.",
-          "es": "Antes de la primera carga, introduce el ID de cuenta, el bucket, la clave de acceso y el secreto guardado en el llavero.",
-          "fr": "Avant le premier envoi, saisissez l’identifiant du compte, le bucket, la clé d’accès et le secret stocké dans le trousseau.",
-          "ja": "初回アップロード前に、アカウント ID、バケット、アクセスキー、キーチェーンに保存するシークレットを入力します。",
-          "ko": "처음 업로드하기 전에 계정 ID, 버킷, 액세스 키와 키체인에 저장할 비밀 키를 입력하세요.",
-          "pt": "Antes do primeiro envio, introduza o ID da conta, o bucket, a chave de acesso e o segredo guardado no Porta‑Chaves.",
-          "ru": "Перед первой загрузкой укажите ID учётной записи, бакет, ключ доступа и секрет, сохранённый в Связке ключей.",
-          "zh-Hans": "首次上传前，请填写账户 ID、存储桶、访问密钥，并将密钥安全地存入钥匙串。",
-          "zh-Hant": "首次上傳前，請填寫帳戶 ID、儲存貯體、存取金鑰，並將密鑰安全地存入鑰匙圈。"
-        }
+        "title": "@productStrings.display-name",
+        "description": "@productStrings.setup-configure-r2-credentials-description"
       }
     ],
     "optionalSurfaces": []
@@ -199,8 +204,8 @@
         "staticActions": [
           {
             "id": "upload-file",
-            "title": "@displayName",
-            "description": "@summary",
+            "title": "@productStrings.display-name",
+            "description": "@productStrings.summary",
             "keywords": [
               "R2",
               "S3",
@@ -213,7 +218,7 @@
             ],
             "systemImage": "icloud.and.arrow.up.fill",
             "parameters": [],
-            "parameterSummary": "@summary",
+            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
