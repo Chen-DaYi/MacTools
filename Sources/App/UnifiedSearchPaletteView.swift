@@ -342,6 +342,7 @@ struct UnifiedSearchPresentationView: View {
     let pluginHost: PluginHost
     let launchAtLoginController: LaunchAtLoginController
     let appearanceUserDefaults: UserDefaults
+    let recentStore: CommandPaletteRecentStore
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
 
     var body: some View {
@@ -359,6 +360,7 @@ struct UnifiedSearchPresentationView: View {
                     pluginHost: pluginHost,
                     launchAtLoginController: launchAtLoginController,
                     appearanceUserDefaults: appearanceUserDefaults,
+                    recentStore: recentStore,
                     availableSize: geometry.size,
                     presentationOrigin: navigationCoordinator.unifiedSearchPresentationOrigin,
                     shortcutHint: "⌘K",
@@ -448,6 +450,7 @@ struct UnifiedSearchPaletteView: View {
         pluginHost: PluginHost,
         launchAtLoginController: LaunchAtLoginController,
         appearanceUserDefaults: UserDefaults,
+        recentStore: CommandPaletteRecentStore,
         availableSize: CGSize,
         presentationOrigin: UnifiedSearchPresentationOrigin?,
         shortcutHint: String?,
@@ -472,7 +475,6 @@ struct UnifiedSearchPaletteView: View {
         self.quickSelectionRequest = quickSelectionRequest
         self.showsCustomShadow = showsCustomShadow
         self.actions = actions
-        let recentStore = CommandPaletteRecentStore(userDefaults: appearanceUserDefaults)
         _model = StateObject(wrappedValue: UnifiedSearchPaletteModel(
             commandContext: commandContext,
             recentStore: recentStore
