@@ -45,21 +45,35 @@ enum UnifiedSearchResultRowLayout {
 @MainActor
 final class UnifiedSearchPaletteModel: ObservableObject {
     @Published private(set) var results: [MacToolsSearchResult]
+    @Published private(set) var sections: [MacToolsSearchSection]
 
     private let commandContext: AppHostCommandContext
+    private let recentStore: CommandPaletteRecentStore
     private var index: MacToolsSearchIndex
     private var query = ""
     private var stateCancellables: Set<AnyCancellable> = []
     private var rebuildTask: Task<Void, Never>?
 
-    init(commandContext: AppHostCommandContext) {
+    init(
+        commandContext: AppHostCommandContext,
+        recentStore: CommandPaletteRecentStore = CommandPaletteRecentStore()
+    ) {
         self.commandContext = commandContext
+        self.recentStore = recentStore
         commandContext.launchAtLoginController.refreshStatus()
         let index = Self.buildIndex(commandContext: commandContext)
         self.index = index
-        self.results = MacToolsSearchPresentation.orderedResults(
-            index.results(matching: "")
+        let suggestedResults = index.results(matching: "")
+        let recentResults = recentStore.isEnabled
+            ? recentStore.references.compactMap { index.result(for: $0) }
+            : []
+        let sections = MacToolsSearchPresentation.sections(
+            query: "",
+            results: suggestedResults,
+            recentResults: recentResults
         )
+        self.sections = sections
+        self.results = sections.flatMap(\.results)
         observeStateChanges()
     }
 
@@ -77,6 +91,33 @@ final class UnifiedSearchPaletteModel: ObservableObject {
         commandContext.launchAtLoginController.refreshStatus()
         index = Self.buildIndex(commandContext: commandContext)
         updateResults()
+    }
+
+    var recentActionsEnabled: Bool {
+        recentStore.isEnabled
+    }
+
+    var hasRecentActions: Bool {
+        !recentStore.references.isEmpty
+    }
+
+    func clearRecentActions() {
+        guard recentStore.clear() else { return }
+        updateResults()
+    }
+
+    func setRecentActionsEnabled(_ enabled: Bool) {
+        guard recentStore.setEnabled(enabled) else { return }
+        updateResults()
+    }
+
+    func actionCompletionObserver(
+        for reference: ActionReference
+    ) -> (@MainActor (ActionExecutionOutcome) -> Void) {
+        let recentStore = recentStore
+        return { outcome in
+            recentStore.recordCompletion(of: reference, outcome: outcome)
+        }
     }
 
     private func observeStateChanges() {
@@ -100,6 +141,15 @@ final class UnifiedSearchPaletteModel: ObservableObject {
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
                     self?.scheduleIndexRebuild()
+                }
+            }
+            .store(in: &stateCancellables)
+
+        recentStore.objectWillChange
+            .sink { [weak self] in
+                Task { @MainActor [weak self] in
+                    await Task.yield()
+                    self?.updateResults()
                 }
             }
             .store(in: &stateCancellables)
@@ -130,9 +180,18 @@ final class UnifiedSearchPaletteModel: ObservableObject {
     }
 
     private func updateResults() {
-        results = MacToolsSearchPresentation.orderedResults(
-            index.results(matching: query)
+        let recentReferences = recentStore.isEnabled ? recentStore.references : []
+        let matchingResults = index.results(
+            matching: query,
+            recentReferences: recentReferences
         )
+        let recentResults = recentReferences.compactMap { index.result(for: $0) }
+        sections = MacToolsSearchPresentation.sections(
+            query: query,
+            results: matchingResults,
+            recentResults: recentResults
+        )
+        results = sections.flatMap(\.results)
     }
 }
 
@@ -413,9 +472,11 @@ struct UnifiedSearchPaletteView: View {
         self.quickSelectionRequest = quickSelectionRequest
         self.showsCustomShadow = showsCustomShadow
         self.actions = actions
-        _model = StateObject(
-            wrappedValue: UnifiedSearchPaletteModel(commandContext: commandContext)
-        )
+        let recentStore = CommandPaletteRecentStore(userDefaults: appearanceUserDefaults)
+        _model = StateObject(wrappedValue: UnifiedSearchPaletteModel(
+            commandContext: commandContext,
+            recentStore: recentStore
+        ))
     }
 
     var body: some View {
@@ -591,13 +652,81 @@ struct UnifiedSearchPaletteView: View {
 
     private var metadataRow: some View {
         HStack {
-            Text(originText)
-            Spacer()
-            Text(resultCountText)
+            HStack {
+                Text(originText)
+                Spacer()
+                Text(resultCountText)
+            }
+            .accessibilityElement(children: .combine)
+
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                recentActionsMenu
+            }
         }
         .font(PluginSettingsTheme.Typography.secondaryLabel)
         .foregroundStyle(.secondary)
-        .accessibilityElement(children: .combine)
+    }
+
+    private var recentActionsMenu: some View {
+        Menu {
+            if model.recentActionsEnabled {
+                Button {
+                    model.clearRecentActions()
+                } label: {
+                    Label(
+                        AppL10n.search(
+                            "search.recent.clear",
+                            defaultValue: "清除最近操作"
+                        ),
+                        systemImage: "trash"
+                    )
+                }
+                .disabled(!model.hasRecentActions)
+
+                Divider()
+
+                Button(role: .destructive) {
+                    model.setRecentActionsEnabled(false)
+                } label: {
+                    Label(
+                        AppL10n.search(
+                            "search.recent.disable",
+                            defaultValue: "关闭并清除最近操作"
+                        ),
+                        systemImage: "clock.badge.xmark"
+                    )
+                }
+            } else {
+                Button {
+                    model.setRecentActionsEnabled(true)
+                } label: {
+                    Label(
+                        AppL10n.search(
+                            "search.recent.enable",
+                            defaultValue: "启用最近操作"
+                        ),
+                        systemImage: "clock.arrow.circlepath"
+                    )
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(
+            AppL10n.search(
+                "search.recent.manage",
+                defaultValue: "管理最近操作"
+            )
+        )
+        .accessibilityLabel(
+            AppL10n.search(
+                "search.recent.manage",
+                defaultValue: "管理最近操作"
+            )
+        )
     }
 
     private var resultList: some View {
@@ -617,22 +746,22 @@ struct UnifiedSearchPaletteView: View {
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(MacToolsSearchResultKind.allCases, id: \.self) { kind in
-                            let group = results.filter { $0.kind == kind }
-                            if !group.isEmpty {
-                                Text(kind.title)
+                        ForEach(searchSections) { section in
+                            if let title = section.kind.title {
+                                Text(title)
                                     .font(PluginSettingsTheme.Typography.secondaryLabel)
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 8)
                                     .padding(.top, 6)
+                                    .accessibilityAddTraits(.isHeader)
+                            }
 
-                                ForEach(group) { result in
-                                    resultRow(
-                                        result,
-                                        quickSelectionNumber: quickSelectionNumber(for: result)
-                                    )
-                                        .id(result.id)
-                                }
+                            ForEach(section.results) { result in
+                                resultRow(
+                                    result,
+                                    quickSelectionNumber: quickSelectionNumber(for: result)
+                                )
+                                    .id(result.id)
                             }
                         }
                     }
@@ -849,6 +978,10 @@ struct UnifiedSearchPaletteView: View {
         model.results
     }
 
+    private var searchSections: [MacToolsSearchSection] {
+        model.sections
+    }
+
     private var resultIDs: [String] {
         results.map(\.id)
     }
@@ -1058,15 +1191,17 @@ struct UnifiedSearchPaletteView: View {
                 if ActionSurfaceExecutionSupport.continuesAfterSurfaceDismissal(
                     for: action.definition
                 ) {
-                    let startOutcome = await pluginHost.actionExecutor.startContinuing(
-                        invocation,
-                        expectedDefinition: action.definition,
-                        confirmationService: confirmationService
-                    )
+                    let start = await pluginHost.actionExecutor
+                        .startSurfaceIndependentTrackingCompletion(
+                            invocation,
+                            expectedDefinition: action.definition,
+                            confirmationService: confirmationService,
+                            completionObserver: model.actionCompletionObserver(for: reference)
+                        )
                     guard generation == executionGeneration else { return }
                     actions.setPendingExecutionCancellation(nil)
                     executionTask = nil
-                    switch startOutcome {
+                    switch start.outcome {
                     case .started:
                         actions.dismissAfterSuccessfulExecution()
                     case .cancelled:
@@ -1080,10 +1215,11 @@ struct UnifiedSearchPaletteView: View {
                 }
                 let start = await pluginHost.actionExecutor
                     .startSurfaceIndependentTrackingCompletion(
-                    invocation,
-                    expectedDefinition: action.definition,
-                    confirmationService: confirmationService
-                )
+                        invocation,
+                        expectedDefinition: action.definition,
+                        confirmationService: confirmationService,
+                        completionObserver: model.actionCompletionObserver(for: reference)
+                    )
                 guard generation == executionGeneration else { return }
                 actions.setPendingExecutionCancellation(nil)
                 switch start.outcome {

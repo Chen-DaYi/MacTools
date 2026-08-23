@@ -425,17 +425,25 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
-    func testPresentationOrderMatchesVisibleGroupsAndQuickSelectionNumbers() {
+    func testTypedPresentationPreservesRelevanceOrderAndQuickSelectionNumbers() {
         let navigation = searchResult(id: "navigation", kind: .navigation)
         let setting = searchResult(id: "setting", kind: .setting)
         let command = searchResult(id: "command", kind: .command)
-        let ordered = MacToolsSearchPresentation.orderedResults([
+        let ordered = [
             command,
             navigation,
             setting
-        ])
+        ]
+        let sections = MacToolsSearchPresentation.sections(
+            query: "command",
+            results: ordered,
+            recentResults: []
+        )
 
-        XCTAssertEqual(ordered.map(\.id), ["navigation", "setting", "command"])
+        XCTAssertEqual(sections.map(\.kind), [.results])
+        XCTAssertEqual(sections.flatMap(\.results).map(\.id), [
+            "command", "navigation", "setting"
+        ])
         XCTAssertEqual(
             MacToolsSearchPresentation.quickSelectionNumber(
                 for: "setting",
@@ -449,6 +457,167 @@ final class MacToolsSearchTests: XCTestCase {
                 in: ordered
             )
         )
+    }
+
+    func testExactCommandMatchIsNotRegroupedBelowNavigation() {
+        let exactCommand = MacToolsSearchResult(
+            id: "command.dark",
+            kind: .command,
+            title: "Dark",
+            subtitle: "Appearance",
+            detail: "Use Dark appearance.",
+            keywords: [],
+            systemImage: "moon",
+            action: .executeAction(
+                ActionReference(key: ActionKey(providerID: "app", actionID: "dark"))
+            ),
+            confirmation: nil,
+            suggestionPriority: nil
+        )
+        let navigation = MacToolsSearchResult(
+            id: "navigation.dark-settings",
+            kind: .navigation,
+            title: "Dark Settings",
+            subtitle: "Settings",
+            detail: "Open appearance settings.",
+            keywords: [],
+            systemImage: "gearshape",
+            action: .navigate(destination: .general, target: nil),
+            confirmation: nil,
+            suggestionPriority: nil
+        )
+        let index = MacToolsSearchIndex(items: [navigation, exactCommand])
+
+        XCTAssertEqual(index.results(matching: "dark").map(\.id), [
+            "command.dark", "navigation.dark-settings"
+        ])
+    }
+
+    func testRecencyOnlyBreaksEquivalentLexicalMatches() {
+        let exact = MacToolsSearchResult(
+            id: "exact",
+            kind: .command,
+            title: "Display",
+            subtitle: "",
+            detail: "",
+            keywords: [],
+            systemImage: "display",
+            action: .executeAction(
+                ActionReference(key: ActionKey(providerID: "plugin", actionID: "exact"))
+            ),
+            confirmation: nil,
+            suggestionPriority: nil
+        )
+        let recentPrefixReference = ActionReference(
+            key: ActionKey(providerID: "plugin", actionID: "prefix")
+        )
+        let recentPrefix = MacToolsSearchResult(
+            id: "prefix",
+            kind: .command,
+            title: "Display Settings",
+            subtitle: "",
+            detail: "",
+            keywords: [],
+            systemImage: "display",
+            action: .executeAction(recentPrefixReference),
+            confirmation: nil,
+            suggestionPriority: nil
+        )
+        let index = MacToolsSearchIndex(items: [recentPrefix, exact])
+
+        XCTAssertEqual(
+            index.results(
+                matching: "display",
+                recentReferences: [recentPrefixReference]
+            ).map(\.id),
+            ["exact", "prefix"]
+        )
+    }
+
+    func testTypedSearchUsesTheDocumentedMatchTierOrder() {
+        let query = "display"
+        let exact = rankedSearchResult(id: "exact", title: "Display")
+        let prefix = rankedSearchResult(id: "prefix", title: "Display Settings")
+        let title = rankedSearchResult(id: "title", title: "Open Display Panel")
+        let keyword = rankedSearchResult(
+            id: "keyword",
+            title: "Monitor Tools",
+            keywords: [query]
+        )
+        let subtitle = rankedSearchResult(
+            id: "subtitle",
+            title: "Monitor",
+            subtitle: query
+        )
+        let detail = rankedSearchResult(
+            id: "detail",
+            title: "Screen",
+            detail: query
+        )
+        let index = MacToolsSearchIndex(
+            items: [detail, subtitle, keyword, title, prefix, exact]
+        )
+
+        XCTAssertEqual(index.results(matching: query).map(\.id), [
+            "exact", "prefix", "title", "keyword", "subtitle", "detail"
+        ])
+    }
+
+    func testRecencyBreaksEquivalentRelevanceTies() {
+        let olderReference = ActionReference(
+            key: ActionKey(providerID: "plugin", actionID: "older")
+        )
+        let newerReference = ActionReference(
+            key: ActionKey(providerID: "plugin", actionID: "newer")
+        )
+        let older = rankedSearchResult(
+            id: "older",
+            title: "Display Older",
+            reference: olderReference
+        )
+        let newer = rankedSearchResult(
+            id: "newer",
+            title: "Display Newer",
+            reference: newerReference
+        )
+        let index = MacToolsSearchIndex(items: [older, newer])
+
+        XCTAssertEqual(
+            index.results(
+                matching: "display",
+                recentReferences: [newerReference, olderReference]
+            ).map(\.id),
+            ["newer", "older"]
+        )
+    }
+
+    func testZeroQuerySectionsDeduplicateRecentFromSuggested() {
+        let recent = searchResult(id: "recent", kind: .command)
+        let suggested = searchResult(id: "suggested", kind: .navigation)
+
+        let sections = MacToolsSearchPresentation.sections(
+            query: "",
+            results: [recent, suggested],
+            recentResults: [recent]
+        )
+
+        XCTAssertEqual(sections.map(\.kind), [.recent, .suggested])
+        XCTAssertEqual(sections[0].results.map(\.id), ["recent"])
+        XCTAssertEqual(sections[1].results.map(\.id), ["suggested"])
+    }
+
+    func testParameterlessActionResultIDDoesNotDependOnCatalogPosition() throws {
+        let plugin = SearchableTestPlugin()
+        let result = try XCTUnwrap(
+            MacToolsSearchIndexBuilder.build(
+                pluginHost: makePluginHostForTests(plugins: [plugin])
+            ).items.first { item in
+                guard case let .executeAction(reference) = item.action else { return false }
+                return reference.key == ActionKey(providerID: "searchable", actionID: "sleep")
+            }
+        )
+
+        XCTAssertEqual(result.id, "action.searchable/sleep")
     }
 
     func testSearchIndexUsesUniqueStableIdentifiers() {
@@ -676,6 +845,32 @@ final class MacToolsSearchTests: XCTestCase {
             keywords: [],
             systemImage: "magnifyingglass",
             action: .navigate(destination: .general, target: nil),
+            confirmation: nil,
+            suggestionPriority: nil
+        )
+    }
+
+    private func rankedSearchResult(
+        id: String,
+        title: String,
+        subtitle: String = "",
+        detail: String = "",
+        keywords: [String] = [],
+        reference: ActionReference? = nil
+    ) -> MacToolsSearchResult {
+        MacToolsSearchResult(
+            id: id,
+            kind: .command,
+            title: title,
+            subtitle: subtitle,
+            detail: detail,
+            keywords: keywords,
+            systemImage: "command",
+            action: .executeAction(
+                reference ?? ActionReference(
+                    key: ActionKey(providerID: "plugin", actionID: id)
+                )
+            ),
             confirmation: nil,
             suggestionPriority: nil
         )
