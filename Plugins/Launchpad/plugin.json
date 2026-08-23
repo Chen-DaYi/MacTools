@@ -193,7 +193,6 @@
             ],
             "systemImage": "square.grid.3x3.fill",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

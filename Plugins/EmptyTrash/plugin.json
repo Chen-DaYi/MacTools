@@ -196,7 +196,6 @@
             ],
             "systemImage": "trash",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "automation"
             ],

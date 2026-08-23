@@ -50,7 +50,43 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "setup.requirements.title": "@standardSetup.requirements.title",
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "action.apply-preset.title": {
+      "ar": "تطبيق إعداد مروحة مسبق", "de": "Lüftervoreinstellung anwenden",
+      "en": "Apply Fan Preset", "es": "Aplicar preajuste de ventilador",
+      "fr": "Appliquer un préréglage de ventilateur", "ja": "ファンプリセットを適用",
+      "ko": "팬 사전 설정 적용", "pt": "Aplicar predefinição de ventoinha",
+      "ru": "Применить профиль вентилятора", "zh-Hans": "应用风扇预设",
+      "zh-Hant": "套用風扇預設"
+    },
+    "action.apply-preset.description": {
+      "ar": "طبّق إستراتيجية سرعة المروحة من إعداد مسبق محفوظ.",
+      "de": "Wendet die Lüfterstrategie einer gespeicherten Voreinstellung an.",
+      "en": "Apply the fan-speed strategy from a saved preset.",
+      "es": "Aplica la estrategia de velocidad de un preajuste guardado.",
+      "fr": "Applique la stratégie de vitesse d’un préréglage enregistré.",
+      "ja": "保存済みプリセットのファン速度戦略を適用します。",
+      "ko": "저장된 사전 설정의 팬 속도 전략을 적용합니다.",
+      "pt": "Aplica a estratégia de velocidade de uma predefinição salva.",
+      "ru": "Применяет стратегию скорости из сохранённого профиля.",
+      "zh-Hans": "应用已存预设中的风扇转速策略。",
+      "zh-Hant": "套用已儲存預設中的風扇轉速策略。"
+    },
+    "action.apply-preset.parameter-summary": {
+      "ar": "اختر إعداد المروحة المسبق المحفوظ لتطبيقه.",
+      "de": "Wähle die gespeicherte Lüftervoreinstellung aus, die angewendet werden soll.",
+      "en": "Select the saved fan preset to apply.",
+      "es": "Selecciona el preajuste de ventilador guardado que quieres aplicar.",
+      "fr": "Sélectionnez le préréglage de ventilateur enregistré à appliquer.",
+      "ja": "適用する保存済みファンプリセットを選択します。",
+      "ko": "적용할 저장된 팬 사전 설정을 선택하세요.",
+      "pt": "Selecione a predefinição de ventoinha salva que deseja aplicar.",
+      "ru": "Выберите сохранённый профиль вентилятора для применения.",
+      "zh-Hans": "选择要应用的已存风扇预设。",
+      "zh-Hant": "選擇要套用的已儲存風扇預設。"
+    }
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -176,8 +212,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@productStrings.display-name",
-        "description": "@productStrings.summary"
+        "title": "@productStrings.setup.requirements.title",
+        "description": "@productStrings.setup.requirements.description"
       }
     ],
     "optionalSurfaces": []
@@ -197,8 +233,8 @@
         "dynamicTemplates": [
           {
             "id": "apply-preset",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.apply-preset.title",
+            "description": "@productStrings.action.apply-preset.description",
             "entrySource": "saved-fan-presets",
             "parameters": [
               {
@@ -208,7 +244,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.apply-preset.parameter-summary",
             "localOnlyIdentity": false,
             "keywords": [
               "fan",

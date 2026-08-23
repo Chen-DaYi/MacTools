@@ -50,7 +50,9 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "setup.requirements.title": "@standardSetup.requirements.title",
+    "setup.requirements.description": "@standardSetup.requirements.description"
   },
   "version": "1.0.0",
   "minHostVersion": "1.2.0",
@@ -180,8 +182,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@productStrings.display-name",
-        "description": "@productStrings.summary"
+        "title": "@productStrings.setup.requirements.title",
+        "description": "@productStrings.setup.requirements.description"
       }
     ],
     "optionalSurfaces": []

@@ -50,7 +50,10 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.launch.title": "@localizable.action.launch.title",
+    "action.launch.description": "@localizable.action.launch.description",
+    "action.launch.parameter-summary": "@localizable.action.launch.app"
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -186,8 +189,8 @@
         "dynamicTemplates": [
           {
             "id": "launch",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.launch.title",
+            "description": "@productStrings.action.launch.description",
             "entrySource": "installed-applications",
             "parameters": [
               {
@@ -197,7 +200,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.launch.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "app",

@@ -55,6 +55,8 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
 
         self.assertIn("origin/main:docs/plugins/v5/catalog.json", workflow)
         self.assertIn('echo "PLUGIN_RELEASE_MODE=all"', workflow)
+        self.assertIn('echo "PLUGIN_RELEASE_REQUIRE_VERSION_BUMP=true"', workflow)
+        self.assertIn("plan_args+=(--require-version-bump)", workflow)
 
     def test_legacy_plugin_kit_release_is_rejected_before_tagging(self) -> None:
         with self.assertRaisesRegex(release.ReleaseError, "catalog 已冻结"):
@@ -192,6 +194,71 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
 
 
 class WorkflowReleasePlanningTests(unittest.TestCase):
+    def test_compatibility_migration_rejects_equal_published_versions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            plugin_directory = root / "Plugins" / "Demo"
+            plugin_directory.mkdir(parents=True)
+            manifest_path = plugin_directory / "plugin.json"
+            manifest = {
+                "id": "demo",
+                "displayName": "Demo",
+                "version": "1.0.0",
+                "pluginKitVersion": 5,
+            }
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            previous_catalog = root / "catalog.json"
+            previous_catalog.write_text(
+                json.dumps(
+                    {
+                        "pluginKitVersion": 5,
+                        "plugins": [
+                            {
+                                "id": "demo",
+                                "version": "1.0.0",
+                                "pluginKitVersion": 5,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = root / "plan.json"
+            command = [
+                sys.executable,
+                str(PLAN_SCRIPT_PATH),
+                "--mode", "all",
+                "--require-version-bump",
+                "--source-dir", "Plugins",
+                "--previous-catalog", str(previous_catalog),
+                "--output", str(output),
+            ]
+
+            rejected = subprocess.run(
+                command,
+                cwd=root,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("compatibility migration requires a version bump", rejected.stderr)
+
+            manifest["version"] = "1.0.1"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            accepted = subprocess.run(
+                command,
+                cwd=root,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            plan = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(plan["selectedPluginIDs"], ["demo"])
+
     def test_default_plan_rejects_unbumped_plugin_after_plugin_kit_change(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

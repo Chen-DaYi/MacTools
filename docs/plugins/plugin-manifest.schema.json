@@ -38,6 +38,7 @@
           {"enum": ["@displayName", "@summary"]},
           {"type": "string", "pattern": "^@localizable\\.[^\\s]+$"},
           {"type": "string", "pattern": "^@standardAction\\.(?:toggle|set-enabled)\\.(?:title|description)$"},
+          {"type": "string", "pattern": "^@standardSetup\\.requirements\\.(?:title|description)$"},
           {"$ref": "#/$defs/completeLocalizedText"}
         ]
       }

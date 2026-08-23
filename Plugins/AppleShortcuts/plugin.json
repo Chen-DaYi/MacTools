@@ -50,7 +50,22 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "setup.requirements.title": "@standardSetup.requirements.title",
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "action.run-shortcut.parameter-summary": {
+      "ar": "اختر اختصار Apple المخزن على هذا الـ Mac لتشغيله.",
+      "de": "Wähle den auf diesem Mac gespeicherten Apple-Kurzbefehl aus, der ausgeführt werden soll.",
+      "en": "Select the Apple Shortcut stored on this Mac to run.",
+      "es": "Selecciona el atajo de Apple guardado en este Mac que quieres ejecutar.",
+      "fr": "Sélectionnez le raccourci Apple enregistré sur ce Mac à exécuter.",
+      "ja": "この Mac に保存されている Apple ショートカットから、実行する項目を選択します。",
+      "ko": "이 Mac에 저장된 Apple 단축어 중 실행할 항목을 선택하세요.",
+      "pt": "Selecione o Atalho Apple salvo neste Mac para executar.",
+      "ru": "Выберите сохранённую на этом Mac быструю команду Apple для запуска.",
+      "zh-Hans": "选择存储在此 Mac 上、要运行的 Apple 快捷指令。",
+      "zh-Hant": "選擇儲存在此 Mac 上、要執行的 Apple 捷徑。"
+    }
   },
   "version": "1.0.0",
   "minHostVersion": "1.2.0",
@@ -179,8 +194,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@productStrings.display-name",
-        "description": "@productStrings.summary"
+        "title": "@productStrings.setup.requirements.title",
+        "description": "@productStrings.setup.requirements.description"
       }
     ],
     "optionalSurfaces": []
@@ -204,7 +219,7 @@
             "description": "@productStrings.summary",
             "entrySource": "apple-shortcuts",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.run-shortcut.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "apple",

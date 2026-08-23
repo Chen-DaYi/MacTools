@@ -192,7 +192,6 @@
             ],
             "systemImage": "trash",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [

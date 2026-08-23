@@ -205,7 +205,6 @@
             ],
             "systemImage": "arrow.clockwise.circle.fill",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [

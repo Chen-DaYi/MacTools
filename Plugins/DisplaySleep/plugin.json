@@ -191,7 +191,6 @@
             ],
             "systemImage": "display",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

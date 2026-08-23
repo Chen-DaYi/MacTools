@@ -198,7 +198,6 @@
             ],
             "systemImage": "wrench.and.screwdriver.fill",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

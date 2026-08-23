@@ -102,6 +102,7 @@ jobs:
           {
             echo "TAG=$TAG"
             echo "PLUGIN_RELEASE_MODE=$MODE"
+            echo "PLUGIN_RELEASE_REQUIRE_VERSION_BUMP=false"
             echo "PLUGIN_RELEASE_SELECTION=$PLUGIN_SELECTION"
             echo "PLUGIN_RELEASE_TITLE=MacTools Plugins ${RELEASE_SUFFIX}"
             echo "PLUGIN_RELEASE_NOTES_URL=https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
@@ -123,6 +124,7 @@ jobs:
                git show origin/main:docs/plugins/v5/catalog.json > "$PLUGIN_PREVIOUS_CATALOG_PATH" 2>/dev/null; then
             echo "Using docs/plugins/v5/catalog.json from origin/main as the same-ABI schema migration baseline."
             echo "PLUGIN_RELEASE_MODE=all" >> "$GITHUB_ENV"
+            echo "PLUGIN_RELEASE_REQUIRE_VERSION_BUMP=true" >> "$GITHUB_ENV"
           elif PREVIOUS_VERSIONED_CATALOG="$(git ls-tree -r --name-only origin/main docs/plugins | \
                python3 -c 'import re,sys; current=int(sys.argv[1]); paths=[path.strip() for path in sys.stdin if re.fullmatch(r"docs/plugins/v\d+/catalog\.json", path.strip())]; candidates=[(int(re.search(r"/v(\d+)/", path).group(1)), path) for path in paths if int(re.search(r"/v(\d+)/", path).group(1)) < current]; print(max(candidates)[1] if candidates else "")' \
                "$PLUGIN_KIT_VERSION")" && \
@@ -150,6 +152,9 @@ jobs:
           )
           if [[ -n "$PLUGIN_RELEASE_SELECTION" ]]; then
             plan_args+=(--plugins "$PLUGIN_RELEASE_SELECTION")
+          fi
+          if [[ "$PLUGIN_RELEASE_REQUIRE_VERSION_BUMP" == "true" ]]; then
+            plan_args+=(--require-version-bump)
           fi
 
           scripts/plugins/plan-plugin-release.py "${plan_args[@]}"

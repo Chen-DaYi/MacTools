@@ -50,7 +50,24 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "setup.requirements.title": "@standardSetup.requirements.title",
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "action.set-resolution.title": "@localizable.metadata.title",
+    "action.set-resolution.description": "@localizable.metadata.description",
+    "action.set-resolution.parameter-summary": {
+      "ar": "اختر شاشة وحدد الحجم المنطقي وحجم البكسل ومعدل التحديث.",
+      "de": "Wähle ein Display und gib logische Größe, Pixelgröße und Bildwiederholrate an.",
+      "en": "Select a display and specify logical size, pixel size, and refresh rate.",
+      "es": "Selecciona una pantalla y especifica el tamaño lógico, el tamaño en píxeles y la frecuencia de actualización.",
+      "fr": "Sélectionnez un écran et indiquez la taille logique, la taille en pixels et la fréquence de rafraîchissement.",
+      "ja": "ディスプレイを選択し、論理サイズ、ピクセルサイズ、リフレッシュレートを指定します。",
+      "ko": "디스플레이를 선택하고 논리적 크기, 픽셀 크기 및 새로 고침 빈도를 지정하세요.",
+      "pt": "Selecione um monitor e especifique o tamanho lógico, o tamanho em pixels e a taxa de atualização.",
+      "ru": "Выберите дисплей и укажите логический размер, размер в пикселях и частоту обновления.",
+      "zh-Hans": "选择显示器，并指定逻辑尺寸、像素尺寸和刷新率。",
+      "zh-Hant": "選擇顯示器，並指定邏輯尺寸、像素尺寸和更新率。"
+    }
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -168,8 +185,8 @@
     "steps": [
       {
         "id": "review-requirements",
-        "title": "@productStrings.display-name",
-        "description": "@productStrings.summary"
+        "title": "@productStrings.setup.requirements.title",
+        "description": "@productStrings.setup.requirements.description"
       }
     ],
     "optionalSurfaces": []
@@ -189,8 +206,8 @@
         "dynamicTemplates": [
           {
             "id": "set-resolution",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.set-resolution.title",
+            "description": "@productStrings.action.set-resolution.description",
             "entrySource": "connected-display-modes",
             "parameters": [
               {
@@ -230,7 +247,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.set-resolution.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "display",

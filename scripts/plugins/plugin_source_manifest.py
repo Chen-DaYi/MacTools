@@ -21,6 +21,7 @@ SUPPORTED_LOCALE_SET = SUPPORTED_LOCALES
 BASE_LOCALIZED_REFERENCES = {"@displayName", "@summary"}
 LOCALIZABLE_STRING_REFERENCE_PREFIX = "@localizable."
 STANDARD_ACTION_REFERENCE_PREFIX = "@standardAction."
+STANDARD_SETUP_REFERENCE_PREFIX = "@standardSetup."
 PRODUCT_STRING_REFERENCE_PREFIX = "@productStrings."
 STANDARD_ACTION_TEMPLATES = {
     "toggle.title": {
@@ -65,6 +66,114 @@ STANDARD_ACTION_TEMPLATES = {
         "zh-Hans": "设置是否启用{displayName}。",
         "zh-Hant": "設定是否啟用{displayName}。",
     },
+}
+STANDARD_SETUP_TEMPLATES = {
+    "requirements.title": {
+        "ar": "إعداد {displayName}", "de": "{displayName} einrichten",
+        "en": "Set Up {displayName}", "es": "Configurar {displayName}",
+        "fr": "Configurer {displayName}", "ja": "{displayName}を設定",
+        "ko": "{displayName} 설정", "pt": "Configurar {displayName}",
+        "ru": "Настройка «{displayName}»", "zh-Hans": "设置{displayName}",
+        "zh-Hant": "設定{displayName}",
+    },
+    "requirements.description": {
+        "ar": "قبل استخدام هذه الإضافة، راجع المتطلبات التالية واستوفها: {requirements}.",
+        "de": "Prüfe und erfülle vor der Verwendung dieses Plugins folgende Anforderungen: {requirements}.",
+        "en": "Before using this plugin, review and satisfy these requirements: {requirements}.",
+        "es": "Antes de usar este plugin, revisa y cumple estos requisitos: {requirements}.",
+        "fr": "Avant d’utiliser ce module, vérifiez et remplissez les conditions suivantes : {requirements}.",
+        "ja": "このプラグインを使用する前に、次の要件を確認して満たしてください：{requirements}。",
+        "ko": "이 플러그인을 사용하기 전에 다음 요구 사항을 확인하고 충족하세요: {requirements}.",
+        "pt": "Antes de usar este plugin, revise e cumpra estes requisitos: {requirements}.",
+        "ru": "Перед использованием плагина проверьте и выполните следующие требования: {requirements}.",
+        "zh-Hans": "使用此插件前，请检查并满足以下要求：{requirements}。",
+        "zh-Hant": "使用此外掛程式前，請檢查並滿足以下要求：{requirements}。",
+    },
+}
+
+
+def _localized_requirement(
+    en: str,
+    *,
+    ar: str,
+    de: str,
+    es: str,
+    fr: str,
+    ja: str,
+    ko: str,
+    pt: str,
+    ru: str,
+    zh_hans: str,
+    zh_hant: str,
+) -> dict[str, str]:
+    return {
+        "ar": ar, "de": de, "en": en, "es": es, "fr": fr, "ja": ja,
+        "ko": ko, "pt": pt, "ru": ru, "zh-Hans": zh_hans, "zh-Hant": zh_hant,
+    }
+
+
+LOCALIZED_REQUIREMENT_NAMES = {
+    "accessibility": _localized_requirement(
+        "Accessibility permission", ar="إذن تسهيلات الاستخدام", de="Bedienungshilfen-Berechtigung",
+        es="permiso de Accesibilidad", fr="autorisation Accessibilité", ja="アクセシビリティ権限",
+        ko="손쉬운 사용 권한", pt="permissão de Acessibilidade", ru="доступ к Универсальному доступу",
+        zh_hans="辅助功能权限", zh_hant="輔助使用權限",
+    ),
+    "automation": _localized_requirement(
+        "Automation permission", ar="إذن الأتمتة", de="Automation-Berechtigung",
+        es="permiso de Automatización", fr="autorisation Automatisation", ja="オートメーション権限",
+        ko="자동화 권한", pt="permissão de Automação", ru="доступ к Автоматизации",
+        zh_hans="自动化权限", zh_hant="自動化權限",
+    ),
+    "calendarFullAccess": _localized_requirement(
+        "Full Calendar Access", ar="وصول كامل إلى التقويم", de="Vollzugriff auf Kalender",
+        es="acceso total al Calendario", fr="accès complet au calendrier", ja="カレンダーへのフルアクセス",
+        ko="캘린더 전체 접근", pt="acesso total ao Calendário", ru="полный доступ к Календарю",
+        zh_hans="日历完全访问权限", zh_hant="行事曆完整取用權限",
+    ),
+    "inputMonitoring": _localized_requirement(
+        "Input Monitoring permission", ar="إذن مراقبة الإدخال", de="Eingabeüberwachung-Berechtigung",
+        es="permiso de Monitorización de entrada", fr="autorisation Surveillance de l’entrée",
+        ja="入力監視権限", ko="입력 모니터링 권한", pt="permissão de Monitoramento de Entrada",
+        ru="доступ к Мониторингу ввода", zh_hans="输入监控权限", zh_hant="輸入監控權限",
+    ),
+    "screen-recording": _localized_requirement(
+        "Screen Recording permission", ar="إذن تسجيل الشاشة", de="Bildschirmaufnahme-Berechtigung",
+        es="permiso de Grabación de pantalla", fr="autorisation Enregistrement de l’écran",
+        ja="画面収録権限", ko="화면 기록 권한", pt="permissão de Gravação de Tela",
+        ru="доступ к Записи экрана", zh_hans="屏幕录制权限", zh_hant="螢幕錄製權限",
+    ),
+    "system-audio-recording": _localized_requirement(
+        "System Audio Recording permission", ar="إذن تسجيل صوت النظام",
+        de="Systemaudioaufnahme-Berechtigung", es="permiso de grabación de audio del sistema",
+        fr="autorisation d’enregistrement audio du système", ja="システムオーディオ録音権限",
+        ko="시스템 오디오 녹음 권한", pt="permissão de gravação de áudio do sistema",
+        ru="доступ к записи системного аудио", zh_hans="系统音频录制权限", zh_hant="系統音訊錄製權限",
+    ),
+    "built-in battery": _localized_requirement(
+        "built-in battery", ar="بطارية مدمجة", de="integrierter Akku", es="batería integrada",
+        fr="batterie intégrée", ja="内蔵バッテリー", ko="내장 배터리", pt="bateria integrada",
+        ru="встроенный аккумулятор", zh_hans="内置电池", zh_hant="內建電池",
+    ),
+    "connected display": _localized_requirement(
+        "connected display", ar="شاشة متصلة", de="angeschlossenes Display", es="pantalla conectada",
+        fr="écran connecté", ja="接続済みディスプレイ", ko="연결된 디스플레이",
+        pt="monitor conectado", ru="подключённый дисплей", zh_hans="已连接的显示器", zh_hant="已連接的顯示器",
+    ),
+    "controllable system fans": _localized_requirement(
+        "controllable system fans", ar="مراوح نظام قابلة للتحكم", de="steuerbare Systemlüfter",
+        es="ventiladores del sistema controlables", fr="ventilateurs système contrôlables",
+        ja="制御可能なシステムファン", ko="제어 가능한 시스템 팬", pt="ventoinhas do sistema controláveis",
+        ru="управляемые системные вентиляторы", zh_hans="可控制的系统风扇", zh_hant="可控制的系統風扇",
+    ),
+    "Sidecar-compatible Mac and display": _localized_requirement(
+        "Sidecar-compatible Mac and display", ar="جهاز Mac وشاشة متوافقان مع Sidecar",
+        de="Sidecar-kompatibler Mac und Bildschirm", es="Mac y pantalla compatibles con Sidecar",
+        fr="Mac et écran compatibles avec Sidecar", ja="Sidecar 対応の Mac とディスプレイ",
+        ko="Sidecar 호환 Mac 및 디스플레이", pt="Mac e monitor compatíveis com Sidecar",
+        ru="Mac и дисплей с поддержкой Sidecar", zh_hans="支持 Sidecar 的 Mac 和显示器",
+        zh_hant="支援 Sidecar 的 Mac 和顯示器",
+    ),
 }
 VALID_CATEGORIES = {
     "display", "audio", "system", "storage", "productivity", "monitoring", "other"
@@ -347,6 +456,68 @@ def _localizable_string(
     return localized_value
 
 
+def _standard_setup_string(
+    reference: str,
+    manifest: dict,
+    plugin_id: str,
+    field: str,
+) -> dict[str, str]:
+    template_key = reference.removeprefix(STANDARD_SETUP_REFERENCE_PREFIX)
+    templates = STANDARD_SETUP_TEMPLATES.get(template_key)
+    if templates is None:
+        _fail(plugin_id, field, f"unknown standard setup string {template_key}")
+
+    metadata = manifest.get("localizedMetadata")
+    if not isinstance(metadata, dict) or set(metadata) != SUPPORTED_LOCALE_SET:
+        _fail(
+            plugin_id,
+            field,
+            f"{reference} requires localizedMetadata for all supported locales",
+        )
+    requirements = manifest.get("requirements")
+    if not isinstance(requirements, dict):
+        _fail(plugin_id, field, f"{reference} requires a requirements section")
+
+    requirement_values: list[dict[str, str]] = []
+    for permission_id in requirements.get("permissionIDs", []):
+        localized = LOCALIZED_REQUIREMENT_NAMES.get(permission_id)
+        if localized is None:
+            _fail(plugin_id, field, f"cannot localize permission requirement {permission_id}")
+        requirement_values.append(localized)
+    for hardware in requirements.get("hardware", []):
+        localized = LOCALIZED_REQUIREMENT_NAMES.get(hardware)
+        if localized is None:
+            _fail(plugin_id, field, f"cannot localize hardware requirement {hardware}")
+        requirement_values.append(localized)
+    for application in requirements.get("applications", []):
+        name = application.get("name") if isinstance(application, dict) else None
+        if not isinstance(name, str) or not name.strip():
+            _fail(plugin_id, field, "cannot localize an unnamed application requirement")
+        requirement_values.append({locale: name for locale in SUPPORTED_LOCALE_ORDER})
+    for executable in requirements.get("executables", []):
+        if not isinstance(executable, str) or not executable.strip():
+            _fail(plugin_id, field, "cannot localize an unnamed executable requirement")
+        requirement_values.append({locale: executable for locale in SUPPORTED_LOCALE_ORDER})
+    if not requirement_values:
+        _fail(plugin_id, field, f"{reference} requires at least one declared requirement")
+
+    separators = {"ar": "، ", "ja": "、", "zh-Hans": "、", "zh-Hant": "、"}
+    localized_value = {}
+    for locale in SUPPORTED_LOCALE_ORDER:
+        locale_metadata = metadata.get(locale)
+        display_name = locale_metadata.get("displayName") if isinstance(locale_metadata, dict) else None
+        if not isinstance(display_name, str) or not display_name.strip():
+            _fail(plugin_id, f"localizedMetadata.{locale}.displayName", "must be a non-empty string")
+        joined_requirements = separators.get(locale, ", ").join(
+            value[locale] for value in requirement_values
+        )
+        localized_value[locale] = templates[locale].format(
+            displayName=display_name,
+            requirements=joined_requirements,
+        )
+    return localized_value
+
+
 def expand_localized_references(
     manifest: dict,
     manifest_path: Path | None = None,
@@ -423,6 +594,13 @@ def expand_localized_references(
                     )
                 localized_value[locale] = templates[locale].format(displayName=display_name)
             reference_values[key] = localized_value
+        elif isinstance(value, str) and value.startswith(STANDARD_SETUP_REFERENCE_PREFIX):
+            reference_values[key] = _standard_setup_string(
+                value,
+                projected,
+                plugin_id,
+                f"productStrings.{key}",
+            )
         elif isinstance(value, dict):
             _localized_text(value, plugin_id, f"productStrings.{key}")
             reference_values[key] = dict(value)
@@ -430,7 +608,8 @@ def expand_localized_references(
             _fail(
                 plugin_id,
                 f"productStrings.{key}",
-                "must be @displayName, @summary, @localizable.<key>, @standardAction.<key>, or a complete locale-to-string object",
+                "must be @displayName, @summary, @localizable.<key>, @standardAction.<key>, "
+                "@standardSetup.<key>, or a complete locale-to-string object",
             )
 
     for field, value in localized_fields:
@@ -772,6 +951,12 @@ def _validate_actions(actions: dict, plugin_id: str) -> None:
             if "parameterSummary" in action:
                 _localized_text(action["parameterSummary"], plugin_id, f"{action_field}.parameterSummary")
             _validate_parameters(action["parameters"], plugin_id, f"{action_field}.parameters")
+            if not action["parameters"] and "parameterSummary" in action:
+                _fail(
+                    plugin_id,
+                    f"{action_field}.parameterSummary",
+                    "is not allowed for an action without parameters",
+                )
             _validate_action_policy(action, plugin_id, action_field)
         for index, template in enumerate(dynamic_templates):
             template_field = f"{field}.dynamicTemplates[{index}]"
@@ -788,6 +973,19 @@ def _validate_actions(actions: dict, plugin_id: str) -> None:
             _localized_text(template["title"], plugin_id, f"{template_field}.title")
             _localized_text(template["description"], plugin_id, f"{template_field}.description")
             _localized_text(template["parameterSummary"], plugin_id, f"{template_field}.parameterSummary")
+            duplicate_summary_locales = [
+                locale
+                for locale in SUPPORTED_LOCALE_ORDER
+                if template["parameterSummary"][locale]
+                in {template["title"][locale], template["description"][locale]}
+            ]
+            if duplicate_summary_locales:
+                _fail(
+                    plugin_id,
+                    f"{template_field}.parameterSummary",
+                    "must describe the template parameters instead of repeating the title or "
+                    "description; repeated locales: " + ", ".join(duplicate_summary_locales),
+                )
             _non_empty_string(template["entrySource"], plugin_id, f"{template_field}.entrySource")
             if not isinstance(template["localOnlyIdentity"], bool):
                 _fail(plugin_id, f"{template_field}.localOnlyIdentity", "must be a boolean")
@@ -997,11 +1195,28 @@ def _validate_manifest(
         _require_keys(setup, {"steps", "optionalSurfaces"}, plugin_id, "setup")
         if not isinstance(setup["steps"], list):
             _fail(plugin_id, "setup.steps", "must be an array")
+        if (
+            requirements is not None
+            and requirements["setupComplexity"] in {"guided", "advanced"}
+            and not setup["steps"]
+        ):
+            _fail(plugin_id, "setup.steps", "guided and advanced setup requires at least one step")
         for index, step in enumerate(setup["steps"]):
             _require_keys(step, {"id", "title", "description"}, plugin_id, f"setup.steps[{index}]")
             _identifier(step["id"], plugin_id, f"setup.steps[{index}].id")
             _localized_text(step["title"], plugin_id, f"setup.steps[{index}].title")
             _localized_text(step["description"], plugin_id, f"setup.steps[{index}].description")
+            localized_metadata = manifest.get("localizedMetadata", {})
+            if all(
+                step["title"].get(locale) == localized_metadata.get(locale, {}).get("displayName")
+                and step["description"].get(locale) == localized_metadata.get(locale, {}).get("summary")
+                for locale in SUPPORTED_LOCALE_ORDER
+            ):
+                _fail(
+                    plugin_id,
+                    f"setup.steps[{index}]",
+                    "must describe concrete setup requirements instead of repeating product metadata",
+                )
         test_action = setup.get("suggestedTestAction")
         if test_action is not None:
             _require_keys(test_action, {"providerID", "actionID"}, plugin_id, "setup.suggestedTestAction")

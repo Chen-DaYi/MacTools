@@ -218,7 +218,6 @@
             ],
             "systemImage": "icloud.and.arrow.up.fill",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

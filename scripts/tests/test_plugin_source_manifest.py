@@ -72,6 +72,20 @@ class PluginSourceManifestTests(unittest.TestCase):
         )
         self.assertNotIn("productStrings", projected)
 
+    def test_standard_setup_references_expand_declared_requirements(self) -> None:
+        path = PLUGINS_ROOT / "Calendar" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        projected, _ = validate_and_project_manifest(
+            manifest,
+            path,
+            load_known_plugin_ids(PLUGINS_ROOT),
+        )
+
+        step = projected["setup"]["steps"][0]
+        self.assertEqual(step["title"]["en"], "Set Up Calendar")
+        self.assertIn("Full Calendar Access", step["description"]["en"])
+        self.assertIn("Automation permission", step["description"]["en"])
+
     def test_repository_product_text_uses_only_declared_product_string_references(self) -> None:
         known_ids = load_known_plugin_ids(PLUGINS_ROOT)
         for path in sorted(PLUGINS_ROOT.glob("*/plugin.json")):
@@ -511,6 +525,37 @@ class PluginSourceManifestTests(unittest.TestCase):
         provider["dynamicTemplates"].append(copy.deepcopy(provider["dynamicTemplates"][0]))
 
         with self.assertRaisesRegex(ManifestValidationError, "duplicates an action or template key"):
+            validate_and_project_manifest(manifest, path, load_known_plugin_ids(PLUGINS_ROOT))
+
+    def test_parameterless_static_action_rejects_parameter_summary(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        action = manifest["actions"]["providers"][0]["staticActions"][0]
+        action["parameterSummary"] = action["description"]
+
+        with self.assertRaisesRegex(ManifestValidationError, "without parameters"):
+            validate_and_project_manifest(manifest, path, load_known_plugin_ids(PLUGINS_ROOT))
+
+    def test_dynamic_template_rejects_repeated_parameter_summary(self) -> None:
+        path = PLUGINS_ROOT / "AppHotkey" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        template = manifest["actions"]["providers"][0]["dynamicTemplates"][0]
+        template["parameterSummary"] = template["description"]
+        del manifest["productStrings"]["action.launch.parameter-summary"]
+
+        with self.assertRaisesRegex(ManifestValidationError, "must describe the template parameters"):
+            validate_and_project_manifest(manifest, path, load_known_plugin_ids(PLUGINS_ROOT))
+
+    def test_guided_setup_rejects_product_metadata_placeholder(self) -> None:
+        path = PLUGINS_ROOT / "Calendar" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        step = manifest["setup"]["steps"][0]
+        step["title"] = "@productStrings.display-name"
+        step["description"] = "@productStrings.summary"
+        del manifest["productStrings"]["setup.requirements.title"]
+        del manifest["productStrings"]["setup.requirements.description"]
+
+        with self.assertRaisesRegex(ManifestValidationError, "concrete setup requirements"):
             validate_and_project_manifest(manifest, path, load_known_plugin_ids(PLUGINS_ROOT))
 
     def test_multi_action_providers_publish_distinct_localized_copy(self) -> None:
