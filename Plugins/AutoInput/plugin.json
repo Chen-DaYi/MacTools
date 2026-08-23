@@ -50,7 +50,15 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.toggle.title": "@standardAction.toggle.title",
+    "action.toggle.description": "@standardAction.toggle.description",
+    "action.set-enabled.title": "@standardAction.set-enabled.title",
+    "action.set-enabled.description": "@standardAction.set-enabled.description",
+    "action.set-enabled.parameter-summary": "@standardAction.set-enabled.description",
+    "action.select-input-source.title": "@localizable.action.selectSource.definitionTitle",
+    "action.select-input-source.description": "@localizable.action.selectSource.description",
+    "action.select-input-source.parameter-summary": "@localizable.action.selectSource.parameterTitle"
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -194,8 +202,8 @@
         "staticActions": [
           {
             "id": "toggle",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.toggle.title",
+            "description": "@productStrings.action.toggle.description",
             "keywords": [
               "自动切换输入法",
               "按应用记住并自动切换输入法",
@@ -205,7 +213,6 @@
             ],
             "systemImage": "keyboard",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -224,8 +231,8 @@
           },
           {
             "id": "set-enabled",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.set-enabled.title",
+            "description": "@productStrings.action.set-enabled.description",
             "keywords": [
               "自动切换输入法",
               "按应用记住并自动切换输入法",
@@ -243,7 +250,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.set-enabled.parameter-summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -264,8 +271,8 @@
         "dynamicTemplates": [
           {
             "id": "select-input-source",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.select-input-source.title",
+            "description": "@productStrings.action.select-input-source.description",
             "entrySource": "installed-input-sources",
             "parameters": [
               {
@@ -275,7 +282,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.select-input-source.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "auto",

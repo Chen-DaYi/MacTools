@@ -50,7 +50,12 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.set-tracking-enabled.title": "@standardAction.set-enabled.title",
+    "action.set-tracking-enabled.description": "@standardAction.set-enabled.description",
+    "action.set-tracking-enabled.parameter-summary": "@standardAction.set-enabled.description",
+    "action.reset-today.title": "@localizable.panel.action.resetToday",
+    "action.reset-today.description": "@localizable.panel.action.resetToday"
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -194,8 +199,8 @@
         "staticActions": [
           {
             "id": "set-tracking-enabled",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.set-tracking-enabled.title",
+            "description": "@productStrings.action.set-tracking-enabled.description",
             "keywords": [
               "活动统计",
               "统计输入、前台应用使用时长和 AI 编程活动",
@@ -214,7 +219,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.set-tracking-enabled.parameter-summary",
             "permissionIDs": [
               "inputMonitoring"
             ],
@@ -235,8 +240,8 @@
           },
           {
             "id": "reset-today",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.reset-today.title",
+            "description": "@productStrings.action.reset-today.description",
             "keywords": [
               "活动统计",
               "清空今日统计",
@@ -247,7 +252,6 @@
             ],
             "systemImage": "arrow.counterclockwise",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [

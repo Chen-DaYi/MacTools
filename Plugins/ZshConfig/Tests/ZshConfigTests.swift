@@ -7,7 +7,10 @@ final class ZshConfigTests: XCTestCase {
         let plugin = ZshConfigPlugin()
 
         XCTAssertEqual(plugin.permissionRequirements.map(\.id), ["automation"])
-        XCTAssertTrue(plugin.permissionState(for: "automation").isGranted)
+        let state = plugin.permissionState(for: "automation")
+        XCTAssertFalse(state.isGranted)
+        XCTAssertEqual(state.statusText, "按需确认")
+        XCTAssertEqual(state.statusTone, .neutral)
     }
 
     func testFileTypesExposeStableFilenamesAndMetadata() throws {

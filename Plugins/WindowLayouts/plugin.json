@@ -50,7 +50,82 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.toggle-full-screen.title": "@localizable.action.toggle-full-screen.title",
+    "action.toggle-full-screen.description": "@localizable.action.toggle-full-screen.description",
+    "action.left-half.title": "@localizable.action.left-half.title",
+    "action.left-half.description": "@localizable.action.left-half.description",
+    "action.right-half.title": "@localizable.action.right-half.title",
+    "action.right-half.description": "@localizable.action.right-half.description",
+    "action.top-half.title": "@localizable.action.top-half.title",
+    "action.top-half.description": "@localizable.action.top-half.description",
+    "action.bottom-half.title": "@localizable.action.bottom-half.title",
+    "action.bottom-half.description": "@localizable.action.bottom-half.description",
+    "action.top-left-quarter.title": "@localizable.action.top-left-quarter.title",
+    "action.top-left-quarter.description": "@localizable.action.top-left-quarter.description",
+    "action.top-right-quarter.title": "@localizable.action.top-right-quarter.title",
+    "action.top-right-quarter.description": "@localizable.action.top-right-quarter.description",
+    "action.bottom-left-quarter.title": "@localizable.action.bottom-left-quarter.title",
+    "action.bottom-left-quarter.description": "@localizable.action.bottom-left-quarter.description",
+    "action.bottom-right-quarter.title": "@localizable.action.bottom-right-quarter.title",
+    "action.bottom-right-quarter.description": "@localizable.action.bottom-right-quarter.description",
+    "action.maximize.title": "@localizable.action.maximize.title",
+    "action.maximize.description": "@localizable.action.maximize.description",
+    "action.maximize-height.title": "@localizable.action.maximize-height.title",
+    "action.maximize-height.description": "@localizable.action.maximize-height.description",
+    "action.maximize-width.title": "@localizable.action.maximize-width.title",
+    "action.maximize-width.description": "@localizable.action.maximize-width.description",
+    "action.center.title": "@localizable.action.center.title",
+    "action.center.description": "@localizable.action.center.description",
+    "action.reasonable-size.title": "@localizable.action.reasonable-size.title",
+    "action.reasonable-size.description": "@localizable.action.reasonable-size.description",
+    "action.move-to-top-edge.title": "@localizable.action.move-to-top-edge.title",
+    "action.move-to-top-edge.description": "@localizable.action.move-to-top-edge.description",
+    "action.move-to-bottom-edge.title": "@localizable.action.move-to-bottom-edge.title",
+    "action.move-to-bottom-edge.description": "@localizable.action.move-to-bottom-edge.description",
+    "action.move-to-left-edge.title": "@localizable.action.move-to-left-edge.title",
+    "action.move-to-left-edge.description": "@localizable.action.move-to-left-edge.description",
+    "action.move-to-right-edge.title": "@localizable.action.move-to-right-edge.title",
+    "action.move-to-right-edge.description": "@localizable.action.move-to-right-edge.description",
+    "action.first-third.title": "@localizable.action.first-third.title",
+    "action.first-third.description": "@localizable.action.first-third.description",
+    "action.first-two-thirds.title": "@localizable.action.first-two-thirds.title",
+    "action.first-two-thirds.description": "@localizable.action.first-two-thirds.description",
+    "action.center-third.title": "@localizable.action.center-third.title",
+    "action.center-third.description": "@localizable.action.center-third.description",
+    "action.last-two-thirds.title": "@localizable.action.last-two-thirds.title",
+    "action.last-two-thirds.description": "@localizable.action.last-two-thirds.description",
+    "action.last-third.title": "@localizable.action.last-third.title",
+    "action.last-third.description": "@localizable.action.last-third.description",
+    "action.first-fourth.title": "@localizable.action.first-fourth.title",
+    "action.first-fourth.description": "@localizable.action.first-fourth.description",
+    "action.second-fourth.title": "@localizable.action.second-fourth.title",
+    "action.second-fourth.description": "@localizable.action.second-fourth.description",
+    "action.third-fourth.title": "@localizable.action.third-fourth.title",
+    "action.third-fourth.description": "@localizable.action.third-fourth.description",
+    "action.last-fourth.title": "@localizable.action.last-fourth.title",
+    "action.last-fourth.description": "@localizable.action.last-fourth.description",
+    "action.top-left-sixth.title": "@localizable.action.top-left-sixth.title",
+    "action.top-left-sixth.description": "@localizable.action.top-left-sixth.description",
+    "action.top-center-sixth.title": "@localizable.action.top-center-sixth.title",
+    "action.top-center-sixth.description": "@localizable.action.top-center-sixth.description",
+    "action.top-right-sixth.title": "@localizable.action.top-right-sixth.title",
+    "action.top-right-sixth.description": "@localizable.action.top-right-sixth.description",
+    "action.bottom-left-sixth.title": "@localizable.action.bottom-left-sixth.title",
+    "action.bottom-left-sixth.description": "@localizable.action.bottom-left-sixth.description",
+    "action.bottom-center-sixth.title": "@localizable.action.bottom-center-sixth.title",
+    "action.bottom-center-sixth.description": "@localizable.action.bottom-center-sixth.description",
+    "action.bottom-right-sixth.title": "@localizable.action.bottom-right-sixth.title",
+    "action.bottom-right-sixth.description": "@localizable.action.bottom-right-sixth.description",
+    "action.move-to-next-display.title": "@localizable.action.move-to-next-display.title",
+    "action.move-to-next-display.description": "@localizable.action.move-to-next-display.description",
+    "action.move-to-previous-display.title": "@localizable.action.move-to-previous-display.title",
+    "action.move-to-previous-display.description": "@localizable.action.move-to-previous-display.description",
+    "action.restore-previous-frame.title": "@localizable.action.restore-previous-frame.title",
+    "action.restore-previous-frame.description": "@localizable.action.restore-previous-frame.description",
+    "action.custom-command.title": "@localizable.settings.custom.defaultName",
+    "action.custom-command.description": "@localizable.action.custom.description",
+    "action.custom-command.parameter-summary": "@localizable.settings.custom.name"
   },
   "version": "1.0.0",
   "minHostVersion": "1.2.0",
@@ -194,8 +269,8 @@
         "staticActions": [
           {
             "id": "toggle-full-screen",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.toggle-full-screen.title",
+            "description": "@productStrings.action.toggle-full-screen.description",
             "keywords": [
               "窗口布局",
               "切换全屏",
@@ -209,7 +284,6 @@
             ],
             "systemImage": "arrow.up.left.and.arrow.down.right",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -228,8 +302,8 @@
           },
           {
             "id": "left-half",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.left-half.title",
+            "description": "@productStrings.action.left-half.description",
             "keywords": [
               "窗口布局",
               "左半屏",
@@ -242,7 +316,6 @@
             ],
             "systemImage": "rectangle.lefthalf.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -261,8 +334,8 @@
           },
           {
             "id": "right-half",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.right-half.title",
+            "description": "@productStrings.action.right-half.description",
             "keywords": [
               "窗口布局",
               "右半屏",
@@ -275,7 +348,6 @@
             ],
             "systemImage": "rectangle.righthalf.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -294,8 +366,8 @@
           },
           {
             "id": "top-half",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.top-half.title",
+            "description": "@productStrings.action.top-half.description",
             "keywords": [
               "窗口布局",
               "上半屏",
@@ -308,7 +380,6 @@
             ],
             "systemImage": "rectangle.tophalf.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -327,8 +398,8 @@
           },
           {
             "id": "bottom-half",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.bottom-half.title",
+            "description": "@productStrings.action.bottom-half.description",
             "keywords": [
               "窗口布局",
               "下半屏",
@@ -341,7 +412,6 @@
             ],
             "systemImage": "rectangle.bottomhalf.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -360,8 +430,8 @@
           },
           {
             "id": "top-left-quarter",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.top-left-quarter.title",
+            "description": "@productStrings.action.top-left-quarter.description",
             "keywords": [
               "窗口布局",
               "左上四分之一",
@@ -375,7 +445,6 @@
             ],
             "systemImage": "rectangle.split.2x2",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -394,8 +463,8 @@
           },
           {
             "id": "top-right-quarter",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.top-right-quarter.title",
+            "description": "@productStrings.action.top-right-quarter.description",
             "keywords": [
               "窗口布局",
               "右上四分之一",
@@ -409,7 +478,6 @@
             ],
             "systemImage": "rectangle.split.2x2",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -428,8 +496,8 @@
           },
           {
             "id": "bottom-left-quarter",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.bottom-left-quarter.title",
+            "description": "@productStrings.action.bottom-left-quarter.description",
             "keywords": [
               "窗口布局",
               "左下四分之一",
@@ -443,7 +511,6 @@
             ],
             "systemImage": "rectangle.split.2x2",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -462,8 +529,8 @@
           },
           {
             "id": "bottom-right-quarter",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.bottom-right-quarter.title",
+            "description": "@productStrings.action.bottom-right-quarter.description",
             "keywords": [
               "窗口布局",
               "右下四分之一",
@@ -477,7 +544,6 @@
             ],
             "systemImage": "rectangle.split.2x2",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -496,8 +562,8 @@
           },
           {
             "id": "maximize",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.maximize.title",
+            "description": "@productStrings.action.maximize.description",
             "keywords": [
               "窗口布局",
               "最大化窗口",
@@ -509,7 +575,6 @@
             ],
             "systemImage": "rectangle.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -528,8 +593,8 @@
           },
           {
             "id": "maximize-height",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.maximize-height.title",
+            "description": "@productStrings.action.maximize-height.description",
             "keywords": [
               "窗口布局",
               "最大化高度",
@@ -542,7 +607,6 @@
             ],
             "systemImage": "arrow.up.and.down",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -561,8 +625,8 @@
           },
           {
             "id": "maximize-width",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.maximize-width.title",
+            "description": "@productStrings.action.maximize-width.description",
             "keywords": [
               "窗口布局",
               "最大化宽度",
@@ -575,7 +639,6 @@
             ],
             "systemImage": "arrow.left.and.right",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -594,8 +657,8 @@
           },
           {
             "id": "center",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.center.title",
+            "description": "@productStrings.action.center.description",
             "keywords": [
               "窗口布局",
               "居中窗口",
@@ -607,7 +670,6 @@
             ],
             "systemImage": "macwindow",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -626,8 +688,8 @@
           },
           {
             "id": "reasonable-size",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.reasonable-size.title",
+            "description": "@productStrings.action.reasonable-size.description",
             "keywords": [
               "窗口布局",
               "合理大小",
@@ -640,7 +702,6 @@
             ],
             "systemImage": "rectangle.center.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -659,8 +720,8 @@
           },
           {
             "id": "move-to-top-edge",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.move-to-top-edge.title",
+            "description": "@productStrings.action.move-to-top-edge.description",
             "keywords": [
               "窗口布局",
               "移到顶部",
@@ -675,7 +736,6 @@
             ],
             "systemImage": "arrow.up.to.line",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -694,8 +754,8 @@
           },
           {
             "id": "move-to-bottom-edge",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.move-to-bottom-edge.title",
+            "description": "@productStrings.action.move-to-bottom-edge.description",
             "keywords": [
               "窗口布局",
               "移到底部",
@@ -710,7 +770,6 @@
             ],
             "systemImage": "arrow.down.to.line",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -729,8 +788,8 @@
           },
           {
             "id": "move-to-left-edge",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.move-to-left-edge.title",
+            "description": "@productStrings.action.move-to-left-edge.description",
             "keywords": [
               "窗口布局",
               "移到左侧",
@@ -745,7 +804,6 @@
             ],
             "systemImage": "arrow.left.to.line",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -764,8 +822,8 @@
           },
           {
             "id": "move-to-right-edge",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.move-to-right-edge.title",
+            "description": "@productStrings.action.move-to-right-edge.description",
             "keywords": [
               "窗口布局",
               "移到右侧",
@@ -780,7 +838,6 @@
             ],
             "systemImage": "arrow.right.to.line",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -799,8 +856,8 @@
           },
           {
             "id": "first-third",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.first-third.title",
+            "description": "@productStrings.action.first-third.description",
             "keywords": [
               "窗口布局",
               "左侧三分之一",
@@ -813,7 +870,6 @@
             ],
             "systemImage": "rectangle.leadingthird.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -832,8 +888,8 @@
           },
           {
             "id": "first-two-thirds",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.first-two-thirds.title",
+            "description": "@productStrings.action.first-two-thirds.description",
             "keywords": [
               "窗口布局",
               "左侧三分之二",
@@ -847,7 +903,6 @@
             ],
             "systemImage": "rectangle.leadinghalf.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -866,8 +921,8 @@
           },
           {
             "id": "center-third",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.center-third.title",
+            "description": "@productStrings.action.center-third.description",
             "keywords": [
               "窗口布局",
               "中间三分之一",
@@ -880,7 +935,6 @@
             ],
             "systemImage": "rectangle.center.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -899,8 +953,8 @@
           },
           {
             "id": "last-two-thirds",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.last-two-thirds.title",
+            "description": "@productStrings.action.last-two-thirds.description",
             "keywords": [
               "窗口布局",
               "右侧三分之二",
@@ -914,7 +968,6 @@
             ],
             "systemImage": "rectangle.trailinghalf.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -933,8 +986,8 @@
           },
           {
             "id": "last-third",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.last-third.title",
+            "description": "@productStrings.action.last-third.description",
             "keywords": [
               "窗口布局",
               "右侧三分之一",
@@ -947,7 +1000,6 @@
             ],
             "systemImage": "rectangle.trailingthird.inset.filled",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -966,8 +1018,8 @@
           },
           {
             "id": "first-fourth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.first-fourth.title",
+            "description": "@productStrings.action.first-fourth.description",
             "keywords": [
               "窗口布局",
               "第一个四分之一",
@@ -980,7 +1032,6 @@
             ],
             "systemImage": "rectangle.split.3x1",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -999,8 +1050,8 @@
           },
           {
             "id": "second-fourth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.second-fourth.title",
+            "description": "@productStrings.action.second-fourth.description",
             "keywords": [
               "窗口布局",
               "第二个四分之一",
@@ -1013,7 +1064,6 @@
             ],
             "systemImage": "rectangle.split.3x1",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1032,8 +1082,8 @@
           },
           {
             "id": "third-fourth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.third-fourth.title",
+            "description": "@productStrings.action.third-fourth.description",
             "keywords": [
               "窗口布局",
               "第三个四分之一",
@@ -1046,7 +1096,6 @@
             ],
             "systemImage": "rectangle.split.3x1",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1065,8 +1114,8 @@
           },
           {
             "id": "last-fourth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.last-fourth.title",
+            "description": "@productStrings.action.last-fourth.description",
             "keywords": [
               "窗口布局",
               "最后一个四分之一",
@@ -1079,7 +1128,6 @@
             ],
             "systemImage": "rectangle.split.3x1",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1098,8 +1146,8 @@
           },
           {
             "id": "top-left-sixth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.top-left-sixth.title",
+            "description": "@productStrings.action.top-left-sixth.description",
             "keywords": [
               "窗口布局",
               "左上六分之一",
@@ -1113,7 +1161,6 @@
             ],
             "systemImage": "rectangle.split.3x3",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1132,8 +1179,8 @@
           },
           {
             "id": "top-center-sixth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.top-center-sixth.title",
+            "description": "@productStrings.action.top-center-sixth.description",
             "keywords": [
               "窗口布局",
               "中上六分之一",
@@ -1147,7 +1194,6 @@
             ],
             "systemImage": "rectangle.split.3x3",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1166,8 +1212,8 @@
           },
           {
             "id": "top-right-sixth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.top-right-sixth.title",
+            "description": "@productStrings.action.top-right-sixth.description",
             "keywords": [
               "窗口布局",
               "右上六分之一",
@@ -1181,7 +1227,6 @@
             ],
             "systemImage": "rectangle.split.3x3",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1200,8 +1245,8 @@
           },
           {
             "id": "bottom-left-sixth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.bottom-left-sixth.title",
+            "description": "@productStrings.action.bottom-left-sixth.description",
             "keywords": [
               "窗口布局",
               "左下六分之一",
@@ -1215,7 +1260,6 @@
             ],
             "systemImage": "rectangle.split.3x3",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1234,8 +1278,8 @@
           },
           {
             "id": "bottom-center-sixth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.bottom-center-sixth.title",
+            "description": "@productStrings.action.bottom-center-sixth.description",
             "keywords": [
               "窗口布局",
               "中下六分之一",
@@ -1249,7 +1293,6 @@
             ],
             "systemImage": "rectangle.split.3x3",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1268,8 +1311,8 @@
           },
           {
             "id": "bottom-right-sixth",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.bottom-right-sixth.title",
+            "description": "@productStrings.action.bottom-right-sixth.description",
             "keywords": [
               "窗口布局",
               "右下六分之一",
@@ -1283,7 +1326,6 @@
             ],
             "systemImage": "rectangle.split.3x3",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1302,8 +1344,8 @@
           },
           {
             "id": "move-to-next-display",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.move-to-next-display.title",
+            "description": "@productStrings.action.move-to-next-display.description",
             "keywords": [
               "窗口布局",
               "移到下一台显示器",
@@ -1318,7 +1360,6 @@
             ],
             "systemImage": "arrow.right.square",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1337,8 +1378,8 @@
           },
           {
             "id": "move-to-previous-display",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.move-to-previous-display.title",
+            "description": "@productStrings.action.move-to-previous-display.description",
             "keywords": [
               "窗口布局",
               "移到上一台显示器",
@@ -1353,7 +1394,6 @@
             ],
             "systemImage": "arrow.left.square",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1372,8 +1412,8 @@
           },
           {
             "id": "restore-previous-frame",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.restore-previous-frame.title",
+            "description": "@productStrings.action.restore-previous-frame.description",
             "keywords": [
               "窗口布局",
               "恢复上一个窗口位置",
@@ -1387,7 +1427,6 @@
             ],
             "systemImage": "arrow.uturn.backward.square",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -1408,11 +1447,11 @@
         "dynamicTemplates": [
           {
             "id": "custom-command",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.custom-command.title",
+            "description": "@productStrings.action.custom-command.description",
             "entrySource": "custom-window-layouts",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.custom-command.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "window",

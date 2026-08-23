@@ -50,7 +50,16 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.start-favorite.title": "@localizable.managedAction.start.title",
+    "action.start-favorite.description": "@localizable.managedAction.start.title",
+    "action.start-favorite.parameter-summary": "@localizable.managedAction.start.title",
+    "action.stop-favorite.title": "@localizable.managedAction.stop.title",
+    "action.stop-favorite.description": "@localizable.managedAction.stop.title",
+    "action.stop-favorite.parameter-summary": "@localizable.managedAction.stop.title",
+    "action.restart-favorite.title": "@localizable.managedAction.restart.title",
+    "action.restart-favorite.description": "@localizable.managedAction.restart.title",
+    "action.restart-favorite.parameter-summary": "@localizable.managedAction.restart.title"
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -185,8 +194,8 @@
         "dynamicTemplates": [
           {
             "id": "start-favorite",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.start-favorite.title",
+            "description": "@productStrings.action.start-favorite.description",
             "entrySource": "favorite-launch-items",
             "parameters": [
               {
@@ -196,7 +205,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.start-favorite.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "launch",
@@ -221,8 +230,8 @@
           },
           {
             "id": "stop-favorite",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.stop-favorite.title",
+            "description": "@productStrings.action.stop-favorite.description",
             "entrySource": "favorite-launch-items",
             "parameters": [
               {
@@ -232,7 +241,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.stop-favorite.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "launch",
@@ -256,8 +265,8 @@
           },
           {
             "id": "restart-favorite",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.restart-favorite.title",
+            "description": "@productStrings.action.restart-favorite.description",
             "entrySource": "favorite-launch-items",
             "parameters": [
               {
@@ -267,7 +276,7 @@
                 "portability": "localOnly"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.restart-favorite.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "launch",

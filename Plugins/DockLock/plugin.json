@@ -50,7 +50,12 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.toggle.title": "@standardAction.toggle.title",
+    "action.toggle.description": "@standardAction.toggle.description",
+    "action.set-enabled.title": "@standardAction.set-enabled.title",
+    "action.set-enabled.description": "@standardAction.set-enabled.description",
+    "action.set-enabled.parameter-summary": "@standardAction.set-enabled.description"
   },
   "version": "1.0.1",
   "minHostVersion": "1.2.0",
@@ -193,8 +198,8 @@
         "staticActions": [
           {
             "id": "toggle",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.toggle.title",
+            "description": "@productStrings.action.toggle.description",
             "keywords": [
               "锁定程序坞",
               "防止程序坞在多显示器之间意外移动",
@@ -205,7 +210,6 @@
             ],
             "systemImage": "lock.rectangle",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility"
             ],
@@ -226,8 +230,8 @@
           },
           {
             "id": "set-enabled",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.set-enabled.title",
+            "description": "@productStrings.action.set-enabled.description",
             "keywords": [
               "锁定程序坞",
               "防止程序坞在多显示器之间意外移动",
@@ -246,7 +250,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.set-enabled.parameter-summary",
             "permissionIDs": [
               "accessibility"
             ],

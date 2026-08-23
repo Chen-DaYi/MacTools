@@ -710,6 +710,76 @@
           }
         }
       }
+    },
+    "permission.automation.status": {
+        "localizations": {
+            "ar": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "تأكيد عند الاستخدام"
+                }
+            },
+            "de": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "Bestätigung bei Verwendung"
+                }
+            },
+            "en": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "Confirm on Use"
+                }
+            },
+            "es": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "Confirmar al usar"
+                }
+            },
+            "fr": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "Confirmation à l’utilisation"
+                }
+            },
+            "ja": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "使用時に確認"
+                }
+            },
+            "ko": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "사용 시 확인"
+                }
+            },
+            "pt": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "Confirmar ao usar"
+                }
+            },
+            "ru": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "Подтверждение при использовании"
+                }
+            },
+            "zh-Hans": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "按需确认"
+                }
+            },
+            "zh-Hant": {
+                "stringUnit": {
+                    "state": "translated",
+                    "value": "按需確認"
+                }
+            }
+        }
     }
   },
   "version": "1.0"

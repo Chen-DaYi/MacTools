@@ -50,7 +50,12 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.toggle.title": "@standardAction.toggle.title",
+    "action.toggle.description": "@standardAction.toggle.description",
+    "action.set-enabled.title": "@standardAction.set-enabled.title",
+    "action.set-enabled.description": "@standardAction.set-enabled.description",
+    "action.set-enabled.parameter-summary": "@standardAction.set-enabled.description"
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -181,8 +186,8 @@
         "staticActions": [
           {
             "id": "toggle",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.toggle.title",
+            "description": "@productStrings.action.toggle.description",
             "keywords": [
               "台前调度",
               "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
@@ -193,7 +198,6 @@
             ],
             "systemImage": "sidebar.squares.leading",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -212,8 +216,8 @@
           },
           {
             "id": "set-enabled",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.set-enabled.title",
+            "description": "@productStrings.action.set-enabled.description",
             "keywords": [
               "台前调度",
               "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
@@ -232,7 +236,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.set-enabled.parameter-summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

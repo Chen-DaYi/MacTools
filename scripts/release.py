@@ -421,11 +421,21 @@ def plugin_catalog_path(plugin_kit_version: int) -> Path:
     return ROOT_DIR / "docs" / "plugins" / f"v{plugin_kit_version}" / "catalog.json"
 
 
+def same_abi_catalog_migration_baseline_path(plugin_kit_version: int) -> Path | None:
+    if plugin_kit_version == 5:
+        return ROOT_DIR / "docs/plugins/v5/catalog.json"
+    return None
+
+
 def previous_plugin_catalog_path() -> Path:
     plugin_kit_version = current_plugin_kit_version(read_plugins())
     preferred_path = plugin_catalog_path(plugin_kit_version)
     if preferred_path.exists() or preferred_path == LEGACY_PLUGIN_CATALOG:
         return preferred_path
+
+    same_abi_baseline = same_abi_catalog_migration_baseline_path(plugin_kit_version)
+    if same_abi_baseline is not None and same_abi_baseline.exists():
+        return same_abi_baseline
 
     previous_versioned_catalogs = []
     for candidate in (ROOT_DIR / "docs" / "plugins").glob("v*/catalog.json"):
@@ -1104,7 +1114,18 @@ def release_plugin(args: argparse.Namespace) -> None:
     ensure_plugin_kit_releasable(current_plugin_kit)
     previous_catalog = read_previous_catalog()
     previous_plugin_kit = previous_catalog.get("pluginKitVersion")
-    if mode == "auto" and previous_plugin_kit is not None and previous_plugin_kit != current_plugin_kit:
+    is_compatibility_migration = (
+        not plugin_catalog_path(current_plugin_kit).exists()
+        and same_abi_catalog_migration_baseline_path(current_plugin_kit)
+        == previous_plugin_catalog_path()
+    )
+    if mode == "auto" and is_compatibility_migration:
+        mode = "all"
+        info(
+            "检测到同一 PluginKit ABI 的 catalog schema 迁移，"
+            "插件发布模式自动切换为 all。"
+        )
+    elif mode == "auto" and previous_plugin_kit is not None and previous_plugin_kit != current_plugin_kit:
         mode = "all"
         info(
             f"检测到 PluginKit ABI 升级（{previous_plugin_kit} -> {current_plugin_kit}），"

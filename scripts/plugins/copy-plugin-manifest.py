@@ -35,7 +35,7 @@ def copy_manifest(
     manifest = json.loads(source.read_text(encoding="utf-8"))
     had_build_metadata = "build" in manifest
     manifest.pop("build", None)
-    expanded_manifest = expand_localized_references(manifest)
+    expanded_manifest = expand_localized_references(manifest, source)
     had_localization_references = expanded_manifest != manifest
     manifest = expanded_manifest
     validate_runtime_envelope(

@@ -50,7 +50,19 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.set-enabled.title": "@standardAction.set-enabled.title",
+    "action.set-enabled.description": "@standardAction.set-enabled.description",
+    "action.set-enabled.parameter-summary": "@standardAction.set-enabled.description",
+    "action.hold.title": "@localizable.panel.action.stopCharging",
+    "action.hold.description": "@localizable.panel.action.stopCharging",
+    "action.resume.title": "@localizable.panel.action.startCharging",
+    "action.resume.description": "@localizable.panel.action.startCharging",
+    "action.discharge.title": "@localizable.action.manifest.discharge.title",
+    "action.discharge.description": "@localizable.action.manifest.discharge.title",
+    "action.set-limit.title": "@localizable.settings.limit.title",
+    "action.set-limit.description": "@localizable.settings.limit.description",
+    "action.set-limit.parameter-summary": "@localizable.settings.limit.target"
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -197,8 +209,8 @@
         "staticActions": [
           {
             "id": "set-enabled",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.set-enabled.title",
+            "description": "@productStrings.action.set-enabled.description",
             "keywords": [
               "电池充电上限",
               "限制电池充电至指定上限",
@@ -217,7 +229,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.set-enabled.parameter-summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -234,8 +246,8 @@
           },
           {
             "id": "hold",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.hold.title",
+            "description": "@productStrings.action.hold.description",
             "keywords": [
               "电池充电上限",
               "停止充电",
@@ -246,7 +258,6 @@
             ],
             "systemImage": "bolt.slash.fill",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -263,8 +274,8 @@
           },
           {
             "id": "resume",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.resume.title",
+            "description": "@productStrings.action.resume.description",
             "keywords": [
               "电池充电上限",
               "开始充电",
@@ -275,7 +286,6 @@
             ],
             "systemImage": "bolt.fill",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -292,8 +302,8 @@
           },
           {
             "id": "discharge",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.discharge.title",
+            "description": "@productStrings.action.discharge.description",
             "keywords": [
               "电池充电上限",
               "强制放电至 80%",
@@ -304,7 +314,6 @@
             ],
             "systemImage": "minus.circle",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [
@@ -323,8 +332,8 @@
         "dynamicTemplates": [
           {
             "id": "set-limit",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.set-limit.title",
+            "description": "@productStrings.action.set-limit.description",
             "entrySource": "charge-limit-presets",
             "parameters": [
               {
@@ -334,7 +343,7 @@
                 "portability": "portable"
               }
             ],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.set-limit.parameter-summary",
             "localOnlyIdentity": false,
             "keywords": [
               "battery",

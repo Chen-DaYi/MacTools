@@ -50,7 +50,15 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.display-brightness.decrease.title": "@localizable.shortcut.direction.decrease",
+    "action.display-brightness.decrease.description": "@localizable.shortcut.direction.decrease",
+    "action.display-brightness.increase.title": "@localizable.shortcut.direction.increase",
+    "action.display-brightness.increase.description": "@localizable.shortcut.direction.increase",
+    "action.disable-built-in-display.title": "@localizable.displayDisable.action.disable",
+    "action.disable-built-in-display.description": "@localizable.displayDisable.action.disable",
+    "action.restore-built-in-display.title": "@localizable.displayDisable.action.restore",
+    "action.restore-built-in-display.description": "@localizable.displayDisable.action.restore"
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -190,8 +198,8 @@
         "staticActions": [
           {
             "id": "display-brightness.decrease",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.display-brightness.decrease.title",
+            "description": "@productStrings.action.display-brightness.decrease.description",
             "keywords": [
               "显示器亮度",
               "降低",
@@ -201,7 +209,6 @@
             ],
             "systemImage": "sun.min.fill",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -220,8 +227,8 @@
           },
           {
             "id": "display-brightness.increase",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.display-brightness.increase.title",
+            "description": "@productStrings.action.display-brightness.increase.description",
             "keywords": [
               "显示器亮度",
               "增加",
@@ -231,7 +238,6 @@
             ],
             "systemImage": "sun.max.fill",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -250,8 +256,8 @@
           },
           {
             "id": "disable-built-in-display",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.disable-built-in-display.title",
+            "description": "@productStrings.action.disable-built-in-display.description",
             "keywords": [
               "显示器亮度",
               "display",
@@ -262,7 +268,6 @@
             ],
             "systemImage": "display",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "confirmationRequired",
             "surfaces": [
@@ -278,8 +283,8 @@
           },
           {
             "id": "restore-built-in-display",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.restore-built-in-display.title",
+            "description": "@productStrings.action.restore-built-in-display.description",
             "keywords": [
               "显示器亮度",
               "display",
@@ -290,7 +295,6 @@
             ],
             "systemImage": "display",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [

@@ -34,4 +34,12 @@ final class AppearancePluginTests: XCTestCase {
             .allowed
         )
     }
+
+    func testAutomationPermissionIsReportedAsOnDemand() {
+        let state = AppearancePlugin().permissionState(for: "automation")
+
+        XCTAssertFalse(state.isGranted)
+        XCTAssertEqual(state.statusText, "按需确认")
+        XCTAssertEqual(state.statusTone, .neutral)
+    }
 }

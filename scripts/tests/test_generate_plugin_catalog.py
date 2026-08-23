@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import pathlib
 import stat
 import subprocess
 import sys
 import tempfile
 import unittest
+import unicodedata
 import zipfile
 from unittest import mock
 
@@ -186,6 +188,19 @@ class GeneratePluginCatalogTests(unittest.TestCase):
             expected = hashlib.sha256(b"payload\0included\0").hexdigest()
             self.assertEqual((digest, size), (expected, len(b"included")))
 
+    @unittest.skipUnless(hasattr(stat, "UF_HIDDEN"), "requires macOS hidden file flags")
+    def test_directory_metrics_skip_finder_hidden_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            hidden = root / "payload"
+            hidden.write_bytes(b"hidden")
+            os.chflags(hidden, stat.UF_HIDDEN)
+
+            digest, size = generate_plugin_catalog.directory_metrics(root)
+
+            self.assertEqual(digest, hashlib.sha256().hexdigest())
+            self.assertEqual(size, 0)
+
     def test_zip_preflight_rejects_traversal_and_unsupported_members(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)
@@ -241,6 +256,47 @@ class GeneratePluginCatalogTests(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(SystemExit, "escaping symlink"):
                         generate_plugin_catalog.packaged_manifest(symlink_archive)
+
+    def test_zip_preflight_rejects_crc_corruption(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive_path = pathlib.Path(temporary_directory) / "corrupt.zip"
+            payload_name = "Demo.mactoolsplugin/Demo.bundle/payload"
+            with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_STORED) as archive:
+                archive.writestr(
+                    "Demo.mactoolsplugin/plugin.json",
+                    json.dumps(projected_manifest()),
+                )
+                archive.writestr(payload_name, b"original")
+            with zipfile.ZipFile(archive_path) as archive:
+                info = archive.getinfo(payload_name)
+                payload_offset = (
+                    info.header_offset
+                    + 30
+                    + len(info.filename.encode("utf-8"))
+                    + len(info.extra)
+                )
+            data = bytearray(archive_path.read_bytes())
+            data[payload_offset] ^= 1
+            archive_path.write_bytes(data)
+
+            with self.assertRaisesRegex(SystemExit, "unreadable data"):
+                generate_plugin_catalog.packaged_manifest(archive_path)
+
+    def test_zip_preflight_normalizes_unicode_duplicate_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive_path = pathlib.Path(temporary_directory) / "unicode.zip"
+            nfc_name = "café"
+            nfd_name = unicodedata.normalize("NFD", nfc_name)
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr(
+                    "Demo.mactoolsplugin/plugin.json",
+                    json.dumps(projected_manifest()),
+                )
+                archive.writestr(f"Demo.mactoolsplugin/{nfc_name}", b"first")
+                archive.writestr(f"Demo.mactoolsplugin/{nfd_name}", b"second")
+
+            with self.assertRaisesRegex(SystemExit, "duplicate archive path"):
+                generate_plugin_catalog.packaged_manifest(archive_path)
 
 
 if __name__ == "__main__":

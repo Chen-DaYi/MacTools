@@ -332,6 +332,8 @@ enum PluginSourceManifestTestProjection {
         "relationships",
     ]
     private static let referencePrefix = "@productStrings."
+    private static let localizablePrefix = "@localizable."
+    private static let standardActionPrefix = "@standardAction."
 
     static func data(pluginDirectoryName: String) throws -> Data {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
@@ -350,6 +352,13 @@ enum PluginSourceManifestTestProjection {
               let localizedMetadata = manifest["localizedMetadata"] as? [String: [String: String]] else {
             throw projectionError("Missing source localization metadata in \(sourceURL.path)")
         }
+        let stringCatalogURL = sourceURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources/Localizable.xcstrings")
+        let stringCatalog = try? JSONSerialization.jsonObject(
+            with: Data(contentsOf: stringCatalogURL)
+        ) as? [String: Any]
+        let catalogStrings = stringCatalog?["strings"] as? [String: Any]
 
         let resolvedStrings = try Dictionary(uniqueKeysWithValues: productStrings.map { key, value in
             if let reference = value as? String,
@@ -360,6 +369,35 @@ enum PluginSourceManifestTestProjection {
                         throw projectionError("Missing \(locale).\(field) for \(key)")
                     }
                     return (locale, text)
+                })
+                return (key, localized as Any)
+            }
+            if let reference = value as? String,
+               reference.hasPrefix(localizablePrefix) {
+                let catalogKey = String(reference.dropFirst(localizablePrefix.count))
+                guard let catalogEntry = catalogStrings?[catalogKey] as? [String: Any],
+                      let localizations = catalogEntry["localizations"] as? [String: Any] else {
+                    throw projectionError("Missing string catalog entry \(catalogKey) for \(key)")
+                }
+                let localized = try Dictionary(uniqueKeysWithValues: localizations.map { locale, value in
+                    guard let localization = value as? [String: Any],
+                          let stringUnit = localization["stringUnit"] as? [String: Any],
+                          let text = stringUnit["value"] as? String,
+                          !text.isEmpty else {
+                        throw projectionError("Missing \(catalogKey).\(locale) for \(key)")
+                    }
+                    return (locale, text)
+                })
+                return (key, localized as Any)
+            }
+            if let reference = value as? String,
+               reference.hasPrefix(standardActionPrefix) {
+                let actionKey = String(reference.dropFirst(standardActionPrefix.count))
+                let localized = try Dictionary(uniqueKeysWithValues: localizedMetadata.map { locale, values in
+                    guard let displayName = values["displayName"], !displayName.isEmpty else {
+                        throw projectionError("Missing \(locale).displayName for \(key)")
+                    }
+                    return (locale, "\(actionKey): \(displayName)")
                 })
                 return (key, localized as Any)
             }

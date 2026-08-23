@@ -165,13 +165,18 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(
-            isGranted: true,
+            isGranted: false,
             footnote: permissionID == PermissionID.automation
                 ? localization.string(
                     "permission.automation.footnote",
                     defaultValue: "macOS 会在首次使用时请求自动化授权。"
                 )
-                : nil
+                : nil,
+            statusText: permissionID == PermissionID.automation
+                ? localization.string("permission.automation.status", defaultValue: "按需确认")
+                : nil,
+            statusSystemImage: permissionID == PermissionID.automation ? "cursorarrow.click.2" : nil,
+            statusTone: permissionID == PermissionID.automation ? .neutral : nil
         )
     }
 

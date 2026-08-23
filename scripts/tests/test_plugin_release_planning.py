@@ -35,6 +35,27 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
             release.ROOT_DIR / "docs/plugins/v5/schema3/catalog.json",
         )
 
+    def test_first_plugin_kit5_schema3_release_uses_schema2_baseline(self) -> None:
+        with (
+            mock.patch.object(release, "read_plugins", return_value={}),
+            mock.patch.object(release, "current_plugin_kit_version", return_value=5),
+            mock.patch.object(Path, "exists", autospec=True) as exists,
+        ):
+            exists.side_effect = lambda path: path == release.ROOT_DIR / "docs/plugins/v5/catalog.json"
+
+            self.assertEqual(
+                release.previous_plugin_catalog_path(),
+                release.ROOT_DIR / "docs/plugins/v5/catalog.json",
+            )
+
+    def test_schema3_workflow_uses_same_abi_baseline_and_forces_full_release(self) -> None:
+        workflow = (release.ROOT_DIR / ".github/workflows/plugin-release.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("origin/main:docs/plugins/v5/catalog.json", workflow)
+        self.assertIn('echo "PLUGIN_RELEASE_MODE=all"', workflow)
+
     def test_legacy_plugin_kit_release_is_rejected_before_tagging(self) -> None:
         with self.assertRaisesRegex(release.ReleaseError, "catalog 已冻结"):
             release.ensure_plugin_kit_releasable(4)

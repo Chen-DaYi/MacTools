@@ -19,7 +19,53 @@ SUPPORTED_LOCALE_ORDER = (
 SUPPORTED_LOCALES = frozenset(SUPPORTED_LOCALE_ORDER)
 SUPPORTED_LOCALE_SET = SUPPORTED_LOCALES
 BASE_LOCALIZED_REFERENCES = {"@displayName", "@summary"}
+LOCALIZABLE_STRING_REFERENCE_PREFIX = "@localizable."
+STANDARD_ACTION_REFERENCE_PREFIX = "@standardAction."
 PRODUCT_STRING_REFERENCE_PREFIX = "@productStrings."
+STANDARD_ACTION_TEMPLATES = {
+    "toggle.title": {
+        "ar": "تبديل حالة {displayName}", "de": "{displayName} umschalten",
+        "en": "Toggle {displayName}", "es": "Alternar {displayName}",
+        "fr": "Activer ou désactiver {displayName}", "ja": "{displayName}を切り替える",
+        "ko": "{displayName} 전환", "pt": "Alternar {displayName}",
+        "ru": "Переключить «{displayName}»", "zh-Hans": "切换{displayName}",
+        "zh-Hant": "切換{displayName}",
+    },
+    "toggle.description": {
+        "ar": "بدّل حالة «{displayName}» بين التشغيل والإيقاف.",
+        "de": "Schaltet „{displayName}“ ein oder aus.",
+        "en": "Switch {displayName} between on and off.",
+        "es": "Activa o desactiva {displayName}.",
+        "fr": "Active ou désactive {displayName}.",
+        "ja": "{displayName}のオン／オフを切り替えます。",
+        "ko": "{displayName}을(를) 켜거나 끕니다.",
+        "pt": "Ativa ou desativa {displayName}.",
+        "ru": "Включает или выключает функцию «{displayName}».",
+        "zh-Hans": "在开启和关闭之间切换{displayName}。",
+        "zh-Hant": "在開啟和關閉之間切換{displayName}。",
+    },
+    "set-enabled.title": {
+        "ar": "تعيين حالة {displayName}", "de": "{displayName}-Status festlegen",
+        "en": "Set {displayName} State", "es": "Definir estado de {displayName}",
+        "fr": "Définir l’état de {displayName}", "ja": "{displayName}の状態を設定",
+        "ko": "{displayName} 상태 설정", "pt": "Definir estado de {displayName}",
+        "ru": "Задать состояние «{displayName}»", "zh-Hans": "设置{displayName}状态",
+        "zh-Hant": "設定{displayName}狀態",
+    },
+    "set-enabled.description": {
+        "ar": "عيّن ما إذا كان «{displayName}» مفعّلًا.",
+        "de": "Legt fest, ob „{displayName}“ aktiviert ist.",
+        "en": "Set whether {displayName} is enabled.",
+        "es": "Define si {displayName} está activado.",
+        "fr": "Définit si {displayName} est activé.",
+        "ja": "{displayName}を有効にするかどうかを設定します。",
+        "ko": "{displayName}의 활성화 여부를 설정합니다.",
+        "pt": "Define se {displayName} está ativado.",
+        "ru": "Определяет, включена ли функция «{displayName}».",
+        "zh-Hans": "设置是否启用{displayName}。",
+        "zh-Hant": "設定是否啟用{displayName}。",
+    },
+}
 VALID_CATEGORIES = {
     "display", "audio", "system", "storage", "productivity", "monitoring", "other"
 }
@@ -266,7 +312,45 @@ def validate_runtime_envelope(
     return plugin_id
 
 
-def expand_localized_references(manifest: dict) -> dict:
+def _localizable_string(
+    reference: str,
+    manifest_path: Path | None,
+    plugin_id: str,
+    field: str,
+) -> dict[str, str]:
+    if manifest_path is None:
+        _fail(plugin_id, field, f"{reference} requires a source manifest path")
+    catalog_path = manifest_path.parent / "Resources" / "Localizable.xcstrings"
+    try:
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        _fail(plugin_id, field, f"cannot read {catalog_path}: {error}")
+    key = reference.removeprefix(LOCALIZABLE_STRING_REFERENCE_PREFIX)
+    entry = catalog.get("strings", {}).get(key)
+    if not isinstance(entry, dict):
+        _fail(plugin_id, field, f"references missing Localizable.xcstrings key {key}")
+    localizations = entry.get("localizations")
+    if not isinstance(localizations, dict):
+        _fail(plugin_id, field, f"Localizable.xcstrings key {key} has no localizations")
+    localized_value = {}
+    for locale in SUPPORTED_LOCALE_ORDER:
+        localized = localizations.get(locale)
+        string_unit = localized.get("stringUnit") if isinstance(localized, dict) else None
+        value = string_unit.get("value") if isinstance(string_unit, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            _fail(
+                plugin_id,
+                field,
+                f"Localizable.xcstrings key {key} is missing locale {locale}",
+            )
+        localized_value[locale] = value
+    return localized_value
+
+
+def expand_localized_references(
+    manifest: dict,
+    manifest_path: Path | None = None,
+) -> dict:
     """Expand source-only product-string references for catalog and package projection."""
     projected = json.loads(json.dumps(manifest))
     localized_fields = list(_localized_source_fields(projected))
@@ -307,6 +391,38 @@ def expand_localized_references(manifest: dict) -> dict:
                     )
                 localized_value[locale] = text
             reference_values[key] = localized_value
+        elif isinstance(value, str) and value.startswith(LOCALIZABLE_STRING_REFERENCE_PREFIX):
+            reference_values[key] = _localizable_string(
+                value,
+                manifest_path,
+                plugin_id,
+                f"productStrings.{key}",
+            )
+        elif isinstance(value, str) and value.startswith(STANDARD_ACTION_REFERENCE_PREFIX):
+            template_key = value.removeprefix(STANDARD_ACTION_REFERENCE_PREFIX)
+            templates = STANDARD_ACTION_TEMPLATES.get(template_key)
+            if templates is None:
+                _fail(plugin_id, f"productStrings.{key}", f"unknown standard action string {template_key}")
+            if not isinstance(metadata, dict) or set(metadata) != SUPPORTED_LOCALE_SET:
+                _fail(
+                    plugin_id,
+                    f"productStrings.{key}",
+                    f"{value} requires localizedMetadata for all supported locales",
+                )
+            localized_value = {}
+            for locale in SUPPORTED_LOCALE_ORDER:
+                locale_metadata = metadata.get(locale)
+                if not isinstance(locale_metadata, dict):
+                    _fail(plugin_id, f"localizedMetadata.{locale}", "must be an object")
+                display_name = locale_metadata.get("displayName")
+                if not isinstance(display_name, str) or not display_name.strip():
+                    _fail(
+                        plugin_id,
+                        f"localizedMetadata.{locale}.displayName",
+                        "must be a non-empty string",
+                    )
+                localized_value[locale] = templates[locale].format(displayName=display_name)
+            reference_values[key] = localized_value
         elif isinstance(value, dict):
             _localized_text(value, plugin_id, f"productStrings.{key}")
             reference_values[key] = dict(value)
@@ -314,7 +430,7 @@ def expand_localized_references(manifest: dict) -> dict:
             _fail(
                 plugin_id,
                 f"productStrings.{key}",
-                "must be @displayName, @summary, or a complete locale-to-string object",
+                "must be @displayName, @summary, @localizable.<key>, @standardAction.<key>, or a complete locale-to-string object",
             )
 
     for field, value in localized_fields:
@@ -952,7 +1068,7 @@ def validate_and_project_manifest(
     allow_sparse_legacy: bool = False,
 ) -> tuple[dict, list[AssetProjection]]:
     return _validate_manifest(
-        expand_localized_references(manifest),
+        expand_localized_references(manifest, manifest_path),
         manifest_path,
         known_plugin_ids,
         allow_sparse_legacy=allow_sparse_legacy,

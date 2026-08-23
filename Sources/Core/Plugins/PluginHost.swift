@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import SwiftUI
@@ -5491,18 +5492,26 @@ final class PluginHost: ObservableObject {
     }
 
     private func requestPermissionGuidance(forPluginID pluginID: String, permissionID: String) {
-        guard activePlugins.contains(where: { plugin in
-            plugin.metadata.id == pluginID
-                && (guardedValue(
-                    for: plugin,
-                    operation: "read permission requirements",
-                    plugin.permissionRequirements
-                ) ?? []).contains(where: { $0.id == permissionID })
-        }) else {
+        guard let plugin = activePlugins.first(where: { $0.metadata.id == pluginID }),
+              let requirement = (guardedValue(
+                  for: plugin,
+                  operation: "read permission requirements",
+                  plugin.permissionRequirements
+              ) ?? []).first(where: { $0.id == permissionID }) else {
             return
         }
 
-        presentPluginSettings(pluginID: pluginID)
+        switch requirement.kind {
+        case .automation:
+            guard let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+            ) else {
+                return
+            }
+            NSWorkspace.shared.open(url)
+        default:
+            presentPluginSettings(pluginID: pluginID)
+        }
     }
 
     private func permissionActionTitle(

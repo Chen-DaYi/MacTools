@@ -9,6 +9,7 @@ import json
 import re
 import shutil
 import stat
+import unicodedata
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -31,6 +32,7 @@ MAX_ARCHIVE_ENTRIES = 10_000
 MAX_ARCHIVE_EXPANDED_BYTES = MAX_PACKAGE_BYTES
 MAX_ARCHIVE_MANIFEST_BYTES = 4 * 1024 * 1024
 MAX_ARCHIVE_SYMLINK_BYTES = 4096
+SUPPORTED_ZIP_COMPRESSION = {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}
 
 
 def version_tuple(value: str) -> tuple[int, ...]:
@@ -59,11 +61,24 @@ def parse_args() -> argparse.Namespace:
 def directory_metrics(path: Path) -> tuple[str, int]:
     digest = hashlib.sha256()
     size = 0
+    hidden_flag = getattr(stat, "UF_HIDDEN", 0)
+
+    def is_hidden(candidate: Path) -> bool:
+        relative = candidate.relative_to(path)
+        current = path
+        for part in relative.parts:
+            current = current / part
+            if part.startswith("."):
+                return True
+            if hidden_flag and current.lstat().st_flags & hidden_flag:
+                return True
+        return False
+
     files = sorted(
         candidate for candidate in path.rglob("*")
         if candidate.is_file()
         and not candidate.is_symlink()
-        and not any(part.startswith(".") for part in candidate.relative_to(path).parts)
+        and not is_hidden(candidate)
     )
     for file_path in files:
         relative = file_path.relative_to(path).as_posix()
@@ -107,6 +122,25 @@ def _archive_member_kind(info: zipfile.ZipInfo, archive_path: Path) -> str:
     if file_type == stat.S_IFLNK:
         return "symlink"
     raise SystemExit(f"{archive_path} contains unsupported archive member {info.filename}")
+
+
+def _validate_archive_member_data(
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    archive_path: Path,
+) -> None:
+    if info.flag_bits & 0x1:
+        raise SystemExit(f"{archive_path} contains an encrypted archive member: {info.filename}")
+    if info.compress_type not in SUPPORTED_ZIP_COMPRESSION:
+        raise SystemExit(
+            f"{archive_path} contains an unsupported compression method: {info.filename}"
+        )
+    try:
+        with archive.open(info) as member:
+            while member.read(1024 * 1024):
+                pass
+    except (EOFError, NotImplementedError, OSError, RuntimeError, zipfile.BadZipFile) as error:
+        raise SystemExit(f"{archive_path} contains unreadable data: {info.filename}") from error
 
 
 def _validate_archive_symlink(
@@ -173,7 +207,10 @@ def packaged_manifest(path: Path) -> tuple[dict, Path]:
         package_roots: set[str] = set()
         for info in infos:
             parts = _archive_parts(info.filename, path)
-            normalized_parts = tuple(part.casefold() for part in parts)
+            normalized_parts = tuple(
+                unicodedata.normalize("NFC", part).casefold()
+                for part in parts
+            )
             if normalized_parts in normalized_member_paths:
                 raise SystemExit(f"{path} contains a duplicate archive path: {info.filename}")
             normalized_member_paths.add(normalized_parts)
@@ -192,6 +229,8 @@ def packaged_manifest(path: Path) -> tuple[dict, Path]:
                 if parts[0] != package_root:
                     raise SystemExit(f"{path} contains an unsupported metadata symlink")
                 _validate_archive_symlink(archive, info, parts, package_root, path)
+            if kind != "directory":
+                _validate_archive_member_data(archive, info, path)
 
         manifest_members = [
             info
@@ -236,19 +275,20 @@ def _validated_https_url(value: str, field: str) -> None:
         raise SystemExit(str(error)) from error
 
 
-def _source_package_projection(source_manifest: dict) -> dict:
-    projected = expand_localized_references(source_manifest)
+def _source_package_projection(source_manifest: dict, source_path: Path) -> dict:
+    projected = expand_localized_references(source_manifest, source_path)
     projected.pop("build", None)
     return projected
 
 
 def _validate_source_package_parity(
     source_manifest: dict,
+    source_path: Path,
     packaged: dict,
     packaged_path: Path,
     mode: str,
 ) -> None:
-    expected = _source_package_projection(source_manifest)
+    expected = _source_package_projection(source_manifest, source_path)
     if mode == "debug" and "minHostVersion" in packaged:
         expected["minHostVersion"] = packaged["minHostVersion"]
     differing = sorted(
@@ -392,6 +432,7 @@ def main() -> None:
                 )
                 _validate_source_package_parity(
                     source_manifest,
+                    source_path,
                     packaged,
                     packaged_manifest_path,
                     args.mode,

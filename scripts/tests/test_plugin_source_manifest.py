@@ -229,10 +229,11 @@ class PluginSourceManifestTests(unittest.TestCase):
             "permission.automation.title",
             "permission.automation.description",
             "permission.automation.footnote",
+            "permission.automation.status",
         }
         expected_locales = {
             "Appearance": SUPPORTED_LOCALES,
-            "AppleShortcuts": {"en", "zh-Hans", "zh-Hant"},
+            "AppleShortcuts": SUPPORTED_LOCALES,
             "AutoHideDock": SUPPORTED_LOCALES,
             "AutoHideMenuBar": SUPPORTED_LOCALES,
             "ZshConfig": SUPPORTED_LOCALES,
@@ -511,6 +512,29 @@ class PluginSourceManifestTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ManifestValidationError, "duplicates an action or template key"):
             validate_and_project_manifest(manifest, path, load_known_plugin_ids(PLUGINS_ROOT))
+
+    def test_multi_action_providers_publish_distinct_localized_copy(self) -> None:
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+        for path in sorted(PLUGINS_ROOT.glob("*/plugin.json")):
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            projected, _ = validate_and_project_manifest(manifest, path, known_ids)
+            for provider in projected.get("actions", {}).get("providers", []):
+                entries = provider["staticActions"] + provider["dynamicTemplates"]
+                if len(entries) < 2:
+                    continue
+                for field in ("title", "description", "parameterSummary"):
+                    field_entries = [entry for entry in entries if field in entry]
+                    if len(field_entries) < 2:
+                        continue
+                    for locale in SUPPORTED_LOCALES:
+                        values = [entry[field][locale] for entry in field_entries]
+                        with self.subTest(
+                            plugin=manifest["id"],
+                            provider=provider["id"],
+                            field=field,
+                            locale=locale,
+                        ):
+                            self.assertEqual(len(values), len(set(values)))
 
     def test_rejects_action_surfaces_that_runtime_policy_cannot_expose(self) -> None:
         path = PLUGINS_ROOT / "Appearance" / "plugin.json"

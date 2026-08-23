@@ -178,6 +178,20 @@ final class PluginPackageResolverTests: XCTestCase {
         XCTAssertEqual(metrics, expected)
     }
 
+    func testDirectoryPackageMetricsSkipFinderHiddenFiles() throws {
+        let packageURL = try makePackage(id: "com.example.demo", version: "1.0.0")
+        var payloadURL = packageURL.appendingPathComponent("payload", isDirectory: false)
+        try Data("hidden".utf8).write(to: payloadURL)
+        var resourceValues = URLResourceValues()
+        resourceValues.isHidden = true
+        try payloadURL.setResourceValues(resourceValues)
+
+        let metrics = try PluginPackageResolver.packageMetrics(for: packageURL)
+        let expected = stableDirectoryMetrics(root: packageURL, files: ["plugin.json"])
+
+        XCTAssertEqual(metrics, expected)
+    }
+
     private func makePackage(id: String, version: String) throws -> URL {
         let packageURL = temporaryRoot
             .appendingPathComponent("\(id)-\(version)", isDirectory: true)

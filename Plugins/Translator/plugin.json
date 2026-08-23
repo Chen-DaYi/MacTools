@@ -50,7 +50,11 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.select-translation.title": "@localizable.shortcut.selectTranslation.title",
+    "action.select-translation.description": "@localizable.shortcut.selectTranslation.description",
+    "action.screenshot-translation.title": "@localizable.shortcut.screenshotTranslation.title",
+    "action.screenshot-translation.description": "@localizable.shortcut.screenshotTranslation.description"
   },
   "version": "0.2.0",
   "minHostVersion": "1.2.0",
@@ -200,8 +204,8 @@
         "staticActions": [
           {
             "id": "select-translation",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.select-translation.title",
+            "description": "@productStrings.action.select-translation.description",
             "keywords": [
               "翻译",
               "划词翻译",
@@ -211,7 +215,6 @@
             ],
             "systemImage": "text.cursor",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "accessibility",
               "automation"
@@ -231,8 +234,8 @@
           },
           {
             "id": "screenshot-translation",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.screenshot-translation.title",
+            "description": "@productStrings.action.screenshot-translation.description",
             "keywords": [
               "翻译",
               "截图翻译",
@@ -243,7 +246,6 @@
             ],
             "systemImage": "viewfinder",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [
               "screen-recording"
             ],

@@ -50,7 +50,14 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "action.connect-first-available.title": "@localizable.panel.action.connect",
+    "action.connect-first-available.description": "@localizable.shortcut.connectFirstAvailable.target",
+    "action.disconnect-all.title": "@localizable.panel.action.disconnect",
+    "action.disconnect-all.description": "@localizable.shortcut.disconnectAll.target",
+    "action.device.title": "@localizable.device.unnamed",
+    "action.device.description": "@localizable.panel.device.subtitle",
+    "action.device.parameter-summary": "@localizable.device.unnamed"
   },
   "version": "1.1.0",
   "minHostVersion": "1.2.0",
@@ -190,8 +197,8 @@
         "staticActions": [
           {
             "id": "connect-first-available",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.connect-first-available.title",
+            "description": "@productStrings.action.connect-first-available.description",
             "keywords": [
               "Sidecar",
               "sidecar",
@@ -201,7 +208,6 @@
             ],
             "systemImage": "rectangle.badge.plus",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -220,8 +226,8 @@
           },
           {
             "id": "disconnect-all",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.disconnect-all.title",
+            "description": "@productStrings.action.disconnect-all.description",
             "keywords": [
               "Sidecar",
               "sidecar",
@@ -230,7 +236,6 @@
             ],
             "systemImage": "rectangle.badge.minus",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
             "permissionIDs": [],
             "risk": "safe",
             "surfaces": [
@@ -251,11 +256,11 @@
         "dynamicTemplates": [
           {
             "id": "device",
-            "title": "@productStrings.display-name",
-            "description": "@productStrings.summary",
+            "title": "@productStrings.action.device.title",
+            "description": "@productStrings.action.device.description",
             "entrySource": "configured-sidecar-devices",
             "parameters": [],
-            "parameterSummary": "@productStrings.summary",
+            "parameterSummary": "@productStrings.action.device.parameter-summary",
             "localOnlyIdentity": true,
             "keywords": [
               "sidecar",
