@@ -20,7 +20,7 @@ final class AutoInputStoreTests: XCTestCase {
         store.setInputHUDEnabled(true)
         store.setInteractiveHUDEnabled(true)
         store.setInputHUDSize(.large)
-        store.setInputHUDPosition(.above)
+        store.setInputHUDPosition(.atPointer)
         store.setRemembersLastInputSource(false)
         store.upsertRule(makeRule(bundleID: "com.example.editor", sourceID: "zh"))
         store.remember(inputSourceID: "en", for: "com.example.terminal")
@@ -30,7 +30,7 @@ final class AutoInputStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.isInputHUDEnabled)
         XCTAssertTrue(reloaded.isInteractiveHUDEnabled)
         XCTAssertEqual(reloaded.inputHUDSize, .large)
-        XCTAssertEqual(reloaded.inputHUDPosition, .above)
+        XCTAssertEqual(reloaded.inputHUDPosition, .atPointer)
         XCTAssertFalse(reloaded.remembersLastInputSource)
         XCTAssertEqual(reloaded.rule(for: "com.example.editor")?.inputSourceID, "zh")
         XCTAssertEqual(reloaded.rememberedInputSourceID(for: "com.example.terminal"), "en")
@@ -127,6 +127,28 @@ final class AutoInputStoreTests: XCTestCase {
 
         XCTAssertEqual(store.inputHUDSize, .standard)
         XCTAssertEqual(store.inputHUDPosition, .automatic)
+    }
+
+    func testAtPointerPositionRequiresInteractiveHUD() {
+        XCTAssertFalse(AutoInputHUDPosition.atPointer.isAvailable(isInteractive: false))
+        XCTAssertTrue(AutoInputHUDPosition.atPointer.isAvailable(isInteractive: true))
+        XCTAssertTrue(AutoInputHUDPosition.automatic.isAvailable(isInteractive: false))
+        XCTAssertEqual(
+            AutoInputHUDConfiguration(
+                size: .standard,
+                position: .atPointer,
+                isInteractive: false
+            ).effectivePosition,
+            .automatic
+        )
+        XCTAssertEqual(
+            AutoInputHUDConfiguration(
+                size: .standard,
+                position: .atPointer,
+                isInteractive: true
+            ).effectivePosition,
+            .atPointer
+        )
     }
 }
 
@@ -281,12 +303,15 @@ final class AutoInputControllerTests: XCTestCase {
         let fixture = makeFixture(currentSourceID: "en", accessibilityGranted: true)
         fixture.store.setInputHUDEnabled(true)
         fixture.store.setInteractiveHUDEnabled(true)
+        fixture.store.setInputHUDPosition(.atPointer)
         fixture.controller.start()
         fixture.focusObserver.focus(AutoInputEditableFocus(
             frame: CGRect(x: 100, y: 200, width: 300, height: 24)
         ))
 
-        XCTAssertTrue(try XCTUnwrap(fixture.hud.presentations.last).configuration.isInteractive)
+        let initialPresentation = try XCTUnwrap(fixture.hud.presentations.last)
+        XCTAssertTrue(initialPresentation.configuration.isInteractive)
+        XCTAssertEqual(initialPresentation.configuration.position, .atPointer)
 
         fixture.hud.activateLastPresentation()
 
@@ -928,12 +953,14 @@ final class InputSourceHUDControllerTests: XCTestCase {
             dismissDelay: .seconds(60),
             duplicateInterval: 0,
             now: { now },
-            visibleFrames: { [CGRect(x: 0, y: 0, width: 1200, height: 800)] }
+            visibleFrames: { [CGRect(x: 0, y: 0, width: 1200, height: 800)] },
+            displayFrames: { [CGRect(x: 0, y: 0, width: 1200, height: 800)] },
+            pointerLocation: { CGPoint(x: 400, y: 424) }
         )
         defer { controller.dismiss() }
         let configuration = AutoInputHUDConfiguration(
             size: .standard,
-            position: .automatic,
+            position: .atPointer,
             isInteractive: true
         )
         let focusedFrame = CGRect(x: 300, y: 400, width: 200, height: 24)
@@ -971,6 +998,65 @@ final class InputSourceHUDControllerTests: XCTestCase {
         XCTAssertEqual(controller.hostingViewIdentityForTests, hostingViewIdentity)
         XCTAssertFalse(panel.ignoresMouseEvents)
         XCTAssertTrue(controller.sendPointerHoverForTests(false))
+    }
+
+    func testAtPointerHUDSnapshotsPointerLocationWhenPresented() throws {
+        var pointerLocation = CGPoint(x: 420, y: 510)
+        let displayFrame = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let controller = InputSourceHUDController(
+            dismissDelay: .seconds(60),
+            duplicateInterval: 0,
+            visibleFrames: { [displayFrame.insetBy(dx: 0, dy: 24)] },
+            displayFrames: { [displayFrame] },
+            pointerLocation: { pointerLocation }
+        )
+        defer { controller.dismiss() }
+
+        controller.show(
+            label: InputSourceHUDLabel(title: "ABC", modeIndicator: nil),
+            near: CGRect(x: 100, y: 200, width: 300, height: 24),
+            configuration: AutoInputHUDConfiguration(
+                size: .standard,
+                position: .atPointer,
+                isInteractive: true
+            )
+        )
+
+        let presentedFrame = try XCTUnwrap(controller.presentedPanelForTests).frame
+        XCTAssertTrue(presentedFrame.contains(pointerLocation))
+        XCTAssertEqual(presentedFrame.maxY, pointerLocation.y + 8)
+
+        pointerLocation = CGPoint(x: 900, y: 200)
+
+        XCTAssertEqual(controller.presentedPanelForTests?.frame, presentedFrame)
+    }
+
+    func testAtPointerHUDStaysInsidePointerDisplayAtEveryEdge() {
+        let leftDisplay = CGRect(x: -1280, y: 0, width: 1280, height: 1024)
+        let mainDisplay = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let cases: [(CGPoint, CGRect)] = [
+            (CGPoint(x: -1279, y: 1), leftDisplay),
+            (CGPoint(x: -1, y: 1023), leftDisplay),
+            (CGPoint(x: 1, y: 1), mainDisplay),
+            (CGPoint(x: 1919, y: 1079), mainDisplay),
+        ]
+
+        for (pointerLocation, expectedDisplay) in cases {
+            let frame = InputSourceHUDController.panelFrame(
+                at: pointerLocation,
+                panelSize: CGSize(width: 240, height: 64),
+                displayFrames: [mainDisplay, leftDisplay]
+            )
+
+            XCTAssertGreaterThanOrEqual(frame.minX, expectedDisplay.minX)
+            XCTAssertLessThanOrEqual(frame.maxX, expectedDisplay.maxX)
+            XCTAssertGreaterThanOrEqual(frame.minY, expectedDisplay.minY)
+            XCTAssertLessThanOrEqual(frame.maxY, expectedDisplay.maxY)
+            XCTAssertGreaterThanOrEqual(pointerLocation.x, frame.minX)
+            XCTAssertLessThanOrEqual(pointerLocation.x, frame.maxX)
+            XCTAssertGreaterThanOrEqual(pointerLocation.y, frame.minY)
+            XCTAssertLessThanOrEqual(pointerLocation.y, frame.maxY)
+        }
     }
 
     func testHUDAppearsAboveFocusedFieldNearBottomEdge() {
