@@ -1119,12 +1119,19 @@ def release_plugin(args: argparse.Namespace) -> None:
         and same_abi_catalog_migration_baseline_path(current_plugin_kit)
         == previous_plugin_catalog_path()
     )
-    if mode == "auto" and is_compatibility_migration:
-        mode = "all"
-        info(
-            "检测到同一 PluginKit ABI 的 catalog schema 迁移，"
-            "插件发布模式自动切换为 all。"
-        )
+    if is_compatibility_migration:
+        if mode == "selected":
+            fail(
+                "检测到同一 PluginKit ABI 的 catalog schema 迁移。"
+                "plugin-mode selected 不能只发布部分插件；"
+                "请使用 plugin-mode all 全量重建并提升所有插件版本。"
+            )
+        if mode == "auto":
+            mode = "all"
+            info(
+                "检测到同一 PluginKit ABI 的 catalog schema 迁移，"
+                "插件发布模式自动切换为 all。"
+            )
     elif mode == "auto" and previous_plugin_kit is not None and previous_plugin_kit != current_plugin_kit:
         mode = "all"
         info(

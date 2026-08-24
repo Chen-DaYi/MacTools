@@ -58,6 +58,46 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
         self.assertIn('echo "PLUGIN_RELEASE_REQUIRE_VERSION_BUMP=true"', workflow)
         self.assertIn("plan_args+=(--require-version-bump)", workflow)
 
+    def test_selected_mode_cannot_skip_same_abi_migration_rebuild(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            schema3_catalog = root / "docs/plugins/v5/schema3/catalog.json"
+            schema2_catalog = root / "docs/plugins/v5/catalog.json"
+            args = mock.Mock(plugin_mode="selected", plugin=["demo"], skip_check=True)
+
+            with (
+                mock.patch.object(release, "read_plugins", return_value={}),
+                mock.patch.object(release, "current_plugin_kit_version", return_value=5),
+                mock.patch.object(release, "plugin_catalog_path", return_value=schema3_catalog),
+                mock.patch.object(
+                    release,
+                    "same_abi_catalog_migration_baseline_path",
+                    return_value=schema2_catalog,
+                ),
+                mock.patch.object(
+                    release,
+                    "previous_plugin_catalog_path",
+                    return_value=schema2_catalog,
+                ),
+                mock.patch.object(
+                    release,
+                    "read_previous_catalog",
+                    return_value={"pluginKitVersion": 5},
+                ),
+                mock.patch.object(release, "write_plugin_versions") as write_versions,
+                mock.patch.object(release, "commit_if_needed") as commit,
+                mock.patch.object(release, "push_branch_and_tag") as push,
+            ):
+                with self.assertRaisesRegex(
+                    release.ReleaseError,
+                    "plugin-mode selected.*plugin-mode all",
+                ):
+                    release.release_plugin(args)
+
+            write_versions.assert_not_called()
+            commit.assert_not_called()
+            push.assert_not_called()
+
     def test_legacy_plugin_kit_release_is_rejected_before_tagging(self) -> None:
         with self.assertRaisesRegex(release.ReleaseError, "catalog 已冻结"):
             release.ensure_plugin_kit_releasable(4)
