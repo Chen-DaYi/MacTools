@@ -6,6 +6,8 @@ This phase intentionally supports only trusted local plugins built by the same d
 
 For catalog-based installation, GitHub release distribution, and Debug `file://` development catalogs, see [plugin-catalog.md](plugin-catalog.md).
 
+For a complete workspace-plugin example with a typed catalog, verified adapters, portable preferences, profiles, and composition of canonical actions from other providers, see [Mac Settings](mac-settings.md).
+
 ## Package Layout
 
 Use a directory package with the `.mactoolsplugin` extension:

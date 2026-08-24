@@ -107,6 +107,80 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.pluginSettingsItems.first?.shortcutItems.map(\.pluginID), ["component"])
     }
 
+    func testPermissionPresentationUsesStableCapabilityIDsForLegacyPluginKitKinds() {
+        let plugin = MockComponentPanelPlugin(
+            id: "component",
+            permissionRequirements: [
+                PluginPermissionRequirement(
+                    id: "full-disk-access",
+                    kind: .automation,
+                    title: "完全磁盘访问权限",
+                    description: "需要完全磁盘访问权限。"
+                ),
+                PluginPermissionRequirement(
+                    id: "finder-extension",
+                    kind: .automation,
+                    title: "Finder 扩展",
+                    description: "需要启用 Finder 扩展。"
+                )
+            ]
+        )
+
+        let cards = makeHost(plugins: [plugin]).permissionCards
+
+        XCTAssertEqual(cards.map(\.permissionID), ["full-disk-access", "finder-extension"])
+        XCTAssertEqual(cards.map(\.iconSystemImage), [
+            "externaldrive.badge.checkmark",
+            "puzzlepiece.extension"
+        ])
+    }
+
+    func testPluginSettingsExposeOnlyMissingPermissionsForTopGuidance() throws {
+        let plugin = MockComponentPanelPlugin(
+            id: "component",
+            permissionRequirements: [
+                PluginPermissionRequirement(
+                    id: "accessibility",
+                    kind: .accessibility,
+                    title: "辅助功能",
+                    description: "需要辅助功能权限。"
+                )
+            ],
+            isPermissionGranted: false
+        )
+
+        let item = try XCTUnwrap(makeHost(plugins: [plugin]).pluginSettingsItems.first)
+
+        XCTAssertEqual(item.permissionCards.map(\.permissionID), ["accessibility"])
+        XCTAssertEqual(item.missingPermissionCards.map(\.permissionID), ["accessibility"])
+    }
+
+    func testPermissionGuidanceRequestDoesNotChangeSettingsPage() {
+        let plugin = MockComponentPanelPlugin(
+            id: "component",
+            permissionRequirements: [
+                PluginPermissionRequirement(
+                    id: "accessibility",
+                    kind: .accessibility,
+                    title: "辅助功能",
+                    description: "需要辅助功能权限。"
+                )
+            ],
+            isPermissionGranted: false
+        )
+        let host = makeHost(plugins: [plugin])
+        var presentationRequests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { presentationRequests.append($0) }
+
+        plugin.requestPermissionGuidance?("accessibility")
+
+        XCTAssertTrue(presentationRequests.isEmpty)
+        XCTAssertEqual(
+            host.pluginSettingsItems.first?.missingPermissionCards.map(\.permissionID),
+            ["accessibility"]
+        )
+    }
+
     func testShortcutsInSameSharedBindingGroupCanUseSameBinding() {
         let binding = ShortcutBinding(keyCode: 18, modifiers: [.command, .option])
         let componentPanelPlugin = MockComponentPanelPlugin(
@@ -873,6 +947,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     private(set) var receivedPanelVisibilityValues: [Bool] = []
     private(set) var surfaceEvents: [SurfaceEvent] = []
     private(set) var shortcutBindingChanges: [ShortcutBindingChange] = []
+    private let isPermissionGranted: Bool
 
     init(
         id: String,
@@ -881,7 +956,8 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
         isActive: Bool = false,
         permissionRequirements: [PluginPermissionRequirement] = [],
         settingsPage: PluginSettingsPage? = nil,
-        shortcutDefinitions: [PluginShortcutDefinition] = []
+        shortcutDefinitions: [PluginShortcutDefinition] = [],
+        isPermissionGranted: Bool = true
     ) {
         self.metadata = PluginMetadata(
             id: id,
@@ -896,6 +972,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
         self.permissionRequirements = permissionRequirements
         self.shortcutDefinitions = shortcutDefinitions
         self.settingsPage = settingsPage
+        self.isPermissionGranted = isPermissionGranted
     }
 
     var componentPanelState: PluginComponentState {
@@ -931,7 +1008,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
-        PluginPermissionState(isGranted: true, footnote: nil)
+        PluginPermissionState(isGranted: isPermissionGranted, footnote: nil)
     }
 
     func handlePermissionAction(id: String) {}

@@ -1799,7 +1799,7 @@ final class PluginHost: ObservableObject {
             return false
         }
 
-        if item.permissionCards.contains(where: { $0.id == target.entryID }) {
+        if item.missingPermissionCards.contains(where: { $0.id == target.entryID }) {
             return true
         }
 
@@ -2802,6 +2802,9 @@ final class PluginHost: ObservableObject {
             if let trackpadActionConsumer = plugin as? any TrackpadActionHostContextConsuming {
                 trackpadActionConsumer.trackpadActionHostContext = makeTrackpadActionHostContext()
             }
+            if let actionExecutionConsumer = plugin as? any PluginActionExecutionHostContextConsuming {
+                actionExecutionConsumer.actionExecutionHostContext = makePluginActionExecutionHostContext()
+            }
             if let activityStateHandling = plugin as? any PluginApplicationActivityStateHandling {
                 guardPluginCall(plugin, operation: "set application activity state") {
                     activityStateHandling.applicationActivityStateDidChange(applicationActivityState)
@@ -3172,6 +3175,7 @@ final class PluginHost: ObservableObject {
             )
         }
 
+        var missingPermissionCardIDs = Set<String>()
         permissionCards = orderedCorePlugins().flatMap { plugin -> [PluginPermissionCard] in
             let requirements = guardedValue(
                 for: plugin,
@@ -3188,13 +3192,18 @@ final class PluginHost: ObservableObject {
                     return nil
                 }
 
+                let cardID = "\(plugin.metadata.id).permission.\(requirement.id)"
+                if !state.isGranted {
+                    missingPermissionCardIDs.insert(cardID)
+                }
+
                 return PluginPermissionCard(
-                    id: "\(plugin.metadata.id).permission.\(requirement.id)",
+                    id: cardID,
                     pluginID: plugin.metadata.id,
                     permissionID: requirement.id,
                     title: requirement.title,
                     description: requirement.description,
-                    iconSystemImage: permissionIconName(for: requirement.kind),
+                    iconSystemImage: permissionIconName(for: requirement),
                     statusText: state.statusText ?? (state.isGranted
                         ? AppL10n.plugins("plugin.permission.granted", defaultValue: "已授权")
                         : AppL10n.plugins("plugin.permission.notGranted", defaultValue: "未授权")),
@@ -3202,7 +3211,7 @@ final class PluginHost: ObservableObject {
                     statusTone: state.statusTone ?? (state.isGranted ? .positive : .caution),
                     footnote: state.footnote,
                     buttonTitle: permissionActionTitle(
-                        for: requirement.kind,
+                        for: requirement,
                         isGranted: state.isGranted
                     )
                 )
@@ -3328,6 +3337,7 @@ final class PluginHost: ObservableObject {
 
         pluginSettingsItems = buildPluginSettingsItems(
             permissionCards: permissionCards,
+            missingPermissionCardIDs: missingPermissionCardIDs,
             shortcutItems: shortcutItems
         )
         if let dirtyPluginIDs {
@@ -3530,6 +3540,7 @@ final class PluginHost: ObservableObject {
         for plugin in activePlugins {
             (plugin as? any ActionGridHostContextConsuming)?.actionSurfaceCatalogDidChange()
             (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionCatalogDidChange()
+            (plugin as? any PluginActionExecutionHostContextConsuming)?.actionExecutionCatalogDidChange()
         }
     }
 
@@ -3606,6 +3617,45 @@ final class PluginHost: ObservableObject {
                     return false
                 }
                 return self.actionGridPresentationHandler?(entries, source) ?? false
+            }
+        )
+    }
+
+    private func makePluginActionExecutionHostContext() -> PluginActionExecutionHostContext {
+        PluginActionExecutionHostContext(
+            item: { [weak self] reference in
+                self?.actionSurfaceItem(for: reference)
+            },
+            execute: { [weak self] reference, source in
+                guard let self else {
+                    return .unavailable(reason: FeatureL10n.string("操作不可用。"))
+                }
+                let outcome = await self.actionExecutor.execute(
+                    ActionInvocation(
+                        reference: reference,
+                        source: source,
+                        mode: .foreground
+                    )
+                )
+                switch outcome {
+                case let .completed(.succeeded(message)):
+                    return .succeeded(message: message)
+                case let .completed(.failed(message)):
+                    return .failed(message: message)
+                case .completed(.cancelled):
+                    return .cancelled
+                case let .rejected(.unavailable(reason)):
+                    return .unavailable(
+                        reason: reason ?? FeatureL10n.string("操作不可用。")
+                    )
+                case let .rejected(.providerFailure(message)):
+                    return .failed(message: message)
+                case .rejected(.confirmationDenied),
+                     .rejected(.confirmationTimedOut):
+                    return .cancelled
+                case .rejected:
+                    return .failed(message: FeatureL10n.string("无法执行操作。"))
+                }
             }
         )
     }
@@ -4132,6 +4182,7 @@ final class PluginHost: ObservableObject {
         (plugin as? any PluginSettingsPresenting)?.requestSettingsPresentation = nil
         (plugin as? any ActionGridHostContextConsuming)?.actionGridHostContext = nil
         (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionHostContext = nil
+        (plugin as? any PluginActionExecutionHostContextConsuming)?.actionExecutionHostContext = nil
         syncGlobalShortcuts()
     }
 
@@ -4180,11 +4231,15 @@ final class PluginHost: ObservableObject {
 
     private func buildPluginSettingsItems(
         permissionCards: [PluginPermissionCard],
+        missingPermissionCardIDs: Set<String>,
         shortcutItems: [ShortcutSettingsItem]
     ) -> [PluginSettingsPageItem] {
         orderedPluginDescriptors().compactMap { descriptor in
             let pluginID = descriptor.metadata.id
             let matchingPermissionCards = permissionCards.filter { $0.pluginID == pluginID }
+            let matchingMissingPermissionCardIDs = missingPermissionCardIDs.intersection(
+                matchingPermissionCards.map(\.id)
+            )
             let matchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
             let rawPage: PluginSettingsPage?
             if descriptor.hasSettings {
@@ -4243,7 +4298,7 @@ final class PluginHost: ObservableObject {
             } else {
                 actionShortcutSettingsConfiguration = nil
             }
-            let hasSettingsSurface = !matchingPermissionCards.isEmpty
+            let hasSettingsSurface = !matchingMissingPermissionCardIDs.isEmpty
                 || !matchingShortcutItems.isEmpty
                 || actionShortcutSettingsConfiguration != nil
                 || page != nil
@@ -4262,6 +4317,7 @@ final class PluginHost: ObservableObject {
                 installedAt: dynamicPluginInstalledAtByID[pluginID],
                 page: page,
                 permissionCards: matchingPermissionCards,
+                missingPermissionCardIDs: matchingMissingPermissionCardIDs,
                 shortcutItems: matchingShortcutItems,
                 actionShortcutSettingsConfiguration: actionShortcutSettingsConfiguration
             )
@@ -5502,47 +5558,83 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        presentPluginSettings(pluginID: pluginID)
+        // Keep the user's current context. The unresolved requirement is rendered at the
+        // top of this plugin's settings page when they choose to open it.
+        rebuildDerivedState(dirtyPluginIDs: [pluginID])
     }
 
     private func permissionActionTitle(
-        for kind: PluginPermissionKind,
+        for requirement: PluginPermissionRequirement,
         isGranted: Bool
     ) -> String {
-        switch kind {
-        case .accessibility:
+        switch permissionPresentationRole(for: requirement) {
+        case .fullDiskAccess:
             return isGranted
-                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                ? AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
                 : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
-        case .inputMonitoring:
-            return isGranted
-                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
-                : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
-        case .calendarFullAccess:
-            return isGranted
-                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
-                : AppL10n.plugins("plugin.permission.requestAuthorization", defaultValue: "请求授权")
-        case .automation:
+        case .extensionManagement:
             return AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
-        case .screenRecording:
-            return isGranted
-                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
-                : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
+        case let .system(kind):
+            switch kind {
+            case .accessibility:
+                return isGranted
+                    ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                    : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
+            case .inputMonitoring:
+                return isGranted
+                    ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                    : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
+            case .calendarFullAccess:
+                return isGranted
+                    ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                    : AppL10n.plugins("plugin.permission.requestAuthorization", defaultValue: "请求授权")
+            case .automation:
+                return AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
+            case .screenRecording:
+                return isGranted
+                    ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                    : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
+            }
         }
     }
 
-    private func permissionIconName(for kind: PluginPermissionKind) -> String {
-        switch kind {
-        case .accessibility:
-            return "accessibility"
-        case .inputMonitoring:
-            return "keyboard.badge.eye"
-        case .calendarFullAccess:
-            return "calendar"
-        case .automation:
-            return "cursorarrow.click.2"
-        case .screenRecording:
-            return "rectangle.dashed.badge.record"
+    private func permissionIconName(for requirement: PluginPermissionRequirement) -> String {
+        switch permissionPresentationRole(for: requirement) {
+        case .fullDiskAccess:
+            return "externaldrive.badge.checkmark"
+        case .extensionManagement:
+            return "puzzlepiece.extension"
+        case let .system(kind):
+            switch kind {
+            case .accessibility:
+                return "accessibility"
+            case .inputMonitoring:
+                return "keyboard.badge.eye"
+            case .calendarFullAccess:
+                return "calendar"
+            case .automation:
+                return "cursorarrow.click.2"
+            case .screenRecording:
+                return "rectangle.dashed.badge.record"
+            }
         }
+    }
+
+    /// These capabilities predate first-class PluginKit permission kinds. Stable IDs let
+    /// the host render them consistently without making an incompatible PluginKit v5 change.
+    private func permissionPresentationRole(
+        for requirement: PluginPermissionRequirement
+    ) -> PermissionPresentationRole {
+        switch requirement.id {
+        case "full-disk-access": .fullDiskAccess
+        case "finder-extension": .extensionManagement
+        default: .system(requirement.kind)
+        }
+    }
+
+    private enum PermissionPresentationRole {
+        case system(PluginPermissionKind)
+        case fullDiskAccess
+        case extensionManagement
     }
 }

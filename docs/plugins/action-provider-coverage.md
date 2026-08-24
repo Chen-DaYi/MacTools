@@ -37,7 +37,7 @@ The maintenance providers use deliberately narrow contracts:
 These plugins should not publish a canonical action merely to appear in action pickers:
 
 - `Calendar`, `DeviceBattery`, and `SystemStatus` primarily present information without a stable repeatable mutation. Calendar's selected-date context belongs in its view, while app launching is already covered by App Hotkeys.
-- `MouseEnhancer` and `ZshConfig` are configuration editors; runnable shell tasks belong in Saved Scripts.
+- `MacSettings`, `MouseEnhancer`, and `ZshConfig` are configuration editors. Mac Settings consumes existing canonical providers for settings that already have one, while runnable shell tasks belong in Saved Scripts.
 - `InputRemapping` is an input-lifecycle and configuration surface rather than one stable repeatable operation. If it adopts canonical MacTools actions as mapping outputs, it remains an action consumer rather than publishing a parallel provider surface.
 - `DockClickMinimize` observes native Dock clicks and hides the active app only after macOS processes the click. Its enable switch and event-monitor lifecycle are configuration, not a user-invoked canonical action.
 - `RightClick` extends Finder context menus rather than representing one repeatable operation.

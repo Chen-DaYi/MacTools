@@ -1,0 +1,67 @@
+{
+  "id": "mac-settings",
+  "displayName": "Mac 设置",
+  "summary": "搜索并集中调整当前 Mac 的常用设置",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إعدادات Mac",
+      "summary": "ابحث عن إعدادات Mac الشائعة واضبطها في مكان واحد."
+    },
+    "de": {
+      "displayName": "Mac-Einstellungen",
+      "summary": "Häufige Mac-Einstellungen suchen und zentral anpassen."
+    },
+    "en": {
+      "displayName": "Mac Settings",
+      "summary": "Search and adjust common settings for this Mac in one place."
+    },
+    "es": {
+      "displayName": "Ajustes del Mac",
+      "summary": "Busca y ajusta opciones habituales del Mac en un solo lugar."
+    },
+    "fr": {
+      "displayName": "Réglages du Mac",
+      "summary": "Recherchez et ajustez les réglages courants du Mac au même endroit."
+    },
+    "ja": {
+      "displayName": "Mac 設定",
+      "summary": "この Mac のよく使う設定を検索して一か所で調整します。"
+    },
+    "ko": {
+      "displayName": "Mac 설정",
+      "summary": "이 Mac의 자주 쓰는 설정을 검색하고 한곳에서 조절합니다."
+    },
+    "pt": {
+      "displayName": "Ajustes do Mac",
+      "summary": "Pesquise e ajuste configurações comuns do Mac em um só lugar."
+    },
+    "ru": {
+      "displayName": "Настройки Mac",
+      "summary": "Ищите и меняйте основные настройки этого Mac в одном месте."
+    },
+    "zh-Hans": {
+      "displayName": "Mac 设置",
+      "summary": "搜索并集中调整当前 Mac 的常用设置"
+    },
+    "zh-Hant": {
+      "displayName": "Mac 設定",
+      "summary": "搜尋並集中調整目前 Mac 的常用設定"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.2.0",
+  "pluginKitVersion": 5,
+  "bundleRelativePath": "MacSettings.bundle",
+  "factoryClass": "MacSettingsPlugin.MacSettingsPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "MacSettingsPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "settings": "workspace"
+  },
+  "permissions": [],
+  "category": "system"
+}
