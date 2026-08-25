@@ -179,6 +179,7 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            PLUGIN_CATALOG_URL="https://mactools.ggbond.app/nightly/plugins/v${PLUGIN_KIT_VERSION}/catalog.json" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY= \
@@ -189,7 +190,8 @@ jobs:
             --app "$DERIVED_DATA/Build/Products/Nightly/$APP_PRODUCT_NAME.app" \
             --bundle-identifier-prefix "${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}" \
             --version "$VERSION" \
-            --build-number "$BUILD_NUMBER"
+            --build-number "$BUILD_NUMBER" \
+            --plugin-kit-version "$PLUGIN_KIT_VERSION"
 
       - name: Sign app bundle
         run: |
@@ -289,6 +291,7 @@ jobs:
           scripts/nightly-release.py verify-catalog \
             --catalog "$SIGNED_PLUGIN_CATALOG_PATH" \
             --plugins-dir Plugins \
+            --repository "$GITHUB_REPOSITORY" \
             --tag "$TAG" \
             --build-number "$BUILD_NUMBER"
 
@@ -344,11 +347,14 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          shasum -a 256 "$DMG_PATH" | tee "$SHA256_PATH"
+          DMG_DIRECTORY="$(dirname "$DMG_PATH")"
+          DMG_NAME="$(basename "$DMG_PATH")"
+          (cd "$DMG_DIRECTORY" && shasum -a 256 "$DMG_NAME") | tee "$SHA256_PATH"
           RELEASE_NOTES_PATH="$RUNNER_TEMP/nightly-release-notes.md"
           NIGHTLY_APPCAST_PATH="$RUNNER_TEMP/nightly-appcast.xml"
           scripts/nightly-release.py notes \
             --output "$RELEASE_NOTES_PATH" \
+            --repository "$GITHUB_REPOSITORY" \
             --version "$VERSION" \
             --build-number "$BUILD_NUMBER" \
             --source-sha "$SOURCE_SHA"
@@ -431,10 +437,35 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           RELEASES_PATH="$RUNNER_TEMP/nightly-releases.json"
-          gh release list --limit 100 --json tagName,isPrerelease,publishedAt > "$RELEASES_PATH"
+          RELEASE_PAGES_PATH="$RUNNER_TEMP/nightly-release-pages.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$RELEASE_PAGES_PATH"
+          jq 'flatten | map({tagName: .tag_name, isDraft: .draft, isPrerelease: .prerelease, publishedAt: .published_at})' \
+            "$RELEASE_PAGES_PATH" > "$RELEASES_PATH"
+
+          PRESERVE_TAG_ARGS=()
+          COMMITTED_APPCAST_PATH="$RUNNER_TEMP/committed-nightly-appcast.xml"
+          if git show "origin/main:$NIGHTLY_APPCAST_RELATIVE_PATH" > "$COMMITTED_APPCAST_PATH" 2>/dev/null; then
+            COMMITTED_TAG="$(scripts/nightly-release.py appcast-tag --input "$COMMITTED_APPCAST_PATH")"
+            PRESERVE_TAG_ARGS+=(--preserve-tag "$COMMITTED_TAG")
+          fi
+
+          DEPLOYED_APPCAST_PATH="$RUNNER_TEMP/deployed-nightly-appcast.xml"
+          if curl --fail --silent --show-error --location \
+            "https://mactools.ggbond.app/nightly/appcast.xml" \
+            --output "$DEPLOYED_APPCAST_PATH" \
+            && DEPLOYED_TAG="$(scripts/nightly-release.py appcast-tag --input "$DEPLOYED_APPCAST_PATH")"; then
+            PRESERVE_TAG_ARGS+=(--preserve-tag "$DEPLOYED_TAG")
+          else
+            echo "The deployed Nightly appcast is unavailable; skipping retention to preserve rollback safety."
+            exit 0
+          fi
+
           scripts/nightly-release.py stale-tags \
             --input "$RELEASES_PATH" \
             --keep "$NIGHTLY_RETENTION_COUNT" \
+            "${PRESERVE_TAG_ARGS[@]}" \
             > "$RUNNER_TEMP/stale-nightly-tags.txt"
           while IFS= read -r stale_tag; do
             [[ -n "$stale_tag" ]] || continue

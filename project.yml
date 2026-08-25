@@ -106,7 +106,6 @@ targets:
         MACTOOLS_URL_SCHEME: mactools
         APPLICATION_SUPPORT_DIRECTORY_NAME: MacTools
         MACTOOLS_RELEASE_CHANNEL: stable
-        PLUGIN_CATALOG_URL: https://mactools.ggbond.app/plugins/v5/catalog.json
         RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH: Library/Application Support/MacTools/right-click-menu.json
         SPARKLE_FEED_URL: https://mactools.ggbond.app/appcast.xml
         SPARKLE_PUBLIC_ED_KEY: YS4ioWunyQC5rP/YQdDbG9panyqCKNyBd0iPTUqIFY0=
@@ -128,7 +127,6 @@ targets:
           MACTOOLS_URL_SCHEME: mactools-nightly
           APPLICATION_SUPPORT_DIRECTORY_NAME: "MacTools Nightly"
           MACTOOLS_RELEASE_CHANNEL: nightly
-          PLUGIN_CATALOG_URL: https://mactools.ggbond.app/nightly/plugins/v5/catalog.json
           RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH: Library/Application Support/MacTools Nightly/right-click-menu.json
           SPARKLE_FEED_URL: https://mactools.ggbond.app/nightly/appcast.xml
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) NIGHTLY"
@@ -167,17 +165,23 @@ targets:
         INFOPLIST_FILE: Sources/Extensions/RightClickFinderSync/RightClickFinderSync-Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/Extensions/RightClickFinderSync/RightClickFinderSync.entitlements
         MACTOOLS_URL_SCHEME: mactools
+        RIGHT_CLICK_EXTENSION_DISPLAY_NAME: MacTools 右键工具
+        RIGHT_CLICK_TOOLBAR_ITEM_NAME: MacTools
         RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH: Library/Application Support/MacTools/right-click-menu.json
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: "$(BUNDLE_IDENTIFIER_PREFIX).mactools.dev.right-click.finder-sync"
           CODE_SIGN_ENTITLEMENTS: Sources/Extensions/RightClickFinderSync/RightClickFinderSync-Debug.entitlements
           MACTOOLS_URL_SCHEME: mactools-dev
+          RIGHT_CLICK_EXTENSION_DISPLAY_NAME: MacTools Dev 右键工具
+          RIGHT_CLICK_TOOLBAR_ITEM_NAME: MacTools Dev
           RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH: Library/Application Support/MacTools Dev/right-click-menu.json
         Nightly:
           PRODUCT_BUNDLE_IDENTIFIER: "$(BUNDLE_IDENTIFIER_PREFIX).mactools.nightly.right-click.finder-sync"
           CODE_SIGN_ENTITLEMENTS: Sources/Extensions/RightClickFinderSync/RightClickFinderSync-Nightly.entitlements
           MACTOOLS_URL_SCHEME: mactools-nightly
+          RIGHT_CLICK_EXTENSION_DISPLAY_NAME: MacTools Nightly 右键工具
+          RIGHT_CLICK_TOOLBAR_ITEM_NAME: MacTools Nightly
           RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH: Library/Application Support/MacTools Nightly/right-click-menu.json
           DEAD_CODE_STRIPPING: true
           DEPLOYMENT_POSTPROCESSING: true

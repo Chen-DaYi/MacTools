@@ -39,6 +39,10 @@ struct PluginCatalogProviderConfiguration {
         return URL(string: "https://mactools.ggbond.app/plugins/v\(pluginKitVersion)/catalog.json")!
     }
 
+    static func nightlyCatalogURL(for pluginKitVersion: Int) -> URL {
+        URL(string: "https://mactools.ggbond.app/nightly/plugins/v\(pluginKitVersion)/catalog.json")!
+    }
+
     static func configuredProductionCatalogURL(
         for pluginKitVersion: Int,
         infoDictionary: [String: Any]? = Bundle.main.infoDictionary
@@ -48,6 +52,10 @@ struct PluginCatalogProviderConfiguration {
            let url = URL(string: rawURL),
            url.scheme?.lowercased() == "https" {
             return url
+        }
+
+        if infoDictionary?["MTReleaseChannel"] as? String == "nightly" {
+            return nightlyCatalogURL(for: pluginKitVersion)
         }
 
         return productionCatalogURL(for: pluginKitVersion)

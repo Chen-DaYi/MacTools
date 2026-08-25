@@ -21,10 +21,20 @@ VERSION_PATTERN = re.compile(
 BUILD_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,40}$")
 NIGHTLY_TAG_PATTERN = re.compile(r"^nightly-([0-9]+)-([0-9]+)$")
+REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+RELEASE_DOWNLOAD_TAG_PATTERN = re.compile(
+    r"/releases/download/(nightly-[0-9]+-[0-9]+)/"
+)
 
 
 def fail(message: str) -> None:
     raise SystemExit(message)
+
+
+def validate_repository(repository: str) -> str:
+    if not REPOSITORY_PATTERN.fullmatch(repository):
+        fail("repository must use owner/name form")
+    return repository
 
 
 def read_app_version(config_path: pathlib.Path) -> Dict[str, str]:
@@ -80,8 +90,7 @@ def make_metadata(
         fail("run attempt must be a positive integer")
     if not SHA_PATTERN.fullmatch(source_sha):
         fail("source SHA must contain 7 to 40 hexadecimal characters")
-    if repository.count("/") != 1:
-        fail("repository must use owner/name form")
+    validate_repository(repository)
 
     version = read_app_version(config_path)["MARKETING_VERSION"]
     build_number = f"{run_number}.{run_attempt}"
@@ -129,10 +138,12 @@ def write_github_env(metadata: Dict[str, str], output_path: pathlib.Path) -> Non
 
 def write_release_notes(
     output_path: pathlib.Path,
+    repository: str,
     version: str,
     build_number: str,
     source_sha: str,
 ) -> None:
+    validate_repository(repository)
     if not BUILD_PATTERN.fullmatch(build_number):
         fail("build number must contain only numeric components")
     notes = f"""> [!WARNING]
@@ -142,7 +153,7 @@ This prerelease is an automated snapshot of the current MacTools source. It inst
 
 - App version: `{version}`
 - Nightly build: `{build_number}`
-- Source commit: [`{source_sha}`](https://github.com/ggbond268/MacTools/commit/{source_sha})
+- Source commit: [`{source_sha}`](https://github.com/{repository}/commit/{source_sha})
 
 To roll back, publish a known-good source commit as a new Nightly build. Signed assets for an existing Nightly tag are never replaced.
 """
@@ -161,6 +172,7 @@ def write_appcast(
     publication_date: str,
     release_notes: str,
 ) -> None:
+    validate_repository(repository)
     if not NIGHTLY_TAG_PATTERN.fullmatch(tag):
         fail("Nightly tag must use nightly-<run>-<attempt>")
     if not BUILD_PATTERN.fullmatch(build_number):
@@ -206,7 +218,10 @@ def verify_nightly_app(
     bundle_identifier_prefix: str,
     version: str,
     build_number: str,
+    plugin_kit_version: int,
 ) -> None:
+    if plugin_kit_version < 1:
+        fail("PluginKit version must be positive")
     app_info_path = app_path / "Contents/Info.plist"
     extension_info_path = (
         app_path
@@ -228,7 +243,8 @@ def verify_nightly_app(
         "MTApplicationSupportDirectoryName": "MacTools Nightly",
         "MTReleaseChannel": "nightly",
         "MTPluginCatalogURL": (
-            "https://mactools.ggbond.app/nightly/plugins/v5/catalog.json"
+            "https://mactools.ggbond.app/nightly/plugins/"
+            f"v{plugin_kit_version}/catalog.json"
         ),
         "MTRightClickConfigurationHomeRelativePath": (
             "Library/Application Support/MacTools Nightly/right-click-menu.json"
@@ -248,12 +264,14 @@ def verify_nightly_app(
         fail(f"Nightly URL schemes are {schemes!r}; expected ['mactools-nightly']")
 
     expected_extension_values = {
+        "CFBundleDisplayName": "MacTools Nightly 右键工具",
         "CFBundleIdentifier": (
             f"{bundle_identifier_prefix}.mactools.nightly.right-click.finder-sync"
         ),
         "CFBundleShortVersionString": version,
         "CFBundleVersion": build_number,
         "MTRightClickHostURLScheme": "mactools-nightly",
+        "MTRightClickToolbarItemName": "MacTools Nightly",
         "MTRightClickConfigurationHomeRelativePath": (
             "Library/Application Support/MacTools Nightly/right-click-menu.json"
         ),
@@ -269,9 +287,11 @@ def verify_nightly_app(
 def verify_nightly_catalog(
     catalog_path: pathlib.Path,
     plugins_dir: pathlib.Path,
+    repository: str,
     tag: str,
     build_number: str,
 ) -> None:
+    validate_repository(repository)
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     source_manifests = {
         json.loads(path.read_text(encoding="utf-8"))["id"]: json.loads(
@@ -286,7 +306,7 @@ def verify_nightly_catalog(
         fail(f"Nightly catalog plugin set differs; missing={missing}, extra={extra}")
 
     expected_url_prefix = (
-        "https://github.com/ggbond268/MacTools/releases/download/"
+        f"https://github.com/{repository}/releases/download/"
         f"{tag}/"
     )
     for plugin_id, entry in entries.items():
@@ -303,17 +323,42 @@ def verify_nightly_catalog(
         fail("Nightly catalog is not signed with Ed25519")
 
 
-def stale_nightly_tags(releases: Iterable[Dict[str, Any]], keep: int) -> List[str]:
+def read_nightly_appcast_tag(appcast_path: pathlib.Path) -> str:
+    try:
+        root = ET.parse(appcast_path).getroot()
+    except (ET.ParseError, OSError) as error:
+        fail(f"Nightly appcast cannot be parsed: {appcast_path}: {error}")
+    for enclosure in root.iter("enclosure"):
+        match = RELEASE_DOWNLOAD_TAG_PATTERN.search(enclosure.attrib.get("url", ""))
+        if match:
+            return match.group(1)
+    fail(f"Nightly appcast does not contain a valid release tag: {appcast_path}")
+
+
+def stale_nightly_tags(
+    releases: Iterable[Dict[str, Any]],
+    keep: int,
+    preserve_tags: Iterable[str] = (),
+) -> List[str]:
     if keep < 1:
         fail("retention count must be positive")
+    preserved = set(preserve_tags)
+    for tag in preserved:
+        if not NIGHTLY_TAG_PATTERN.fullmatch(tag):
+            fail(f"preserved Nightly tag is invalid: {tag}")
     nightly = [
         release
         for release in releases
         if release.get("isPrerelease") is True
+        and release.get("isDraft") is not True
         and NIGHTLY_TAG_PATTERN.fullmatch(str(release.get("tagName", "")))
     ]
     nightly.sort(key=lambda release: str(release.get("publishedAt", "")), reverse=True)
-    return [str(release["tagName"]) for release in nightly[keep:]]
+    return [
+        str(release["tagName"])
+        for release in nightly[keep:]
+        if str(release["tagName"]) not in preserved
+    ]
 
 
 def parser() -> argparse.ArgumentParser:
@@ -331,6 +376,7 @@ def parser() -> argparse.ArgumentParser:
 
     notes = subparsers.add_parser("notes")
     notes.add_argument("--output", type=pathlib.Path, required=True)
+    notes.add_argument("--repository", required=True)
     notes.add_argument("--version", required=True)
     notes.add_argument("--build-number", required=True)
     notes.add_argument("--source-sha", required=True)
@@ -351,16 +397,25 @@ def parser() -> argparse.ArgumentParser:
     verify_app.add_argument("--bundle-identifier-prefix", required=True)
     verify_app.add_argument("--version", required=True)
     verify_app.add_argument("--build-number", required=True)
+    verify_app.add_argument("--plugin-kit-version", required=True, type=int)
 
     verify_catalog = subparsers.add_parser("verify-catalog")
     verify_catalog.add_argument("--catalog", type=pathlib.Path, required=True)
     verify_catalog.add_argument("--plugins-dir", type=pathlib.Path, required=True)
+    verify_catalog.add_argument("--repository", required=True)
     verify_catalog.add_argument("--tag", required=True)
     verify_catalog.add_argument("--build-number", required=True)
 
     stale_tags = subparsers.add_parser("stale-tags")
     stale_tags.add_argument("--input", type=pathlib.Path, required=True)
     stale_tags.add_argument("--keep", type=int, default=14)
+    stale_tags.add_argument("--preserve-tag", action="append", default=[])
+
+    appcast_tag = subparsers.add_parser("appcast-tag")
+    appcast_tag.add_argument("--input", type=pathlib.Path, required=True)
+
+    plugin_kit_version = subparsers.add_parser("plugin-kit-version")
+    plugin_kit_version.add_argument("--plugins-dir", type=pathlib.Path, required=True)
     return root
 
 
@@ -383,6 +438,7 @@ def main() -> None:
     elif args.command == "notes":
         write_release_notes(
             args.output,
+            args.repository,
             args.version,
             args.build_number,
             args.source_sha,
@@ -405,18 +461,24 @@ def main() -> None:
             args.bundle_identifier_prefix,
             args.version,
             args.build_number,
+            args.plugin_kit_version,
         )
     elif args.command == "verify-catalog":
         verify_nightly_catalog(
             args.catalog,
             args.plugins_dir,
+            args.repository,
             args.tag,
             args.build_number,
         )
     elif args.command == "stale-tags":
         releases = json.loads(args.input.read_text(encoding="utf-8"))
-        for tag in stale_nightly_tags(releases, args.keep):
+        for tag in stale_nightly_tags(releases, args.keep, args.preserve_tag):
             print(tag)
+    elif args.command == "appcast-tag":
+        print(read_nightly_appcast_tag(args.input))
+    elif args.command == "plugin-kit-version":
+        print(discover_plugin_metadata(args.plugins_dir)["PLUGIN_KIT_VERSION"])
 
 
 if __name__ == "__main__":

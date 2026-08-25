@@ -19,10 +19,16 @@ enum AppStorageScope {
         #endif
     }
 
-    static func applicationSupportRoot(fileManager: FileManager = .default) -> URL {
+    static func applicationSupportRoot(
+        fileManager: FileManager = .default,
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
+    ) -> URL {
         let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
 
-        return baseURL.appendingPathComponent(applicationSupportDirectoryName, isDirectory: true)
+        return baseURL.appendingPathComponent(
+            applicationSupportDirectoryName(infoDictionary: infoDictionary),
+            isDirectory: true
+        )
     }
 }

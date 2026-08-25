@@ -37,19 +37,26 @@ class NightlyReleaseTests(unittest.TestCase):
     def test_release_warning_is_first(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = pathlib.Path(temporary_directory) / "notes.md"
-            nightly_release.write_release_notes(output, "1.2.1", "512.1", "a" * 40)
+            nightly_release.write_release_notes(
+                output,
+                "example/MacTools",
+                "1.2.1",
+                "512.1",
+                "a" * 40,
+            )
             notes = output.read_text(encoding="utf-8")
 
             self.assertTrue(notes.startswith("> [!WARNING]\n"))
             self.assertIn("MacTools Nightly is unstable", notes)
             self.assertIn("Signed assets for an existing Nightly tag are never replaced", notes)
+            self.assertIn("github.com/example/MacTools/commit/", notes)
 
     def test_appcast_uses_dedicated_asset_and_numeric_build(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = pathlib.Path(temporary_directory) / "appcast.xml"
             nightly_release.write_appcast(
                 output_path=output,
-                repository="ggbond268/MacTools",
+                repository="example/MacTools",
                 tag="nightly-512-1",
                 version="1.2.1",
                 build_number="512.1",
@@ -63,6 +70,11 @@ class NightlyReleaseTests(unittest.TestCase):
             self.assertIn("<sparkle:version>512.1</sparkle:version>", content)
             self.assertIn("nightly-512-1/MacTools-Nightly.dmg", content)
             self.assertNotIn("docs/appcast.xml", content)
+
+            self.assertEqual(
+                nightly_release.read_nightly_appcast_tag(output),
+                "nightly-512-1",
+            )
 
     def test_verify_app_accepts_fully_isolated_nightly_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -81,15 +93,17 @@ class NightlyReleaseTests(unittest.TestCase):
                 "CFBundleURLTypes": [{"CFBundleURLSchemes": ["mactools-nightly"]}],
                 "MTApplicationSupportDirectoryName": "MacTools Nightly",
                 "MTReleaseChannel": "nightly",
-                "MTPluginCatalogURL": "https://mactools.ggbond.app/nightly/plugins/v5/catalog.json",
+                "MTPluginCatalogURL": "https://mactools.ggbond.app/nightly/plugins/v6/catalog.json",
                 "MTRightClickConfigurationHomeRelativePath": "Library/Application Support/MacTools Nightly/right-click-menu.json",
                 "SUFeedURL": "https://mactools.ggbond.app/nightly/appcast.xml",
             }
             extension_info = {
+                "CFBundleDisplayName": "MacTools Nightly 右键工具",
                 "CFBundleIdentifier": "com.example.mactools.nightly.right-click.finder-sync",
                 "CFBundleShortVersionString": "1.2.1",
                 "CFBundleVersion": "512.1",
                 "MTRightClickHostURLScheme": "mactools-nightly",
+                "MTRightClickToolbarItemName": "MacTools Nightly",
                 "MTRightClickConfigurationHomeRelativePath": "Library/Application Support/MacTools Nightly/right-click-menu.json",
             }
             with app_info_path.open("wb") as file:
@@ -102,7 +116,16 @@ class NightlyReleaseTests(unittest.TestCase):
                 "com.example",
                 "1.2.1",
                 "512.1",
+                6,
             )
+
+    def test_appcast_tag_rejects_malformed_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            appcast = pathlib.Path(temporary_directory) / "appcast.xml"
+            appcast.write_text("<html>not an appcast", encoding="utf-8")
+
+            with self.assertRaises(SystemExit):
+                nightly_release.read_nightly_appcast_tag(appcast)
 
     def test_catalog_requires_all_plugins_and_build_specific_versions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -132,7 +155,7 @@ class NightlyReleaseTests(unittest.TestCase):
                                 "version": "1.512.1",
                                 "pluginKitVersion": 5,
                                 "package": {
-                                    "url": "https://github.com/ggbond268/MacTools/releases/download/nightly-512-1/example.mactoolsplugin.zip"
+                                    "url": "https://github.com/example/MacTools/releases/download/nightly-512-1/example.mactoolsplugin.zip"
                                 },
                             }
                         ],
@@ -144,6 +167,7 @@ class NightlyReleaseTests(unittest.TestCase):
             nightly_release.verify_nightly_catalog(
                 catalog_path,
                 plugins,
+                "example/MacTools",
                 "nightly-512-1",
                 "512.1",
             )
@@ -169,12 +193,53 @@ class NightlyReleaseTests(unittest.TestCase):
                     "isPrerelease": True,
                     "publishedAt": "2026-08-21T00:00:00Z",
                 },
+                {
+                    "tagName": "nightly-99-1",
+                    "isDraft": True,
+                    "isPrerelease": True,
+                    "publishedAt": None,
+                },
             ]
         )
 
         self.assertEqual(
             nightly_release.stale_nightly_tags(releases, keep=2),
             ["nightly-2-1", "nightly-1-1"],
+        )
+        self.assertEqual(
+            nightly_release.stale_nightly_tags(
+                releases,
+                keep=2,
+                preserve_tags=["nightly-1-1"],
+            ),
+            ["nightly-2-1"],
+        )
+
+    def test_retention_never_deletes_the_advertised_tag(self) -> None:
+        advertised_tag = "nightly-100-1"
+        releases = [
+            {
+                "tagName": advertised_tag,
+                "isPrerelease": True,
+                "publishedAt": "2026-08-01T00:00:00Z",
+            }
+        ]
+        releases.extend(
+            {
+                "tagName": f"nightly-{100 + index}-1",
+                "isPrerelease": True,
+                "publishedAt": f"2026-08-{index + 1:02d}T00:00:00Z",
+            }
+            for index in range(1, 15)
+        )
+
+        self.assertEqual(
+            nightly_release.stale_nightly_tags(
+                releases,
+                keep=14,
+                preserve_tags=[advertised_tag],
+            ),
+            [],
         )
 
 

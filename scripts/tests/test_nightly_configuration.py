@@ -18,7 +18,13 @@ class NightlyConfigurationTests(unittest.TestCase):
         self.assertIn("MACTOOLS_URL_SCHEME: mactools-nightly", project)
         self.assertIn('APPLICATION_SUPPORT_DIRECTORY_NAME: "MacTools Nightly"', project)
         self.assertIn("https://mactools.ggbond.app/nightly/appcast.xml", project)
-        self.assertIn("https://mactools.ggbond.app/nightly/plugins/v5/catalog.json", project)
+        self.assertNotIn("https://mactools.ggbond.app/nightly/plugins/v5/catalog.json", project)
+        self.assertNotIn(
+            "MACTOOLS_RELEASE_CHANNEL: stable\n        PLUGIN_CATALOG_URL:",
+            project,
+        )
+        self.assertIn("RIGHT_CLICK_EXTENSION_DISPLAY_NAME: MacTools Nightly 右键工具", project)
+        self.assertIn("RIGHT_CLICK_TOOLBAR_ITEM_NAME: MacTools Nightly", project)
 
     def test_finder_sync_nightly_entitlement_isolated_from_stable_and_debug(self) -> None:
         entitlement_path = (
@@ -61,6 +67,12 @@ class NightlyConfigurationTests(unittest.TestCase):
         self.assertIn("Build and verify unsigned Nightly configuration", workflow)
         self.assertIn("-configuration Nightly", workflow)
         self.assertIn("scripts/nightly-release.py verify-app", workflow)
+        self.assertIn("scripts/nightly-release.py plugin-kit-version", workflow)
+        self.assertIn('--plugin-kit-version "$PLUGIN_KIT_VERSION"', workflow)
+        self.assertIn(
+            'PLUGIN_CATALOG_URL="https://mactools.ggbond.app/nightly/plugins/v${PLUGIN_KIT_VERSION}/catalog.json"',
+            workflow,
+        )
 
     def test_nightly_workflow_is_gated_manual_and_fail_closed(self) -> None:
         workflow = (REPO_ROOT / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
@@ -84,6 +96,16 @@ class NightlyConfigurationTests(unittest.TestCase):
         self.assertIn("unexpectedly replaced the stable Latest release", workflow)
         self.assertIn("preflight-app-plugin-catalog.swift", workflow)
         self.assertIn('--deployed-catalog "$SIGNED_PLUGIN_CATALOG_PATH"', workflow)
+        self.assertIn(
+            '(cd "$DMG_DIRECTORY" && shasum -a 256 "$DMG_NAME")',
+            workflow,
+        )
+        self.assertIn("gh api --paginate --slurp", workflow)
+        self.assertNotIn("--slurp \\\n            --jq", workflow)
+        self.assertIn("jq 'flatten | map(", workflow)
+        self.assertIn('--preserve-tag "$COMMITTED_TAG"', workflow)
+        self.assertIn('--preserve-tag "$DEPLOYED_TAG"', workflow)
+        self.assertIn('&& DEPLOYED_TAG="$(scripts/nightly-release.py appcast-tag', workflow)
 
     def test_nightly_reuses_existing_release_credentials(self) -> None:
         workflow = (REPO_ROOT / ".github/workflows/nightly.yml").read_text(encoding="utf-8")

@@ -152,6 +152,16 @@ make run MACTOOLS_PLUGIN_CATALOG_URL=https://mactools.ggbond.app/plugins/catalog
 
 The app copies the package into its own staging and installed directories. Uninstall deletes only the installed copy under MacTools application support; it never deletes the plugin source directory or the local build directory.
 
+## Public Nightly Catalog
+
+The public Nightly channel publishes a separate, signed catalog under `docs/nightly/plugins/vN/catalog.json`. It never modifies or merges into the stable `docs/plugins/vN/catalog.json` catalog.
+
+Each Nightly workflow run performs one aggregate `Nightly` app build, then passes that build's products directory to `build-plugin-release-assets.sh --products-dir`. Every plugin package and the host app therefore come from the same source commit. The workflow publishes a complete catalog rather than an incremental delta.
+
+Nightly package versions are generated artifacts using `source-major.run.attempt`, where `source-major` comes from the plugin's committed manifest and `run.attempt` comes from GitHub Actions. This produces valid, monotonically increasing versions without changing or pre-bumping source `plugin.json` files. Stable plugin releases continue to own committed manifest version bumps.
+
+The workflow signs the complete catalog with the existing catalog key, verifies every package URL and PluginKit version, and publishes it together with the dedicated Nightly appcast. See `docs/github-actions.md` for the maintainer enablement and two-run update validation procedure.
+
 ## Release Flow
 
 Recommended production flow is an incremental batch plugin release:

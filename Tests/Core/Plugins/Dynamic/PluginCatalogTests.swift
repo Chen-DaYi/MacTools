@@ -46,6 +46,32 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
+    func testNightlyChannelDerivesVersionedCatalogWhenBuildSettingIsEmpty() {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.configuredProductionCatalogURL(
+                for: 6,
+                infoDictionary: [
+                    "MTPluginCatalogURL": "",
+                    "MTReleaseChannel": "nightly"
+                ]
+            ),
+            URL(string: "https://mactools.ggbond.app/nightly/plugins/v6/catalog.json")
+        )
+    }
+
+    func testNightlyChannelDerivesVersionedCatalogWhenBuildSettingIsUnresolved() {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.configuredProductionCatalogURL(
+                for: 6,
+                infoDictionary: [
+                    "MTPluginCatalogURL": "$(PLUGIN_CATALOG_URL)",
+                    "MTReleaseChannel": "nightly"
+                ]
+            ),
+            URL(string: "https://mactools.ggbond.app/nightly/plugins/v6/catalog.json")
+        )
+    }
+
     func testConfiguredCatalogRejectsNonHTTPSURL() {
         XCTAssertEqual(
             PluginCatalogProviderConfiguration.configuredProductionCatalogURL(
@@ -53,6 +79,16 @@ final class PluginCatalogTests: XCTestCase {
                 infoDictionary: ["MTPluginCatalogURL": "file:///tmp/catalog.json"]
             ),
             URL(string: "https://mactools.ggbond.app/plugins/v5/catalog.json")
+        )
+    }
+
+    func testEmptyConfiguredCatalogFollowsSupportedPluginKitVersion() {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.configuredProductionCatalogURL(
+                for: 6,
+                infoDictionary: ["MTPluginCatalogURL": ""]
+            ),
+            URL(string: "https://mactools.ggbond.app/plugins/v6/catalog.json")
         )
     }
 
