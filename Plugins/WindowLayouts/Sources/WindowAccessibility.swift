@@ -71,6 +71,19 @@ struct ExternalFocusedWindowTarget: Sendable {
     let preferredWindowNumber: Int?
 }
 
+func firstCancellableMatch<Element>(
+    in elements: [Element],
+    where predicate: (Element) -> Bool
+) throws -> Element? {
+    for element in elements {
+        try Task.checkCancellation()
+        if predicate(element) {
+            return element
+        }
+    }
+    return nil
+}
+
 actor WindowAccessibilityWorker {
     private let messagingTimeout: Float
 
@@ -86,7 +99,7 @@ actor WindowAccessibilityWorker {
         AXUIElementSetMessagingTimeout(applicationElement, messagingTimeout)
         let resolvedWindow: AXUIElement?
         if let preferredWindowNumber = target.preferredWindowNumber {
-            resolvedWindow = copyWindow(applicationElement, matching: preferredWindowNumber)
+            resolvedWindow = try copyWindow(applicationElement, matching: preferredWindowNumber)
         } else {
             resolvedWindow = copyWindowAttribute(applicationElement, kAXFocusedWindowAttribute)
                 ?? copyWindowAttribute(applicationElement, kAXMainWindowAttribute)
@@ -256,8 +269,12 @@ actor WindowAccessibilityWorker {
         return (value as! AXUIElement)
     }
 
-    private func copyWindow(_ application: AXUIElement, matching windowNumber: Int) -> AXUIElement? {
+    private func copyWindow(
+        _ application: AXUIElement,
+        matching windowNumber: Int
+    ) throws -> AXUIElement? {
         guard windowNumber > 0 else { return nil }
+        try Task.checkCancellation()
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             application,
@@ -267,13 +284,10 @@ actor WindowAccessibilityWorker {
               let windows = value as? [AXUIElement] else {
             return nil
         }
-        for window in windows {
+        return try firstCancellableMatch(in: windows) { window in
             AXUIElementSetMessagingTimeout(window, messagingTimeout)
-            if copyNumberAttribute(window, "AXWindowNumber")?.intValue == windowNumber {
-                return window
-            }
+            return copyNumberAttribute(window, "AXWindowNumber")?.intValue == windowNumber
         }
-        return nil
     }
 
     private func hasAttribute(_ element: AXUIElement, _ attribute: String) -> Bool {
