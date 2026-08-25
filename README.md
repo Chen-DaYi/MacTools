@@ -99,6 +99,10 @@ MacTools supports Simplified Chinese, Traditional Chinese, English, Spanish, Fre
 brew install --cask mactools
 ```
 
+### Nightly builds
+
+When a public Nightly release is available, download `MacTools-Nightly.dmg` from the newest [`nightly-*` prerelease](https://github.com/ggbond268/MacTools/releases). Nightly is an unstable, separately signed app with its own settings, URL scheme, update feed, and same-commit plugin catalog, so it can be installed beside stable MacTools. Do not rely on it for critical workflows; published Nightly assets are retained only for a bounded period.
+
 ## Upgrade
 
 ```bash

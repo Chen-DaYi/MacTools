@@ -39,7 +39,21 @@ struct PluginCatalogProviderConfiguration {
         return URL(string: "https://mactools.ggbond.app/plugins/v\(pluginKitVersion)/catalog.json")!
     }
 
-    static let productionCatalogURL = productionCatalogURL(
+    static func configuredProductionCatalogURL(
+        for pluginKitVersion: Int,
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
+    ) -> URL {
+        if let rawURL = infoDictionary?["MTPluginCatalogURL"] as? String,
+           !rawURL.contains("$("),
+           let url = URL(string: rawURL),
+           url.scheme?.lowercased() == "https" {
+            return url
+        }
+
+        return productionCatalogURL(for: pluginKitVersion)
+    }
+
+    static let productionCatalogURL = configuredProductionCatalogURL(
         for: PluginPackageManifestLoader.supportedPluginKitVersion
     )
 

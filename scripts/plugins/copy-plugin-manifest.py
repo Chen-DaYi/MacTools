@@ -8,12 +8,15 @@ import json
 import pathlib
 import re
 import shutil
+from typing import Optional
 
 
 MARKETING_VERSION_PATTERN = re.compile(
     r"^\s*MARKETING_VERSION\s*=\s*(\S+)\s*$",
     re.MULTILINE,
 )
+PLUGIN_VERSION_PATTERN = re.compile(r"^([0-9]+)(?:\.[0-9]+){0,2}$")
+NIGHTLY_BUILD_PATTERN = re.compile(r"^([0-9]+)\.([0-9]+)$")
 
 
 def development_host_version(config_path: pathlib.Path) -> str:
@@ -28,13 +31,28 @@ def copy_manifest(
     destination: pathlib.Path,
     configuration: str,
     app_version_config: pathlib.Path,
+    nightly_build_number: Optional[str] = None,
 ) -> None:
-    if configuration != "Debug":
+    if nightly_build_number is not None and configuration != "Nightly":
+        raise ValueError("Nightly build number is only valid for the Nightly configuration")
+    if configuration != "Debug" and nightly_build_number is None:
         shutil.copy2(source, destination)
         return
 
     manifest = json.loads(source.read_text(encoding="utf-8"))
-    manifest["minHostVersion"] = development_host_version(app_version_config)
+    if configuration == "Debug":
+        manifest["minHostVersion"] = development_host_version(app_version_config)
+    if nightly_build_number is not None:
+        source_version = str(manifest["version"])
+        source_match = PLUGIN_VERSION_PATTERN.fullmatch(source_version)
+        build_match = NIGHTLY_BUILD_PATTERN.fullmatch(nightly_build_number)
+        if source_match is None:
+            raise ValueError("source plugin version must contain one to three numeric components")
+        if build_match is None:
+            raise ValueError("Nightly build number must use numeric run.attempt components")
+        manifest["version"] = (
+            f"{source_match.group(1)}.{build_match.group(1)}.{build_match.group(2)}"
+        )
     destination.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -50,6 +68,7 @@ def main() -> None:
     copy_parser.add_argument("--destination", type=pathlib.Path, required=True)
     copy_parser.add_argument("--configuration", required=True)
     copy_parser.add_argument("--app-version-config", type=pathlib.Path, required=True)
+    copy_parser.add_argument("--nightly-build-number")
 
     version_parser = subparsers.add_parser("host-version")
     version_parser.add_argument("--app-version-config", type=pathlib.Path, required=True)
@@ -64,6 +83,7 @@ def main() -> None:
         destination=args.destination,
         configuration=args.configuration,
         app_version_config=args.app_version_config,
+        nightly_build_number=args.nightly_build_number,
     )
 
 

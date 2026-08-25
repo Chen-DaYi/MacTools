@@ -96,6 +96,10 @@ MacTools 支持简体中文、繁體中文、English、Español、Français、Р
 brew install --cask mactools
 ```
 
+### Nightly 构建
+
+公开 Nightly 发布可用后，请从最新的 [`nightly-*` 预发布](https://github.com/ggbond268/MacTools/releases)下载 `MacTools-Nightly.dmg`。Nightly 是不稳定的独立签名应用，使用单独的设置目录、URL Scheme、更新源和同一提交构建的插件目录，因此可以与稳定版 MacTools 同时安装。请勿将它用于关键工作流；已发布的 Nightly 产物只会保留有限时间。
+
 ## 升级
 
 ```bash

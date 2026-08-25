@@ -64,6 +64,118 @@ class CopyPluginManifestTests(unittest.TestCase):
 
             self.assertEqual(destination.read_bytes(), original)
 
+    def test_nightly_copy_derives_valid_monotonic_version_without_changing_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "plugin.json"
+            destination = root / "copied.json"
+            config = root / "AppVersion.xcconfig"
+            source.write_text(
+                json.dumps(
+                    {
+                        "id": "example",
+                        "version": "1.4.2",
+                        "minHostVersion": "1.2.0",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original = source.read_bytes()
+            config.write_text("MARKETING_VERSION = 1.2.3\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), "copy",
+                    "--source", str(source),
+                    "--destination", str(destination),
+                    "--configuration", "Nightly",
+                    "--app-version-config", str(config),
+                    "--nightly-build-number", "412.2",
+                ],
+                check=True,
+            )
+
+            copied = json.loads(destination.read_text(encoding="utf-8"))
+            self.assertEqual(copied["version"], "1.412.2")
+            self.assertEqual(copied["minHostVersion"], "1.2.0")
+            self.assertEqual(source.read_bytes(), original)
+
+    def test_nightly_copy_rejects_invalid_build_number(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "plugin.json"
+            destination = root / "copied.json"
+            config = root / "AppVersion.xcconfig"
+            source.write_text(
+                json.dumps({"id": "example", "version": "1.0.0"}),
+                encoding="utf-8",
+            )
+            config.write_text("MARKETING_VERSION = 1.2.3\n", encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), "copy",
+                    "--source", str(source),
+                    "--destination", str(destination),
+                    "--configuration", "Nightly",
+                    "--app-version-config", str(config),
+                    "--nightly-build-number", "412-beta",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("numeric run.attempt components", result.stderr)
+
+    def test_nightly_packaging_reuses_aggregate_build_products(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "Source"
+            plugin_root = source / "Example"
+            products = root / "Products"
+            output = root / "Output"
+            bundle = products / "Example.bundle"
+            plugin_root.mkdir(parents=True)
+            bundle.mkdir(parents=True)
+            (bundle / "payload").write_text("nightly bundle", encoding="utf-8")
+            (plugin_root / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "id": "example-nightly-plugin",
+                        "displayName": "Example",
+                        "version": "1.3.0",
+                        "minHostVersion": "1.2.0",
+                        "pluginKitVersion": 5,
+                        "bundleRelativePath": "Example.bundle",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            subprocess.run(
+                [
+                    str(REPO_ROOT / "scripts/plugins/build-local-plugins.sh"),
+                    "--source-dir", str(source),
+                    "--output-dir", str(output),
+                    "--configuration", "Nightly",
+                    "--products-dir", str(products),
+                    "--nightly-build-number", "512.1",
+                    "--skip-catalog",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            package = output / "Packages/example-nightly-plugin.mactoolsplugin"
+            manifest = json.loads((package / "plugin.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["version"], "1.512.1")
+            self.assertEqual(
+                (package / "Example.bundle/payload").read_text(encoding="utf-8"),
+                "nightly bundle",
+            )
+
     def test_debug_sync_normalizes_and_caches_packaged_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)

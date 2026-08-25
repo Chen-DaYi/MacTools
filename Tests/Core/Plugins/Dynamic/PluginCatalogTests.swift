@@ -32,6 +32,30 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
+    func testConfiguredNightlyCatalogOverridesProductionURL() throws {
+        let nightlyURL = try XCTUnwrap(
+            URL(string: "https://mactools.ggbond.app/nightly/plugins/v5/catalog.json")
+        )
+
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.configuredProductionCatalogURL(
+                for: 5,
+                infoDictionary: ["MTPluginCatalogURL": nightlyURL.absoluteString]
+            ),
+            nightlyURL
+        )
+    }
+
+    func testConfiguredCatalogRejectsNonHTTPSURL() {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.configuredProductionCatalogURL(
+                for: 5,
+                infoDictionary: ["MTPluginCatalogURL": "file:///tmp/catalog.json"]
+            ),
+            URL(string: "https://mactools.ggbond.app/plugins/v5/catalog.json")
+        )
+    }
+
     func testCurrentVerifierRejectsSchemaVersion1() throws {
         let catalog = makeCatalog(schemaVersion: 1)
         let verifier = PluginCatalogVerifier.localDevelopment(hostVersion: "1.0.0")

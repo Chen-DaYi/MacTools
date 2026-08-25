@@ -2,6 +2,16 @@ import Foundation
 
 enum AppStorageScope {
     static var applicationSupportDirectoryName: String {
+        applicationSupportDirectoryName(infoDictionary: Bundle.main.infoDictionary)
+    }
+
+    static func applicationSupportDirectoryName(infoDictionary: [String: Any]?) -> String {
+        if let configuredName = infoDictionary?["MTApplicationSupportDirectoryName"] as? String,
+           !configuredName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !configuredName.contains("$(") {
+            return configuredName
+        }
+
         #if DEBUG
         return "MacTools Dev"
         #else
