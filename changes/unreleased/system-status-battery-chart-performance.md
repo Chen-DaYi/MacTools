@@ -4,4 +4,4 @@ type: fixed
 area: System Status
 ---
 
-Fixed battery temperature and time-status reporting, avoided unnecessary power-profiler work, and made interactive charts more responsive with instant timeline switching and clearer time-axis labels while preserving the full selected timeline.
+Fixed battery temperature and time-remaining reporting, reduced power-profiler work, and made interactive charts faster with instant range switching, clearer time labels, and complete selected timelines.
