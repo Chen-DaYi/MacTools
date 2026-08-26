@@ -90,6 +90,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     private var isAccessibilityGranted: Bool
     private var modifierDragSession: (any WindowModifierDragSessionManaging)?
     private var modifierDragError: String?
+    private var modifierDragMonitorStartFailed = false
     private var externalGestureConflicts: [PluginInputGestureConflict] = []
 
     var actionExecutionRevision: UInt64 { store.revision }
@@ -154,7 +155,10 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
     }
 
     var activeInputGestureClaims: [PluginInputGestureClaim] {
-        guard store.modifierDragEnabled, isAccessibilityGranted else { return [] }
+        guard store.modifierDragEnabled,
+              isAccessibilityGranted,
+              !modifierDragMonitorStartFailed
+        else { return [] }
         return [modifierDragClaim]
     }
 
@@ -321,6 +325,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         if previous != isAccessibilityGranted {
             if isAccessibilityGranted {
                 modifierDragError = nil
+                modifierDragMonitorStartFailed = false
             } else if store.modifierDragEnabled {
                 modifierDragError = localizedMessage(for: .accessibilityRequired)
             }
@@ -464,6 +469,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
 
     func setModifierDragModifiers(_ modifiers: ShortcutModifiers) {
         modifierDragError = nil
+        modifierDragMonitorStartFailed = false
         store.setModifierDragModifiers(modifiers)
         applyModifierDragConfiguration()
     }
@@ -477,6 +483,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
 
     func setModifierDragEnabled(_ enabled: Bool) {
         modifierDragError = nil
+        modifierDragMonitorStartFailed = false
         guard enabled else {
             store.setModifierDragEnabled(false)
             applyModifierDragConfiguration()
@@ -525,7 +532,16 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
             session = newSession
         }
         session.configure(modifiers: store.modifierDragModifiers)
-        session.start()
+        switch session.start() {
+        case .success:
+            modifierDragMonitorStartFailed = false
+        case let .failure(error):
+            session.stop()
+            modifierDragSession = nil
+            modifierDragMonitorStartFailed = true
+            modifierDragError = localizedMessage(for: error)
+            onStateChange?()
+        }
     }
 
     private func stopModifierDragSession() {
@@ -863,6 +879,7 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         switch controlID {
         case SettingsID.reset:
             modifierDragError = nil
+            modifierDragMonitorStartFailed = false
             store.reset()
             applyModifierDragConfiguration()
         case SettingsID.addCustom:
@@ -1121,6 +1138,16 @@ final class WindowLayoutsPlugin: MacToolsPlugin, AccessibilityPermissionRefreshi
         case .noPreviousFrame: localizedKey("error.noPreviousFrame", "此窗口没有可恢复的上一个位置。")
         case .frameReadFailed: localizedKey("error.frameReadFailed", "无法读取当前窗口的位置和大小。")
         case .frameWriteFailed: localizedKey("error.frameWriteFailed", "无法调整当前窗口。")
+        }
+    }
+
+    private func localizedMessage(for error: WindowModifierDragMonitorStartError) -> String {
+        switch error {
+        case .eventTapUnavailable, .runLoopSourceUnavailable, .eventLoopUnavailable:
+            localizedKey(
+                "error.modifierDragMonitorUnavailable",
+                "无法启动全局指针监控。请关闭后重新开启修饰键拖移。"
+            )
         }
     }
 

@@ -251,6 +251,11 @@ final class WindowLayoutsPluginTests: XCTestCase {
         plugin.inputGestureConflictsDidChange([conflict])
 
         XCTAssertEqual(session.stopCount, 1)
+        XCTAssertEqual(
+            plugin.activeInputGestureClaims.map(\.id),
+            ["pointer.move.modifiers.9"],
+            "A paused owner must retain its claim so conflict resolution stays stable"
+        )
         XCTAssertEqual(stateChangeCount, 0)
 
         let configureCountAfterConflict = session.configureCount
@@ -263,6 +268,38 @@ final class WindowLayoutsPluginTests: XCTestCase {
         plugin.inputGestureConflictsDidChange([])
         XCTAssertEqual(session.startCount, startCountBeforeResume + 1)
         XCTAssertEqual(stateChangeCount, 0)
+    }
+
+    func testModifierDragMonitorStartupFailureSuppressesClaimAndSupportsRetry() throws {
+        let session = MockWindowModifierDragSession()
+        session.startResult = .failure(.eventTapUnavailable)
+        let plugin = makePlugin(modifierDragSession: session)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "window-layouts"))
+        plugin.setModifierDragEnabled(true)
+
+        XCTAssertTrue(plugin.activeInputGestureClaims.isEmpty)
+        XCTAssertFalse(session.isRunning)
+        XCTAssertEqual(session.startCount, 1)
+        XCTAssertEqual(session.stopCount, 1)
+        XCTAssertEqual(
+            try modifierDragFooter(in: plugin),
+            plugin.localizedKey(
+                "error.modifierDragMonitorUnavailable",
+                "无法启动全局指针监控。请关闭后重新开启修饰键拖移。"
+            )
+        )
+
+        session.startResult = .success(())
+        plugin.setModifierDragEnabled(false)
+        plugin.setModifierDragEnabled(true)
+
+        XCTAssertTrue(session.isRunning)
+        XCTAssertEqual(session.startCount, 2)
+        XCTAssertEqual(
+            plugin.activeInputGestureClaims.map(\.id),
+            ["pointer.move.modifiers.6"]
+        )
     }
 
     func testModifierDragFooterHidesInactiveConflictsAndClearsRuntimeErrors() throws {
@@ -867,18 +904,25 @@ private final class MockWindowModifierDragSession: WindowModifierDragSessionMana
     private(set) var configureCount = 0
     private(set) var startCount = 0
     private(set) var stopCount = 0
+    private(set) var isRunning = false
+    var startResult: Result<Void, WindowModifierDragMonitorStartError> = .success(())
 
     func configure(modifiers: ShortcutModifiers) {
         configureCount += 1
         configuredModifiers = modifiers
     }
 
-    func start() {
+    func start() -> Result<Void, WindowModifierDragMonitorStartError> {
         startCount += 1
+        if case .success = startResult {
+            isRunning = true
+        }
+        return startResult
     }
 
     func stop() {
         stopCount += 1
+        isRunning = false
     }
 }
 

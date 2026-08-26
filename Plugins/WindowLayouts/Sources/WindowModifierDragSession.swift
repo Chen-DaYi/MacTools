@@ -7,8 +7,9 @@ import MacToolsPluginKit
 protocol WindowModifierDragSessionManaging: AnyObject {
     var onFailure: (WindowLayoutError) -> Void { get set }
     var onSuccess: () -> Void { get set }
+    var isRunning: Bool { get }
     func configure(modifiers: ShortcutModifiers)
-    func start()
+    func start() -> Result<Void, WindowModifierDragMonitorStartError>
     func stop()
 }
 
@@ -278,7 +279,6 @@ struct WindowModifierDragActionQueue {
 nonisolated final class WindowModifierDragSession: @unchecked Sendable,
     WindowModifierDragSessionManaging
 {
-    private typealias CallbackContext = PluginCallbackContext<WindowModifierDragSession>
     @MainActor var onFailure: (WindowLayoutError) -> Void {
         get { controller.onFailure }
         set { controller.onFailure = newValue }
@@ -290,17 +290,18 @@ nonisolated final class WindowModifierDragSession: @unchecked Sendable,
 
     private let lock = NSLock()
     private let controller: WindowModifierDragController
+    private let eventMonitor: any WindowModifierDragEventMonitoring
     private var gesture: WindowModifierDragGesture
     private var actionQueue = WindowModifierDragActionQueue()
-    private var tap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    private var callbackPointer: UnsafeMutableRawPointer?
+
+    @MainActor var isRunning: Bool { eventMonitor.isRunning }
 
     @MainActor
     init(
         modifiers: ShortcutModifiers = WindowLayoutsStore.defaultModifierDragModifiers,
         resolver: (any WindowUnderPointerResolving)? = nil,
-        frameAdapter: AccessibilityWindowFrameAdapter? = nil
+        frameAdapter: AccessibilityWindowFrameAdapter? = nil,
+        eventMonitor: (any WindowModifierDragEventMonitoring)? = nil
     ) {
         let adapter = frameAdapter ?? AccessibilityWindowFrameAdapter()
         self.controller = WindowModifierDragController(
@@ -308,6 +309,7 @@ nonisolated final class WindowModifierDragSession: @unchecked Sendable,
             frameReader: adapter,
             frameWriter: adapter
         )
+        self.eventMonitor = eventMonitor ?? SystemWindowModifierDragEventMonitor()
         self.gesture = WindowModifierDragGesture(requiredModifiers: modifiers)
     }
 
@@ -322,93 +324,51 @@ nonisolated final class WindowModifierDragSession: @unchecked Sendable,
     }
 
     @MainActor
-    func start() {
-        guard lock.withLock({ tap == nil }) else { return }
-        let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
-            | CGEventMask(1 << CGEventType.mouseMoved.rawValue)
-            | CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
-            | CGEventMask(1 << CGEventType.rightMouseDown.rawValue)
-            | CGEventMask(1 << CGEventType.otherMouseDown.rawValue)
-        let callbackContext = CallbackContext(owner: self)
-        let callbackPointer = Unmanaged.passRetained(callbackContext).toOpaque()
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: eventMask,
-            callback: Self.eventCallback,
-            userInfo: callbackPointer
-        ) else {
-            callbackContext.invalidate()
-            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
-            onFailure(.accessibilityRequired)
-            return
-        }
-        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
-            CFMachPortInvalidate(tap)
-            callbackContext.invalidate()
-            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
-            onFailure(.accessibilityRequired)
-            return
-        }
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    func start() -> Result<Void, WindowModifierDragMonitorStartError> {
+        if eventMonitor.isRunning { return .success(()) }
         lock.withLock {
-            self.tap = tap
-            self.runLoopSource = source
-            self.callbackPointer = callbackPointer
-            _ = self.actionQueue.activate()
+            _ = actionQueue.activate()
         }
-        CGEvent.tapEnable(tap: tap, enable: true)
+        let result = eventMonitor.start { [weak self] event in
+            self?.handle(event)
+        }
+        if case .failure = result {
+            eventMonitor.stop()
+            lock.withLock {
+                _ = gesture.reset()
+                actionQueue.deactivate()
+            }
+            controller.stop()
+        }
+        return result
     }
 
     @MainActor
     func stop() {
-        let state = lock.withLock { () -> (CFMachPort?, CFRunLoopSource?, UnsafeMutableRawPointer?) in
+        eventMonitor.stop()
+        lock.withLock {
             _ = gesture.reset()
             actionQueue.deactivate()
-            let state = (tap, runLoopSource, callbackPointer)
-            tap = nil
-            runLoopSource = nil
-            callbackPointer = nil
-            return state
         }
         controller.stop()
-        if let callbackPointer = state.2 {
-            Unmanaged<CallbackContext>
-                .fromOpaque(callbackPointer)
-                .takeUnretainedValue()
-                .invalidate()
-        }
-        if let tap = state.0 {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        if let runLoopSource = state.1 {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        }
-        if let tap = state.0 {
-            CFMachPortInvalidate(tap)
-        }
-        if let callbackPointer = state.2 {
-            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
-        }
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap = lock.withLock({ tap }) {
-                CGEvent.tapEnable(tap: tap, enable: true)
-            }
+    private func handle(_ event: WindowModifierDragMonitorEvent) {
+        if event.type == .tapDisabledByTimeout || event.type == .tapDisabledByUserInput {
             let cancellation = lock.withLock { gesture.reset() }
             dispatch(cancellation)
-            return Unmanaged.passUnretained(event)
+            return
         }
 
         let modifiers = ShortcutModifiers.from(event.flags)
         let action = lock.withLock { () -> WindowModifierDragGestureAction? in
-            switch type {
+            switch event.type {
             case .flagsChanged:
                 return gesture.modifiersChanged(modifiers, pointer: event.location)
             case .mouseMoved:
+                guard gesture.shouldProcessPointerMovement(modifiers: modifiers) else {
+                    return nil
+                }
                 return gesture.pointerMoved(to: event.location, modifiers: modifiers)
             case .leftMouseDown, .rightMouseDown, .otherMouseDown:
                 return gesture.mouseButtonPressed()
@@ -417,7 +377,6 @@ nonisolated final class WindowModifierDragSession: @unchecked Sendable,
             }
         }
         dispatch(action)
-        return Unmanaged.passUnretained(event)
     }
 
     private func dispatch(_ action: WindowModifierDragGestureAction?) {
@@ -443,13 +402,6 @@ nonisolated final class WindowModifierDragSession: @unchecked Sendable,
         }
     }
 
-    private static let eventCallback: CGEventTapCallBack = { _, type, event, userInfo in
-        guard let userInfo else { return Unmanaged.passUnretained(event) }
-        let context = Unmanaged<CallbackContext>.fromOpaque(userInfo).takeUnretainedValue()
-        return context.withOwner { session in
-            session.handle(type: type, event: event)
-        } ?? Unmanaged.passUnretained(event)
-    }
 }
 
 private extension NSLock {
