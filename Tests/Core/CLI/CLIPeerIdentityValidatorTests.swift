@@ -2,6 +2,45 @@ import XCTest
 @testable import MacTools
 
 final class CLIPeerIdentityValidatorTests: XCTestCase {
+    func testLocalIdentityCacheReusesSuccessfulValidation() {
+        var cache = CLILocalPeerIdentityCache()
+        var loadCount = 0
+        let identity = CLIPeerIdentity(
+            processIdentifier: 1,
+            effectiveUserIdentifier: 501,
+            signingIdentifier: "app.example.mactools",
+            teamIdentifier: "TEAM123"
+        )
+
+        let first = cache.resolve {
+            loadCount += 1
+            return identity
+        }
+        let second = cache.resolve {
+            loadCount += 1
+            return nil
+        }
+
+        XCTAssertEqual(first, identity)
+        XCTAssertEqual(second, identity)
+        XCTAssertEqual(loadCount, 1)
+    }
+
+    func testLocalIdentityCacheRetriesAfterValidationFailure() {
+        var cache = CLILocalPeerIdentityCache()
+        var loadCount = 0
+
+        XCTAssertNil(cache.resolve {
+            loadCount += 1
+            return nil
+        })
+        XCTAssertNil(cache.resolve {
+            loadCount += 1
+            return nil
+        })
+        XCTAssertEqual(loadCount, 2)
+    }
+
     func testExactPeerMatchingRejectsWrongUserTeamIdentifierAndRole() {
         let validator = CLIPeerIdentityValidator()
         let broker = CLIPeerIdentity(

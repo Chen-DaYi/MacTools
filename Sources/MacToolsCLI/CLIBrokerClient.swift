@@ -10,6 +10,8 @@ enum CLIBrokerClientError: Error {
 
 final class CLIBrokerClient: @unchecked Sendable {
     private let identityValidator = CLIPeerIdentityValidator()
+    private let requestCleanupPolicy = CLIRequestCleanupPolicy(budget: .milliseconds(250))
+    private let connectionLifecyclePolicy = CLIConnectionLifecyclePolicy()
     private var connection: NSXPCConnection?
     private var negotiatedProtocolVersion: Int?
 
@@ -18,6 +20,17 @@ final class CLIBrokerClient: @unchecked Sendable {
     }
 
     func prepareHost(deadline: CLIStartupDeadline) async throws -> CLIHandshakeResponse {
+        try await connectionLifecyclePolicy.preserveConnectionOnSuccess(
+            operation: { [self] in
+                try await prepareHostConnection(deadline: deadline)
+            },
+            invalidate: { [self] in invalidateConnection() }
+        )
+    }
+
+    private func prepareHostConnection(
+        deadline: CLIStartupDeadline
+    ) async throws -> CLIHandshakeResponse {
         var lastMessage = "The MacTools command-line broker is unavailable."
         while let handshakeDeadline = deadline.cappedInstant(upTo: .seconds(1)) {
             do {
@@ -77,7 +90,11 @@ final class CLIBrokerClient: @unchecked Sendable {
         )
         let data = try CLIProtocolCodec.encodeRequest(request)
         let responseData: Data
-        guard let responseDeadline = deadline.cappedInstant(upTo: .seconds(10)) else {
+        guard let responseDeadline = requestCleanupPolicy.responseDeadline(
+            within: deadline,
+            maximumWait: .seconds(10)
+        ) else {
+            invalidateConnection()
             throw CLIBrokerClientError.unavailable(
                 "Timed out waiting for the broker reply; delivery state is unknown."
             )
@@ -98,11 +115,11 @@ final class CLIBrokerClient: @unchecked Sendable {
             }
         } catch is CancellationError {
             await Task.detached { [self] in
-                await cancel(requestID: requestID, deadline: deadline)
+                await cleanup(requestID: requestID, deadline: deadline)
             }.value
             throw CancellationError()
         } catch CLIBrokerClientError.timedOut {
-            await cancel(requestID: requestID, deadline: deadline)
+            await cleanup(requestID: requestID, deadline: deadline)
             throw CLIBrokerClientError.unavailable(
                 "Timed out waiting for the broker reply; delivery state is unknown."
             )
@@ -204,9 +221,21 @@ final class CLIBrokerClient: @unchecked Sendable {
         }
     }
 
-    private func cancel(requestID: UUID, deadline: CLIStartupDeadline) async {
-        guard let cancelDeadline = deadline.cappedInstant(upTo: .seconds(2)) else { return }
-        let _: Bool? = try? await awaitReply(deadline: cancelDeadline) { completion in
+    private func cleanup(requestID: UUID, deadline: CLIStartupDeadline) async {
+        await requestCleanupPolicy.performCleanup(
+            within: deadline,
+            cancel: { [self] cleanupDeadline in
+                await cancel(requestID: requestID, deadline: cleanupDeadline)
+            },
+            invalidate: { [self] in invalidateConnection() }
+        )
+    }
+
+    private func cancel(
+        requestID: UUID,
+        deadline: ContinuousClock.Instant
+    ) async {
+        let _: Bool? = try? await awaitReply(deadline: deadline) { completion in
             guard let broker = self.brokerProxy(errorHandler: { _ in
                 completion(.success(false))
             }) else {
@@ -215,6 +244,12 @@ final class CLIBrokerClient: @unchecked Sendable {
             }
             broker.cancel(requestID) { completion(.success($0)) }
         }
+    }
+
+    private func invalidateConnection() {
+        connection?.invalidate()
+        connection = nil
+        negotiatedProtocolVersion = nil
     }
 
     private func brokerProxy(

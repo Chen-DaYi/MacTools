@@ -10,11 +10,21 @@ final class CLIHostBridge: NSObject, CLIHostXPCProtocol {
     nonisolated private let requestState = CLIHostRequestState()
     private var connection: NSXPCConnection?
     private var reconnectTask: Task<Void, Never>?
+    private var reconnectBackoff = CLIReconnectBackoff()
+    private var connectionGeneration = CLIConnectionGeneration()
+    private var localIdentityCache = CLILocalPeerIdentityCache()
     private var serviceStatusObservation: AnyCancellable?
     private var isStarted = false
-    private lazy var callbackRelay = CLIHostBridgeCallbackRelay { @MainActor [weak self] in
-        self?.scheduleReconnect()
-    }
+    private lazy var callbackRelay = CLIHostBridgeCallbackRelay(
+        reconnect: { @MainActor [weak self] generation in
+            guard self?.connectionGeneration.isCurrent(generation) == true else { return }
+            self?.scheduleReconnect()
+        },
+        registered: { @MainActor [weak self] generation in
+            guard self?.connectionGeneration.isCurrent(generation) == true else { return }
+            self?.reconnectBackoff.reset()
+        }
+    )
 
     init(
         serviceController: CLIBrokerServiceController = .shared,
@@ -37,6 +47,7 @@ final class CLIHostBridge: NSObject, CLIHostXPCProtocol {
 
     func start() {
         isStarted = true
+        reconnectBackoff.reset()
         serviceController.reconcileRegisteredService()
         serviceStatusDidChange(serviceController.status)
     }
@@ -45,6 +56,8 @@ final class CLIHostBridge: NSObject, CLIHostXPCProtocol {
         isStarted = false
         reconnectTask?.cancel()
         reconnectTask = nil
+        reconnectBackoff.reset()
+        _ = connectionGeneration.advance()
         connection?.invalidate()
         connection = nil
     }
@@ -165,6 +178,7 @@ final class CLIHostBridge: NSObject, CLIHostXPCProtocol {
     private func connect() {
         guard isStarted, serviceController.status == .enabled else { return }
         connection?.invalidate()
+        let generation = connectionGeneration.advance()
         let connection = NSXPCConnection(
             machServiceName: CLIServiceConfiguration.serviceName(
                 bundleIdentifier: Bundle.main.bundleIdentifier
@@ -173,14 +187,23 @@ final class CLIHostBridge: NSObject, CLIHostXPCProtocol {
         connection.remoteObjectInterface = NSXPCInterface(with: CLIBrokerXPCProtocol.self)
         connection.exportedInterface = NSXPCInterface(with: CLIHostXPCProtocol.self)
         connection.exportedObject = self
-        guard identityValidator.configure(connection, toRequire: .broker) else { return }
-        connection.invalidationHandler = callbackRelay.makeReconnectHandler()
-        connection.interruptionHandler = callbackRelay.makeReconnectHandler()
+        guard let currentIdentity = localIdentityCache.resolve(
+            using: identityValidator.currentIdentity
+        ), identityValidator.configure(
+            connection,
+            toRequire: .broker,
+            currentIdentity: currentIdentity
+        ) else {
+            scheduleReconnect()
+            return
+        }
+        connection.invalidationHandler = callbackRelay.makeReconnectHandler(for: generation)
+        connection.interruptionHandler = callbackRelay.makeReconnectHandler(for: generation)
         connection.activate()
         self.connection = connection
 
         guard let broker = connection.remoteObjectProxyWithErrorHandler(
-            callbackRelay.makeReconnectErrorHandler()
+            callbackRelay.makeReconnectErrorHandler(for: generation)
         ) as? CLIBrokerXPCProtocol else {
             scheduleReconnect()
             return
@@ -194,16 +217,21 @@ final class CLIHostBridge: NSObject, CLIHostXPCProtocol {
         guard let data = try? CLIProtocolCodec.encodeRequest(registration) else { return }
         broker.registerHost(
             data,
-            withReply: callbackRelay.makeRegistrationReplyHandler(for: connection)
+            withReply: callbackRelay.makeRegistrationReplyHandler(
+                for: connection,
+                generation: generation
+            )
         )
     }
 
     private func scheduleReconnect() {
         guard isStarted, reconnectTask == nil else { return }
+        let delay = reconnectBackoff.nextDelay()
+        _ = connectionGeneration.advance()
         connection?.invalidate()
         connection = nil
         reconnectTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: delay)
             guard !Task.isCancelled else { return }
             self?.reconnectTask = nil
             self?.connect()
@@ -220,9 +248,39 @@ final class CLIHostBridge: NSObject, CLIHostXPCProtocol {
         case .requiresApproval, .notRegistered, .notFound, .registrationFailed:
             reconnectTask?.cancel()
             reconnectTask = nil
+            reconnectBackoff.reset()
+            _ = connectionGeneration.advance()
             connection?.invalidate()
             connection = nil
         }
+    }
+}
+
+struct CLIReconnectBackoff {
+    private static let maximumExponent = 5
+    private(set) var failureCount = 0
+
+    mutating func nextDelay() -> Duration {
+        let exponent = min(failureCount, Self.maximumExponent)
+        failureCount += 1
+        return .seconds(min(1 << exponent, 30))
+    }
+
+    mutating func reset() {
+        failureCount = 0
+    }
+}
+
+struct CLIConnectionGeneration {
+    private(set) var current = 0
+
+    mutating func advance() -> Int {
+        current &+= 1
+        return current
+    }
+
+    func isCurrent(_ candidate: Int) -> Bool {
+        candidate == current
     }
 }
 
@@ -273,29 +331,35 @@ final class CLIHostRequestState: @unchecked Sendable {
 }
 
 final class CLIHostBridgeCallbackRelay: @unchecked Sendable {
-    private let reconnect: @MainActor @Sendable () -> Void
+    private let reconnect: @MainActor @Sendable (Int) -> Void
+    private let registered: @MainActor @Sendable (Int) -> Void
     private let connectionIsBroker: @Sendable (NSXPCConnection) -> Bool
 
     init(
-        reconnect: @escaping @MainActor @Sendable () -> Void,
+        reconnect: @escaping @MainActor @Sendable (Int) -> Void,
+        registered: @escaping @MainActor @Sendable (Int) -> Void = { _ in },
         connectionIsBroker: @escaping @Sendable (NSXPCConnection) -> Bool = {
             CLIPeerIdentityValidator().accepts($0, as: .broker)
         }
     ) {
         self.reconnect = reconnect
+        self.registered = registered
         self.connectionIsBroker = connectionIsBroker
     }
 
-    nonisolated func makeReconnectHandler() -> @Sendable () -> Void {
-        { [weak self] in self?.requestReconnect() }
+    nonisolated func makeReconnectHandler(for generation: Int) -> @Sendable () -> Void {
+        { [weak self] in self?.requestReconnect(generation: generation) }
     }
 
-    nonisolated func makeReconnectErrorHandler() -> @Sendable (Error) -> Void {
-        { [weak self] _ in self?.requestReconnect() }
+    nonisolated func makeReconnectErrorHandler(
+        for generation: Int
+    ) -> @Sendable (Error) -> Void {
+        { [weak self] _ in self?.requestReconnect(generation: generation) }
     }
 
     nonisolated func makeRegistrationReplyHandler(
-        for connection: NSXPCConnection
+        for connection: NSXPCConnection,
+        generation: Int
     ) -> @Sendable (Data) -> Void {
         let reference = CLIHostXPCConnectionReference(connection)
         return { [weak self, reference, connectionIsBroker] response in
@@ -311,23 +375,30 @@ final class CLIHostBridgeCallbackRelay: @unchecked Sendable {
                   ),
                   (try? CLIProtocolSemanticValidator.validate(handshake: handshake)) != nil
             else {
-                self?.requestReconnect()
+                self?.requestReconnect(generation: generation)
                 return
             }
             if handshake.hostReady {
                 guard handshake.selectedProtocolVersion != nil else {
-                    self?.requestReconnect()
+                    self?.requestReconnect(generation: generation)
                     return
                 }
             } else if handshake.hostVersion == nil {
-                self?.requestReconnect()
+                self?.requestReconnect(generation: generation)
+                return
             }
+            self?.requestRegistered(generation: generation)
         }
     }
 
-    nonisolated func requestReconnect() {
+    nonisolated func requestReconnect(generation: Int) {
         let reconnect = reconnect
-        Task { @MainActor in reconnect() }
+        Task { @MainActor in reconnect(generation) }
+    }
+
+    nonisolated func requestRegistered(generation: Int) {
+        let registered = registered
+        Task { @MainActor in registered(generation) }
     }
 }
 

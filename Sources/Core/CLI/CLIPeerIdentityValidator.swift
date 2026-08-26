@@ -8,6 +8,19 @@ struct CLIPeerIdentity: Equatable {
     let teamIdentifier: String
 }
 
+struct CLILocalPeerIdentityCache {
+    private var cachedIdentity: CLIPeerIdentity?
+
+    mutating func resolve(
+        using loader: () -> CLIPeerIdentity?
+    ) -> CLIPeerIdentity? {
+        if let cachedIdentity { return cachedIdentity }
+        guard let identity = loader() else { return nil }
+        cachedIdentity = identity
+        return identity
+    }
+}
+
 enum CLIPeerRole {
     case host
     case commandLineTool
