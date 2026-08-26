@@ -479,7 +479,7 @@ private struct ComponentCardContainer: View {
 }
 
 @MainActor
-private final class ComponentDetailCoordinator: ObservableObject {
+final class ComponentDetailCoordinator: ObservableObject {
     struct Selection: Equatable {
         let pluginID: String
         let detailID: String
@@ -494,9 +494,18 @@ private final class ComponentDetailCoordinator: ObservableObject {
 
     func toggle(pluginID: String, detailID: String) {
         let requested = Selection(pluginID: pluginID, detailID: detailID)
+
+        if state.selection == requested {
+            state = State()
+            return
+        }
+
+        let selectedCardFrame = state.selection?.pluginID == pluginID
+            ? state.selectedCardFrame
+            : nil
         state = State(
-            selection: state.selection == requested ? nil : requested,
-            selectedCardFrame: nil
+            selection: requested,
+            selectedCardFrame: selectedCardFrame
         )
     }
 
