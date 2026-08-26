@@ -731,7 +731,8 @@ struct TrackpadGesturesSettingsView: View {
     private func mappingMatchesActionType(_ mapping: TrackpadGestureMapping) -> Bool {
         switch (store.mappingActionFilter, mapping.action) {
         case (.all, _), (.macToolsAction, .action),
-             (.keyboardShortcut, .keyboardShortcut), (.middleClick, .middleClick):
+             (.keyboardShortcut, .keyboardShortcut), (.singleKey, .keyTap),
+             (.middleClick, .middleClick):
             true
         default:
             false
@@ -857,6 +858,8 @@ struct TrackpadGesturesSettingsView: View {
             actionHostContext?.item(for: reference)?.systemImage ?? "questionmark.square.dashed"
         case .keyboardShortcut:
             "keyboard"
+        case .keyTap:
+            "keyboard.badge.ellipsis"
         case .middleClick:
             "computermouse"
         }
@@ -867,6 +870,7 @@ private enum TrackpadGestureEditorActionKind: String, Identifiable {
     case none
     case action
     case keyboardShortcut
+    case keyTap
     case middleClick
 
     var id: String { rawValue }
@@ -878,6 +882,7 @@ private struct TrackpadGestureMappingDraft: Identifiable {
     var actionKind: TrackpadGestureEditorActionKind
     var actionReference: ActionReference?
     var shortcut: ShortcutBinding?
+    var keyTap: KeyboardKeyTap?
     var isEnabled: Bool
 
     init(gesture: TrackpadGesture) {
@@ -886,6 +891,7 @@ private struct TrackpadGestureMappingDraft: Identifiable {
         self.actionKind = .none
         self.actionReference = nil
         self.shortcut = nil
+        self.keyTap = nil
         self.isEnabled = true
     }
 
@@ -898,14 +904,22 @@ private struct TrackpadGestureMappingDraft: Identifiable {
             self.actionKind = .action
             self.actionReference = reference
             self.shortcut = nil
+            self.keyTap = nil
         case let .keyboardShortcut(shortcut):
             self.actionKind = .keyboardShortcut
             self.actionReference = nil
             self.shortcut = shortcut
+            self.keyTap = nil
+        case let .keyTap(keyTap):
+            self.actionKind = .keyTap
+            self.actionReference = nil
+            self.shortcut = nil
+            self.keyTap = keyTap
         case .middleClick:
             self.actionKind = .middleClick
             self.actionReference = nil
             self.shortcut = nil
+            self.keyTap = nil
         }
     }
 
@@ -920,6 +934,9 @@ private struct TrackpadGestureMappingDraft: Identifiable {
         case .keyboardShortcut:
             guard let shortcut, shortcut.isValid else { return nil }
             action = .keyboardShortcut(shortcut)
+        case .keyTap:
+            guard let keyTap else { return nil }
+            action = .keyTap(keyTap)
         case .middleClick:
             action = .middleClick
         }
@@ -972,6 +989,8 @@ private extension TrackpadGestureMappingActionFilter {
             )
         case .keyboardShortcut:
             localization.string("action.shortcut", defaultValue: "键盘快捷键")
+        case .singleKey:
+            localization.string("action.singleKey", defaultValue: "单键")
         case .middleClick:
             localization.string("action.middleClick", defaultValue: "鼠标中键")
         }
@@ -1217,7 +1236,8 @@ private struct TrackpadGestureEditor: View {
                             context: actionHostContext,
                             actionKind: $draft.actionKind,
                             actionReference: $draft.actionReference,
-                            shortcut: $draft.shortcut
+                            shortcut: $draft.shortcut,
+                            keyTap: $draft.keyTap
                         )
 
                         if draft.actionKind == .keyboardShortcut {
@@ -1252,6 +1272,35 @@ private struct TrackpadGestureEditor: View {
                                     .font(PluginSettingsTheme.Typography.rowDescription)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+
+                        if draft.actionKind == .keyTap {
+                            PluginSettingsShortcutControlLayout {
+                                Label(
+                                    localization.string(
+                                        "editor.singleKey.record",
+                                        defaultValue: "录制单键"
+                                    ),
+                                    systemImage: "keyboard.badge.ellipsis"
+                                )
+                                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                                .lineLimit(1)
+
+                                PluginKeyTapRecorder(
+                                    title: localization.string(
+                                        "editor.singleKey.record",
+                                        defaultValue: "录制单键"
+                                    ),
+                                    displayText: keyTapDisplayText,
+                                    prompt: localization.string(
+                                        "editor.singleKey.prompt",
+                                        defaultValue: "按下一个按键"
+                                    ),
+                                    minWidth: PluginSettingsTheme.Size.shortcutRecorderWidth,
+                                    onRecord: { draft.keyTap = $0 }
+                                )
+                                .frame(width: PluginSettingsTheme.Size.shortcutRecorderWidth)
                             }
                         }
                     }
@@ -1345,6 +1394,12 @@ private struct TrackpadGestureEditor: View {
                 defaultValue: "请录制一个键盘快捷键。"
             )
         }
+        if draft.actionKind == .keyTap, draft.keyTap == nil {
+            return localization.string(
+                "editor.error.singleKeyRequired",
+                defaultValue: "请录制一个按键。"
+            )
+        }
         if draft.actionKind == .action, draft.actionReference == nil {
             return localization.string(
                 "editor.error.actionRequired",
@@ -1359,6 +1414,13 @@ private struct TrackpadGestureEditor: View {
             return localization.string("editor.shortcut.unset", defaultValue: "未设置")
         }
         return ShortcutFormatter.displayString(for: shortcut)
+    }
+
+    private var keyTapDisplayText: String {
+        guard let keyTap = draft.keyTap else {
+            return localization.string("editor.singleKey.unset", defaultValue: "未设置")
+        }
+        return KeyboardKeyTapFormatter.displayString(for: keyTap)
     }
 
     private var shortcutReuseGuidance: String? {
@@ -1391,6 +1453,7 @@ private struct TrackpadActionPickerGroup: Identifiable {
 
 private enum TrackpadInputActionChoice: String, CaseIterable, Identifiable {
     case keyboardShortcut
+    case singleKey
     case middleClick
 
     var id: String { rawValue }
@@ -1398,6 +1461,7 @@ private enum TrackpadInputActionChoice: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .keyboardShortcut: "keyboard"
+        case .singleKey: "keyboard.badge.ellipsis"
         case .middleClick: "computermouse"
         }
     }
@@ -1406,6 +1470,8 @@ private enum TrackpadInputActionChoice: String, CaseIterable, Identifiable {
         switch self {
         case .keyboardShortcut:
             localization.string("action.shortcut", defaultValue: "键盘快捷键")
+        case .singleKey:
+            localization.string("action.singleKey", defaultValue: "单键")
         case .middleClick:
             localization.string("action.middleClick", defaultValue: "鼠标中键")
         }
@@ -1418,6 +1484,7 @@ private struct TrackpadUnifiedActionPickerControl: View {
     @Binding var actionKind: TrackpadGestureEditorActionKind
     @Binding var actionReference: ActionReference?
     @Binding var shortcut: ShortcutBinding?
+    @Binding var keyTap: KeyboardKeyTap?
 
     @State private var isPresented = false
     @State private var query = ""
@@ -1537,6 +1604,8 @@ private struct TrackpadUnifiedActionPickerControl: View {
             )
         case .keyboardShortcut:
             localization.string("action.shortcut", defaultValue: "键盘快捷键")
+        case .keyTap:
+            localization.string("action.singleKey", defaultValue: "单键")
         case .middleClick:
             localization.string("action.middleClick", defaultValue: "鼠标中键")
         }
@@ -1551,6 +1620,9 @@ private struct TrackpadUnifiedActionPickerControl: View {
         case .keyboardShortcut:
             shortcut.map(ShortcutFormatter.displayString(for:))
                 ?? localization.string("editor.shortcut.unset", defaultValue: "未设置")
+        case .keyTap:
+            keyTap.map(KeyboardKeyTapFormatter.displayString(for:))
+                ?? localization.string("editor.singleKey.unset", defaultValue: "未设置")
         }
     }
 
@@ -1559,6 +1631,7 @@ private struct TrackpadUnifiedActionPickerControl: View {
         case .none: "bolt.circle"
         case .action: selectedItem?.systemImage ?? "questionmark.square.dashed"
         case .keyboardShortcut: TrackpadInputActionChoice.keyboardShortcut.systemImage
+        case .keyTap: TrackpadInputActionChoice.singleKey.systemImage
         case .middleClick: TrackpadInputActionChoice.middleClick.systemImage
         }
     }
@@ -1607,22 +1680,30 @@ private struct TrackpadUnifiedActionPickerControl: View {
     }
 
     private func inputActionRow(_ choice: TrackpadInputActionChoice) -> some View {
-        Button {
+        let subtitle: String? = switch choice {
+        case .keyboardShortcut: shortcut.map(ShortcutFormatter.displayString(for:))
+        case .singleKey: keyTap.map(KeyboardKeyTapFormatter.displayString(for:))
+        case .middleClick: nil
+        }
+        return Button {
             actionReference = nil
             switch choice {
             case .keyboardShortcut:
                 actionKind = .keyboardShortcut
+                keyTap = nil
+            case .singleKey:
+                actionKind = .keyTap
+                shortcut = nil
             case .middleClick:
                 actionKind = .middleClick
                 shortcut = nil
+                keyTap = nil
             }
             isPresented = false
         } label: {
             pickerRow(
                 title: choice.title(localization: localization),
-                subtitle: choice == .keyboardShortcut
-                    ? shortcut.map(ShortcutFormatter.displayString(for:))
-                    : nil,
+                subtitle: subtitle,
                 systemImage: choice.systemImage,
                 isSafe: true,
                 isSelected: isSelected(choice)
@@ -1636,6 +1717,7 @@ private struct TrackpadUnifiedActionPickerControl: View {
             actionKind = .action
             actionReference = item.reference
             shortcut = nil
+            keyTap = nil
             isPresented = false
         } label: {
             pickerRow(
@@ -1698,6 +1780,7 @@ private struct TrackpadUnifiedActionPickerControl: View {
     private func isSelected(_ choice: TrackpadInputActionChoice) -> Bool {
         switch choice {
         case .keyboardShortcut: actionKind == .keyboardShortcut
+        case .singleKey: actionKind == .keyTap
         case .middleClick: actionKind == .middleClick
         }
     }
@@ -1857,6 +1940,12 @@ extension TrackpadGestureAction {
                 "action.shortcutFormat",
                 defaultValue: "快捷键 %@",
                 ShortcutFormatter.displayString(for: binding)
+            )
+        case let .keyTap(keyTap):
+            localization.format(
+                "action.singleKeyFormat",
+                defaultValue: "单键 %@",
+                KeyboardKeyTapFormatter.displayString(for: keyTap)
             )
         case .middleClick:
             localization.string("action.middleClick", defaultValue: "鼠标中键")

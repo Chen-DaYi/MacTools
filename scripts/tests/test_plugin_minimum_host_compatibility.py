@@ -70,6 +70,19 @@ NEW_API_MINIMUM_HOSTS = {
     "PluginPresentationSafety": "1.2.0",
     "PluginProcessGroupLease": "1.2.0",
     "PluginSystemImage": "1.2.0",
+    # Side-aware atomic keyboard output introduced in host 1.2.1.
+    "KeyboardKeyTap": "1.2.1",
+    "KeyboardKeyTapFormatter": "1.2.1",
+    "MacToolsSyntheticInputEvent": "1.2.1",
+    "KeyboardKeyTapEventTransition": "1.2.1",
+    "KeyboardKeyTapEventPoster": "1.2.1",
+    "PluginKeyTapRecorder": "1.2.1",
+    # New accessors on the pre-existing PluginKitLocalization type.
+    "keyboardKeyLeft": "1.2.1",
+    "keyboardKeyRight": "1.2.1",
+    "keyboardKeyTapPrompt": "1.2.1",
+    "keyboardKeyTapUnset": "1.2.1",
+    "keyboardKeyTapUnsupportedHelp": "1.2.1",
     # Shared component-panel theme surfaces introduced in host 1.2.
     "PluginComponentTheme": "1.2.0",
     "PluginComponentCardBackground": "1.2.0",
