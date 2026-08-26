@@ -43,8 +43,28 @@ struct PluginCatalogProviderConfiguration {
         URL(string: "https://mactools.ggbond.app/nightly/plugins/v\(pluginKitVersion)/catalog.json")!
     }
 
+    // Schema 3 lives on its own compatibility endpoint so released PluginKit 5
+    // hosts can keep reading the immutable schema-2 catalog they understand.
+    static let schema3ProductionCatalogURL = URL(
+        string: "https://mactools.ggbond.app/plugins/v5/schema3/catalog.json"
+    )!
+
+    static func productionCatalogURL(
+        forHostVersion hostVersion: String,
+        pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion
+    ) -> URL {
+        guard pluginKitVersion == 5 else {
+            return productionCatalogURL(for: pluginKitVersion)
+        }
+        guard PluginVersionComparator.isVersion(hostVersion, atLeast: "1.2.1") else {
+            return productionCatalogURL(for: pluginKitVersion)
+        }
+        return schema3ProductionCatalogURL
+    }
+
     static func configuredProductionCatalogURL(
         for pluginKitVersion: Int,
+        hostVersion: String = AppMetadata.shortVersion ?? "0",
         infoDictionary: [String: Any]? = Bundle.main.infoDictionary
     ) -> URL {
         if let rawURL = infoDictionary?["MTPluginCatalogURL"] as? String,
@@ -58,14 +78,16 @@ struct PluginCatalogProviderConfiguration {
             return nightlyCatalogURL(for: pluginKitVersion)
         }
 
-        return productionCatalogURL(for: pluginKitVersion)
+        return productionCatalogURL(
+            forHostVersion: hostVersion,
+            pluginKitVersion: pluginKitVersion
+        )
     }
 
-    static let productionCatalogURL = configuredProductionCatalogURL(
-        for: PluginPackageManifestLoader.supportedPluginKitVersion
-    )
-
-    static func defaultSource(environment: [String: String] = ProcessInfo.processInfo.environment) -> PluginCatalogSource {
+    static func defaultSource(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        hostVersion: String = AppMetadata.shortVersion ?? "0"
+    ) -> PluginCatalogSource {
         #if DEBUG
         if let rawURL = environment["MACTOOLS_PLUGIN_CATALOG_URL"],
            let url = URL(string: rawURL) {
@@ -77,7 +99,10 @@ struct PluginCatalogProviderConfiguration {
         }
         #endif
 
-        return .production(productionCatalogURL)
+        return .production(configuredProductionCatalogURL(
+            for: PluginPackageManifestLoader.supportedPluginKitVersion,
+            hostVersion: hostVersion
+        ))
     }
 
     private static func source(forEnvironmentCatalogURL url: URL) -> PluginCatalogSource {
