@@ -21,6 +21,14 @@ struct WindowModifierDragGesture {
     private var state: State = .idle
     private var nextGeneration: UInt64 = 0
 
+    init(
+        requiredModifiers: ShortcutModifiers,
+        activationDistance: CGFloat = 4
+    ) {
+        self.requiredModifiers = requiredModifiers
+        self.activationDistance = activationDistance
+    }
+
     mutating func modifiersChanged(
         _ modifiers: ShortcutModifiers,
         pointer: CGPoint
