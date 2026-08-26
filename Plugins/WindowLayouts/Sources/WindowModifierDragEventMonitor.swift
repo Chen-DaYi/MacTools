@@ -14,11 +14,25 @@ struct WindowModifierDragMonitorEvent: Sendable {
     let flags: CGEventFlags
 }
 
+/// Carries the callback across the Core Graphics event-thread boundary. The session receiving
+/// events protects its gesture and action state with a lock before dispatching UI work.
+nonisolated final class WindowModifierDragEventHandler: @unchecked Sendable {
+    private let body: (WindowModifierDragMonitorEvent) -> Void
+
+    init(_ body: @escaping (WindowModifierDragMonitorEvent) -> Void) {
+        self.body = body
+    }
+
+    func handle(_ event: WindowModifierDragMonitorEvent) {
+        body(event)
+    }
+}
+
 protocol WindowModifierDragEventMonitoring: AnyObject, Sendable {
     var isRunning: Bool { get }
 
     func start(
-        handler: @escaping @Sendable (WindowModifierDragMonitorEvent) -> Void
+        handler: WindowModifierDragEventHandler
     ) -> Result<Void, WindowModifierDragMonitorStartError>
     func stop()
 }
@@ -27,8 +41,6 @@ nonisolated final class SystemWindowModifierDragEventMonitor: @unchecked Sendabl
     WindowModifierDragEventMonitoring
 {
     private typealias CallbackContext = PluginCallbackContext<SystemWindowModifierDragEventMonitor>
-    private typealias EventHandler = @Sendable (WindowModifierDragMonitorEvent) -> Void
-
     private let lock = NSLock()
     private let eventQueue = DispatchQueue(
         label: "com.mactools.window-layouts.modifier-drag-events",
@@ -40,7 +52,7 @@ nonisolated final class SystemWindowModifierDragEventMonitor: @unchecked Sendabl
     private var eventRunLoop: CFRunLoop?
     private var readySignal: DispatchSemaphore?
     private var finishedSignal: DispatchSemaphore?
-    private var eventHandler: EventHandler?
+    private var eventHandler: WindowModifierDragEventHandler?
     private var shouldRun = false
 
     var isRunning: Bool {
@@ -50,7 +62,7 @@ nonisolated final class SystemWindowModifierDragEventMonitor: @unchecked Sendabl
     }
 
     func start(
-        handler: @escaping @Sendable (WindowModifierDragMonitorEvent) -> Void
+        handler: WindowModifierDragEventHandler
     ) -> Result<Void, WindowModifierDragMonitorStartError> {
         if isRunning { return .success(()) }
         if lock.withLock({ tap != nil || callbackPointer != nil }) {
@@ -189,7 +201,7 @@ nonisolated final class SystemWindowModifierDragEventMonitor: @unchecked Sendabl
             CGEvent.tapEnable(tap: tap, enable: true)
         }
         let handler = lock.withLock { eventHandler }
-        handler?(WindowModifierDragMonitorEvent(
+        handler?.handle(WindowModifierDragMonitorEvent(
             type: type,
             location: event.location,
             flags: event.flags

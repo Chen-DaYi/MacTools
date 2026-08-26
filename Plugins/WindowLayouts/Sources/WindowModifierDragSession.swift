@@ -329,9 +329,10 @@ nonisolated final class WindowModifierDragSession: @unchecked Sendable,
         lock.withLock {
             _ = actionQueue.activate()
         }
-        let result = eventMonitor.start { [weak self] event in
+        let eventHandler = WindowModifierDragEventHandler { [weak self] event in
             self?.handle(event)
         }
+        let result = eventMonitor.start(handler: eventHandler)
         if case .failure = result {
             eventMonitor.stop()
             lock.withLock {

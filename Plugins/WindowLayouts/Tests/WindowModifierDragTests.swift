@@ -170,7 +170,12 @@ final class WindowModifierDragSessionTests: XCTestCase {
         )
         let session = WindowModifierDragSession(eventMonitor: monitor)
 
-        XCTAssertEqual(session.start(), .failure(.eventTapUnavailable))
+        switch session.start() {
+        case .success:
+            XCTFail("Expected monitor startup to fail")
+        case let .failure(error):
+            XCTAssertEqual(error, .eventTapUnavailable)
+        }
         XCTAssertFalse(session.isRunning)
         XCTAssertEqual(monitor.stopCount, 1)
     }
@@ -402,7 +407,7 @@ nonisolated private final class StubWindowModifierDragEventMonitor: @unchecked S
     }
 
     func start(
-        handler: @escaping @Sendable (WindowModifierDragMonitorEvent) -> Void
+        handler: WindowModifierDragEventHandler
     ) -> Result<Void, WindowModifierDragMonitorStartError> {
         if case .success = startResult {
             isRunning = true
