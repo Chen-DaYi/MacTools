@@ -24,7 +24,7 @@ final class SystemWindowUnderPointerResolver: WindowUnderPointerResolving {
     private let accessibilityTrusted: @MainActor () -> Bool
     private let windowInfoProvider: WindowInfoProvider
     private let hostWindow: @MainActor (Int) -> NSWindow?
-    private let worker: WindowAccessibilityWorker
+    private let worker: any ExternalWindowResolving
 
     init(
         accessibilityTrusted: @escaping @MainActor () -> Bool = AXIsProcessTrusted,
@@ -39,7 +39,7 @@ final class SystemWindowUnderPointerResolver: WindowUnderPointerResolving {
                 $0.windowNumber == windowNumber && $0.isVisible
             })
         },
-        worker: WindowAccessibilityWorker = WindowAccessibilityWorker()
+        worker: any ExternalWindowResolving = WindowAccessibilityWorker()
     ) {
         self.accessibilityTrusted = accessibilityTrusted
         self.windowInfoProvider = windowInfoProvider
@@ -77,7 +77,8 @@ final class SystemWindowUnderPointerResolver: WindowUnderPointerResolving {
         return try await worker.resolveFocusedWindow(target: ExternalFocusedWindowTarget(
             processIdentifier: target.processIdentifier,
             bundleIdentifier: application?.bundleIdentifier,
-            preferredWindowNumber: target.windowNumber
+            preferredWindowNumber: target.windowNumber,
+            pointerLocation: point
         ))
     }
 

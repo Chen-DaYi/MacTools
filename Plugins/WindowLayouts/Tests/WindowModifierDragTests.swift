@@ -188,6 +188,36 @@ final class SystemWindowUnderPointerResolverTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testPassesPointerLocationToExternalAccessibilityResolver() async throws {
+        let expectedPoint = CGPoint(x: 50, y: 75)
+        let window = AccessibilityWindowHandle(
+            identity: WindowIdentity(processIdentifier: 123, token: "external-window"),
+            canMove: true,
+            canResize: true
+        )
+        let worker = StubExternalWindowResolver(window: window)
+        let resolver = SystemWindowUnderPointerResolver(
+            accessibilityTrusted: { true },
+            windowInfoProvider: {
+                [self.windowInfo(
+                    number: 12,
+                    ownerPID: 123,
+                    layer: 0,
+                    bounds: CGRect(x: 0, y: 0, width: 200, height: 200)
+                )]
+            },
+            worker: worker
+        )
+
+        _ = try await resolver.resolveWindow(at: expectedPoint)
+        let target = await worker.lastTarget()
+
+        XCTAssertEqual(target?.processIdentifier, 123)
+        XCTAssertEqual(target?.preferredWindowNumber, 12)
+        XCTAssertEqual(target?.pointerLocation, expectedPoint)
+    }
+
     private func windowInfo(
         number: Int,
         ownerPID: Int,
@@ -272,6 +302,26 @@ private final class StubWindowUnderPointerResolver: WindowUnderPointerResolving 
 
     func resolveWindow(at point: CGPoint) async throws -> AccessibilityWindowHandle {
         window
+    }
+}
+
+private actor StubExternalWindowResolver: ExternalWindowResolving {
+    private let window: AccessibilityWindowHandle
+    private var targets: [ExternalFocusedWindowTarget] = []
+
+    init(window: AccessibilityWindowHandle) {
+        self.window = window
+    }
+
+    func resolveFocusedWindow(
+        target: ExternalFocusedWindowTarget
+    ) throws -> AccessibilityWindowHandle {
+        targets.append(target)
+        return window
+    }
+
+    func lastTarget() -> ExternalFocusedWindowTarget? {
+        targets.last
     }
 }
 
