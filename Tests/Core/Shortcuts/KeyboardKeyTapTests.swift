@@ -37,6 +37,8 @@ final class KeyboardKeyTapTests: XCTestCase {
         XCTAssertEqual(events.up.getIntegerValueField(.keyboardEventKeycode), Int64(kVK_RightCommand))
         XCTAssertTrue(events.down.flags.contains(.maskCommand))
         XCTAssertFalse(events.up.flags.contains(.maskCommand))
+        XCTAssertGreaterThan(events.down.timestamp, 0)
+        XCTAssertGreaterThan(events.up.timestamp, events.down.timestamp)
         XCTAssertTrue(MacToolsSyntheticInputEvent.isMarked(events.down))
         XCTAssertTrue(MacToolsSyntheticInputEvent.isMarked(events.up))
     }
@@ -230,7 +232,10 @@ final class KeyboardKeyTapTests: XCTestCase {
 
         PluginRuntimeLocalization.source.setPreference("ar")
 
-        XCTAssertEqual(PluginKitLocalization.keyboardKeyTapPrompt, "اضغط مفتاحًا واحدًا")
+        XCTAssertEqual(
+            PluginKitLocalization.keyboardKeyTapPickerHelp,
+            "اختر المفتاح المراد إرساله من القائمة."
+        )
         XCTAssertEqual(PluginKitLocalization.keyboardKeyTapUnset, "غير محدد")
         XCTAssertEqual(
             PluginKitLocalization.keyboardKeyTapUnsupportedHelp,

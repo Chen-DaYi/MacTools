@@ -29,12 +29,11 @@ private final class InputRemappingTapSpy: InputRemappingEventTapping {
     var startResult = true
     var captureHandler: (@Sendable (InputRemappingCapturedInput) -> Void)?
     var shortcutCaptureHandler: (@Sendable (ShortcutBinding) -> Void)?
-    var keyTapCaptureHandler: (@Sendable (KeyboardKeyTap) -> Void)?
     private(set) var executedActions: [InputRemappingRule.Action] = []
     var emergencyStopHandler: (@Sendable () -> Void)?
 
     var isCaptureSequenceActive: Bool {
-        captureHandler != nil || shortcutCaptureHandler != nil || keyTapCaptureHandler != nil
+        captureHandler != nil || shortcutCaptureHandler != nil
     }
 
     func update(rules: [InputRemappingRule]) {
@@ -60,16 +59,10 @@ private final class InputRemappingTapSpy: InputRemappingEventTapping {
         return startResult
     }
 
-    func beginKeyTapCapture(_ handler: @escaping @Sendable (KeyboardKeyTap) -> Void) -> Bool {
-        keyTapCaptureHandler = handler
-        return startResult
-    }
-
     func cancelButtonCapture() {
         cancelCaptureCallCount += 1
         captureHandler = nil
         shortcutCaptureHandler = nil
-        keyTapCaptureHandler = nil
     }
 
     func execute(_ action: InputRemappingRule.Action) -> Bool {
@@ -89,11 +82,6 @@ private final class InputRemappingTapSpy: InputRemappingEventTapping {
         handler?(shortcut)
     }
 
-    func capture(keyTap: KeyboardKeyTap) {
-        let handler = keyTapCaptureHandler
-        keyTapCaptureHandler = nil
-        handler?(keyTap)
-    }
 }
 
 @MainActor
@@ -116,23 +104,6 @@ private final class InputRemappingCaptureRecorder: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return values
-    }
-}
-
-private final class InputRemappingKeyTapRecorder: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value: KeyboardKeyTap?
-
-    func record(_ keyTap: KeyboardKeyTap) {
-        lock.lock()
-        value = keyTap
-        lock.unlock()
-    }
-
-    var snapshot: KeyboardKeyTap? {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
     }
 }
 
@@ -533,47 +504,6 @@ final class InputRemappingModelsTests: XCTestCase {
         XCTAssertNil(tap.handle(type: .keyUp, event: up))
         XCTAssertFalse(tap.isCaptureSequenceActive)
         XCTAssertEqual(captured.snapshot, [.keyboard(keyCode: 21, modifiers: [])])
-    }
-
-    func testSingleKeyCaptureReadsRightCommandFromFlagsChangedWithoutConsumingIt() {
-        let tap = InputRemappingEventTap(captureStartResult: true)
-        let captured = InputRemappingKeyTapRecorder()
-        XCTAssertTrue(tap.beginKeyTapCapture { captured.record($0) })
-        defer { tap.stop() }
-        let event = CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: CGKeyCode(kVK_RightCommand),
-            keyDown: true
-        )!
-
-        XCTAssertNotNil(tap.handle(type: .flagsChanged, event: event))
-        XCTAssertEqual(captured.snapshot, KeyboardKeyTap(keyCode: UInt16(kVK_RightCommand)))
-    }
-
-    func testSingleKeyCaptureIgnoresModifierReleaseBeforeRecordingPress() {
-        let tap = InputRemappingEventTap(captureStartResult: true)
-        let captured = InputRemappingKeyTapRecorder()
-        XCTAssertTrue(tap.beginKeyTapCapture { captured.record($0) })
-        defer { tap.stop() }
-
-        let release = CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: CGKeyCode(kVK_RightCommand),
-            keyDown: false
-        )!
-        release.flags.formUnion(.maskCommand)
-        XCTAssertNotNil(tap.handle(type: .flagsChanged, event: release))
-        XCTAssertNil(captured.snapshot)
-        XCTAssertTrue(tap.isCaptureSequenceActive)
-
-        let press = CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: CGKeyCode(kVK_RightCommand),
-            keyDown: true
-        )!
-        XCTAssertNotNil(tap.handle(type: .flagsChanged, event: press))
-        XCTAssertEqual(captured.snapshot, KeyboardKeyTap(keyCode: UInt16(kVK_RightCommand)))
-        XCTAssertFalse(tap.isCaptureSequenceActive)
     }
 
     func testEmergencyShortcutCancelsCaptureAndRunsOnlyOncePerPress() {
@@ -1000,23 +930,6 @@ final class InputRemappingModelsTests: XCTestCase {
 
         XCTAssertEqual(captured, ShortcutBinding(keyCode: 12, modifiers: [.command]))
         XCTAssertNil(coordinator.recordingShortcutRuleID)
-    }
-
-    @MainActor
-    func testSingleKeyCapturePreservesRightModifierIdentity() async {
-        let tap = InputRemappingTapSpy()
-        let coordinator = InputRemappingButtonCaptureCoordinator(
-            tap: tap,
-            scheduleArming: { $0() }
-        )
-        var captured: KeyboardKeyTap?
-
-        XCTAssertTrue(coordinator.startKeyTap(ruleID: UUID()) { captured = $0 })
-        tap.capture(keyTap: KeyboardKeyTap(keyCode: UInt16(kVK_RightCommand)))
-        await Task.yield()
-
-        XCTAssertEqual(captured, KeyboardKeyTap(keyCode: UInt16(kVK_RightCommand)))
-        XCTAssertNil(coordinator.recordingKeyTapRuleID)
     }
 
     @MainActor

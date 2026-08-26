@@ -15,7 +15,6 @@ protocol InputRemappingEventTapping: AnyObject {
     func stop()
     func beginInputCapture(_ handler: @escaping @Sendable (InputRemappingCapturedInput) -> Void) -> Bool
     func beginShortcutCapture(_ handler: @escaping @Sendable (ShortcutBinding) -> Void) -> Bool
-    func beginKeyTapCapture(_ handler: @escaping @Sendable (KeyboardKeyTap) -> Void) -> Bool
     func cancelButtonCapture()
     func execute(_ action: InputRemappingRule.Action) -> Bool
 }
@@ -45,7 +44,6 @@ final class InputRemappingEventTap: InputRemappingEventTapping, @unchecked Senda
     private var currentRules: [InputRemappingRule] = []
     private var inputCaptureHandler: (@Sendable (InputRemappingCapturedInput) -> Void)?
     private var shortcutCaptureHandler: (@Sendable (ShortcutBinding) -> Void)?
-    private var keyTapCaptureHandler: (@Sendable (KeyboardKeyTap) -> Void)?
     private var capturedKeyAwaitingUp: UInt16?
     private var capturedMouseButtonAwaitingUp: Int64?
     private var capturedScrollUntil: TimeInterval?
@@ -66,7 +64,6 @@ final class InputRemappingEventTap: InputRemappingEventTapping, @unchecked Senda
         defer { rulesLock.unlock() }
         return inputCaptureHandler != nil
             || shortcutCaptureHandler != nil
-            || keyTapCaptureHandler != nil
             || capturedKeyAwaitingUp != nil
             || capturedMouseButtonAwaitingUp != nil
             || capturedScrollUntil != nil
@@ -151,17 +148,6 @@ final class InputRemappingEventTap: InputRemappingEventTapping, @unchecked Senda
         return true
     }
 
-    func beginKeyTapCapture(_ handler: @escaping @Sendable (KeyboardKeyTap) -> Void) -> Bool {
-        rulesLock.lock()
-        keyTapCaptureHandler = handler
-        rulesLock.unlock()
-        guard start() else {
-            cancelButtonCapture()
-            return false
-        }
-        return true
-    }
-
     func cancelButtonCapture() {
         clearCaptureState()
         scheduleStopIfNoMonitoringNeeded()
@@ -171,7 +157,6 @@ final class InputRemappingEventTap: InputRemappingEventTapping, @unchecked Senda
         rulesLock.lock()
         inputCaptureHandler = nil
         shortcutCaptureHandler = nil
-        keyTapCaptureHandler = nil
         capturedKeyAwaitingUp = nil
         capturedMouseButtonAwaitingUp = nil
         capturedScrollUntil = nil
@@ -216,16 +201,6 @@ final class InputRemappingEventTap: InputRemappingEventTapping, @unchecked Senda
 
         if type == .scrollWheel,
            consumeCapturedScroll(at: TimeInterval(event.timestamp) / 1_000_000_000) {
-            return nil
-        }
-
-        if type == .flagsChanged,
-           captureModifierKeyTap(from: event) {
-            return Unmanaged.passUnretained(event)
-        }
-
-        if type == .keyDown,
-           captureKeyTap(from: event) {
             return nil
         }
 
@@ -319,40 +294,6 @@ final class InputRemappingEventTap: InputRemappingEventTapping, @unchecked Senda
         MacToolsSyntheticInputEvent.isMarked(event)
     }
 
-    private func captureModifierKeyTap(from event: CGEvent) -> Bool {
-        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-        let keyTap = KeyboardKeyTap(keyCode: keyCode)
-        guard keyTap.isSupported else { return false }
-        guard KeyboardKeyTapEventTransition.isModifierPress(
-            keyCode: keyCode,
-            flags: event.flags
-        ) else {
-            return false
-        }
-        rulesLock.lock()
-        let handler = keyTapCaptureHandler
-        keyTapCaptureHandler = nil
-        rulesLock.unlock()
-        guard let handler else { return false }
-        handler(keyTap)
-        scheduleStopIfNoMonitoringNeeded()
-        return true
-    }
-
-    private func captureKeyTap(from event: CGEvent) -> Bool {
-        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-        let keyTap = KeyboardKeyTap(keyCode: keyCode)
-        guard keyTap.isSupported else { return false }
-        rulesLock.lock()
-        let handler = keyTapCaptureHandler
-        keyTapCaptureHandler = nil
-        if handler != nil { capturedKeyAwaitingUp = keyCode }
-        rulesLock.unlock()
-        guard let handler else { return false }
-        handler(keyTap)
-        return true
-    }
-
     private func shortcutCapture(from event: CGEvent) -> ShortcutBinding? {
         ShortcutBinding(
             keyCode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
@@ -401,7 +342,6 @@ final class InputRemappingEventTap: InputRemappingEventTapping, @unchecked Senda
         emergencyStopKeyAwaitingUp = true
         inputCaptureHandler = nil
         shortcutCaptureHandler = nil
-        keyTapCaptureHandler = nil
         capturedKeyAwaitingUp = nil
         capturedMouseButtonAwaitingUp = nil
         capturedScrollUntil = nil

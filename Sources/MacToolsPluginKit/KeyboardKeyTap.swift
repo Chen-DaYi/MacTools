@@ -145,6 +145,12 @@ public enum KeyboardKeyTapEventTransition {
 }
 
 public enum KeyboardKeyTapEventPoster {
+    private static let keyPressDuration: TimeInterval = 0.03
+    private static let postingQueue = DispatchQueue(
+        label: "cc.ggbond.mactools.keyboard-key-tap",
+        qos: .userInteractive
+    )
+
     fileprivate static let modifierFlags: CGEventFlags = [
         .maskCommand,
         .maskControl,
@@ -162,12 +168,13 @@ public enum KeyboardKeyTapEventPoster {
         ambientFlags: CGEventFlags = CGEventSource.flagsState(.combinedSessionState)
     ) -> (down: CGEvent, up: CGEvent)? {
         guard keyTap.isSupported,
+              let source = CGEventSource(stateID: .hidSystemState),
               let down = CGEvent(
-            keyboardEventSource: nil,
+            keyboardEventSource: source,
             virtualKey: CGKeyCode(keyTap.keyCode),
             keyDown: true
         ), let up = CGEvent(
-            keyboardEventSource: nil,
+            keyboardEventSource: source,
             virtualKey: CGKeyCode(keyTap.keyCode),
             keyDown: false
         ) else {
@@ -179,14 +186,21 @@ public enum KeyboardKeyTapEventPoster {
         up.flags.formUnion(preservedFlags)
         MacToolsSyntheticInputEvent.mark(down)
         MacToolsSyntheticInputEvent.mark(up)
+        let timestamp = DispatchTime.now().uptimeNanoseconds
+        down.timestamp = timestamp
+        up.timestamp = timestamp + UInt64(keyPressDuration * 1_000_000_000)
         return (down, up)
     }
 
     @discardableResult
     public static func post(_ keyTap: KeyboardKeyTap) -> Bool {
-        guard let events = makeEvents(for: keyTap) else { return false }
-        events.down.post(tap: .cghidEventTap)
-        events.up.post(tap: .cghidEventTap)
+        guard keyTap.isSupported else { return false }
+        postingQueue.async {
+            guard let events = makeEvents(for: keyTap) else { return }
+            events.down.post(tap: .cghidEventTap)
+            Thread.sleep(forTimeInterval: keyPressDuration)
+            events.up.post(tap: .cghidEventTap)
+        }
         return true
     }
 }

@@ -35,10 +35,8 @@ enum InputRemappingInputMonitoringStatus: Equatable {
 final class InputRemappingButtonCaptureCoordinator: ObservableObject {
     @Published private(set) var recordingRuleID: UUID?
     @Published private(set) var recordingShortcutRuleID: UUID?
-    @Published private(set) var recordingKeyTapRuleID: UUID?
     @Published private(set) var preparingRuleID: UUID?
     @Published private(set) var preparingShortcutRuleID: UUID?
-    @Published private(set) var preparingKeyTapRuleID: UUID?
 
     private let tap: any InputRemappingEventTapping
     private let scheduleArming: (@escaping @MainActor () -> Void) -> Void
@@ -84,25 +82,20 @@ final class InputRemappingButtonCaptureCoordinator: ObservableObject {
 
     func cancel() {
         guard recordingRuleID != nil || recordingShortcutRuleID != nil
-            || recordingKeyTapRuleID != nil || preparingRuleID != nil
-            || preparingShortcutRuleID != nil || preparingKeyTapRuleID != nil
+            || preparingRuleID != nil || preparingShortcutRuleID != nil
         else { return }
         recordingRuleID = nil
         recordingShortcutRuleID = nil
-        recordingKeyTapRuleID = nil
         preparingRuleID = nil
         preparingShortcutRuleID = nil
-        preparingKeyTapRuleID = nil
         tap.cancelButtonCapture()
     }
 
     func cancelFromEmergencyStop() {
         recordingRuleID = nil
         recordingShortcutRuleID = nil
-        recordingKeyTapRuleID = nil
         preparingRuleID = nil
         preparingShortcutRuleID = nil
-        preparingKeyTapRuleID = nil
     }
 
     func startShortcut(
@@ -132,30 +125,6 @@ final class InputRemappingButtonCaptureCoordinator: ObservableObject {
         return true
     }
 
-    func startKeyTap(
-        ruleID: UUID,
-        onCapture: @escaping @MainActor (KeyboardKeyTap) -> Void
-    ) -> Bool {
-        cancel()
-        guard tap.start() else { return false }
-        preparingKeyTapRuleID = ruleID
-        scheduleArming { [weak self] in
-            guard let self, self.preparingKeyTapRuleID == ruleID else { return }
-            self.preparingKeyTapRuleID = nil
-            self.recordingKeyTapRuleID = ruleID
-            guard self.tap.beginKeyTapCapture({ [weak self] keyTap in
-                Task { @MainActor [weak self] in
-                    guard let self, self.recordingKeyTapRuleID == ruleID else { return }
-                    self.recordingKeyTapRuleID = nil
-                    onCapture(keyTap)
-                }
-            }) else {
-                self.recordingKeyTapRuleID = nil
-                return
-            }
-        }
-        return true
-    }
 }
 
 @MainActor
@@ -761,7 +730,7 @@ private struct InputRemappingRuleEditor: View {
             }
             if draft.outputConfigurationState == .recordingKeyTap ||
                 (draft.isOutputConfigured && draft.action.kind == .keyTap) {
-                keyTapRecordingControl
+                keyTapSelectionControl
             }
         }
         .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
@@ -1050,58 +1019,32 @@ private struct InputRemappingRuleEditor: View {
         }
     }
 
-    @ViewBuilder
-    private var keyTapRecordingControl: some View {
-        if buttonCapture.preparingKeyTapRuleID == rule.id {
-            Label(
-                localization.string("settings.singleKey.preparing", defaultValue: "Preparing key recording…"),
-                systemImage: "hourglass"
-            )
-            .foregroundStyle(.tint)
-            Text(localization.string(
-                "settings.singleKey.preparing.detail",
-                defaultValue: "Release the Record Key button; listening starts next."
-            ))
-            .foregroundStyle(.secondary)
-            Button(localization.string("settings.cancel", defaultValue: "Cancel")) {
-                cancelOutputRecording()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        } else if buttonCapture.recordingKeyTapRuleID == rule.id {
-            Label(
-                localization.string("settings.singleKey.recording", defaultValue: "Press one key"),
-                systemImage: "record.circle"
-            )
-            .foregroundStyle(.tint)
-            Text(PluginKitLocalization.keyboardKeyTapUnsupportedHelp)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(localization.string("settings.cancel", defaultValue: "Cancel")) {
-                cancelOutputRecording()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        } else {
-            Button {
-                beginOutputRecordingIfNeeded()
-                guard buttonCapture.startKeyTap(ruleID: rule.id, onCapture: { keyTap in
+    private var keyTapSelectionControl: some View {
+        PluginKeyTapPicker(
+            title: localization.string("action.singleKey", defaultValue: "Single Key"),
+            selection: Binding(
+                get: {
+                    guard case let .keyTap(keyTap) = draft.action,
+                          draft.outputConfigurationState == .configured
+                    else { return nil }
+                    return keyTap
+                },
+                set: { keyTap in
+                    guard let keyTap else {
+                        draft.outputConfigurationState = .recordingKeyTap
+                        draft.isEnabled = false
+                        save()
+                        return
+                    }
                     outputRecordingSnapshot = nil
                     draft.action = .keyTap(keyTap)
                     draft.outputConfigurationState = .configured
                     enableIfComplete()
                     save()
-                }) else {
-                    cancelOutputRecording()
-                    return
                 }
-            } label: {
-                Text(localization.string("settings.singleKey.record", defaultValue: "Record key"))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-        }
+            ),
+            minWidth: InputRemappingEditorLayout.inputControlWidth
+        )
     }
 
     private func enableIfComplete() {

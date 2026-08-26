@@ -27,8 +27,8 @@ public enum PluginKitLocalization {
         string("keyboardKey.side.right", defaultValue: "右侧")
     }
 
-    public static var keyboardKeyTapPrompt: String {
-        string("keyboardKeyTap.prompt", defaultValue: "按下一个按键")
+    public static var keyboardKeyTapPickerHelp: String {
+        string("keyboardKeyTap.pickerHelp", defaultValue: "从列表中选择要发送的按键。")
     }
 
     public static var keyboardKeyTapUnset: String {
@@ -40,6 +40,22 @@ public enum PluginKitLocalization {
             "keyboardKeyTap.unsupportedHelp",
             defaultValue: "不支持大写锁定和媒体键。"
         )
+    }
+
+    public static var keyboardKeyGroupModifiers: String {
+        string("keyboardKeyTap.group.modifiers", defaultValue: "修饰键")
+    }
+
+    public static var keyboardKeyGroupNavigation: String {
+        string("keyboardKeyTap.group.navigation", defaultValue: "导航与编辑")
+    }
+
+    public static var keyboardKeyGroupKeypad: String {
+        string("keyboardKeyTap.group.keypad", defaultValue: "数字键盘")
+    }
+
+    public static var keyboardKeyGroupOther: String {
+        string("keyboardKeyTap.group.other", defaultValue: "其他按键")
     }
 
     static var shortcutRecorderPreviewPlaceholder: String {

@@ -1278,27 +1278,16 @@ private struct TrackpadGestureEditor: View {
                         if draft.actionKind == .keyTap {
                             PluginSettingsShortcutControlLayout {
                                 Label(
-                                    localization.string(
-                                        "editor.singleKey.record",
-                                        defaultValue: "录制单键"
-                                    ),
+                                    localization.string("action.singleKey", defaultValue: "单键"),
                                     systemImage: "keyboard.badge.ellipsis"
                                 )
                                 .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                                 .lineLimit(1)
 
-                                PluginKeyTapRecorder(
-                                    title: localization.string(
-                                        "editor.singleKey.record",
-                                        defaultValue: "录制单键"
-                                    ),
-                                    displayText: keyTapDisplayText,
-                                    prompt: localization.string(
-                                        "editor.singleKey.prompt",
-                                        defaultValue: "按下一个按键"
-                                    ),
+                                PluginKeyTapPicker(
+                                    title: localization.string("action.singleKey", defaultValue: "单键"),
+                                    selection: $draft.keyTap,
                                     minWidth: PluginSettingsTheme.Size.shortcutRecorderWidth,
-                                    onRecord: { draft.keyTap = $0 }
                                 )
                                 .frame(width: PluginSettingsTheme.Size.shortcutRecorderWidth)
                             }
@@ -1397,7 +1386,7 @@ private struct TrackpadGestureEditor: View {
         if draft.actionKind == .keyTap, draft.keyTap == nil {
             return localization.string(
                 "editor.error.singleKeyRequired",
-                defaultValue: "请录制一个按键。"
+                defaultValue: "请选择一个按键。"
             )
         }
         if draft.actionKind == .action, draft.actionReference == nil {
@@ -1414,13 +1403,6 @@ private struct TrackpadGestureEditor: View {
             return localization.string("editor.shortcut.unset", defaultValue: "未设置")
         }
         return ShortcutFormatter.displayString(for: shortcut)
-    }
-
-    private var keyTapDisplayText: String {
-        guard let keyTap = draft.keyTap else {
-            return localization.string("editor.singleKey.unset", defaultValue: "未设置")
-        }
-        return KeyboardKeyTapFormatter.displayString(for: keyTap)
     }
 
     private var shortcutReuseGuidance: String? {

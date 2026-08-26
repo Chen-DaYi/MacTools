@@ -4,4 +4,4 @@ type: added
 area: Input
 ---
 
-Added shared host support for plugins to record and send one side-aware keyboard key tap.
+Added shared host support for plugins to choose and send one side-aware keyboard key tap.
