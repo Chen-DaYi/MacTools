@@ -51,6 +51,35 @@ final class SystemStatusPluginTests: XCTestCase {
         )
     }
 
+    func testMenuBarMetricPopoverToggleDismissesWhilePresentationIsTracked() {
+        XCTAssertEqual(
+            SystemStatusMenuBarPopoverLifecyclePolicy.toggleAction(hasTrackedPopover: false),
+            .present
+        )
+        XCTAssertEqual(
+            SystemStatusMenuBarPopoverLifecyclePolicy.toggleAction(hasTrackedPopover: true),
+            .dismiss
+        )
+    }
+
+    func testMenuBarMetricPopoverIgnoresStaleCloseCallbacks() {
+        let trackedPopover = NSObject()
+        let stalePopover = NSObject()
+
+        XCTAssertTrue(
+            SystemStatusMenuBarPopoverLifecyclePolicy.shouldFinishDismissal(
+                trackedPopoverIdentifier: ObjectIdentifier(trackedPopover),
+                closedPopoverIdentifier: ObjectIdentifier(trackedPopover)
+            )
+        )
+        XCTAssertFalse(
+            SystemStatusMenuBarPopoverLifecyclePolicy.shouldFinishDismissal(
+                trackedPopoverIdentifier: ObjectIdentifier(trackedPopover),
+                closedPopoverIdentifier: ObjectIdentifier(stalePopover)
+            )
+        )
+    }
+
     func testConfigurationDefaultsShowPanelMetricsAndHideMenuBarMetrics() {
         let controller = SystemStatusSettingsController(
             store: SystemStatusPluginStorageConfigurationStore(storage: SystemStatusMemoryPluginStorage())

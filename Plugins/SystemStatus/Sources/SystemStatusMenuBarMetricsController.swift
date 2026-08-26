@@ -1335,6 +1335,24 @@ enum SystemStatusMenuBarPopoverPresentationPolicy {
     }
 }
 
+enum SystemStatusMenuBarPopoverLifecyclePolicy {
+    enum ToggleAction: Equatable {
+        case present
+        case dismiss
+    }
+
+    static func toggleAction(hasTrackedPopover: Bool) -> ToggleAction {
+        hasTrackedPopover ? .dismiss : .present
+    }
+
+    static func shouldFinishDismissal(
+        trackedPopoverIdentifier: ObjectIdentifier?,
+        closedPopoverIdentifier: ObjectIdentifier
+    ) -> Bool {
+        trackedPopoverIdentifier == closedPopoverIdentifier
+    }
+}
+
 @MainActor
 private final class SystemStatusMenuBarPopoverController: NSObject, NSPopoverDelegate {
     private enum DetailLayout {
@@ -1379,7 +1397,9 @@ private final class SystemStatusMenuBarPopoverController: NSObject, NSPopoverDel
     }
 
     func toggle(relativeTo button: NSStatusBarButton) {
-        if popover?.isShown == true {
+        if SystemStatusMenuBarPopoverLifecyclePolicy.toggleAction(
+            hasTrackedPopover: popover != nil
+        ) == .dismiss {
             hide()
             return
         }
@@ -1417,17 +1437,26 @@ private final class SystemStatusMenuBarPopoverController: NSObject, NSPopoverDel
     func hide() {
         detailPanelController.hide()
         popover?.performClose(nil)
-        popover = nil
-        statusItemButton = nil
         removeDismissMonitors()
     }
 
     nonisolated func popoverDidClose(_ notification: Notification) {
+        guard let closedPopover = notification.object as? NSPopover else {
+            return
+        }
+        let closedPopoverIdentifier = ObjectIdentifier(closedPopover)
         Task { @MainActor [weak self] in
-            self?.detailPanelController.hide()
-            self?.popover = nil
-            self?.statusItemButton = nil
-            self?.removeDismissMonitors()
+            guard let self else { return }
+            guard SystemStatusMenuBarPopoverLifecyclePolicy.shouldFinishDismissal(
+                trackedPopoverIdentifier: self.popover.map(ObjectIdentifier.init),
+                closedPopoverIdentifier: closedPopoverIdentifier
+            ) else {
+                return
+            }
+            self.detailPanelController.hide()
+            self.popover = nil
+            self.statusItemButton = nil
+            self.removeDismissMonitors()
         }
     }
 
