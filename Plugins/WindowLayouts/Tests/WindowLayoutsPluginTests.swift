@@ -214,6 +214,89 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertEqual(plugin.actionShortcutAssignmentRevision, initialRevision + 1)
     }
 
+    func testModifierDragIsOptInPublishesExactClaimAndPausesForConflict() {
+        let session = MockWindowModifierDragSession()
+        let plugin = makePlugin(modifierDragSession: session)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "window-layouts"))
+        XCTAssertTrue(plugin.activeInputGestureClaims.isEmpty)
+        XCTAssertEqual(session.startCount, 0)
+
+        plugin.setModifierDragEnabled(true)
+
+        XCTAssertEqual(session.startCount, 1)
+        XCTAssertEqual(session.configuredModifiers, [.control, .option])
+        XCTAssertEqual(
+            plugin.activeInputGestureClaims.map(\.id),
+            ["pointer.move.modifiers.6"]
+        )
+
+        plugin.setModifierDragModifiers([.shift, .command])
+        XCTAssertEqual(session.configuredModifiers, [.shift, .command])
+        XCTAssertEqual(
+            plugin.activeInputGestureClaims.map(\.id),
+            ["pointer.move.modifiers.9"]
+        )
+
+        let conflict = PluginInputGestureConflict(
+            claim: PluginInputGestureClaim(
+                id: "pointer.move.modifiers.9",
+                title: "Modifier Drag"
+            ),
+            ownerPluginID: "other-plugin",
+            ownerPluginTitle: "Other Plugin"
+        )
+        var stateChangeCount = 0
+        plugin.onStateChange = { stateChangeCount += 1 }
+        plugin.inputGestureConflictsDidChange([conflict])
+
+        XCTAssertEqual(session.stopCount, 1)
+        XCTAssertEqual(stateChangeCount, 0)
+
+        let configureCountAfterConflict = session.configureCount
+        plugin.inputGestureConflictsDidChange([conflict])
+        XCTAssertEqual(session.stopCount, 1)
+        XCTAssertEqual(session.configureCount, configureCountAfterConflict)
+        XCTAssertEqual(stateChangeCount, 0)
+
+        let startCountBeforeResume = session.startCount
+        plugin.inputGestureConflictsDidChange([])
+        XCTAssertEqual(session.startCount, startCountBeforeResume + 1)
+        XCTAssertEqual(stateChangeCount, 0)
+    }
+
+    func testModifierDragFooterHidesInactiveConflictsAndClearsRuntimeErrors() throws {
+        let session = MockWindowModifierDragSession()
+        let plugin = makePlugin(modifierDragSession: session)
+        let disabledFooter = try modifierDragFooter(in: plugin)
+
+        plugin.inputGestureConflictsDidChange([
+            PluginInputGestureConflict(
+                claim: PluginInputGestureClaim(
+                    id: "pointer.move.modifiers.6",
+                    title: "Modifier Drag"
+                ),
+                ownerPluginID: "other-plugin",
+                ownerPluginTitle: "Other Plugin"
+            )
+        ])
+        XCTAssertEqual(try modifierDragFooter(in: plugin), disabledFooter)
+
+        plugin.inputGestureConflictsDidChange([])
+        plugin.setModifierDragEnabled(true)
+        let activeFooter = try modifierDragFooter(in: plugin)
+
+        session.onFailure(.windowCannotMove)
+        XCTAssertNotEqual(try modifierDragFooter(in: plugin), activeFooter)
+
+        session.onSuccess()
+        XCTAssertEqual(try modifierDragFooter(in: plugin), activeFooter)
+
+        session.onFailure(.windowCannotMove)
+        plugin.handleSettingsAction(.invoke(controlID: "reset"))
+        XCTAssertEqual(try modifierDragFooter(in: plugin), disabledFooter)
+    }
+
     func testCustomCommandEditorPublishesPreviewShortcutAndHeaderActions() throws {
         let plugin = makePlugin()
         plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
@@ -717,6 +800,7 @@ final class WindowLayoutsPluginTests: XCTestCase {
     private func makePlugin(
         executor: MockWindowLayoutExecutor? = nil,
         storage: PluginStorage? = nil,
+        modifierDragSession: (any WindowModifierDragSessionManaging)? = nil,
         accessibilityTrusted: @escaping @MainActor @Sendable () -> Bool = { true }
     ) -> WindowLayoutsPlugin {
         WindowLayoutsPlugin(
@@ -725,9 +809,20 @@ final class WindowLayoutsPluginTests: XCTestCase {
                 storage: storage ?? WindowLayoutsMemoryStorage()
             ),
             executor: executor ?? MockWindowLayoutExecutor(),
+            makeModifierDragSession: {
+                modifierDragSession ?? MockWindowModifierDragSession()
+            },
             accessibilityTrusted: accessibilityTrusted,
             requestAccessibilityTrust: { _ in accessibilityTrusted() }
         )
+    }
+
+    private func modifierDragFooter(in plugin: WindowLayoutsPlugin) throws -> String? {
+        guard case let .form(sections) = try XCTUnwrap(plugin.settingsPage).body else {
+            XCTFail("Expected Window Layouts form settings")
+            return nil
+        }
+        return try XCTUnwrap(sections.first(where: { $0.id == "modifier-drag" })).footer
     }
 
     private func configureShortcutHost(
@@ -761,6 +856,29 @@ final class WindowLayoutsPluginTests: XCTestCase {
             }
             return nil
         }
+    }
+}
+
+@MainActor
+private final class MockWindowModifierDragSession: WindowModifierDragSessionManaging {
+    var onFailure: (WindowLayoutError) -> Void = { _ in }
+    var onSuccess: () -> Void = {}
+    private(set) var configuredModifiers: ShortcutModifiers?
+    private(set) var configureCount = 0
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+
+    func configure(modifiers: ShortcutModifiers) {
+        configureCount += 1
+        configuredModifiers = modifiers
+    }
+
+    func start() {
+        startCount += 1
+    }
+
+    func stop() {
+        stopCount += 1
     }
 }
 
