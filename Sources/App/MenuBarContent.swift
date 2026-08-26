@@ -2528,13 +2528,13 @@ private struct SecondarySlidingPanel: View {
     }
 }
 
-private final class SecondaryPanelWindow: NSPanel {
+final class SecondaryPanelWindow: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
 
 @MainActor
-private final class SecondaryPanelController: ObservableObject {
+final class SecondaryPanelController: ObservableObject {
     // The secondary panel must remain a sibling of the MenuBarExtra popover, not a child window.
     //
     // Background: `NSWindow.addChildWindow(_:, ordered:)` binds parent and child key status into the
@@ -2612,8 +2612,42 @@ private final class SecondaryPanelController: ObservableObject {
             .foregroundStyle(theme.text.primary)
             .tint(theme.accent)
             .environment(\.menuBarPanelTheme, theme)
-            .environment(\.pluginComponentTheme, theme.componentTheme)
+                .environment(\.pluginComponentTheme, theme.componentTheme)
         )
+
+        show(
+            rootView: rootView,
+            width: MenuBarPanelLayout.secondaryPanelWidth,
+            minimumHeight: MenuBarPanelLayout.secondaryPanelMinimumHeight,
+            anchorRect: anchorRect,
+            screen: screen
+        )
+    }
+
+    func show(
+        content: AnyView,
+        width: CGFloat,
+        minimumHeight: CGFloat,
+        anchorRect: CGRect
+    ) {
+        guard let hostWindow, hostWindow.isVisible else { return }
+        show(
+            rootView: content,
+            width: width,
+            minimumHeight: minimumHeight,
+            anchorRect: anchorRect,
+            screen: screenContaining(anchorRect: anchorRect)
+        )
+    }
+
+    private func show(
+        rootView: AnyView,
+        width: CGFloat,
+        minimumHeight: CGFloat,
+        anchorRect: CGRect,
+        screen: NSScreen?
+    ) {
+        guard let hostWindow, hostWindow.isVisible else { return }
 
         let panelWindow = panelWindow ?? makePanel()
         // Reuse one NSHostingView. Rebuilding `contentView` on every `show()` destroys the SwiftUI
@@ -2632,9 +2666,8 @@ private final class SecondaryPanelController: ObservableObject {
         applyCurrentAppearance()
 
         let fittingSize = hostingView.fittingSize
-        let width = MenuBarPanelLayout.secondaryPanelWidth
         let height = min(
-            max(fittingSize.height, MenuBarPanelLayout.secondaryPanelMinimumHeight),
+            max(fittingSize.height, minimumHeight),
             maximumSecondaryPanelHeight(for: screen)
         )
         let visibleFrame = screen?.visibleFrame
@@ -2759,7 +2792,7 @@ private final class SecondaryPanelController: ObservableObject {
     }
 }
 
-private struct MenuWindowAccessor: NSViewRepresentable {
+struct MenuWindowAccessor: NSViewRepresentable {
     let onWindowChange: (NSWindow?) -> Void
 
     func makeNSView(context: Context) -> NSView {

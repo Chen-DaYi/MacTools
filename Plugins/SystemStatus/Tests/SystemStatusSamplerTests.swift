@@ -10,6 +10,160 @@ final class SystemStatusSamplerTests: XCTestCase {
         )
     }
 
+    func testRateChartDownsamplingPreservesPeakTimestampAndPairedValues() {
+        let samples = [
+            SystemStatusHUDRateChartSample(timestamp: 0, firstValue: 1, secondValue: 2),
+            SystemStatusHUDRateChartSample(timestamp: 300, firstValue: 90, secondValue: 5),
+            SystemStatusHUDRateChartSample(timestamp: 600, firstValue: 3, secondValue: 100),
+            SystemStatusHUDRateChartSample(timestamp: 603, firstValue: 4, secondValue: 4),
+        ]
+
+        XCTAssertEqual(
+            SystemStatusHUDDualLineChart.downsamplePeakSamples(samples, limit: 2),
+            [samples[1], samples[2]]
+        )
+    }
+
+    func testSingleLineChartDownsamplingPreservesSelectedRangeEndpoints() {
+        let samples = (0..<10).map {
+            SystemStatusHUDChartSample(timestamp: TimeInterval($0), value: Double($0))
+        }
+
+        XCTAssertEqual(
+            SystemStatusHUDSingleLineChart.downsample(samples, limit: 3),
+            [samples[0], samples[5], samples[9]]
+        )
+    }
+
+    func testDetailChartDownsamplesAcrossTheWholeSelectedRange() {
+        let history = (0...100).map { index in
+            SystemStatusHistoryPoint(
+                timestamp: TimeInterval(index * 60),
+                cpuUsage: Double(index) / 100
+            )
+        }
+
+        let chartData = SystemStatusMetricDetailChartData(
+            history: history,
+            kind: .cpu,
+            range: .twentyFourHours,
+            sampleLimit: 3
+        )
+
+        XCTAssertEqual(chartData.singleSamples.count, 3)
+        XCTAssertEqual(chartData.singleSamples.first?.timestamp, 0)
+        XCTAssertEqual(chartData.singleSamples.last?.timestamp, 6_000)
+        XCTAssertEqual(chartData.startTimestamp, 0)
+        XCTAssertEqual(chartData.endTimestamp, 6_000)
+    }
+
+    func testDetailChartBoundsMaximumStoredHistoryToRenderableSampleLimit() {
+        let history = (0..<SystemStatusHistoryStore.maximumSampleCount).map { index in
+            SystemStatusHistoryPoint(
+                timestamp: TimeInterval(index * 10),
+                cpuUsage: Double(index % 100) / 100
+            )
+        }
+
+        let chartData = SystemStatusMetricDetailChartData(
+            history: history,
+            kind: .cpu,
+            range: .twentyFourHours,
+            sampleLimit: 120
+        )
+
+        XCTAssertEqual(chartData.singleSamples.count, 120)
+        XCTAssertEqual(chartData.singleSamples.first?.timestamp, history.first?.timestamp)
+        XCTAssertEqual(chartData.singleSamples.last?.timestamp, history.last?.timestamp)
+    }
+
+    func testDetailChartCachePreparesEveryRangeBeforeSelection() {
+        let history = (0...180).map { index in
+            SystemStatusHistoryPoint(
+                timestamp: TimeInterval(index * 60),
+                cpuUsage: Double(index) / 180
+            )
+        }
+
+        let chartCache = SystemStatusMetricDetailChartCache(
+            history: history,
+            kind: .cpu,
+            sampleLimit: 20
+        )
+
+        for range in SystemStatusMetricDetailRange.allCases {
+            let chartData = chartCache.data(for: range)
+            XCTAssertEqual(chartData.range, range)
+            XCTAssertFalse(chartData.singleSamples.isEmpty)
+            XCTAssertLessThanOrEqual(chartData.singleSamples.count, 20)
+            XCTAssertEqual(chartData.endTimestamp, history.last?.timestamp)
+        }
+
+        XCTAssertEqual(
+            chartCache.data(for: .thirtyMinutes).startTimestamp,
+            history[150].timestamp
+        )
+        XCTAssertEqual(
+            chartCache.data(for: .twoHours).startTimestamp,
+            history[60].timestamp
+        )
+        XCTAssertEqual(
+            chartCache.data(for: .twentyFourHours).startTimestamp,
+            history.first?.timestamp
+        )
+    }
+
+    func testDetailChartAxisAddsEvenlySpacedIntermediateLabels() {
+        let day: TimeInterval = 24 * 60 * 60
+        let expected: [TimeInterval] = [0, day / 4, day / 2, day * 3 / 4, day]
+        let timestamps = SystemStatusMetricDetailAxis.timestamps(start: 0, end: day)
+
+        XCTAssertEqual(timestamps, expected)
+        XCTAssertEqual(
+            SystemStatusMetricDetailAxis.timestamps(start: 42, end: 42),
+            [42]
+        )
+        XCTAssertTrue(
+            SystemStatusMetricDetailAxis.timestamps(start: nil, end: 42).isEmpty
+        )
+    }
+
+    func testChartGeometryUsesActualIrregularTimestamps() throws {
+        let timestamps: [TimeInterval] = [0, 300, 600, 603, 606]
+        let range = try XCTUnwrap(
+            SystemStatusHUDChartGeometry.timeRange(timestamps: timestamps)
+        )
+
+        XCTAssertEqual(
+            SystemStatusHUDChartGeometry.x(for: 600, in: range, width: 100),
+            99.01,
+            accuracy: 0.01
+        )
+        let middleIndex = try XCTUnwrap(
+            SystemStatusHUDChartGeometry.nearestIndex(to: 0.5, timestamps: timestamps)
+        )
+        XCTAssertEqual(timestamps[middleIndex], 300)
+        XCTAssertEqual(
+            try XCTUnwrap(SystemStatusHUDChartGeometry.fraction(at: 2, timestamps: timestamps)),
+            600 / 606,
+            accuracy: 0.0001
+        )
+    }
+
+    func testBatteryTemperatureUsesNestedAndVirtualRegistryFallbacks() throws {
+        XCTAssertEqual(
+            try XCTUnwrap(SystemStatusSampler.batteryTemperatureCelsius(rawValues: [nil, 3_589, 3_200])),
+            35.89,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(SystemStatusSampler.batteryTemperatureCelsius(rawValues: [12_000, 3_200])),
+            32,
+            accuracy: 0.001
+        )
+        XCTAssertNil(SystemStatusSampler.batteryTemperatureCelsius(rawValues: [nil, 12_000]))
+    }
+
     func testCPUUsageCalculatorUsesPositiveTickDeltas() throws {
         let usage = try XCTUnwrap(SystemStatusCPUUsageCalculator.usage(
             current: SystemStatusCPUTicks(user: 150, system: 75, idle: 925, nice: 0),
@@ -194,6 +348,20 @@ final class SystemStatusSamplerTests: XCTestCase {
 
         XCTAssertEqual(processes.map(\.pid), [6, 9, 7])
         XCTAssertEqual(processes.map(\.displayName), ["delta", "gamma", "beta"])
+    }
+
+    func testProcessParserKeepsCPUAndMemoryLeadersAsCandidates() {
+        let output = """
+           1  90.0  1.0   1024 /usr/bin/cpu-leader
+           2  80.0  2.0   2048 /usr/bin/cpu-runner-up
+           3   1.0 40.0  40960 /usr/bin/memory-leader
+           4   2.0 30.0  30720 /usr/bin/memory-runner-up
+           5   3.0  3.0   3072 /usr/bin/other
+        """
+
+        let candidates = SystemStatusProcessParser.parsePSOutputCandidates(output, limitPerSort: 2)
+
+        XCTAssertEqual(Set(candidates.map(\.pid)), [1, 2, 3, 4])
     }
 
     func testFormatterOutputsExpectedValues() {

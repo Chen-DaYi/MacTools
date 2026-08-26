@@ -226,34 +226,39 @@ enum ComponentGridPlacementEngine {
 }
 
 struct ComponentPanelContent: View {
+    private enum DetailLayout {
+        static let width: CGFloat = 360
+        static let minimumHeight: CGFloat = 300
+    }
+
+    @StateObject private var detailCoordinator = ComponentDetailCoordinator()
+    @StateObject private var secondaryPanelController = SecondaryPanelController()
     @ObservedObject var pluginHost: PluginHost
     let contentBodyHeight: CGFloat
+    let isPanelVisible: Bool
     let onDismiss: () -> Void
+    @Environment(\.menuBarPanelTheme) private var theme
 
     private var placements: [ComponentGridPlacement] {
         ComponentGridPlacementEngine.placements(for: pluginHost.componentItems)
     }
 
     var body: some View {
-        Group {
-            if pluginHost.componentItems.isEmpty {
-                emptyState
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    ComponentGridView(
-                        pluginHost: pluginHost,
-                        items: pluginHost.componentItems,
-                        placements: placements,
-                        onDismiss: onDismiss
-                    )
-                }
-                .background(ScrollViewScrollerVisibilityConfigurator())
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: ComponentPanelLayout.scrollClipCornerRadius,
-                        style: .continuous
-                    )
+        ZStack(alignment: .topLeading) {
+            dashboardContent
+                .opacity(secondaryPanelController.isPresentingInline ? 0 : 1)
+                .allowsHitTesting(!secondaryPanelController.isPresentingInline)
+
+            if secondaryPanelController.isPresentingInline, let detailContent {
+                ComponentDetailPanelView(
+                    title: detailContent.title,
+                    content: detailContent.content,
+                    onDismiss: dismissDetail
+                )
+                .frame(
+                    width: ComponentPanelLayout.gridWidth,
+                    height: contentBodyHeight,
+                    alignment: .topLeading
                 )
             }
         }
@@ -262,6 +267,117 @@ struct ComponentPanelContent: View {
             height: contentBodyHeight,
             alignment: .topLeading
         )
+        .background(
+            MenuWindowAccessor { window in
+                secondaryPanelController.setHostWindow(isPanelVisible ? window : nil)
+                if isPanelVisible {
+                    syncDetailPanel()
+                }
+            }
+        )
+        .onAppear { [detailCoordinator] in
+            pluginHost.componentDetailPresentationHandler = { [weak detailCoordinator] pluginID, detailID in
+                detailCoordinator?.toggle(pluginID: pluginID, detailID: detailID)
+            }
+            secondaryPanelController.onHostWindowDismissRequest = { [weak detailCoordinator] in
+                detailCoordinator?.dismiss()
+            }
+        }
+        .onChange(of: detailCoordinator.selection) {
+            syncDetailPanel()
+        }
+        .onChange(of: detailCoordinator.cardFrames) {
+            syncDetailPanel()
+        }
+        .onChange(of: isPanelVisible) { _, visible in
+            if visible {
+                syncDetailPanel()
+            } else {
+                dismissDetail()
+                secondaryPanelController.setHostWindow(nil)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)) { _ in
+            secondaryPanelController.applyCurrentAppearance()
+        }
+        .onDisappear {
+            pluginHost.componentDetailPresentationHandler = nil
+            secondaryPanelController.onHostWindowDismissRequest = nil
+            dismissDetail()
+            secondaryPanelController.setHostWindow(nil)
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardContent: some View {
+        if pluginHost.componentItems.isEmpty {
+            emptyState
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView(.vertical, showsIndicators: false) {
+                ComponentGridView(
+                    pluginHost: pluginHost,
+                    items: pluginHost.componentItems,
+                    placements: placements,
+                    onDismiss: onDismiss,
+                    onCardFrameChange: detailCoordinator.updateCardFrame
+                )
+            }
+            .background(ScrollViewScrollerVisibilityConfigurator())
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: ComponentPanelLayout.scrollClipCornerRadius,
+                    style: .continuous
+                )
+            )
+        }
+    }
+
+    private var detailContent: PluginComponentDetailContent? {
+        guard let selection = detailCoordinator.selection else {
+            return nil
+        }
+        return pluginHost.componentDetailContent(
+            pluginID: selection.pluginID,
+            detailID: selection.detailID,
+            dismiss: dismissDetail
+        )
+    }
+
+    private func syncDetailPanel() {
+        guard
+            isPanelVisible,
+            let selection = detailCoordinator.selection,
+            let anchorRect = detailCoordinator.cardFrames[selection.pluginID],
+            let detailContent
+        else {
+            secondaryPanelController.hide()
+            return
+        }
+
+        let rootView = AnyView(
+            ComponentDetailPanelView(
+                title: detailContent.title,
+                content: detailContent.content,
+                onDismiss: dismissDetail
+            )
+            .frame(width: DetailLayout.width)
+            .foregroundStyle(theme.text.primary)
+            .tint(theme.accent)
+            .environment(\.menuBarPanelTheme, theme)
+            .environment(\.pluginComponentTheme, theme.componentTheme)
+        )
+        secondaryPanelController.show(
+            content: rootView,
+            width: DetailLayout.width,
+            minimumHeight: DetailLayout.minimumHeight,
+            anchorRect: anchorRect
+        )
+    }
+
+    private func dismissDetail() {
+        detailCoordinator.dismiss()
+        secondaryPanelController.hide()
     }
 
     private var emptyState: some View {
@@ -283,6 +399,7 @@ private struct ComponentGridView: View {
     let items: [PluginComponentItem]
     let placements: [ComponentGridPlacement]
     let onDismiss: () -> Void
+    let onCardFrameChange: (String, CGRect?) -> Void
 
     private var itemsByID: [String: PluginComponentItem] {
         Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
@@ -303,7 +420,8 @@ private struct ComponentGridView: View {
                         componentViewItem: pluginHost.componentViewItem(
                             for: item.id,
                             dismiss: onDismiss
-                        )
+                        ),
+                        onFrameChange: { onCardFrameChange(item.id, $0) }
                     )
                     .frame(
                         width: itemSize.width,
@@ -327,6 +445,7 @@ private struct ComponentGridView: View {
 private struct ComponentCardContainer: View {
     let item: PluginComponentItem
     let componentViewItem: PluginComponentViewItem?
+    let onFrameChange: (CGRect?) -> Void
 
     var body: some View {
         Group {
@@ -340,5 +459,108 @@ private struct ComponentCardContainer: View {
         .clipped()
         .disabled(!item.isEnabled)
         .opacity(item.isEnabled ? 1 : 0.55)
+        .background(ComponentCardFrameReader(onFrameChange: onFrameChange))
+        .onDisappear {
+            onFrameChange(nil)
+        }
+    }
+}
+
+@MainActor
+private final class ComponentDetailCoordinator: ObservableObject {
+    struct Selection: Equatable {
+        let pluginID: String
+        let detailID: String
+    }
+
+    @Published private(set) var selection: Selection?
+    @Published private(set) var cardFrames: [String: CGRect] = [:]
+
+    func toggle(pluginID: String, detailID: String) {
+        let requested = Selection(pluginID: pluginID, detailID: detailID)
+        selection = selection == requested ? nil : requested
+    }
+
+    func dismiss() {
+        selection = nil
+    }
+
+    func updateCardFrame(pluginID: String, frame: CGRect?) {
+        if let frame {
+            guard cardFrames[pluginID] != frame else { return }
+            cardFrames[pluginID] = frame
+        } else {
+            cardFrames.removeValue(forKey: pluginID)
+        }
+    }
+}
+
+private struct ComponentCardFrameReader: NSViewRepresentable {
+    let onFrameChange: (CGRect?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async { updateFrame(for: view) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { updateFrame(for: nsView) }
+    }
+
+    private func updateFrame(for view: NSView) {
+        guard let window = view.window else {
+            onFrameChange(nil)
+            return
+        }
+        let rectInWindow = view.convert(view.bounds, to: nil)
+        onFrameChange(window.convertToScreen(rectInWindow))
+    }
+}
+
+private struct ComponentDetailPanelView: View {
+    let title: String
+    let content: AnyView
+    let onDismiss: () -> Void
+    @Environment(\.menuBarPanelTheme) private var theme
+    @State private var isCloseHovered = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.text.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(
+                            isCloseHovered ? theme.text.primary : theme.text.secondary
+                        )
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle().fill(isCloseHovered ? theme.surfaces.hover : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .onHover { isCloseHovered = $0 }
+                .keyboardShortcut(.cancelAction)
+                .help(AppL10n.settings("panelTheme.close", defaultValue: "关闭"))
+                .accessibilityLabel(AppL10n.settings("panelTheme.close", defaultValue: "关闭"))
+            }
+
+            content
+        }
+        .padding(MenuBarPanelLayout.outerPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background { MenuBarPanelBackground() }
+        .clipShape(
+            RoundedRectangle(cornerRadius: MenuBarPanelLayout.cornerRadius, style: .continuous)
+        )
     }
 }

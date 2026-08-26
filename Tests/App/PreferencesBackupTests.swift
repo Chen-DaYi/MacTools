@@ -3,6 +3,7 @@ import SwiftUI
 import XCTest
 import MacToolsPluginKit
 @testable import MacTools
+@testable import SystemStatusPlugin
 
 @MainActor
 final class PreferencesBackupTests: XCTestCase {
@@ -65,6 +66,51 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(backup.shortcutCustomizations["app.open-settings"], .custom(openSettingsBinding))
         XCTAssertNil(backup.shortcutCustomizations["second.shortcut.open"])
         XCTAssertFalse(try XCTUnwrap(String(data: backup.encodedJSON(), encoding: .utf8)).contains("api-key-value"))
+    }
+
+    func testSystemStatusSettingsRoundTripThroughHostPreferencesBackup() throws {
+        let sourceDefaults = makeDefaults(suiteName: "\(suiteName)-system-status-source")
+        let sourceStorage = UserDefaultsPluginStorage(
+            pluginID: "system-status",
+            userDefaults: sourceDefaults
+        )
+        let sourceController = SystemStatusSettingsController(
+            store: SystemStatusPluginStorageConfigurationStore(storage: sourceStorage)
+        )
+        sourceController.movePanelMetric(.battery, toOffset: 0)
+        sourceController.setPanelMetric(.gpu, visible: false)
+        sourceController.setMenuBarMetric(.memory, visible: true)
+        sourceController.setMenuBarValues(.memory, values: [.swap, .usage])
+        sourceController.setMenuBarLayout(.vertical)
+        sourceController.setProcessSort(.memory)
+        let sourcePlugin = SystemStatusPlugin(
+            settingsController: sourceController,
+            storage: sourceStorage
+        )
+        let sourceHost = makeHost(plugins: [sourcePlugin], defaults: sourceDefaults)
+
+        let backup = sourceHost.makePreferencesBackup()
+        XCTAssertNotNil(backup.pluginPreferences["system-status"])
+        XCTAssertTrue(backup.effectiveSelection.pluginPreferenceIDs.contains("system-status"))
+
+        let destinationDefaults = makeDefaults(suiteName: "\(suiteName)-system-status-destination")
+        let destinationStorage = UserDefaultsPluginStorage(
+            pluginID: "system-status",
+            userDefaults: destinationDefaults
+        )
+        let destinationController = SystemStatusSettingsController(
+            store: SystemStatusPluginStorageConfigurationStore(storage: destinationStorage)
+        )
+        let destinationPlugin = SystemStatusPlugin(
+            settingsController: destinationController,
+            storage: destinationStorage
+        )
+        let destinationHost = makeHost(plugins: [destinationPlugin], defaults: destinationDefaults)
+
+        let result = try destinationHost.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(destinationController.configuration, sourceController.configuration)
     }
 
     func testSettingsSidebarOrderRoundTripsAndUpdatesTheActiveStore() async throws {
