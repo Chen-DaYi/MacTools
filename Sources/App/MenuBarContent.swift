@@ -2560,9 +2560,10 @@ final class SecondaryPanelController: ObservableObject {
     @Published private(set) var isPresentingInline = false
     var onHostWindowDismissRequest: (() -> Void)?
 
-    func setHostWindow(_ window: NSWindow?) {
+    @discardableResult
+    func setHostWindow(_ window: NSWindow?) -> Bool {
         guard hostWindow !== window else {
-            return
+            return false
         }
 
         removeHostWindowObservers()
@@ -2570,10 +2571,11 @@ final class SecondaryPanelController: ObservableObject {
 
         guard window != nil else {
             hide()
-            return
+            return true
         }
 
         observeHostWindowIfNeeded()
+        return true
     }
 
     func show(
@@ -2682,7 +2684,7 @@ final class SecondaryPanelController: ObservableObject {
 
         switch placement {
         case let .right(frame), let .left(frame):
-            isPresentingInline = false
+            setPresentingInline(false)
             panelWindow.setFrame(frame, display: true)
             // Align the panel level to `hostWindow.level + 1` at runtime so it stays above the popover.
             // The MenuBarExtra popover level is a private SwiftUI implementation detail.
@@ -2690,7 +2692,7 @@ final class SecondaryPanelController: ObservableObject {
             PluginPresentationSafety.prepareForWindowOrdering(panelWindow)
             panelWindow.orderFrontRegardless()
         case .inline:
-            isPresentingInline = true
+            setPresentingInline(true)
             panelWindow.orderOut(nil)
         }
         self.panelWindow = panelWindow
@@ -2706,7 +2708,15 @@ final class SecondaryPanelController: ObservableObject {
         panelWindow?.orderOut(nil)
         self.panelWindow = nil
         self.panelHostingView = nil
-        isPresentingInline = false
+        setPresentingInline(false)
+    }
+
+    private func setPresentingInline(_ isPresentingInline: Bool) {
+        guard self.isPresentingInline != isPresentingInline else {
+            return
+        }
+
+        self.isPresentingInline = isPresentingInline
     }
 
     private func screenContaining(anchorRect: CGRect) -> NSScreen? {

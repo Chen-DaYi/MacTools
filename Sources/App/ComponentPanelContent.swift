@@ -232,6 +232,7 @@ struct ComponentPanelContent: View {
     }
 
     @StateObject private var detailCoordinator = ComponentDetailCoordinator()
+    @StateObject private var layoutCache = ComponentGridLayoutCache()
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @ObservedObject var pluginHost: PluginHost
     let contentBodyHeight: CGFloat
@@ -240,7 +241,7 @@ struct ComponentPanelContent: View {
     @Environment(\.menuBarPanelTheme) private var theme
 
     private var placements: [ComponentGridPlacement] {
-        ComponentGridPlacementEngine.placements(for: pluginHost.componentItems)
+        layoutCache.placements(for: pluginHost.componentItems)
     }
 
     var body: some View {
@@ -269,8 +270,10 @@ struct ComponentPanelContent: View {
         )
         .background(
             MenuWindowAccessor { window in
-                secondaryPanelController.setHostWindow(isPanelVisible ? window : nil)
-                if isPanelVisible {
+                let didChangeHostWindow = secondaryPanelController.setHostWindow(
+                    isPanelVisible ? window : nil
+                )
+                if didChangeHostWindow, isPanelVisible, detailCoordinator.state.selection != nil {
                     syncDetailPanel()
                 }
             }
@@ -283,15 +286,14 @@ struct ComponentPanelContent: View {
                 detailCoordinator?.dismiss()
             }
         }
-        .onChange(of: detailCoordinator.selection) {
-            syncDetailPanel()
-        }
-        .onChange(of: detailCoordinator.cardFrames) {
+        .onChange(of: detailCoordinator.state) {
             syncDetailPanel()
         }
         .onChange(of: isPanelVisible) { _, visible in
             if visible {
-                syncDetailPanel()
+                if detailCoordinator.state.selection != nil {
+                    syncDetailPanel()
+                }
             } else {
                 dismissDetail()
                 secondaryPanelController.setHostWindow(nil)
@@ -319,6 +321,7 @@ struct ComponentPanelContent: View {
                     pluginHost: pluginHost,
                     items: pluginHost.componentItems,
                     placements: placements,
+                    detailAnchorPluginID: detailCoordinator.state.selection?.pluginID,
                     onDismiss: onDismiss,
                     onCardFrameChange: detailCoordinator.updateCardFrame
                 )
@@ -334,7 +337,7 @@ struct ComponentPanelContent: View {
     }
 
     private var detailContent: PluginComponentDetailContent? {
-        guard let selection = detailCoordinator.selection else {
+        guard let selection = detailCoordinator.state.selection else {
             return nil
         }
         return pluginHost.componentDetailContent(
@@ -347,8 +350,8 @@ struct ComponentPanelContent: View {
     private func syncDetailPanel() {
         guard
             isPanelVisible,
-            let selection = detailCoordinator.selection,
-            let anchorRect = detailCoordinator.cardFrames[selection.pluginID],
+            detailCoordinator.state.selection != nil,
+            let anchorRect = detailCoordinator.state.selectedCardFrame,
             let detailContent
         else {
             secondaryPanelController.hide()
@@ -398,6 +401,7 @@ private struct ComponentGridView: View {
     @ObservedObject var pluginHost: PluginHost
     let items: [PluginComponentItem]
     let placements: [ComponentGridPlacement]
+    let detailAnchorPluginID: String?
     let onDismiss: () -> Void
     let onCardFrameChange: (String, CGRect?) -> Void
 
@@ -421,6 +425,7 @@ private struct ComponentGridView: View {
                             for: item.id,
                             dismiss: onDismiss
                         ),
+                        measuresDetailAnchor: item.id == detailAnchorPluginID,
                         onFrameChange: { onCardFrameChange(item.id, $0) }
                     )
                     .frame(
@@ -445,6 +450,7 @@ private struct ComponentGridView: View {
 private struct ComponentCardContainer: View {
     let item: PluginComponentItem
     let componentViewItem: PluginComponentViewItem?
+    let measuresDetailAnchor: Bool
     let onFrameChange: (CGRect?) -> Void
 
     var body: some View {
@@ -459,9 +465,15 @@ private struct ComponentCardContainer: View {
         .clipped()
         .disabled(!item.isEnabled)
         .opacity(item.isEnabled ? 1 : 0.55)
-        .background(ComponentCardFrameReader(onFrameChange: onFrameChange))
+        .background {
+            if measuresDetailAnchor {
+                ComponentCardFrameReader(onFrameChange: onFrameChange)
+            }
+        }
         .onDisappear {
-            onFrameChange(nil)
+            if measuresDetailAnchor {
+                onFrameChange(nil)
+            }
         }
     }
 }
@@ -473,25 +485,56 @@ private final class ComponentDetailCoordinator: ObservableObject {
         let detailID: String
     }
 
-    @Published private(set) var selection: Selection?
-    @Published private(set) var cardFrames: [String: CGRect] = [:]
+    struct State: Equatable {
+        var selection: Selection?
+        var selectedCardFrame: CGRect?
+    }
+
+    @Published private(set) var state = State()
 
     func toggle(pluginID: String, detailID: String) {
         let requested = Selection(pluginID: pluginID, detailID: detailID)
-        selection = selection == requested ? nil : requested
+        state = State(
+            selection: state.selection == requested ? nil : requested,
+            selectedCardFrame: nil
+        )
     }
 
     func dismiss() {
-        selection = nil
+        guard state.selection != nil || state.selectedCardFrame != nil else {
+            return
+        }
+        state = State()
     }
 
     func updateCardFrame(pluginID: String, frame: CGRect?) {
-        if let frame {
-            guard cardFrames[pluginID] != frame else { return }
-            cardFrames[pluginID] = frame
-        } else {
-            cardFrames.removeValue(forKey: pluginID)
+        guard state.selection?.pluginID == pluginID, state.selectedCardFrame != frame else {
+            return
         }
+        state.selectedCardFrame = frame
+    }
+}
+
+@MainActor
+private final class ComponentGridLayoutCache: ObservableObject {
+    private struct LayoutItem: Equatable {
+        let id: String
+        let span: PluginComponentSpan
+    }
+
+    private var layoutItems: [LayoutItem] = []
+    private var cachedPlacements: [ComponentGridPlacement] = []
+
+    func placements(for items: [PluginComponentItem]) -> [ComponentGridPlacement] {
+        let nextLayoutItems = items.map { LayoutItem(id: $0.id, span: $0.span) }
+        guard nextLayoutItems != layoutItems else {
+            return cachedPlacements
+        }
+
+        let placements = ComponentGridPlacementEngine.placements(for: items)
+        layoutItems = nextLayoutItems
+        cachedPlacements = placements
+        return placements
     }
 }
 
