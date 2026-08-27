@@ -8,6 +8,7 @@ import json
 import pathlib
 import plistlib
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import xml.sax.saxutils as xml
@@ -136,6 +137,44 @@ def write_github_env(metadata: Dict[str, str], output_path: pathlib.Path) -> Non
             output.write(f"{key}={value}\n")
 
 
+def publication_decision(
+    event_name: str,
+    source_sha: str,
+    previous_source_sha: str,
+    repository_path: pathlib.Path = pathlib.Path("."),
+) -> Dict[str, str]:
+    """Skip only a conclusively unchanged scheduled run; manual runs force publication."""
+    if event_name != "schedule":
+        return {"decision": "publish", "reason": "Manual run: forced Nightly publication."}
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", previous_source_sha):
+        return {"decision": "publish", "reason": "No usable advertised Nightly source; publishing normally."}
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", source_sha):
+        return {"decision": "publish", "reason": "Current source is indeterminate; publishing normally."}
+
+    try:
+        comparison = subprocess.run(
+            [
+                "git", "diff", "--quiet", "--no-ext-diff", "--no-textconv",
+                previous_source_sha, source_sha, "--", ".", ":(exclude)docs/nightly/**",
+            ],
+            cwd=repository_path,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {"decision": "publish", "reason": "Source comparison unavailable; publishing normally."}
+
+    if comparison.returncode == 0:
+        return {
+            "decision": "unchanged",
+            "reason": f"No changes outside docs/nightly/** since advertised source {previous_source_sha}.",
+        }
+    if comparison.returncode == 1:
+        return {"decision": "publish", "reason": "Source changes found since the advertised Nightly."}
+    return {"decision": "publish", "reason": "Source comparison failed; publishing normally."}
+
+
 def write_release_notes(
     output_path: pathlib.Path,
     repository: str,
@@ -213,12 +252,69 @@ def write_appcast(
     ET.parse(output_path)
 
 
+def executable_bundle_identifier(path: pathlib.Path) -> str:
+    # Use the same CFBundle API as CLIServiceConfiguration, including unsigned Mach-O plists.
+    script = '''import Foundation
+let url = URL(fileURLWithPath: CommandLine.arguments[1])
+let info = CFBundleCopyInfoDictionaryForURL(url as CFURL) as? [String: Any]
+print(info?["CFBundleIdentifier"] as? String ?? "")
+'''
+    try:
+        result = subprocess.run(
+            ["xcrun", "swift", "-e", script, str(path)],
+            capture_output=True, text=True, check=True, timeout=60,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        fail(f"Cannot read the embedded Nightly executable Info.plist: {path}")
+    return result.stdout.strip()
+
+
+def verify_nightly_cli(
+    app_path: pathlib.Path, bundle_identifier_prefix: str,
+    cli_path: pathlib.Path | None = None, signed: bool = False,
+) -> None:
+    host_identifier = f"{bundle_identifier_prefix}.mactools.nightly"
+    broker_identifier = f"{host_identifier}.cli-broker"
+    agent_path = app_path / "Contents/Library/LaunchAgents/app.ggbond.MacTools.cli-broker.plist"
+    if not agent_path.is_file():
+        fail("Nightly CLI broker LaunchAgent is missing")
+    with agent_path.open("rb") as file:
+        agent = plistlib.load(file)
+    expected = {
+        "Label": broker_identifier,
+        "MachServices": {broker_identifier: True},
+        "BundleProgram": "Contents/MacOS/MacToolsCLIBroker",
+    }
+    for key, value in expected.items():
+        if agent.get(key) != value:
+            fail(f"Nightly CLI LaunchAgent {key} is not isolated: {agent.get(key)!r}")
+    broker_path = app_path / "Contents/MacOS/MacToolsCLIBroker"
+    executables = [(broker_path, broker_identifier)]
+    if cli_path is not None:
+        executables.append((cli_path, f"{host_identifier}.cli"))
+    for path, identifier in executables:
+        if not path.is_file() or executable_bundle_identifier(path) != identifier:
+            fail(f"Nightly executable must embed {identifier}: {path}")
+    if signed:
+        try:
+            signature = subprocess.run(
+                ["/usr/bin/codesign", "--display", "--verbose=4", str(broker_path)],
+                capture_output=True, text=True, check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            fail("Cannot inspect the signed Nightly CLI broker")
+        if re.findall(r"^Identifier=(.+)$", signature.stderr, re.MULTILINE) != [broker_identifier]:
+            fail("Nightly CLI broker signing identifier is not isolated")
+
+
 def verify_nightly_app(
     app_path: pathlib.Path,
     bundle_identifier_prefix: str,
     version: str,
     build_number: str,
     plugin_kit_version: int,
+    cli_path: pathlib.Path | None = None,
+    signed: bool = False,
 ) -> None:
     if plugin_kit_version < 1:
         fail("PluginKit version must be positive")
@@ -262,6 +358,8 @@ def verify_nightly_app(
     ]
     if schemes != ["mactools-nightly"]:
         fail(f"Nightly URL schemes are {schemes!r}; expected ['mactools-nightly']")
+
+    verify_nightly_cli(app_path, bundle_identifier_prefix, cli_path, signed)
 
     expected_extension_values = {
         "CFBundleDisplayName": "MacTools Nightly 右键工具",
@@ -335,6 +433,29 @@ def read_nightly_appcast_tag(appcast_path: pathlib.Path) -> str:
     fail(f"Nightly appcast does not contain a valid release tag: {appcast_path}")
 
 
+def verify_nightly_helper_signatures(packages_dir: pathlib.Path, bundle_identifier_prefix: str) -> None:
+    helpers = [
+        ("fan-control", "FanControl", "mactools-fan-smc-helper"),
+        ("battery-charge-limit", "BatteryChargeLimit", "mactools-battery-smc-helper"),
+    ]
+    for plugin_id, bundle_name, helper_name in helpers:
+        helper = (
+            packages_dir / f"{plugin_id}.mactoolsplugin" / f"{bundle_name}.bundle"
+            / "Contents/Resources/SMCHelper" / helper_name
+        )
+        try:
+            signature = subprocess.run(
+                ["/usr/bin/codesign", "--display", "--verbose=4", str(helper)],
+                capture_output=True, text=True, check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            fail(f"Cannot inspect the signed Nightly helper for {plugin_id}")
+        expected = f"{bundle_identifier_prefix}.mactools.plugins.{plugin_id}.smc-helper.nightly"
+        identifiers = re.findall(r"^Identifier=(.+)$", signature.stderr, re.MULTILINE)
+        if identifiers != [expected]:
+            fail(f"Nightly helper signing identifier is not isolated for {plugin_id}")
+
+
 def stale_nightly_tags(
     releases: Iterable[Dict[str, Any]],
     keep: int,
@@ -398,6 +519,8 @@ def parser() -> argparse.ArgumentParser:
     verify_app.add_argument("--version", required=True)
     verify_app.add_argument("--build-number", required=True)
     verify_app.add_argument("--plugin-kit-version", required=True, type=int)
+    verify_app.add_argument("--cli", type=pathlib.Path, help="Also verify the separately built CLI prototype")
+    verify_app.add_argument("--signed", action="store_true", help="Also verify the broker signing identifier")
 
     verify_catalog = subparsers.add_parser("verify-catalog")
     verify_catalog.add_argument("--catalog", type=pathlib.Path, required=True)
@@ -405,6 +528,10 @@ def parser() -> argparse.ArgumentParser:
     verify_catalog.add_argument("--repository", required=True)
     verify_catalog.add_argument("--tag", required=True)
     verify_catalog.add_argument("--build-number", required=True)
+
+    verify_helpers = subparsers.add_parser("verify-helper-signatures")
+    verify_helpers.add_argument("--packages-dir", type=pathlib.Path, required=True)
+    verify_helpers.add_argument("--bundle-identifier-prefix", required=True)
 
     stale_tags = subparsers.add_parser("stale-tags")
     stale_tags.add_argument("--input", type=pathlib.Path, required=True)
@@ -416,6 +543,13 @@ def parser() -> argparse.ArgumentParser:
 
     plugin_kit_version = subparsers.add_parser("plugin-kit-version")
     plugin_kit_version.add_argument("--plugins-dir", type=pathlib.Path, required=True)
+
+    decision = subparsers.add_parser("publication-decision")
+    decision.add_argument("--event-name", required=True)
+    decision.add_argument("--source-sha", required=True)
+    decision.add_argument("--previous-source-sha", default="")
+    decision.add_argument("--github-output", type=pathlib.Path, required=True)
+    decision.add_argument("--github-step-summary", type=pathlib.Path, required=True)
     return root
 
 
@@ -462,6 +596,8 @@ def main() -> None:
             args.version,
             args.build_number,
             args.plugin_kit_version,
+            args.cli,
+            args.signed,
         )
     elif args.command == "verify-catalog":
         verify_nightly_catalog(
@@ -471,6 +607,8 @@ def main() -> None:
             args.tag,
             args.build_number,
         )
+    elif args.command == "verify-helper-signatures":
+        verify_nightly_helper_signatures(args.packages_dir, args.bundle_identifier_prefix)
     elif args.command == "stale-tags":
         releases = json.loads(args.input.read_text(encoding="utf-8"))
         for tag in stale_nightly_tags(releases, args.keep, args.preserve_tag):
@@ -479,6 +617,12 @@ def main() -> None:
         print(read_nightly_appcast_tag(args.input))
     elif args.command == "plugin-kit-version":
         print(discover_plugin_metadata(args.plugins_dir)["PLUGIN_KIT_VERSION"])
+    elif args.command == "publication-decision":
+        decision = publication_decision(args.event_name, args.source_sha, args.previous_source_sha)
+        write_github_env(decision, args.github_output)
+        with args.github_step_summary.open("a", encoding="utf-8") as summary:
+            summary.write(f"Nightly decision: **{decision['decision']}**. {decision['reason']}\n")
+        print(decision["reason"])
 
 
 if __name__ == "__main__":

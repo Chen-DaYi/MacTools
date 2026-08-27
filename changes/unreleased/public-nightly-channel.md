@@ -3,4 +3,4 @@ release: app
 type: added
 ---
 
-Added an isolated public Nightly channel that can coexist with stable MacTools and receive same-commit app and plugin updates.
+Added an isolated Nightly channel with same-commit app and plugin updates. Scheduled releases skip unchanged inputs; manual builds remain available for update testing and rollback.

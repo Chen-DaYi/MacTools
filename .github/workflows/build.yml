@@ -91,6 +91,7 @@ jobs:
             -quiet
           scripts/nightly-release.py verify-app \
             --app "${DERIVED_DATA}/Build/Products/Nightly/MacTools Nightly.app" \
+            --cli "${DERIVED_DATA}/Build/Products/Nightly/mactools" \
             --bundle-identifier-prefix "${CI_BUNDLE_IDENTIFIER_PREFIX}" \
             --version "$VERSION" \
             --build-number 1.1 \

@@ -23,6 +23,19 @@ Nightly 不需要新的发布证书或私钥。合并实现后，维护者只需
 
 手动 `Build` workflow 产生的 Debug artifact 仍然只是 CI 调试输出，不会发布到 GitHub Releases、官网或任何 Sparkle feed，也不是第二个 Nightly 渠道。
 
+### Nightly isolation and unchanged-run verification
+
+The Nightly job reads the deployed `https://mactools.ggbond.app/nightly/appcast.xml`, resolves that advertised GitHub prerelease's target source SHA, and compares its tree with the selected source before accessing release credentials. It ignores generated `docs/nightly/**` changes; all other tracked changes are conservatively considered relevant. An unchanged scheduled run reports `unchanged` and skips building, signing, notarizing, release/plugin uploads, and metadata commits. A manual run always reports `publish`, including same-commit N to N+1 and rollback tests. First publication, an unavailable or malformed feed, an unusable release source, or a failed comparison defaults to publication. The check stays within the existing single job and writes no repository tracking state.
+
+Before enabling the schedule, include these coexistence checks in the two manual runs:
+
+1. With stable installed, install the Nightly Fan Control and Battery Charge Limit plugins. Authorize their helper installation and confirm the new files end in `.smc-helper.nightly` under `/Library/PrivilegedHelperTools`; stable helper files remain unchanged. The Nightly helper signing identifiers also end in `.nightly`.
+2. Update Nightly and verify stable can still use its existing helpers without another installation prompt. Separate helpers do not isolate hardware state: test one app's fan or charging policy at a time.
+3. Use separate test credentials in stable and Nightly Translator and Cloudflare R2. Confirm Nightly starts without stable credentials and that saving, updating, or deleting Nightly credentials leaves stable credentials intact.
+4. Install Activity Bar hooks in both apps, in either order. Confirm both channels receive AI events. Remove Nightly's hooks and confirm stable hooks still work; reinstall Nightly's hooks, remove stable hooks, and confirm Nightly still works. Closing either app must leave the other app's listener available.
+5. If testing the experimental CLI, build the standalone tool with the same `Nightly` configuration as the app. Follow `docs/testing/cli-phase-0.md` using the Nightly app and product paths; enable its broker through Nightly's settings. Verify `doctor` connects only to Nightly, and that disabling Nightly's broker leaves stable's broker registration intact. The release workflow checks the broker's embedded identifier, LaunchAgent service, and signature; the standalone prototype remains outside the published app.
+6. After enabling the schedule, confirm a run with only generated `docs/nightly/**` changes reports `unchanged` without a release or metadata commit. Manual dispatch of the same source must still publish.
+
 ## 需要配置的 Secrets
 
 进入 GitHub 仓库：`Settings` → `Secrets and variables` → `Actions` → `Repository secrets`，添加以下条目。

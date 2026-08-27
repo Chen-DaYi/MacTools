@@ -51,6 +51,15 @@ def copy_manifest(
         allow_sparse_legacy=allow_sparse_legacy,
     )
 
+    if configuration == "Nightly" and manifest["id"] in {"fan-control", "battery-charge-limit"}:
+        helper_path = f"/Library/PrivilegedHelperTools/cc.ggbond.mactools.{manifest['id']}.smc-helper"
+        for step in manifest.get("setup", {}).get("steps", []):
+            if step.get("id") == "install-privileged-helper":
+                step["description"] = {
+                    locale: description.replace(helper_path, helper_path + ".nightly")
+                    for locale, description in step["description"].items()
+                }
+
     if nightly_build_number is not None:
         source_version = str(manifest["version"])
         source_match = PLUGIN_VERSION_PATTERN.fullmatch(source_version)
@@ -64,7 +73,7 @@ def copy_manifest(
         )
 
     if (
-        configuration != "Debug"
+        configuration not in {"Debug", "Nightly"}
         and nightly_build_number is None
         and not had_build_metadata
         and not had_localization_references

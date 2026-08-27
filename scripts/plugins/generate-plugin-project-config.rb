@@ -383,6 +383,7 @@ targets["MacToolsTests"] = {
     { "target" => "MacTools" },
     { "target" => "MacToolsPluginKit" },
     { "target" => "MacToolsAppIntents" },
+    { "target" => "MacToolsCLIProtocol" },
     { "target" => "AppInstanceProbe" },
     { "target" => "AppIntentCircuitBreakerProbe" }
   ] + plugin_core_targets.map { |target| { "target" => target } },
@@ -395,6 +396,9 @@ schemes = {
       "targets" => {
         "MacToolsPluginKit" => "all",
         "MacToolsAppIntents" => "all",
+        "MacToolsCLIProtocol" => "all",
+        "MacToolsCLI" => "all",
+        "MacToolsCLIBroker" => "all",
         "AppInstanceProbe" => ["test"],
         "AppIntentCircuitBreakerProbe" => ["test"]
       }.merge(plugin_bundle_targets.to_h { |target| [target, "all"] })
@@ -416,6 +420,17 @@ schemes = {
         }
       ]
     },
+    "profile" => { "config" => "Release" },
+    "archive" => { "config" => "Release" }
+  },
+  "MacToolsCLI" => {
+    "build" => {
+      "targets" => {
+        "MacToolsCLIProtocol" => "all",
+        "MacToolsCLI" => "all"
+      }
+    },
+    "run" => { "config" => "Debug" },
     "profile" => { "config" => "Release" },
     "archive" => { "config" => "Release" }
   }

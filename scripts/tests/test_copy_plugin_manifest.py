@@ -37,6 +37,29 @@ def runtime_envelope(**overrides: object) -> dict[str, object]:
 
 
 class CopyPluginManifestTests(unittest.TestCase):
+    def test_nightly_helper_disclosures_match_isolated_paths_without_changing_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            for directory, plugin_id in [("FanControl", "fan-control"), ("BatteryChargeLimit", "battery-charge-limit")]:
+                source = REPO_ROOT / "Plugins" / directory / "plugin.json"
+                original = source.read_bytes()
+                base_path = f"/Library/PrivilegedHelperTools/cc.ggbond.mactools.{plugin_id}.smc-helper"
+                for configuration in ["Release", "Nightly"]:
+                    with self.subTest(plugin=plugin_id, configuration=configuration):
+                        destination = root / f"{directory}-{configuration}.json"
+                        subprocess.run([
+                            sys.executable, str(SCRIPT), "copy", "--source", str(source),
+                            "--destination", str(destination), "--configuration", configuration,
+                            "--app-version-config", str(APP_VERSION_CONFIG),
+                        ], check=True)
+                        manifest = json.loads(destination.read_text(encoding="utf-8"))
+                        step = next(step for step in manifest["setup"]["steps"] if step["id"] == "install-privileged-helper")
+                        for description in step["description"].values():
+                            self.assertIn(base_path + (".nightly" if configuration == "Nightly" else ""), description)
+                            if configuration == "Release":
+                                self.assertNotIn(base_path + ".nightly", description)
+                self.assertEqual(source.read_bytes(), original)
+
     def test_debug_copy_uses_local_host_version(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)

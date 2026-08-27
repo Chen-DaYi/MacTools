@@ -57,7 +57,44 @@ jobs:
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --github-env "$GITHUB_ENV"
 
+      - name: Decide whether to publish Nightly
+        id: nightly_gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "decision=publish" >> "$GITHUB_OUTPUT"
+            echo "Manual run: forced Nightly publication." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          PREVIOUS_SOURCE_SHA=""
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+            APPCAST_PATH="$RUNNER_TEMP/advertised-nightly-appcast.xml"
+            if curl --fail --silent --show-error --location \
+              --connect-timeout 10 --max-time 30 \
+              "https://mactools.ggbond.app/nightly/appcast.xml" \
+              --output "$APPCAST_PATH" \
+              && PREVIOUS_TAG="$(scripts/nightly-release.py appcast-tag --input "$APPCAST_PATH")"; then
+              PREVIOUS_SOURCE_SHA="$(gh release view "$PREVIOUS_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json targetCommitish,isDraft,isPrerelease \
+                --jq 'if .isDraft == false and .isPrerelease == true then .targetCommitish else "" end')" \
+                || PREVIOUS_SOURCE_SHA=""
+            fi
+          fi
+          scripts/nightly-release.py publication-decision \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --source-sha "$SOURCE_SHA" \
+            --previous-source-sha "$PREVIOUS_SOURCE_SHA" \
+            --github-output "$GITHUB_OUTPUT" \
+            --github-step-summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Report unchanged Nightly
+        if: steps.nightly_gate.outputs.decision == 'unchanged'
+        run: echo "No source changes since the advertised Nightly; publication skipped."
+
       - name: Validate required secrets
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           BUNDLE_IDENTIFIER_PREFIX: ${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}
@@ -88,15 +125,18 @@ jobs:
           exit "$missing"
 
       - name: Show Xcode version
+        if: steps.nightly_gate.outputs.decision == 'publish'
         run: xcodebuild -version
 
       - name: Install XcodeGen
+        if: steps.nightly_gate.outputs.decision == 'publish'
         run: |
           if ! command -v xcodegen >/dev/null 2>&1; then
             brew install xcodegen
           fi
 
       - name: Install catalog signing dependency
+        if: steps.nightly_gate.outputs.decision == 'publish'
         run: |
           python3 -m venv "$RUNNER_TEMP/plugin-signing-venv"
           "$RUNNER_TEMP/plugin-signing-venv/bin/python" -m pip install --upgrade pip
@@ -104,6 +144,7 @@ jobs:
           echo "$RUNNER_TEMP/plugin-signing-venv/bin" >> "$GITHUB_PATH"
 
       - name: Write release local config
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           BUNDLE_IDENTIFIER_PREFIX: ${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}
@@ -115,9 +156,11 @@ jobs:
           EOF
 
       - name: Generate Xcode project
+        if: steps.nightly_gate.outputs.decision == 'publish'
         run: make generate
 
       - name: Run contributor-testable validation
+        if: steps.nightly_gate.outputs.decision == 'publish'
         run: |
           make script-tests
           /usr/bin/python3 scripts/changelog.py validate
@@ -135,6 +178,7 @@ jobs:
           ./scripts/plugins/verify-plugin-kit-v5-binary-compatibility.sh
 
       - name: Import Developer ID certificate
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           DEVELOPER_ID_CERT_P12: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
           DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
@@ -170,6 +214,7 @@ jobs:
           echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Build unsigned Nightly app and plugins
+        if: steps.nightly_gate.outputs.decision == 'publish'
         run: |
           ./scripts/xcodebuild-filtered.sh \
             -project "${PROJECT_NAME}.xcodeproj" \
@@ -188,12 +233,14 @@ jobs:
 
           scripts/nightly-release.py verify-app \
             --app "$DERIVED_DATA/Build/Products/Nightly/$APP_PRODUCT_NAME.app" \
+            --cli "$DERIVED_DATA/Build/Products/Nightly/mactools" \
             --bundle-identifier-prefix "${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}" \
             --version "$VERSION" \
             --build-number "$BUILD_NUMBER" \
             --plugin-kit-version "$PLUGIN_KIT_VERSION"
 
       - name: Sign app bundle
+        if: steps.nightly_gate.outputs.decision == 'publish'
         run: |
           APP_PATH="$DERIVED_DATA/Build/Products/Nightly/$APP_PRODUCT_NAME.app"
           ENTITLEMENTS="Configs/MacTools.entitlements"
@@ -237,6 +284,11 @@ jobs:
             fi
           done < <(find "$APP_PATH/Contents" -depth -type d \( -name "*.framework" -o -name "*.app" -o -name "*.xpc" -o -name "*.appex" \) -print)
 
+          # The broker is a plain executable, so the bundle/dylib loops above do not sign it.
+          CLI_BROKER="$APP_PATH/Contents/MacOS/MacToolsCLIBroker"
+          [[ -f "$CLI_BROKER" ]] || { echo "Nightly CLI broker is missing" >&2; exit 1; }
+          sign_path "$CLI_BROKER"
+
           [[ ! -d "$SPARKLE_FRAMEWORK" ]] || sign_path "$SPARKLE_FRAMEWORK"
           /usr/bin/codesign \
             --force \
@@ -267,10 +319,17 @@ jobs:
             exit 1
           fi
           /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          scripts/nightly-release.py verify-app \
+            --app "$APP_PATH" --signed \
+            --bundle-identifier-prefix "${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}" \
+            --version "$VERSION" --build-number "$BUILD_NUMBER" \
+            --plugin-kit-version "$PLUGIN_KIT_VERSION"
 
       - name: Build and sign same-commit Nightly plugins
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           PLUGIN_CATALOG_PRIVATE_KEY_BASE64: ${{ secrets.PLUGIN_CATALOG_PRIVATE_KEY_BASE64 }}
+          BUNDLE_IDENTIFIER_PREFIX: ${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}
         run: |
           CODE_SIGN_KEYCHAIN="$KEYCHAIN_PATH" \
             scripts/plugins/build-plugin-release-assets.sh \
@@ -287,6 +346,10 @@ jobs:
               --minimum-host-version "$PLUGIN_CATALOG_MINIMUM_HOST_VERSION" \
               --release-notes-url "$PLUGIN_RELEASE_NOTES_URL" \
               --nightly-build-number "$BUILD_NUMBER"
+
+          scripts/nightly-release.py verify-helper-signatures \
+            --packages-dir "$PLUGIN_BUILD_DIR/Packages" \
+            --bundle-identifier-prefix "$BUNDLE_IDENTIFIER_PREFIX"
 
           scripts/nightly-release.py verify-catalog \
             --catalog "$SIGNED_PLUGIN_CATALOG_PATH" \
@@ -306,6 +369,7 @@ jobs:
             --required-plugin-kit-version "$PLUGIN_KIT_VERSION"
 
       - name: Create and sign Nightly DMG
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           BUNDLE_IDENTIFIER_PREFIX: ${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}
         run: |
@@ -326,6 +390,7 @@ jobs:
           /usr/bin/codesign --verify --verbose=2 "$DMG_PATH"
 
       - name: Notarize and staple Nightly DMG
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
@@ -344,6 +409,7 @@ jobs:
           rm -f "$API_KEY_PATH"
 
       - name: Generate Nightly notes, checksum, and appcast
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
@@ -386,6 +452,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Create immutable-by-workflow draft prerelease
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -433,6 +500,7 @@ jobs:
           fi
 
       - name: Apply bounded Nightly retention
+        if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -473,6 +541,7 @@ jobs:
           done < "$RUNNER_TEMP/stale-nightly-tags.txt"
 
       - name: Upload Nightly workflow artifact
+        if: steps.nightly_gate.outputs.decision == 'publish'
         uses: actions/upload-artifact@v4
         with:
           name: MacTools-Nightly-${{ env.BUILD_NUMBER }}
@@ -484,6 +553,7 @@ jobs:
           retention-days: 30
 
       - name: Publish dedicated Nightly catalog and appcast last
+        if: steps.nightly_gate.outputs.decision == 'publish'
         run: |
           git diff --exit-code "$SOURCE_SHA" -- \
             docs/appcast.xml \
@@ -520,7 +590,7 @@ jobs:
           git push origin HEAD:main
 
       - name: Cleanup keychain
-        if: always()
+        if: always() && steps.nightly_gate.outputs.decision == 'publish'
         run: |
           if [[ -n "${KEYCHAIN_PATH:-}" ]]; then
             security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
