@@ -29,6 +29,16 @@ struct WindowModifierDragGesture {
         self.activationDistance = activationDistance
     }
 
+    func shouldProcessPointerMovement(modifiers: ShortcutModifiers) -> Bool {
+        if modifiers == requiredModifiers { return true }
+        switch state {
+        case .armed, .active:
+            return true
+        case .idle, .blocked:
+            return false
+        }
+    }
+
     mutating func modifiersChanged(
         _ modifiers: ShortcutModifiers,
         pointer: CGPoint

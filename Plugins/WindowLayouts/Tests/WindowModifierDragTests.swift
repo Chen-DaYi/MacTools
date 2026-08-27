@@ -4,6 +4,23 @@ import MacToolsPluginKit
 @testable import WindowLayoutsPlugin
 
 final class WindowModifierDragGestureTests: XCTestCase {
+    func testSkipsIdlePointerMovementWithoutExactModifiers() {
+        var gesture = WindowModifierDragGesture(requiredModifiers: [.control, .option])
+
+        XCTAssertFalse(gesture.shouldProcessPointerMovement(modifiers: []))
+        XCTAssertFalse(gesture.shouldProcessPointerMovement(modifiers: [.shift]))
+        XCTAssertTrue(gesture.shouldProcessPointerMovement(modifiers: [.control, .option]))
+
+        _ = gesture.modifiersChanged([.control, .option], pointer: .zero)
+        XCTAssertTrue(
+            gesture.shouldProcessPointerMovement(modifiers: []),
+            "An armed gesture must still observe release when a flags event is missed"
+        )
+
+        _ = gesture.modifiersChanged([.control, .option, .shift], pointer: .zero)
+        XCTAssertFalse(gesture.shouldProcessPointerMovement(modifiers: []))
+    }
+
     func testActivatesAfterDeadZoneAndKeepsOneGeneration() {
         var gesture = WindowModifierDragGesture(
             requiredModifiers: [.control, .option],
@@ -142,6 +159,25 @@ final class WindowModifierDragActionQueueTests: XCTestCase {
             queue.enqueue(.begin(generation: 2, origin: .zero, pointer: CGPoint(x: 6, y: 0))),
             currentEpoch
         )
+    }
+}
+
+@MainActor
+final class WindowModifierDragSessionTests: XCTestCase {
+    func testPropagatesMonitorStartupFailureAndLeavesSessionStopped() {
+        let monitor = StubWindowModifierDragEventMonitor(
+            startResult: .failure(.eventTapUnavailable)
+        )
+        let session = WindowModifierDragSession(eventMonitor: monitor)
+
+        switch session.start() {
+        case .success:
+            XCTFail("Expected monitor startup to fail")
+        case let .failure(error):
+            XCTAssertEqual(error, .eventTapUnavailable)
+        }
+        XCTAssertFalse(session.isRunning)
+        XCTAssertEqual(monitor.stopCount, 1)
     }
 }
 
@@ -356,5 +392,31 @@ private final class RecordingWindowFrameIO: WindowFrameReading, WindowFrameWriti
     ) async throws {
         writes.append(Write(frame: frame, window: window, resize: resize))
         onWrite()
+    }
+}
+
+nonisolated private final class StubWindowModifierDragEventMonitor: @unchecked Sendable,
+    WindowModifierDragEventMonitoring
+{
+    let startResult: Result<Void, WindowModifierDragMonitorStartError>
+    private(set) var isRunning = false
+    private(set) var stopCount = 0
+
+    init(startResult: Result<Void, WindowModifierDragMonitorStartError>) {
+        self.startResult = startResult
+    }
+
+    func start(
+        handler: WindowModifierDragEventHandler
+    ) -> Result<Void, WindowModifierDragMonitorStartError> {
+        if case .success = startResult {
+            isRunning = true
+        }
+        return startResult
+    }
+
+    func stop() {
+        isRunning = false
+        stopCount += 1
     }
 }

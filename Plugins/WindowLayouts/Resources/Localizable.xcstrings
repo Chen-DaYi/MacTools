@@ -244,6 +244,14 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "視窗佈局需要輔助使用權限。" } }
       }
     },
+    "error.modifierDragMonitorUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Unable to start global pointer monitoring. Turn Modifier Drag off and on to try again." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法启动全局指针监控。请关闭后重新开启修饰键拖移。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法啟動全域指標監控。請關閉後重新開啟修飾鍵拖移。" } }
+      }
+    },
     "error.noFocusedWindow": {
       "extractionState": "manual",
       "localizations": {
