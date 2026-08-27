@@ -96,6 +96,10 @@ MacTools 支持简体中文、繁體中文、English、Español、Français、Р
 brew install --cask mactools
 ```
 
+### 实验性命令行原型
+
+源码中包含一个需要单独构建的 `mactools` 本地测试原型。Phase 0 仅支持 `help`、`version` 和 `doctor`，不会打包进应用，也暂不提供应用操作。请按 [Phase 0 测试指南](docs/testing/cli-phase-0.md)构建并配合已签名的本地应用测试。
+
 ## 升级
 
 ```bash

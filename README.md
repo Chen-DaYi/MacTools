@@ -101,6 +101,10 @@ MacTools supports Simplified Chinese, Traditional Chinese, English, Spanish, Fre
 brew install --cask mactools
 ```
 
+### Experimental command-line prototype
+
+The source tree includes a separately built `mactools` prototype for local testing. Phase 0 intentionally supports only `help`, `version`, and `doctor`; it does not ship in the app bundle or expose app actions yet. Build and test it with the signed local app by following [the Phase 0 test guide](docs/testing/cli-phase-0.md).
+
 ## Upgrade
 
 ```bash
