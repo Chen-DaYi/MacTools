@@ -97,15 +97,17 @@ nonisolated final class SystemWindowModifierDragEventMonitor: @unchecked Sendabl
 
         let readySignal = DispatchSemaphore(value: 0)
         let finishedSignal = DispatchSemaphore(value: 0)
-        lock.withLock {
-            self.tap = tap
-            self.source = source
-            self.callbackPointer = callbackPointer
-            self.readySignal = readySignal
-            self.finishedSignal = finishedSignal
-            self.eventHandler = handler
-            shouldRun = true
-        }
+        // Avoid capturing the Core Foundation handles and raw pointer in a generic
+        // closure here: Swift 6.3.3 crashes while analyzing that capture's regions.
+        lock.lock()
+        self.tap = tap
+        self.source = source
+        self.callbackPointer = callbackPointer
+        self.readySignal = readySignal
+        self.finishedSignal = finishedSignal
+        self.eventHandler = handler
+        shouldRun = true
+        lock.unlock()
         eventQueue.async { [self] in
             runEventLoop()
         }
