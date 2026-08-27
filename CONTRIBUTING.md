@@ -4,6 +4,8 @@
 
 Thanks for your interest in MacTools. Please keep each contribution small and clear: explain the problem, provide verifiable changes, and avoid mixing unrelated refactors into the same pull request.
 
+Unless a file is clearly identified as third-party material under separate terms, contributions accepted into MacTools are licensed under `GPL-3.0-only`, consistent with the repository's [licensing policy](LICENSING.md). By submitting a contribution, you confirm that you have the right to provide it under those terms.
+
 ## Ways to Contribute
 - Bug reports should include reproduction steps, expected behavior, actual behavior, macOS version, and relevant logs or screenshots.
 - Feature suggestions should describe the use case, target users, and expected interaction. For large plugins or interaction changes, open an issue first to align on scope.
@@ -73,6 +75,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Rich manifest static and dynamic action descriptors match the runtime provider/action identity, risk, permissions, external policy, automation eligibility, and parameter portability.
 - High-risk features cover safety checks, error states, and missing-permission cases.
 - The PR does not include unrelated formatting, generated files, local configuration, certificates, or release credentials.
+- New or updated third-party material is recorded in `Sources/Resources/ThirdPartyNotices/manifest.json` with an exact upstream revision, affected products, source paths, and retained license text.
 
 ## Release
 

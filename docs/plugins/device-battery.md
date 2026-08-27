@@ -37,11 +37,11 @@ These measures reduce avoidable polling, process launches, and Bluetooth discove
 
 Apple 移动设备首次使用时，需要通过数据线连接 Mac 并在设备上选择“信任”。在 Finder 中启用通过 Wi-Fi 显示设备后，同一局域网内可无线读取。该路径使用 Apple 未公开但随 macOS 提供的系统框架；组件面板可见时按 90 秒最短间隔刷新，面板隐藏后放宽到 5 分钟。框架、符号或返回字段变化时会无崩溃降级，不影响其他电量来源。设备 UDID 不进入 UI 或普通日志，仅使用本地稳定摘要做去重。
 
-Apple Pencil 不采用 AirBattery 的长时间设备 syslog 扫描方案。该方案本身属于 Beta，首次发现慢且可能增加 iPad 耗电，不符合 MacTools 的轻量、非干扰目标。
+Apple Pencil discovery does not use a long-running device syslog scan. That approach has slow initial discovery and may increase iPad energy use, which conflicts with MacTools' lightweight, non-disruptive design.
 
-## 雷蛇设备说明
+## Razer devices
 
-AirBattery 没有雷蛇专用 VID/PID 表、HyperSpeed 接收器命令或厂商 HID 电量协议。它对雷蛇设备的兼容来自通用 `bluetoothd` 电源日志和标准 BLE Battery Service (`0x180F` / `0x2A19`)。DeviceBattery 已具备对应的通用路径，因此蓝牙直连、且由设备或 macOS 上报电量的雷蛇鼠标、键盘或耳机可以显示；使用 2.4G HyperSpeed 接收器且不向系统暴露电量的型号仍需按具体设备协议单独适配。
+DeviceBattery supports Razer hardware only through generic `bluetoothd` power observations and the standard BLE Battery Service (`0x180F` / `0x2A19`). Bluetooth devices that report a battery level through the device or macOS can appear. Models connected through a 2.4 GHz HyperSpeed receiver that exposes no system battery data require a separately verified device protocol.
 
 ## 雷柏 HID 维护依据
 

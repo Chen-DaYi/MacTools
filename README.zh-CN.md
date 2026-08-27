@@ -125,7 +125,7 @@ brew info --cask mactools
 
 ## 许可证
 
-MacTools 基于 [Apache License 2.0](LICENSE) 开源。
+MacTools 基于 [GPL-3.0-only](LICENSE) 开源，适用范围和第三方例外见 [LICENSING.md](LICENSING.md)。
 
 ## 隐私
 

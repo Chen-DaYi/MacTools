@@ -140,7 +140,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, plugin de
 
 ## License
 
-MacTools is open source under the [Apache License 2.0](LICENSE).
+MacTools is open source under [GPL-3.0-only](LICENSE). Historical releases retain the license terms that accompanied them; see [LICENSING.md](LICENSING.md) for scope and third-party exceptions.
 
 ## Privacy
 
