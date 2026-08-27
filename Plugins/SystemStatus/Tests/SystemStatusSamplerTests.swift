@@ -3,6 +3,95 @@ import XCTest
 @testable import SystemStatusPlugin
 
 final class SystemStatusSamplerTests: XCTestCase {
+    func testDetailStatisticsUseEveryVisibleReadingRegardlessOfDrawingBudget() {
+        let history = (0..<600).map { index -> SystemStatusHistoryPoint in
+            let cpu: Double = index == 1 ? 1 : 0
+            let download: UInt64 = index % 5 == 4 ? 100 : 0
+            return SystemStatusHistoryPoint(
+                timestamp: TimeInterval(index * 3),
+                cpuUsage: cpu,
+                networkDownloadBytesPerSecond: download
+            )
+        }
+        for limit in [2, 120, 600] {
+            let network = SystemStatusMetricDetailChartData(
+                history: history, kind: .network, range: .thirtyMinutes, sampleLimit: limit
+            )
+            XCTAssertEqual(network.statistics.minimum, 0)
+            XCTAssertEqual(network.statistics.average, 20)
+            XCTAssertEqual(network.statistics.maximum, 100)
+            XCTAssertEqual(network.statistics.count, 600)
+            XCTAssertLessThanOrEqual(network.rateSamples.count, limit)
+
+            let cpu = SystemStatusMetricDetailChartData(
+                history: history, kind: .cpu, range: .thirtyMinutes, sampleLimit: limit
+            )
+            XCTAssertEqual(cpu.statistics.minimum, 0)
+            XCTAssertEqual(cpu.statistics.maximum, 100)
+            XCTAssertEqual(cpu.statistics.average, 100.0 / 600)
+        }
+    }
+
+    func testStatisticsExcludeUnknownPercentageReadingsAndOutOfRangeHistory() {
+        let history = [
+            SystemStatusHistoryPoint(timestamp: 0, cpuUsage: 1),
+            SystemStatusHistoryPoint(timestamp: 2_000),
+            SystemStatusHistoryPoint(timestamp: 2_001, cpuUsage: 0.2),
+            SystemStatusHistoryPoint(timestamp: 2_002, cpuUsage: 0.4),
+        ]
+        let data = SystemStatusMetricDetailChartData(history: history, kind: .cpu, range: .thirtyMinutes)
+        XCTAssertEqual(data.statistics.count, 2)
+        XCTAssertEqual(data.statistics.minimum, 20)
+        XCTAssertEqual(data.statistics.average, 30)
+        XCTAssertEqual(data.statistics.maximum, 40)
+        let empty = SystemStatusMetricDetailChartData(history: [], kind: .cpu, range: .thirtyMinutes)
+        XCTAssertNil(empty.statistics.minimum)
+        XCTAssertNil(empty.statistics.average)
+        XCTAssertNil(empty.statistics.maximum)
+    }
+
+    func testRateDownsamplingRetainsBothSeriesWithinTheOriginalBudget() {
+        let samples = (0..<600).map { index -> SystemStatusHUDRateChartSample in
+            let first: Double = index % 5 == 0 ? 1_000 : 0
+            let second: Double = index % 5 == 1 ? 100 : 0
+            return SystemStatusHUDRateChartSample(
+                timestamp: TimeInterval(index * 3),
+                firstValue: first,
+                secondValue: second
+            )
+        }
+        for limit in [2, 3, 5, 120] {
+            let reduced = SystemStatusHUDDualLineChart.downsamplePeakSamples(samples, limit: limit)
+            XCTAssertLessThanOrEqual(reduced.count, limit)
+            XCTAssertEqual(reduced.map(\.firstValue).max(), 1_000)
+            XCTAssertEqual(reduced.map(\.secondValue).max(), 100)
+            XCTAssertEqual(reduced.map(\.timestamp), reduced.map(\.timestamp).sorted())
+            XCTAssertEqual(Set(reduced.map(\.timestamp)).count, reduced.count)
+            XCTAssertTrue(reduced.allSatisfy(samples.contains), "Do not invent paired values or timestamps")
+        }
+        XCTAssertTrue(SystemStatusHUDDualLineChart.downsamplePeakSamples(samples, limit: 0).isEmpty)
+        XCTAssertEqual(SystemStatusHUDDualLineChart.downsamplePeakSamples(samples, limit: 1).count, 1)
+        XCTAssertEqual(SystemStatusHUDDualLineChart.downsamplePeakSamples([], limit: 120), [])
+    }
+
+    func testPinnedReadingSurvivesResamplingAndExpiresWithTheVisibleRange() {
+        let reading = SystemStatusChartSelection.Reading(timestamp: 90, values: [78, 12])
+        var selection = SystemStatusChartSelection()
+        selection.toggle(reading)
+        // The next array need not contain timestamp 90: a pin owns the original reading.
+        let updatedTimestamps = (0..<120).map { TimeInterval($0 * 3 + 3) }
+        selection.expire(outside: SystemStatusHUDChartGeometry.timeRange(timestamps: updatedTimestamps))
+        XCTAssertEqual(selection.pinned, reading)
+        selection.expire(outside: 91...400)
+        XCTAssertNil(selection.pinned)
+        selection.toggle(reading)
+        selection.toggle(.init(timestamp: 90, values: [0, 0]))
+        XCTAssertNil(selection.pinned, "Clicking the same timestamp unpins even if its value changed")
+        selection.toggle(reading)
+        selection.expire(outside: nil)
+        XCTAssertNil(selection.pinned)
+    }
+
     func testNetworkChartDownsamplesWithBucketPeaks() {
         XCTAssertEqual(
             SystemStatusHUDDualLineChart.downsamplePeaks([1, 90, 3, 4], limit: 2),

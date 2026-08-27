@@ -1281,6 +1281,7 @@ private struct SystemStatusHUDMiniChart: View {
     let valueFormatter: (Double) -> String
     let rangeLabel: String
     var isInteractive = false
+    var pinRetentionRange: ClosedRange<TimeInterval>?
 
     private var visibleSamples: [SystemStatusHUDChartSample] {
         samples.count > 120 ? Array(samples.suffix(120)) : samples
@@ -1311,7 +1312,8 @@ private struct SystemStatusHUDMiniChart: View {
                     series: [visibleSamples.map(\.value)],
                     labels: [""],
                     valueFormatter: valueFormatter,
-                    rangeLabel: rangeLabel
+                    rangeLabel: rangeLabel,
+                    pinRetentionRange: pinRetentionRange
                 )
             }
         }
@@ -1463,13 +1465,32 @@ enum SystemStatusHUDDualLineChart {
             return samples.max(by: { peakMagnitude($0) < peakMagnitude($1) }).map { [$0] } ?? []
         }
 
-        let bucketSize = Double(samples.count) / Double(limit)
-        return (0..<limit).compactMap { index in
+        // Each bucket can contribute both series' peaks at their actual timestamps.
+        // Reserve two points per bucket so drawing and hover remain bounded by limit.
+        let bucketCount = max(limit / 2, 1)
+        let bucketSize = Double(samples.count) / Double(bucketCount)
+        var result: [SystemStatusHUDRateChartSample] = []
+        result.reserveCapacity(limit)
+        for index in 0..<bucketCount {
             let start = Int((Double(index) * bucketSize).rounded(.down))
             let proposedEnd = Int((Double(index + 1) * bucketSize).rounded(.down))
             let end = min(samples.count, max(start + 1, proposedEnd))
-            return samples[start..<end].max { peakMagnitude($0) < peakMagnitude($1) }
+            var firstPeak = start
+            var secondPeak = start
+            for sampleIndex in (start + 1)..<end {
+                if samples[sampleIndex].firstValue > samples[firstPeak].firstValue {
+                    firstPeak = sampleIndex
+                }
+                if samples[sampleIndex].secondValue > samples[secondPeak].secondValue {
+                    secondPeak = sampleIndex
+                }
+            }
+            result.append(samples[min(firstPeak, secondPeak)])
+            if firstPeak != secondPeak {
+                result.append(samples[max(firstPeak, secondPeak)])
+            }
         }
+        return result
     }
 
     static func points(
@@ -1609,6 +1630,7 @@ private struct SystemStatusHUDRateChart: View {
     let valueFormatter: (Double) -> String
     let rangeLabel: String
     var isInteractive = false
+    var pinRetentionRange: ClosedRange<TimeInterval>?
 
     var body: some View {
         GeometryReader { proxy in
@@ -1651,7 +1673,8 @@ private struct SystemStatusHUDRateChart: View {
                     series: [samples.map(\.firstValue), samples.map(\.secondValue)],
                     labels: [firstLabel, secondLabel],
                     valueFormatter: valueFormatter,
-                    rangeLabel: rangeLabel
+                    rangeLabel: rangeLabel,
+                    pinRetentionRange: pinRetentionRange
                 )
             }
         }
@@ -1711,13 +1734,35 @@ private struct SystemStatusHUDRateChart: View {
     }
 }
 
+struct SystemStatusChartStatistics: Equatable, Sendable {
+    private(set) var minimum: Double?
+    private(set) var maximum: Double?
+    private(set) var count = 0
+    private var sum: Double = 0
+
+    var average: Double? { count > 0 ? sum / Double(count) : nil }
+
+    mutating func record(_ value: Double) {
+        guard value.isFinite else { return }
+        minimum = min(minimum ?? value, value)
+        maximum = max(maximum ?? value, value)
+        sum += value
+        count += 1
+    }
+}
+
 struct SystemStatusMetricDetailChartData: Equatable, Sendable {
     let range: SystemStatusMetricDetailRange
     let startTimestamp: TimeInterval?
     let endTimestamp: TimeInterval?
     let singleSamples: [SystemStatusHUDChartSample]
     let rateSamples: [SystemStatusHUDRateChartSample]
-    let statisticValues: [Double]
+    let statistics: SystemStatusChartStatistics
+
+    var timeRange: ClosedRange<TimeInterval>? {
+        guard let startTimestamp, let endTimestamp else { return nil }
+        return startTimestamp...endTimestamp
+    }
 
     init(
         history: [SystemStatusHistoryPoint],
@@ -1731,20 +1776,23 @@ struct SystemStatusMetricDetailChartData: Equatable, Sendable {
             endTimestamp = nil
             singleSamples = []
             rateSamples = []
-            statisticValues = []
+            statistics = SystemStatusChartStatistics()
             return
         }
 
         let cutoff = latestTimestamp - range.interval
-        let visibleHistory = history.filter {
+        // Avoid copying full history records for each cached range. Only materialize
+        // the small chart samples while accumulating statistics in that same pass.
+        let visibleHistory = history.lazy.filter {
             $0.timestamp >= cutoff && $0.timestamp <= latestTimestamp
         }
         startTimestamp = visibleHistory.first?.timestamp
         endTimestamp = visibleHistory.last?.timestamp
+        var aggregate = SystemStatusChartStatistics()
 
         switch kind {
         case .cpu, .gpu, .memory, .battery:
-            let rawSamples = visibleHistory.compactMap { point -> SystemStatusHUDChartSample? in
+            let rawSamples: [SystemStatusHUDChartSample] = visibleHistory.compactMap { point in
                 let value: Double?
                 switch kind {
                 case .cpu:
@@ -1759,9 +1807,11 @@ struct SystemStatusMetricDetailChartData: Equatable, Sendable {
                     value = nil
                 }
                 return value.map {
-                    SystemStatusHUDChartSample(
+                    let percent = min(max($0 * 100, 0), 100)
+                    aggregate.record(percent)
+                    return SystemStatusHUDChartSample(
                         timestamp: point.timestamp,
-                        value: min(max($0 * 100, 0), 100)
+                        value: percent
                     )
                 }
             }
@@ -1771,30 +1821,31 @@ struct SystemStatusMetricDetailChartData: Equatable, Sendable {
             )
             singleSamples = resolvedSamples
             rateSamples = []
-            statisticValues = resolvedSamples.map(\.value)
 
         case .network, .disk:
-            let rawSamples = visibleHistory.map { point in
-                switch kind {
+            let rawSamples: [SystemStatusHUDRateChartSample] = visibleHistory.map { point in
+                let sample: SystemStatusHUDRateChartSample = switch kind {
                 case .network:
-                    return SystemStatusHUDRateChartSample(
+                    SystemStatusHUDRateChartSample(
                         timestamp: point.timestamp,
                         firstValue: Double(point.networkDownloadBytesPerSecond ?? 0),
                         secondValue: Double(point.networkUploadBytesPerSecond ?? 0)
                     )
                 case .disk:
-                    return SystemStatusHUDRateChartSample(
+                    SystemStatusHUDRateChartSample(
                         timestamp: point.timestamp,
                         firstValue: Double(point.diskReadBytesPerSecond ?? 0),
                         secondValue: Double(point.diskWriteBytesPerSecond ?? 0)
                     )
                 case .cpu, .gpu, .memory, .battery, .topProcesses:
-                    return SystemStatusHUDRateChartSample(
+                    SystemStatusHUDRateChartSample(
                         timestamp: point.timestamp,
                         firstValue: 0,
                         secondValue: 0
                     )
                 }
+                aggregate.record(max(sample.firstValue, 0) + max(sample.secondValue, 0))
+                return sample
             }
             let resolvedSamples = SystemStatusHUDDualLineChart.downsamplePeakSamples(
                 rawSamples,
@@ -1802,15 +1853,12 @@ struct SystemStatusMetricDetailChartData: Equatable, Sendable {
             )
             singleSamples = []
             rateSamples = resolvedSamples
-            statisticValues = resolvedSamples.map {
-                max($0.firstValue, 0) + max($0.secondValue, 0)
-            }
 
         case .topProcesses:
             singleSamples = []
             rateSamples = []
-            statisticValues = []
         }
+        statistics = aggregate
     }
 }
 
@@ -2030,7 +2078,7 @@ struct SystemStatusMetricDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 detailChart(chartData)
                     .frame(height: 112)
-                    .id(chartData.range.rawValue)
+                    .id("\(kind.rawValue):\(chartData.range.rawValue)")
                     .transaction { transaction in
                         transaction.animation = nil
                     }
@@ -2066,17 +2114,15 @@ struct SystemStatusMetricDetailView: View {
             HStack(spacing: 6) {
                 statistic(
                     title: localization.string("detail.minimum", defaultValue: "最低"),
-                    value: chartData.statisticValues.min()
+                    value: chartData.statistics.minimum
                 )
                 statistic(
                     title: localization.string("detail.average", defaultValue: "平均"),
-                    value: chartData.statisticValues.isEmpty
-                        ? nil
-                        : chartData.statisticValues.reduce(0, +) / Double(chartData.statisticValues.count)
+                    value: chartData.statistics.average
                 )
                 statistic(
                     title: localization.string("detail.maximum", defaultValue: "最高"),
-                    value: chartData.statisticValues.max()
+                    value: chartData.statistics.maximum
                 )
             }
 
@@ -2122,7 +2168,8 @@ struct SystemStatusMetricDetailView: View {
                 secondLabel: "↑",
                 valueFormatter: rateFormatter,
                 rangeLabel: "",
-                isInteractive: true
+                isInteractive: true,
+                pinRetentionRange: chartData.timeRange
             )
         case .disk:
             SystemStatusHUDRateChart(
@@ -2133,7 +2180,8 @@ struct SystemStatusMetricDetailView: View {
                 secondLabel: localization.string("chart.disk.writeCompact", defaultValue: "写"),
                 valueFormatter: rateFormatter,
                 rangeLabel: "",
-                isInteractive: true
+                isInteractive: true,
+                pinRetentionRange: chartData.timeRange
             )
         case .cpu, .gpu, .memory, .battery:
             SystemStatusHUDMiniChart(
@@ -2142,7 +2190,8 @@ struct SystemStatusMetricDetailView: View {
                 style: kind == .cpu || kind == .gpu ? .bars : .area,
                 valueFormatter: percentFormatter,
                 rangeLabel: "",
-                isInteractive: true
+                isInteractive: true,
+                pinRetentionRange: chartData.timeRange
             )
         case .topProcesses:
             Color.clear
@@ -2216,7 +2265,7 @@ struct SystemStatusMetricDetailView: View {
             return SystemStatusFormatter.percent(snapshot.memory.usage)
         case .disk:
             return localization.format(
-                "disk.availableFormat",
+                "disk.availableUnitFormat",
                 defaultValue: "%@ 可用",
                 SystemStatusFormatter.bytes(freeDiskBytes)
             )
@@ -2346,30 +2395,69 @@ struct SystemStatusMetricDetailView: View {
 
 }
 
+struct SystemStatusChartSelection: Equatable {
+    struct Reading: Equatable {
+        let timestamp: TimeInterval
+        let values: [Double]
+    }
+
+    private(set) var pinned: Reading?
+
+    mutating func toggle(_ reading: Reading) {
+        pinned = pinned?.timestamp == reading.timestamp ? nil : reading
+    }
+
+    mutating func expire(outside timeRange: ClosedRange<TimeInterval>?) {
+        guard let pinned else { return }
+        if timeRange?.contains(pinned.timestamp) != true {
+            self.pinned = nil
+        }
+    }
+
+    mutating func clear() {
+        pinned = nil
+    }
+}
+
 private struct SystemStatusHUDChartContextOverlay: View {
     let timestamps: [TimeInterval]
     let series: [[Double]]
     let labels: [String]
     let valueFormatter: (Double) -> String
     let rangeLabel: String
+    let pinRetentionRange: ClosedRange<TimeInterval>?
 
     @State private var hoverIndex: Int?
-    @State private var pinnedIndex: Int?
+    @State private var selection = SystemStatusChartSelection()
     @Environment(\.pluginComponentTheme) private var theme
 
-    private var activeIndex: Int? { hoverIndex ?? pinnedIndex }
+    private var activeReading: SystemStatusChartSelection.Reading? {
+        hoverIndex.flatMap(reading(at:)) ?? selection.pinned
+    }
+
+    private var retainedTimeRange: ClosedRange<TimeInterval>? {
+        pinRetentionRange ?? SystemStatusHUDChartGeometry.timeRange(timestamps: timestamps)
+    }
+
+    private func reading(at index: Int) -> SystemStatusChartSelection.Reading? {
+        guard timestamps.indices.contains(index), series.allSatisfy({ $0.indices.contains(index) }) else {
+            return nil
+        }
+        return .init(timestamp: timestamps[index], values: series.map { $0[index] })
+    }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
                 if
-                    let activeIndex,
-                    let activeFraction = SystemStatusHUDChartGeometry.fraction(
-                        at: activeIndex,
-                        timestamps: timestamps
-                    )
+                    let activeReading,
+                    let timeRange = SystemStatusHUDChartGeometry.timeRange(timestamps: timestamps)
                 {
-                    let x = min(max(activeFraction, 0), 1) * proxy.size.width
+                    let x = SystemStatusHUDChartGeometry.x(
+                        for: activeReading.timestamp,
+                        in: timeRange,
+                        width: proxy.size.width
+                    )
                     Path { path in
                         path.move(to: CGPoint(x: x, y: 0))
                         path.addLine(to: CGPoint(x: x, y: proxy.size.height))
@@ -2381,7 +2469,7 @@ private struct SystemStatusHUDChartContextOverlay: View {
                             Spacer(minLength: 0)
                         }
 
-                        Text(contextText(at: activeIndex))
+                        Text(contextText(for: activeReading))
                             .font(SystemStatusHUDFont.mono(9.5, .medium))
                             .foregroundStyle(theme.text.primary)
                             .lineLimit(2)
@@ -2425,32 +2513,32 @@ private struct SystemStatusHUDChartContextOverlay: View {
                         ) else {
                             return
                         }
-                        if pinnedIndex == selectedIndex {
-                            pinnedIndex = nil
-                        } else {
-                            pinnedIndex = selectedIndex
-                        }
+                        guard let reading = reading(at: selectedIndex) else { return }
+                        selection.toggle(reading)
                     }
                 )
             }
             .contentShape(Rectangle())
         }
         .allowsHitTesting(true)
-        .onExitCommand { pinnedIndex = nil }
+        .onChange(of: retainedTimeRange) { expirePinIfNeeded() }
+        .onExitCommand { selection.clear() }
     }
 
-    private func contextText(at sampleIndex: Int) -> String {
-        let timestamp = timestamps.indices.contains(sampleIndex) ? timestamps[sampleIndex] : nil
-        var parts: [String] = timestamp.map {
-            Self.timeFormatter.locale = PluginRuntimeLocalization.locale
-            return [Self.timeFormatter.string(from: Date(timeIntervalSince1970: $0))]
-        } ?? []
-        for (seriesIndex, values) in series.enumerated() {
-            guard values.indices.contains(sampleIndex) else {
-                continue
-            }
+    private func expirePinIfNeeded() {
+        var updatedSelection = selection
+        updatedSelection.expire(outside: retainedTimeRange)
+        if updatedSelection != selection {
+            selection = updatedSelection
+        }
+    }
+
+    private func contextText(for reading: SystemStatusChartSelection.Reading) -> String {
+        Self.timeFormatter.locale = PluginRuntimeLocalization.locale
+        var parts = [Self.timeFormatter.string(from: Date(timeIntervalSince1970: reading.timestamp))]
+        for (seriesIndex, value) in reading.values.enumerated() {
             let label = labels.indices.contains(seriesIndex) ? labels[seriesIndex] : ""
-            parts.append("\(label)\(valueFormatter(values[sampleIndex]))")
+            parts.append("\(label)\(valueFormatter(value))")
         }
         return parts.joined(separator: " · ")
     }

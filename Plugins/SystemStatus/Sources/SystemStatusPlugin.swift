@@ -291,6 +291,11 @@ struct SystemStatusSamplingSchedule: Sendable {
 
 @MainActor
 final class SystemStatusViewModel: ObservableObject {
+    enum ForegroundConsumer: Hashable {
+        case dashboard
+        case menuBarPopover
+    }
+
     private static let processCandidateLimit = 6
     @Published private(set) var snapshot = SystemStatusSnapshot.empty
 
@@ -346,6 +351,9 @@ final class SystemStatusViewModel: ObservableObject {
     private var samplingTask: Task<Void, Never>?
     private var mode: SamplingMode = .background
     private var menuBarMode: SamplingMode?
+    private(set) var foregroundConsumers: Set<ForegroundConsumer> = []
+
+    var isSamplingForeground: Bool { mode == .foreground }
     private var lastSlowDate: Date?
     private var lastProcessDate: Date?
     private var lastHistoryDate: Date?
@@ -376,7 +384,8 @@ final class SystemStatusViewModel: ObservableObject {
         startForeground()
     }
 
-    func startForeground() {
+    func startForeground(for consumer: ForegroundConsumer = .dashboard) {
+        guard foregroundConsumers.insert(consumer).inserted else { return }
         let previousMode = mode
         mode = .foreground
 
@@ -419,7 +428,9 @@ final class SystemStatusViewModel: ObservableObject {
         startSamplingIfNeeded()
     }
 
-    func returnToBackground() {
+    func returnToBackground(from consumer: ForegroundConsumer = .dashboard) {
+        foregroundConsumers.remove(consumer)
+        guard foregroundConsumers.isEmpty else { return }
         mode = menuBarMode ?? .background
     }
 
@@ -453,6 +464,7 @@ final class SystemStatusViewModel: ObservableObject {
         samplingTask = nil
         mode = .background
         menuBarMode = nil
+        foregroundConsumers.removeAll()
     }
 
     private func startSamplingIfNeeded() {

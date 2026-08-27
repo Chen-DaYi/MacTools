@@ -711,7 +711,8 @@ final class SystemStatusMenuBarMetricsView: NSView {
         let lineSizes = lines.map { $0.size() }
         let lineHeights = lines.map { $0.size().height }
         let totalHeight = lineHeights.reduce(0, +)
-        let contentWidth = Layout.compactIconSize + Layout.compactIconValueSpacing + verticalValueColumnWidth
+        let contentWidth = Layout.compactIconSize + Layout.compactIconValueSpacing
+            + compactStackedValueColumnWidth(for: block)
         let contentX = rect.midX - contentWidth / 2
 
         if let image = NSImage(systemSymbolName: block.symbolName, accessibilityDescription: block.label) {
@@ -905,17 +906,15 @@ final class SystemStatusMenuBarMetricsView: NSView {
     }
 
     private func verticalMetricWidth(_ block: SystemStatusMenuBarMetricBlock) -> CGFloat {
-        let reservationWidth = widthReservationValues(for: block).reduce(CGFloat(0)) { width, value in
-            max(
-                width,
-                attributedText(value, font: verticalValueFont, color: .labelColor).size().width
-            )
-        }
         return ceil(max(
             Layout.minimumMetricWidth,
             Layout.compactIconSize + Layout.compactIconValueSpacing
-                + max(verticalValueColumnWidth, reservationWidth)
+                + compactStackedValueColumnWidth(for: block)
         ))
+    }
+
+    func compactStackedValueColumnWidth(for block: SystemStatusMenuBarMetricBlock) -> CGFloat {
+        max(verticalValueColumnWidth, stackedReservationWidth(for: block))
     }
 
     private func labeledStackedMetricWidth(_ block: SystemStatusMenuBarMetricBlock) -> CGFloat {
@@ -1394,6 +1393,7 @@ private final class SystemStatusMenuBarPopoverController: NSObject, NSPopoverDel
 
     isolated deinit {
         removeDismissMonitors()
+        viewModel.returnToBackground(from: .menuBarPopover)
     }
 
     func toggle(relativeTo button: NSStatusBarButton) {
@@ -1428,6 +1428,7 @@ private final class SystemStatusMenuBarPopoverController: NSObject, NSPopoverDel
         )
         self.popover = popover
         statusItemButton = button
+        viewModel.startForeground(for: .menuBarPopover)
         PluginPresentationSafety.prepareForWindowOrdering()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         detailPanelController.setHostWindow(popover.contentViewController?.view.window)
@@ -1435,6 +1436,7 @@ private final class SystemStatusMenuBarPopoverController: NSObject, NSPopoverDel
     }
 
     func hide() {
+        viewModel.returnToBackground(from: .menuBarPopover)
         detailPanelController.hide()
         popover?.performClose(nil)
         removeDismissMonitors()
@@ -1454,6 +1456,7 @@ private final class SystemStatusMenuBarPopoverController: NSObject, NSPopoverDel
                 return
             }
             self.detailPanelController.hide()
+            self.viewModel.returnToBackground(from: .menuBarPopover)
             self.popover = nil
             self.statusItemButton = nil
             self.removeDismissMonitors()

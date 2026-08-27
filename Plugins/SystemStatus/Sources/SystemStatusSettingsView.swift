@@ -694,12 +694,7 @@ private struct SystemStatusMenuBarMetricEditorView: View {
             onStyleChange: onStyleChange,
             onValueArrangementChange: onValueArrangementChange
         )
-        .frame(
-            height: SystemStatusMenuBarMetricEditorTableView.preferredHeight(
-                itemCount: items.count,
-                hasExpandedRow: expandedKind != nil
-            )
-        )
+        .frame(maxWidth: .infinity)
     }
 
     private func toggleExpansion(_ kind: SystemStatusMetricKind) {
@@ -709,7 +704,23 @@ private struct SystemStatusMenuBarMetricEditorView: View {
     }
 }
 
-private struct SystemStatusMenuBarMetricEditorRow: View {
+enum SystemStatusMenuBarEditorLayout {
+    static let collapsedRowHeight: CGFloat = 66
+    static let expandedSingleGridRowHeight: CGFloat = 192
+    static let valueMinimumWidth: CGFloat = 132
+    static let valueHeight: CGFloat = 28
+    static let valueSpacing: CGFloat = 7
+
+    // Match the adaptive grid without measuring live SwiftUI rows on every sample.
+    static func expandedHeight(width: CGFloat, valueCount: Int) -> CGFloat {
+        let availableWidth = max(width - PluginSettingsTheme.Spacing.rowHorizontal * 2, 0)
+        let columns = max(Int((availableWidth + valueSpacing) / (valueMinimumWidth + valueSpacing)), 1)
+        let rows = max((valueCount + columns - 1) / columns, 1)
+        return expandedSingleGridRowHeight + CGFloat(rows - 1) * (valueHeight + valueSpacing)
+    }
+}
+
+struct SystemStatusMenuBarMetricEditorRow: View {
     let item: SystemStatusMetricPreferenceTableItem
     let isExpanded: Bool
     @Binding var selectedSlot: SystemStatusMenuBarValueSlot
@@ -835,9 +846,12 @@ private struct SystemStatusMenuBarMetricEditorRow: View {
                         .foregroundStyle(.secondary)
 
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 132), spacing: 7)],
+                        columns: [GridItem(
+                            .adaptive(minimum: SystemStatusMenuBarEditorLayout.valueMinimumWidth),
+                            spacing: SystemStatusMenuBarEditorLayout.valueSpacing
+                        )],
                         alignment: .leading,
-                        spacing: 7
+                        spacing: SystemStatusMenuBarEditorLayout.valueSpacing
                     ) {
                         ForEach(item.valueOptions) { option in
                             valueChip(option)
@@ -1013,7 +1027,7 @@ private struct SystemStatusMenuBarMetricEditorRow: View {
             }
             .font(.system(size: 11, weight: .medium))
             .padding(.horizontal, 8)
-            .frame(minHeight: 28)
+            .frame(minHeight: SystemStatusMenuBarEditorLayout.valueHeight)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(assignedSlot == nil ? Color.primary.opacity(0.04) : Color.accentColor.opacity(0.08))
@@ -1059,9 +1073,8 @@ private struct SystemStatusMenuBarMetricEditorRow: View {
     }
 }
 
-private struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
-    static let collapsedRowHeight: CGFloat = 66
-    static let expandedRowHeight: CGFloat = 192
+struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
+    static let collapsedRowHeight = SystemStatusMenuBarEditorLayout.collapsedRowHeight
     static let rowSpacing: CGFloat = 6
     static let verticalContentInset: CGFloat = 6
     private static let dragType = NSPasteboard.PasteboardType(
@@ -1081,14 +1094,24 @@ private struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
         SystemStatusMenuBarValueArrangement
     ) -> Void
 
-    static func preferredHeight(itemCount: Int, hasExpandedRow: Bool) -> CGFloat {
-        guard itemCount > 0 else {
-            return verticalContentInset * 2
+    private func expandedRowHeight(width: CGFloat) -> CGFloat {
+        guard let item = items.first(where: { $0.kind == expandedKind }) else { return Self.collapsedRowHeight }
+        return SystemStatusMenuBarEditorLayout.expandedHeight(width: width, valueCount: item.valueOptions.count)
+    }
+
+    private func preferredHeight(width: CGFloat) -> CGFloat {
+        guard !items.isEmpty else {
+            return Self.verticalContentInset * 2
         }
-        let collapsedRowsHeight = CGFloat(itemCount) * collapsedRowHeight
-        let expandedHeight = hasExpandedRow ? expandedRowHeight - collapsedRowHeight : 0
-        let spacing = CGFloat(max(itemCount - 1, 0)) * rowSpacing
-        return collapsedRowsHeight + expandedHeight + spacing + verticalContentInset * 2
+        let collapsedRowsHeight = CGFloat(items.count) * Self.collapsedRowHeight
+        let expandedHeight = expandedRowHeight(width: width) - Self.collapsedRowHeight
+        let spacing = CGFloat(max(items.count - 1, 0)) * Self.rowSpacing
+        return collapsedRowsHeight + expandedHeight + spacing + Self.verticalContentInset * 2
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
+        return CGSize(width: width, height: preferredHeight(width: width))
     }
 
     func makeCoordinator() -> Coordinator {
@@ -1097,6 +1120,9 @@ private struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = SystemStatusMetricPreferenceScrollView()
+        scrollView.onContentWidthChange = { [weak coordinator = context.coordinator] scrollView in
+            coordinator?.syncLayout(in: scrollView)
+        }
         scrollView.contentView = SystemStatusMetricPreferenceClipView()
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -1142,6 +1168,7 @@ private struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
         private var lastOrder: [SystemStatusMetricKind] = []
         private var lastExpandedKind: SystemStatusMetricKind?
         private var lastContentWidth: CGFloat = 0
+        private var lastExpandedHeight: CGFloat = 0
         private var isDragging = false
 
         init(parent: SystemStatusMenuBarMetricEditorTableView) {
@@ -1157,7 +1184,7 @@ private struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
                 return SystemStatusMenuBarMetricEditorTableView.collapsedRowHeight
             }
             return parent.items[row].kind == parent.expandedKind
-                ? SystemStatusMenuBarMetricEditorTableView.expandedRowHeight
+                ? parent.expandedRowHeight(width: tableView.bounds.width)
                 : SystemStatusMenuBarMetricEditorTableView.collapsedRowHeight
         }
 
@@ -1247,10 +1274,9 @@ private struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
             }
 
             let contentWidth = max(scrollView.contentSize.width, 1)
-            let rowContentHeight = SystemStatusMenuBarMetricEditorTableView.preferredHeight(
-                itemCount: parent.items.count,
-                hasExpandedRow: parent.expandedKind != nil
-            ) - SystemStatusMenuBarMetricEditorTableView.verticalContentInset * 2
+            let expandedHeight = parent.expandedRowHeight(width: contentWidth)
+            let rowContentHeight = parent.preferredHeight(width: contentWidth)
+                - SystemStatusMenuBarMetricEditorTableView.verticalContentInset * 2
             tableView.frame = NSRect(
                 x: 0,
                 y: 0,
@@ -1262,6 +1288,7 @@ private struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
             let layoutChanged = order != lastOrder
                 || parent.expandedKind != lastExpandedKind
                 || contentWidth.rounded(.toNearestOrAwayFromZero) != lastContentWidth
+                || expandedHeight != lastExpandedHeight
 
             if layoutChanged {
                 tableView.reloadData()
@@ -1273,6 +1300,7 @@ private struct SystemStatusMenuBarMetricEditorTableView: NSViewRepresentable {
             lastItems = parent.items
             lastOrder = order
             lastExpandedKind = parent.expandedKind
+            lastExpandedHeight = expandedHeight
             lastContentWidth = contentWidth.rounded(.toNearestOrAwayFromZero)
             scrollView.contentView.scroll(to: .zero)
             scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -1594,6 +1622,17 @@ private struct SystemStatusMetricPreferenceTableSignature: Equatable {
 }
 
 private final class SystemStatusMetricPreferenceScrollView: NSScrollView {
+    var onContentWidthChange: ((NSScrollView) -> Void)?
+    private var lastReportedWidth: CGFloat = 0
+
+    override func layout() {
+        super.layout()
+        let width = contentSize.width
+        guard width != lastReportedWidth else { return }
+        lastReportedWidth = width
+        onContentWidthChange?(self)
+    }
+
     override func scrollWheel(with event: NSEvent) {
         nextResponder?.scrollWheel(with: event)
     }

@@ -19,6 +19,99 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(SystemStatusComponentLayout.contentHeight(for: [.cpu, .gpu, .topProcesses]), 184)
     }
 
+    func testForegroundSamplingIsOwnedByEachVisibleSurface() {
+        let viewModel = SystemStatusViewModel(sampler: StubSystemStatusSampler(), historyStore: StubSystemStatusHistoryStore())
+        defer { viewModel.stop() }
+        viewModel.startMenuBar(requiresSlowSampling: false)
+        XCTAssertFalse(viewModel.isSamplingForeground)
+        viewModel.startForeground(for: .menuBarPopover)
+        viewModel.startForeground(for: .menuBarPopover)
+        XCTAssertEqual(viewModel.foregroundConsumers, [.menuBarPopover])
+        XCTAssertTrue(viewModel.isSamplingForeground)
+        viewModel.startForeground(for: .dashboard)
+        viewModel.returnToBackground(from: .menuBarPopover)
+        XCTAssertTrue(viewModel.isSamplingForeground)
+        viewModel.returnToBackground(from: .menuBarPopover)
+        XCTAssertEqual(viewModel.foregroundConsumers, [.dashboard])
+        viewModel.returnToBackground(from: .dashboard)
+        XCTAssertFalse(viewModel.isSamplingForeground)
+        viewModel.startForeground(for: .menuBarPopover)
+        viewModel.startForeground(for: .dashboard)
+        viewModel.returnToBackground(from: .dashboard)
+        XCTAssertTrue(viewModel.isSamplingForeground)
+        viewModel.stop()
+        XCTAssertTrue(viewModel.foregroundConsumers.isEmpty)
+        XCTAssertFalse(viewModel.isSamplingForeground)
+    }
+
+    func testExpandedMetricRowHeightAccommodatesWrappedValues() {
+        let options = [SystemStatusMenuBarValueKind.level, .power, .timeRemaining, .temperature, .state].map {
+            SystemStatusMenuBarValueOption(kind: $0, title: $0.rawValue, liveValue: "100%")
+        }
+        let item = makeMetricPreferenceTableItem(
+            valueOptions: options, selectedValues: [.level, .power],
+            secondaryValueNoneTitle: "No Second Value", reorderAccessibilityTitle: "Drag to reorder"
+        )
+        let row = SystemStatusMenuBarMetricEditorRow(
+            item: item, isExpanded: true, selectedSlot: .constant(.primary),
+            onToggleExpansion: {}, onVisibilityChange: { _ in }, onValuesChange: { _ in },
+            onStyleChange: { _ in }, onValueArrangementChange: { _ in }
+        )
+        for width: CGFloat in [500, 640, 740, 960] {
+            let allocatedHeight = SystemStatusMenuBarEditorLayout.expandedHeight(width: width, valueCount: options.count)
+            let host = NSHostingView(rootView: row.frame(width: width))
+            XCTAssertLessThanOrEqual(host.fittingSize.height, allocatedHeight, "Row overflow at width \(width)")
+            XCTAssertEqual(allocatedHeight, width < 740 ? 227 : 192)
+
+            let table = SystemStatusMenuBarMetricEditorTableView(
+                items: [item], expandedKind: .battery, selectedSlots: .constant([:]),
+                onToggleExpansion: { _ in }, onVisibilityChange: { _, _ in }, onMove: { _, _ in },
+                onValuesChange: { _, _ in }, onStyleChange: { _, _ in }, onValueArrangementChange: { _, _ in }
+            )
+            let tableHost = NSHostingView(rootView: table.frame(width: width))
+            XCTAssertEqual(tableHost.fittingSize.height, allocatedHeight + 12, accuracy: 1)
+        }
+    }
+
+    func testCompactColumnReservationContainsLocalizedBatteryTimes() {
+        let view = SystemStatusMenuBarMetricsView()
+        view.menuBarLayout = .vertical
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
+        for (reservation, value) in [("99Std59Min", "12Std34Min"), ("99時間59分", "12時間34分")] {
+            let block = SystemStatusMenuBarMetricBlock(
+                kind: .battery, label: "BAT", valueKinds: [.timeRemaining], values: [value],
+                widthReservationValues: [reservation], style: .vertical
+            )
+            view.blocks = [block]
+            let cellWidth = view.intrinsicContentSize.width - 8
+            let columnWidth = view.compactStackedValueColumnWidth(for: block)
+            let valueWidth = NSAttributedString(string: value, attributes: [.font: font, .kern: 0]).size().width
+            let contentX = (cellWidth - 13 - columnWidth) / 2
+            XCTAssertGreaterThanOrEqual(contentX, 0)
+            XCTAssertLessThanOrEqual(contentX + 13 + valueWidth, cellWidth)
+        }
+    }
+
+    func testEveryLiteralLocalizationKeyExistsInThePluginCatalog() throws {
+        let pluginRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: pluginRoot.appendingPathComponent("Resources/Localizable.xcstrings"))
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
+        let pattern = #"(?:localization\??\.(?:string|format)|localized)\s*\(\s*"([^"]+)""#
+        let expression = try NSRegularExpression(pattern: pattern)
+        let files = try FileManager.default.contentsOfDirectory(
+            at: pluginRoot.appendingPathComponent("Sources"), includingPropertiesForKeys: nil
+        ).filter { $0.pathExtension == "swift" }
+        for file in files {
+            let source = try String(contentsOf: file, encoding: .utf8)
+            for match in expression.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+                let range = try XCTUnwrap(Range(match.range(at: 1), in: source))
+                let key = String(source[range])
+                XCTAssertNotNil(strings[key], "Missing \(key) referenced in \(file.lastPathComponent)")
+            }
+        }
+    }
+
     func testMenuBarMetricPopoverKeepsDetailWindowInsideItsPresentationBoundary() {
         let popoverWindow = NSWindow()
         let detailWindow = NSPanel()
@@ -737,6 +830,7 @@ final class SystemStatusPluginTests: XCTestCase {
                 .map(\.rawValue)
         )
         let exactKeys: Set<String> = [
+            "disk.availableUnitFormat",
             "chart.range30Minutes",
             "chart.range2Hours",
             "chart.range24Hours",
