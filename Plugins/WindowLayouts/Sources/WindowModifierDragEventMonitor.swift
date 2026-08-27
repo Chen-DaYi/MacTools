@@ -65,7 +65,8 @@ nonisolated final class SystemWindowModifierDragEventMonitor: @unchecked Sendabl
         handler: WindowModifierDragEventHandler
     ) -> Result<Void, WindowModifierDragMonitorStartError> {
         if isRunning { return .success(()) }
-        if lock.withLock({ tap != nil || callbackPointer != nil }) {
+        // Explicit self avoids capturing the same-named locals declared below on Swift 6.3.
+        if lock.withLock({ self.tap != nil || self.callbackPointer != nil }) {
             stop()
         }
 
@@ -97,17 +98,15 @@ nonisolated final class SystemWindowModifierDragEventMonitor: @unchecked Sendabl
 
         let readySignal = DispatchSemaphore(value: 0)
         let finishedSignal = DispatchSemaphore(value: 0)
-        // Avoid capturing the Core Foundation handles and raw pointer in a generic
-        // closure here: Swift 6.3.3 crashes while analyzing that capture's regions.
-        lock.lock()
-        self.tap = tap
-        self.source = source
-        self.callbackPointer = callbackPointer
-        self.readySignal = readySignal
-        self.finishedSignal = finishedSignal
-        self.eventHandler = handler
-        shouldRun = true
-        lock.unlock()
+        lock.withLock {
+            self.tap = tap
+            self.source = source
+            self.callbackPointer = callbackPointer
+            self.readySignal = readySignal
+            self.finishedSignal = finishedSignal
+            self.eventHandler = handler
+            shouldRun = true
+        }
         eventQueue.async { [self] in
             runEventLoop()
         }
