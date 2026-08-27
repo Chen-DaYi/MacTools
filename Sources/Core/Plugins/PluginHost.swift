@@ -874,11 +874,11 @@ final class PluginHost: ObservableObject {
         let automationSnapshot = automationController.preferencesBackupSnapshot()
         let portableWorkflowIDs = WorkflowPortabilityAnalysis.portableWorkflowIDs(
             in: automationSnapshot.workflows,
-            referencePortability: { [weak self] reference in
-                self?.leafActionReferenceBackupPortability(
+            referencePortability: { reference in
+                self.leafActionReferenceBackupPortability(
                     reference,
                     selection: dependencySelection
-                ) ?? .unknown
+                )
             }
         )
         let portableWorkflows = automationSnapshot.workflows.filter {
@@ -887,8 +887,10 @@ final class PluginHost: ObservableObject {
         let selectedPortablePreferences = proposedPortablePreferences.filter {
             selection.pluginPreferenceIDs.contains($0.key)
         }
-        let referenceIsPortable: (ActionReference) -> Bool = { [weak self] reference in
-            self?.actionReferenceBackupPortability(
+        // These predicates never escape this synchronous export. Keep a strong
+        // capture to avoid the premature weak-storage destruction in optimized builds.
+        let referenceIsPortable: (ActionReference) -> Bool = { reference in
+            self.actionReferenceBackupPortability(
                 reference,
                 workflows: automationSnapshot.workflows,
                 portableWorkflowIDs: portableWorkflowIDs,
