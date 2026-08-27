@@ -68,6 +68,8 @@ Focused XCTest classes are `CLIActionDiscoveryTests`, `CLIDiscoveryProtocolTests
 
 The initial local validation passed 51 focused tests, 145 script tests, all 3,062 XCTest tests, changelog validation, and the PluginKit v5 binary-compatibility client. One existing 0.1-second callback expectation and one existing timed preferences-backup test each failed once under load; unchanged-source retries passed. These are recorded as transient verification events, not waived failures. Review subsequently added boundary coverage for eight-level workflows and terminal-page catalog limits; final check counts and review evidence are tracked in the PR.
 
+A later full-suite run exposed an Apple Shortcuts test that assumed `NSCache` would retain an inserted entry. The cache wrapper and controller tests now use controllable storage for deterministic hit, eviction, replacement, removal, and byte-cost checks; production still defaults to memory-pressure-aware `NSCache`. This test-stability fix and the compiler workaround are included in the same Phase 1 PR.
+
 The same Xcode 26.6 / Swift 6.3.3 build was development-signed and tested on:
 
 | Machine | OS/build | Signed smoke checks | Longest successful command |
