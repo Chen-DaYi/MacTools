@@ -214,10 +214,10 @@ done
 "$REPO_ROOT/scripts/plugins/generate-plugin-catalog.sh" "${catalog_args[@]}"
 
 if [[ -n "$SIGNED_CATALOG_OUTPUT" ]]; then
-    "$REPO_ROOT/scripts/plugins/sign-plugin-catalog.sh" \
+    PLUGIN_CATALOG_PRIVATE_KEY_BASE64="$CATALOG_PRIVATE_KEY_BASE64" \
+        "$REPO_ROOT/scripts/plugins/sign-plugin-catalog.sh" \
         --input "$CATALOG_OUTPUT" \
-        --output "$SIGNED_CATALOG_OUTPUT" \
-        --private-key-base64 "$CATALOG_PRIVATE_KEY_BASE64"
+        --output "$SIGNED_CATALOG_OUTPUT"
 fi
 
 echo "Built ${#asset_paths[@]} plugin release asset(s)."

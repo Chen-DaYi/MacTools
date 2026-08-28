@@ -116,6 +116,8 @@ PY
 
 不要复用 Sparkle 私钥。Sparkle key 只负责 app 更新包，插件 catalog key 只负责插件列表。
 
+The Nightly and plugin release workflows verify this private key against the public key embedded in the app before starting expensive build or signing work. Catalog signing uses Swift/CryptoKit and the same Foundation JSON canonicalization as runtime verification, so no Python signing dependency is installed during a release.
+
 ## App 发布方式
 
 推荐用 GitHub Actions 的 `Prepare Release` 触发完整发布准备流程：

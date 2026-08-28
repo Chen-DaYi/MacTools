@@ -124,6 +124,16 @@ jobs:
           done
           exit "$missing"
 
+      - name: Verify plugin catalog signing key
+        if: steps.nightly_gate.outputs.decision == 'publish'
+        env:
+          PLUGIN_CATALOG_PRIVATE_KEY_BASE64: ${{ secrets.PLUGIN_CATALOG_PRIVATE_KEY_BASE64 }}
+        run: |
+          PLUGIN_CATALOG_PUBLIC_KEY="$(sed -n 's/^[[:space:]]*PLUGIN_CATALOG_PUBLIC_KEY[[:space:]]*=[[:space:]]*//p' Configs/Release.xcconfig | head -n 1)"
+          [[ -n "$PLUGIN_CATALOG_PUBLIC_KEY" ]] || { echo "Plugin catalog public key is missing." >&2; exit 1; }
+          scripts/plugins/verify-plugin-catalog-key-pair.sh \
+            --public-key-base64 "$PLUGIN_CATALOG_PUBLIC_KEY"
+
       - name: Show Xcode version
         if: steps.nightly_gate.outputs.decision == 'publish'
         run: xcodebuild -version
@@ -134,14 +144,6 @@ jobs:
           if ! command -v xcodegen >/dev/null 2>&1; then
             brew install xcodegen
           fi
-
-      - name: Install catalog signing dependency
-        if: steps.nightly_gate.outputs.decision == 'publish'
-        run: |
-          python3 -m venv "$RUNNER_TEMP/plugin-signing-venv"
-          "$RUNNER_TEMP/plugin-signing-venv/bin/python" -m pip install --upgrade pip
-          "$RUNNER_TEMP/plugin-signing-venv/bin/python" -m pip install cryptography
-          echo "$RUNNER_TEMP/plugin-signing-venv/bin" >> "$GITHUB_PATH"
 
       - name: Write release local config
         if: steps.nightly_gate.outputs.decision == 'publish'

@@ -250,6 +250,9 @@ class NightlyConfigurationTests(unittest.TestCase):
         self.assertIn("unexpected publication state", workflow)
         self.assertIn("unexpectedly replaced the stable Latest release", workflow)
         self.assertIn("preflight-app-plugin-catalog.swift", workflow)
+        self.assertIn("Verify plugin catalog signing key", workflow)
+        self.assertIn("verify-plugin-catalog-key-pair.sh", workflow)
+        self.assertNotIn("pip install cryptography", workflow)
         self.assertIn("scripts/nightly-release.py verify-helper-signatures", workflow)
         self.assertIn('--deployed-catalog "$SIGNED_PLUGIN_CATALOG_PATH"', workflow)
         self.assertIn(
