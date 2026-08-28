@@ -1,6 +1,30 @@
 import Foundation
 import MacToolsPluginKit
 
+enum SystemSettingsProfileFileReader {
+    static func read(
+        from url: URL,
+        maximumFileSize: Int
+    ) async throws -> Data {
+        try await Task.detached(priority: .userInitiated) {
+            let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            guard values.isRegularFile != false else {
+                throw SystemSettingsProfileCodecError.malformedFile
+            }
+            if let fileSize = values.fileSize, fileSize > maximumFileSize {
+                throw SystemSettingsProfileCodecError.fileTooLarge
+            }
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let data = try handle.read(upToCount: maximumFileSize + 1) ?? Data()
+            guard data.count <= maximumFileSize else {
+                throw SystemSettingsProfileCodecError.fileTooLarge
+            }
+            return data
+        }.value
+    }
+}
+
 @MainActor
 protocol SystemSettingsProfileStoring: AnyObject {
     func load() -> [SystemSettingsProfile]

@@ -144,10 +144,21 @@ struct SystemSettingsProfileValidationResult: Equatable, Sendable {
     var isValid: Bool { errors.isEmpty }
 }
 
-enum SystemSettingsProfileCodecError: Error, Equatable {
+enum SystemSettingsProfileCodecError: Error, Equatable, LocalizedError {
     case fileTooLarge
     case malformedFile
     case validationFailed([SystemSettingsProfileValidationIssue])
+
+    var errorDescription: String? {
+        switch self {
+        case .fileTooLarge:
+            "配置文件超过 1 MiB 限制。"
+        case .malformedFile:
+            "配置文件格式无效。"
+        case .validationFailed:
+            "配置包含不受支持或无效的设置。"
+        }
+    }
 }
 
 @MainActor

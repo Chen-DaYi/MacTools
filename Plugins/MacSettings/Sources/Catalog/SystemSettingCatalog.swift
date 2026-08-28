@@ -191,7 +191,7 @@ enum MacSettingsCatalogFactory {
                     ]
                 )
             ),
-            guided(
+            direct(
                 id: "accessibility.full-keyboard-access",
                 title: "全键盘控制",
                 description: "使用 Tab 键和其他按键在屏幕控制项之间移动。",
@@ -199,12 +199,12 @@ enum MacSettingsCatalogFactory {
                 systemImage: "keyboard.badge.ellipsis",
                 schema: .boolean,
                 defaultValue: .boolean(false),
-                executionClass: .guidedManual,
                 searchTerms: ["full keyboard access", "keyboard navigation", "全键盘访问", "Tab 导航"],
                 destination: accessibilityDestination("Keyboard"),
-                note: "Open Accessibility Keyboard settings; direct activation remains deferred until a stable live setter and verification path are validated."
+                note: "Uses Apple's active Universal Access keyboard setter and verifies the current runtime state immediately.",
+                adapter: UniversalAccessSystemSettingAdapter.fullKeyboardAccess()
             ),
-            guided(
+            direct(
                 id: "accessibility.sticky-keys",
                 title: "粘滞键",
                 description: "依次按下修饰键来输入组合键。",
@@ -212,12 +212,12 @@ enum MacSettingsCatalogFactory {
                 systemImage: "command",
                 schema: .boolean,
                 defaultValue: .boolean(false),
-                executionClass: .guidedManual,
                 searchTerms: ["sticky keys", "modifier keys", "粘滞键", "组合键"],
                 destination: accessibilityDestination("Keyboard"),
-                note: "Open Accessibility Keyboard settings; direct activation remains deferred until a stable live setter and verification path are validated."
+                note: "Uses Apple's active Universal Access Sticky Keys setter and verifies the current runtime state immediately.",
+                adapter: UniversalAccessSystemSettingAdapter.stickyKeys()
             ),
-            guided(
+            direct(
                 id: "accessibility.slow-keys",
                 title: "慢速键",
                 description: "调整按键被接受前需要按住的时间。",
@@ -225,36 +225,57 @@ enum MacSettingsCatalogFactory {
                 systemImage: "timer",
                 schema: .boolean,
                 defaultValue: .boolean(false),
-                executionClass: .guidedManual,
                 searchTerms: ["slow keys", "acceptance delay", "慢速键", "按键延迟"],
                 destination: accessibilityDestination("Keyboard"),
-                note: "Open Accessibility Keyboard settings; direct activation remains deferred until a stable live setter and verification path are validated."
+                note: "Uses Apple's active Universal Access Slow Keys setter and verifies the current runtime state immediately.",
+                adapter: UniversalAccessSystemSettingAdapter.slowKeys()
             ),
-            guided(
+            direct(
                 id: "input.secondary-click",
                 title: "辅助点按",
                 description: "选择使用触控板进行右键点按的手势。",
                 category: .input,
                 systemImage: "hand.point.up.left",
-                schema: .boolean,
-                defaultValue: .boolean(true),
-                executionClass: .guidedManual,
+                schema: .choice(options: [
+                    .init(id: "off", title: "关闭"),
+                    .init(id: "two-fingers", title: "双指点按"),
+                    .init(id: "bottom-right", title: "点按右下角"),
+                    .init(id: "bottom-left", title: "点按左下角"),
+                ]),
+                defaultValue: .choice(id: "two-fingers"),
+                executionClass: .hardwareDependent,
                 searchTerms: ["secondary click", "right click", "辅助点按", "右键"],
                 destination: inputDestination,
-                note: "Open Trackpad settings; the gesture choice uses coupled device-specific state that is not yet safely represented by one Boolean."
+                note: "Uses the runtime-validated System Settings trackpad backend and verifies both the two-finger flag and corner gesture immediately.",
+                adapter: TrackpadSecondaryClickSystemSettingAdapter()
             ),
-            guided(
+            direct(
                 id: "input.scroll-speed",
-                title: "滚动速度",
-                description: "调整鼠标或触控板滚动内容的速度。",
+                title: "触控板滚动速度",
+                description: "调整使用触控板滚动内容的速度。",
                 category: .input,
                 systemImage: "scroll",
-                schema: .decimal(range: 0 ... 10, step: 0.1),
+                schema: .decimal(range: 0 ... 10, step: 0.5),
                 defaultValue: .decimal(5),
-                executionClass: .guidedManual,
-                searchTerms: ["scroll speed", "wheel speed", "滚轮速度"],
+                executionClass: .hardwareDependent,
+                searchTerms: ["trackpad scroll speed", "scroll speed", "触控板滚动速度"],
                 destination: inputDestination,
-                note: "Open Pointer Control settings; direct support remains deferred until separate mouse and trackpad live backends can be verified."
+                note: "Uses the runtime-validated System Settings trackpad backend and verifies its active raw scroll-speed value immediately.",
+                adapter: LiveScrollSpeedSystemSettingAdapter.trackpad()
+            ),
+            direct(
+                id: "input.mouse-scroll-speed",
+                title: "鼠标滚动速度",
+                description: "调整使用鼠标滚轮滚动内容的速度。",
+                category: .input,
+                systemImage: "computermouse",
+                schema: .decimal(range: 0 ... 10, step: 0.5),
+                defaultValue: .decimal(5),
+                executionClass: .hardwareDependent,
+                searchTerms: ["mouse scroll speed", "wheel speed", "鼠标滚动速度", "滚轮速度"],
+                destination: mouseDestination,
+                note: "Uses the runtime-validated System Settings mouse backend and verifies its active raw scroll-speed value immediately.",
+                adapter: LiveScrollSpeedSystemSettingAdapter.mouse()
             ),
             direct(
                 id: "input.tap-to-click",
@@ -717,32 +738,6 @@ enum MacSettingsCatalogFactory {
                 destination: displayDestination,
                 actionContext: actionContext
             ),
-            guided(
-                id: "power.low-power-mode",
-                title: "低电量模式",
-                description: "降低能源消耗以延长电池续航时间。",
-                category: .power,
-                systemImage: "battery.25percent",
-                schema: .boolean,
-                defaultValue: .boolean(false),
-                executionClass: .guidedManual,
-                searchTerms: ["low power mode", "energy mode", "低电量模式", "节能"],
-                destination: powerDestination,
-                note: "Open Battery settings; available choices vary by Mac model and power source."
-            ),
-            guided(
-                id: "network.wifi",
-                title: "Wi-Fi",
-                description: "管理 Wi-Fi 状态、网络与详细信息。",
-                category: .network,
-                systemImage: "wifi",
-                schema: .boolean,
-                defaultValue: .boolean(true),
-                executionClass: .guidedManual,
-                searchTerms: ["wifi", "wireless network", "无线网络", "网络"],
-                destination: networkDestination,
-                note: "Open Network settings; credentials and per-service configuration remain outside portable Mac Settings profiles."
-            ),
             providerBoolean(
                 id: "desktop.menu-bar-auto-hide",
                 title: "自动隐藏菜单栏",
@@ -807,14 +802,6 @@ enum MacSettingsCatalogFactory {
         .init(pane: "com.apple.preference.displays", anchor: nil)
     }
 
-    private static var powerDestination: SystemSettingSystemDestination {
-        .init(pane: "com.apple.preference.energysaver", anchor: nil)
-    }
-
-    private static var networkDestination: SystemSettingSystemDestination {
-        .init(pane: "com.apple.preference.network", anchor: nil)
-    }
-
     private static func accessibilityDestination(_ anchor: String) -> SystemSettingSystemDestination {
         .init(pane: "com.apple.Accessibility-Settings.extension", anchor: anchor)
     }
@@ -856,36 +843,6 @@ enum MacSettingsCatalogFactory {
                 implementationNote: note
             ),
             adapter: adapter
-        )
-    }
-
-    private static func guided(
-        id: SystemSettingID,
-        title: String,
-        description: String,
-        category: SystemSettingCategory,
-        systemImage: String,
-        schema: SystemSettingValueSchema,
-        defaultValue: SystemSettingValue,
-        executionClass: SystemSettingExecutionClass,
-        searchTerms: [String],
-        destination: SystemSettingSystemDestination?,
-        note: String
-    ) -> SystemSettingRecord {
-        return direct(
-            id: id,
-            title: title,
-            description: description,
-            category: category,
-            systemImage: systemImage,
-            schema: schema,
-            defaultValue: defaultValue,
-            executionClass: executionClass,
-            portability: .localOnly,
-            searchTerms: searchTerms,
-            destination: destination,
-            note: note,
-            adapter: UnavailableSystemSettingAdapter(message: note)
         )
     }
 

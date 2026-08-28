@@ -34,6 +34,45 @@ enum MacSettingsWorkspaceDensity: String, CaseIterable, Codable, Identifiable {
     var id: String { rawValue }
 }
 
+enum MacSettingsPaletteSectionKind: String, Hashable {
+    case searchResults
+    case favorites
+    case attention
+    case recent
+    case category
+}
+
+enum MacSettingsKeyboardFocusTarget: Equatable {
+    case search
+    case setting(SystemSettingID)
+}
+
+enum MacSettingsKeyboardNavigation {
+    static func target(
+        from currentID: SystemSettingID?,
+        movingForward: Bool,
+        settingIDs: [SystemSettingID]
+    ) -> MacSettingsKeyboardFocusTarget {
+        guard !settingIDs.isEmpty else { return .search }
+        guard let currentID,
+              let index = settingIDs.firstIndex(of: currentID) else {
+            return movingForward ? .setting(settingIDs[0]) : .search
+        }
+        if movingForward {
+            return .setting(settingIDs[min(index + 1, settingIDs.count - 1)])
+        }
+        return index == 0 ? .search : .setting(settingIDs[index - 1])
+    }
+}
+
+@MainActor
+struct MacSettingsPaletteSection {
+    let id: String
+    let kind: MacSettingsPaletteSectionKind
+    let title: String
+    let records: [SystemSettingRecord]
+}
+
 enum SystemSettingRowVerification: Equatable {
     case verified
     case unverified
@@ -76,12 +115,13 @@ final class MacSettingsController: ObservableObject {
     @Published private(set) var lastApplyReport: SystemSettingsProfileApplyReport?
     @Published private(set) var density: MacSettingsWorkspaceDensity
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isApplyingProfile = false
     @Published private(set) var profileErrorMessage: String?
-
 
     var onStateChange: (() -> Void)?
     var onPersistentPreferencesChange: (() -> Void)?
     var onPermissionAction: ((String) -> Void)?
+    var onOpenSystemSettings: ((URL) -> Void)?
 
     private let storage: any PluginStorage
     private let historyStore: any SystemSettingChangeHistoryStoring
@@ -90,6 +130,10 @@ final class MacSettingsController: ObservableObject {
     private var environment: SystemSettingEnvironment
     private var refreshTask: Task<Void, Never>?
     private var externalRefreshTask: Task<Void, Never>?
+    private var profileOperationTask: Task<Void, Never>?
+    private var refreshGeneration: UInt64 = 0
+    private var rowRevisions: [SystemSettingID: UInt64] = [:]
+    private var applyingSettingIDs: Set<SystemSettingID> = []
     private var pendingRequirementIDs: Set<SystemSettingID> = []
     private var failedSettingIDs: Set<SystemSettingID> = []
 
@@ -114,7 +158,9 @@ final class MacSettingsController: ObservableObject {
             rawValue: storage.string(forKey: StorageKey.density) ?? ""
         ) ?? .comfortable
         self.history = self.historyStore.load(referenceDate: Date())
-        self.profiles = self.profileStore.load()
+        self.profiles = self.profileStore.load().filter {
+            SystemSettingsProfileCodec.validate($0, catalog: catalog).isValid
+        }
         for record in catalog.records {
             rowStates[record.id] = .init(
                 value: record.definition.defaultValue,
@@ -135,35 +181,76 @@ final class MacSettingsController: ObservableObject {
     deinit {
         refreshTask?.cancel()
         externalRefreshTask?.cancel()
+        profileOperationTask?.cancel()
     }
 
     var visibleRecords: [SystemSettingRecord] {
-        var records: [SystemSettingRecord]
+        catalog.search(searchText, in: records(for: destination))
+    }
+
+    var paletteSections: [MacSettingsPaletteSection] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            let records = catalog.search(query)
+            guard !records.isEmpty else { return [] }
+            return [.init(id: "search-results", kind: .searchResults, title: "搜索结果", records: records)]
+        }
+
         switch destination {
         case .all:
-            records = catalog.records
-        case .favorites:
-            let order = Dictionary(uniqueKeysWithValues: favoriteIDs.enumerated().map { ($1, $0) })
-            records = catalog.records
-                .filter { order[$0.id] != nil }
-                .sorted { order[$0.id, default: .max] < order[$1.id, default: .max] }
-        case .recent:
-            var recentIDs: [SystemSettingID] = []
-            for change in history where !recentIDs.contains(change.settingID) {
-                recentIDs.append(change.settingID)
+            return availableCategories.compactMap { category in
+                let records = records(for: .category(category))
+                guard !records.isEmpty else { return nil }
+                return .init(
+                    id: "category.\(category.rawValue)",
+                    kind: .category,
+                    title: category.title,
+                    records: records
+                )
             }
-            let order = Dictionary(uniqueKeysWithValues: recentIDs.enumerated().map { ($1, $0) })
-            records = catalog.records
-                .filter { order[$0.id] != nil }
-                .sorted { order[$0.id, default: .max] < order[$1.id, default: .max] }
+        case .favorites:
+            return section(kind: .favorites, title: "已固定", records: favoriteRecords)
+        case .recent:
+            return section(kind: .recent, title: "最近更改", records: recentRecords)
         case .attention:
-            records = catalog.records.filter { needsAttention($0.id) }
+            return section(kind: .attention, title: "需要关注", records: attentionRecords)
         case let .category(category):
-            records = catalog.records.filter { $0.definition.category == category }
+            return section(
+                id: "category.\(category.rawValue)",
+                kind: .category,
+                title: category.title,
+                records: records(for: .category(category))
+            )
         case .profiles, .importExport, .history:
-            records = []
+            return []
         }
-        return catalog.search(searchText, in: records)
+    }
+
+    var paletteScopeTitle: String? {
+        guard searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        switch destination {
+        case .favorites: return "已固定"
+        case .recent: return "最近更改"
+        case .attention: return "需要关注"
+        case let .category(category): return category.title
+        default: return nil
+        }
+    }
+
+    var favoriteRecords: [SystemSettingRecord] {
+        favoriteIDs.compactMap { catalog[$0] }
+    }
+
+    var recentRecords: [SystemSettingRecord] {
+        var recentIDs: [SystemSettingID] = []
+        for change in history where !recentIDs.contains(change.settingID) {
+            recentIDs.append(change.settingID)
+        }
+        return recentIDs.compactMap { catalog[$0] }
+    }
+
+    var attentionRecords: [SystemSettingRecord] {
+        catalog.records.filter { needsAttention($0.id) }
     }
 
     var favoriteRecordsForFeaturePanel: [SystemSettingRecord] {
@@ -193,6 +280,16 @@ final class MacSettingsController: ObservableObject {
         searchFocusRequest &+= 1
     }
 
+    func showPalette() {
+        destination = .all
+        searchFocusRequest &+= 1
+    }
+
+    func showPaletteHome() {
+        searchText = ""
+        showPalette()
+    }
+
     func updateAvailableProviderIDs(_ providerIDs: Set<String>) {
         guard environment.availableProviderIDs != providerIDs else { return }
         environment = SystemSettingEnvironment(
@@ -211,26 +308,39 @@ final class MacSettingsController: ObservableObject {
     }
 
     func refresh() {
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
         refreshTask?.cancel()
         refreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
             isRefreshing = true
-            defer { isRefreshing = false }
+            defer {
+                if refreshGeneration == generation {
+                    isRefreshing = false
+                    refreshTask = nil
+                }
+            }
             for record in catalog.records {
-                guard !Task.isCancelled else { return }
-                await refresh(record)
+                guard !Task.isCancelled, refreshGeneration == generation else { return }
+                await refresh(record, refreshGeneration: generation)
                 await Task.yield()
             }
-            onStateChange?()
+            if !Task.isCancelled, refreshGeneration == generation {
+                onStateChange?()
+            }
         }
     }
 
     func cancelRefresh() {
+        refreshGeneration &+= 1
         refreshTask?.cancel()
         refreshTask = nil
         externalRefreshTask?.cancel()
         externalRefreshTask = nil
         isRefreshing = false
+        for id in rowStates.keys where !applyingSettingIDs.contains(id) {
+            rowStates[id]?.isLoading = false
+        }
     }
 
     func scheduleExternalRefresh() {
@@ -247,6 +357,15 @@ final class MacSettingsController: ObservableObject {
     }
 
     func refresh(_ record: SystemSettingRecord) async {
+        await refresh(record, refreshGeneration: nil)
+    }
+
+    private func refresh(
+        _ record: SystemSettingRecord,
+        refreshGeneration expectedRefreshGeneration: UInt64?
+    ) async {
+        guard !applyingSettingIDs.contains(record.id) else { return }
+        let rowRevision = rowRevisions[record.id, default: 0]
         let availability = SystemSettingCompatibilityEvaluator.availability(
             for: record.definition,
             environment: environment
@@ -261,13 +380,28 @@ final class MacSettingsController: ObservableObject {
         rowStates[record.id]?.isLoading = true
         do {
             let value = try await record.adapter.read()
+            guard canPublishRefresh(
+                record.id,
+                rowRevision: rowRevision,
+                refreshGeneration: expectedRefreshGeneration
+            ) else { return }
             guard record.definition.schema.accepts(value) else {
                 throw SystemSettingAdapterError.invalidValue
             }
+            rowStates[record.id]?.availability = availability
             rowStates[record.id]?.value = value
             rowStates[record.id]?.errorMessage = nil
             failedSettingIDs.remove(record.id)
         } catch {
+            guard canPublishRefresh(
+                record.id,
+                rowRevision: rowRevision,
+                refreshGeneration: expectedRefreshGeneration
+            ) else { return }
+            rowStates[record.id]?.availability = runtimeFailureAvailability(
+                for: record,
+                error: error
+            )
             rowStates[record.id]?.errorMessage = error.localizedDescription
             failedSettingIDs.insert(record.id)
         }
@@ -278,7 +412,10 @@ final class MacSettingsController: ObservableObject {
         guard let record = catalog[settingID],
               record.definition.schema.accepts(value),
               let state = rowStates[settingID],
-              canApply(state.availability) else { return }
+              canApply(state.availability),
+              state.errorMessage == nil,
+              !state.isApplying,
+              !isApplyingProfile else { return }
         Task { @MainActor [weak self] in
             await self?.applyAndWait(value, to: record)
         }
@@ -291,19 +428,31 @@ final class MacSettingsController: ObservableObject {
     ) async -> Bool {
         guard record.definition.schema.accepts(value),
               let state = rowStates[record.id],
-              canApply(state.availability) else { return false }
+              canApply(state.availability),
+              state.errorMessage == nil,
+              !applyingSettingIDs.contains(record.id),
+              !isApplyingProfile else { return false }
+        applyingSettingIDs.insert(record.id)
+        rowRevisions[record.id, default: 0] &+= 1
+        rowStates[record.id]?.isApplying = true
+        rowStates[record.id]?.isLoading = false
+        defer {
+            applyingSettingIDs.remove(record.id)
+            rowStates[record.id]?.isApplying = false
+        }
         let previousValue: SystemSettingValue
         do {
             previousValue = try await record.adapter.read()
         } catch {
-            guard let cached = state.value else { return false }
-            previousValue = cached
+            rowStates[record.id]?.availability = runtimeFailureAvailability(for: record, error: error)
+            rowStates[record.id]?.errorMessage = error.localizedDescription
+            failedSettingIDs.insert(record.id)
+            onStateChange?()
+            return false
         }
 
         rowStates[record.id]?.value = value
-        rowStates[record.id]?.isApplying = true
         rowStates[record.id]?.errorMessage = nil
-        defer { rowStates[record.id]?.isApplying = false }
         do {
             try await record.adapter.apply(value)
             let verification = try await record.adapter.verify(value)
@@ -322,7 +471,11 @@ final class MacSettingsController: ObservableObject {
                 rowStates[record.id]?.verification = .failed
                 rowStates[record.id]?.errorMessage = rolledBack
                     ? "验证失败，已恢复原值。"
-                    : "验证失败：当前值为 \(actual.conciseDescription)，自动恢复失败。"
+                    : "验证失败：当前值为 \(record.definition.displayDescription(for: actual))，自动恢复失败。"
+                rowStates[record.id]?.availability = runtimeFailureAvailability(
+                    for: record,
+                    message: rowStates[record.id]?.errorMessage ?? "无法验证设置。"
+                )
                 failedSettingIDs.insert(record.id)
                 onStateChange?()
                 return false
@@ -358,6 +511,10 @@ final class MacSettingsController: ObservableObject {
             rowStates[record.id]?.errorMessage = rolledBack
                 ? "\(error.localizedDescription) 已恢复原值。"
                 : "\(error.localizedDescription) 自动恢复失败。"
+            rowStates[record.id]?.availability = runtimeFailureAvailability(
+                for: record,
+                error: error
+            )
             failedSettingIDs.insert(record.id)
             onStateChange?()
             return false
@@ -433,7 +590,11 @@ final class MacSettingsController: ObservableObject {
             return
         }
         guard let url = catalog[settingID]?.definition.destination?.url else { return }
-        NSWorkspace.shared.open(url)
+        if let onOpenSystemSettings {
+            onOpenSystemSettings(url)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     func isPermissionGranted(_ permissionID: String) -> Bool {
@@ -491,6 +652,16 @@ final class MacSettingsController: ObservableObject {
         }
     }
 
+    @discardableResult
+    func restorePortableProfile(_ profile: SystemSettingsProfile) -> Bool {
+        let validation = SystemSettingsProfileCodec.validate(profile, catalog: catalog)
+        guard validation.isValid, profileStore.save(profile) else { return false }
+        profiles = profileStore.load()
+        onPersistentPreferencesChange?()
+        onStateChange?()
+        return true
+    }
+
     func removeProfile(_ profile: SystemSettingsProfile) {
         guard profileStore.remove(id: profile.id) else { return }
         profiles = profileStore.load()
@@ -510,6 +681,12 @@ final class MacSettingsController: ObservableObject {
             activePlan = nil
             profileErrorMessage = "无法导入配置：\(error.localizedDescription)"
         }
+    }
+
+    func reportProfileImportFailure(_ error: Error) {
+        importedPreview = nil
+        activePlan = nil
+        profileErrorMessage = "无法导入配置：\(error.localizedDescription)"
     }
 
     func acceptImportedProfile() {
@@ -533,24 +710,32 @@ final class MacSettingsController: ObservableObject {
     }
 
     func preparePlan(for profile: SystemSettingsProfile) {
+        guard !isApplyingProfile else { return }
         activePlan = makePlan(for: profile)
         lastApplyReport = nil
     }
 
     func updatePlanSelection(_ selectedIDs: Set<SystemSettingID>) {
+        guard !isApplyingProfile else { return }
         activePlan = activePlan?.selecting(selectedIDs)
     }
 
     func applyActivePlan() {
-        guard let plan = activePlan else { return }
-        Task { @MainActor [weak self] in
+        guard let plan = activePlan,
+              !isApplyingProfile,
+              applyingSettingIDs.isEmpty else { return }
+        let settingIDs = Set(plan.items.filter(\.isSelected).map(\.settingID))
+        guard beginProfileOperation(settingIDs: settingIDs) else { return }
+        profileOperationTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { finishProfileOperation(settingIDs: settingIDs) }
             let report = await applyCoordinator.apply(plan: plan)
+            guard !Task.isCancelled else { return }
             lastApplyReport = report
             for result in report.results {
                 if [.appliedAndVerified, .pendingLogout, .pendingRestart, .verificationUnavailable].contains(result.kind),
                    let item = plan.items.first(where: { $0.settingID == result.settingID }),
-                   let previous = item.currentValue,
+                   let previous = result.previousValue,
                    previous != item.desiredValue,
                    let record = catalog[result.settingID],
                    !record.definition.isSensitive {
@@ -566,6 +751,8 @@ final class MacSettingsController: ObservableObject {
                     rowStates[result.settingID]?.changedAt = change.date
                 }
                 if let record = catalog[result.settingID] {
+                    applyingSettingIDs.remove(result.settingID)
+                    rowStates[result.settingID]?.isApplying = false
                     await refresh(record)
                 }
                 switch result.kind {
@@ -574,6 +761,12 @@ final class MacSettingsController: ObservableObject {
                 case .failedAndRolledBack, .failedWithoutRollback:
                     failedSettingIDs.insert(result.settingID)
                     rowStates[result.settingID]?.errorMessage = result.message
+                    if let record = catalog[result.settingID] {
+                        rowStates[result.settingID]?.availability = runtimeFailureAvailability(
+                            for: record,
+                            message: result.message ?? "无法应用设置。"
+                        )
+                    }
                 default:
                     break
                 }
@@ -583,12 +776,20 @@ final class MacSettingsController: ObservableObject {
     }
 
     func rollbackLastApply() {
-        guard let point = lastApplyReport?.rollbackPoint else { return }
-        Task { @MainActor [weak self] in
+        guard let point = lastApplyReport?.rollbackPoint,
+              !isApplyingProfile,
+              applyingSettingIDs.isEmpty else { return }
+        let settingIDs = Set(point.entries.map(\.settingID))
+        guard beginProfileOperation(settingIDs: settingIDs) else { return }
+        profileOperationTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { finishProfileOperation(settingIDs: settingIDs) }
             let results = await applyCoordinator.rollback(point)
+            guard !Task.isCancelled else { return }
             for result in results {
                 if let record = catalog[result.settingID] {
+                    applyingSettingIDs.remove(result.settingID)
+                    rowStates[result.settingID]?.isApplying = false
                     await refresh(record)
                 }
             }
@@ -616,10 +817,98 @@ final class MacSettingsController: ObservableObject {
         }
     }
 
+    private func records(for destination: MacSettingsDestination) -> [SystemSettingRecord] {
+        switch destination {
+        case .all:
+            catalog.records
+        case .favorites:
+            favoriteRecords
+        case .recent:
+            recentRecords
+        case .attention:
+            attentionRecords
+        case let .category(category):
+            catalog.records.filter { $0.definition.category == category }
+        case .profiles, .importExport, .history:
+            []
+        }
+    }
+
+    private func section(
+        id: String? = nil,
+        kind: MacSettingsPaletteSectionKind,
+        title: String,
+        records: [SystemSettingRecord]
+    ) -> [MacSettingsPaletteSection] {
+        guard !records.isEmpty else { return [] }
+        return [.init(id: id ?? kind.rawValue, kind: kind, title: title, records: records)]
+    }
+
     private func persistFavorites() {
         storage.set(favoriteIDs.map(\.rawValue), forKey: StorageKey.favorites)
         onPersistentPreferencesChange?()
         onStateChange?()
+    }
+
+    private func canPublishRefresh(
+        _ settingID: SystemSettingID,
+        rowRevision: UInt64,
+        refreshGeneration expectedRefreshGeneration: UInt64?
+    ) -> Bool {
+        guard !Task.isCancelled,
+              rowRevisions[settingID, default: 0] == rowRevision,
+              !applyingSettingIDs.contains(settingID) else { return false }
+        return expectedRefreshGeneration.map { $0 == refreshGeneration } ?? true
+    }
+
+    private func runtimeFailureAvailability(
+        for record: SystemSettingRecord,
+        error: Error
+    ) -> SystemSettingAvailability {
+        runtimeFailureAvailability(for: record, message: error.localizedDescription)
+    }
+
+    private func runtimeFailureAvailability(
+        for record: SystemSettingRecord,
+        message: String
+    ) -> SystemSettingAvailability {
+        let compatibility = SystemSettingCompatibilityEvaluator.availability(
+            for: record.definition,
+            environment: environment
+        )
+        if case .permissionMissing = compatibility {
+            return compatibility
+        }
+        if record.definition.executionClass == .hardwareDependent {
+            return .hardwareUnavailable(message)
+        }
+        if let providerID = record.definition.requirements.existingProviderID {
+            return .providerUnavailable(providerID)
+        }
+        return .unsupported(message)
+    }
+
+    private func beginProfileOperation(settingIDs: Set<SystemSettingID>) -> Bool {
+        guard !isApplyingProfile,
+              profileOperationTask == nil,
+              applyingSettingIDs.isDisjoint(with: settingIDs) else { return false }
+        isApplyingProfile = true
+        for id in settingIDs {
+            applyingSettingIDs.insert(id)
+            rowRevisions[id, default: 0] &+= 1
+            rowStates[id]?.isApplying = true
+            rowStates[id]?.isLoading = false
+        }
+        return true
+    }
+
+    private func finishProfileOperation(settingIDs: Set<SystemSettingID>) {
+        for id in settingIDs {
+            applyingSettingIDs.remove(id)
+            rowStates[id]?.isApplying = false
+        }
+        isApplyingProfile = false
+        profileOperationTask = nil
     }
 
     private func canRead(_ availability: SystemSettingAvailability) -> Bool {

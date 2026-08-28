@@ -22,6 +22,40 @@ final class MacSettingsTestStorage: PluginStorage {
 }
 
 @MainActor
+final class FirstReadSuspendingSystemSettingAdapter: SystemSettingAdapter {
+    var value: SystemSettingValue
+    private(set) var firstReadStarted = false
+    private var readCount = 0
+    private var firstReadContinuation: CheckedContinuation<SystemSettingValue, Error>?
+
+    init(value: SystemSettingValue) {
+        self.value = value
+    }
+
+    func read() async throws -> SystemSettingValue {
+        readCount += 1
+        guard readCount == 1 else { return value }
+        firstReadStarted = true
+        return try await withCheckedThrowingContinuation { continuation in
+            firstReadContinuation = continuation
+        }
+    }
+
+    func resumeFirstRead(with value: SystemSettingValue) {
+        firstReadContinuation?.resume(returning: value)
+        firstReadContinuation = nil
+    }
+
+    func apply(_ value: SystemSettingValue) async throws {
+        self.value = value
+    }
+
+    func verify(_ expectedValue: SystemSettingValue) async throws -> SystemSettingVerification {
+        value == expectedValue ? .verified(value) : .mismatch(actual: value)
+    }
+}
+
+@MainActor
 func makeTestRecord(
     id: SystemSettingID,
     title: String,

@@ -344,6 +344,14 @@ struct SystemSettingDefinition: Identifiable {
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .lowercased()
     }
+
+    func displayDescription(for value: SystemSettingValue) -> String {
+        guard case let .choice(options) = schema,
+              case let .choice(id) = value else {
+            return value.conciseDescription
+        }
+        return options.first(where: { $0.id == id })?.title ?? id
+    }
 }
 
 enum SystemSettingAvailability: Equatable, Sendable {

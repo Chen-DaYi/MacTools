@@ -1,7 +1,64 @@
 import AppKit
 import Foundation
+import IOKit.hid
 import SwiftUI
 import MacToolsPluginKit
+
+@MainActor
+private final class MacSettingsInputDeviceObserver {
+    private var manager: IOHIDManager?
+    private let onChange: () -> Void
+
+    init(onChange: @escaping () -> Void) {
+        self.onChange = onChange
+    }
+
+    func start() {
+        guard manager == nil else { return }
+        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        IOHIDManagerRegisterDeviceMatchingCallback(manager, Self.deviceChanged, context)
+        IOHIDManagerRegisterDeviceRemovalCallback(manager, Self.deviceChanged, context)
+        IOHIDManagerScheduleWithRunLoop(
+            manager,
+            CFRunLoopGetMain(),
+            CFRunLoopMode.commonModes.rawValue
+        )
+        IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        self.manager = manager
+    }
+
+    func stop() {
+        guard let manager else { return }
+        IOHIDManagerRegisterDeviceMatchingCallback(manager, nil, nil)
+        IOHIDManagerRegisterDeviceRemovalCallback(manager, nil, nil)
+        IOHIDManagerUnscheduleFromRunLoop(
+            manager,
+            CFRunLoopGetMain(),
+            CFRunLoopMode.commonModes.rawValue
+        )
+        IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        self.manager = nil
+    }
+
+    private func notifyChange() {
+        onChange()
+    }
+
+    private nonisolated(unsafe) static let deviceChanged: IOHIDDeviceCallback = {
+        context,
+        _,
+        _,
+        _ in
+        guard let context else { return }
+        let observer = Unmanaged<MacSettingsInputDeviceObserver>
+            .fromOpaque(context)
+            .takeUnretainedValue()
+        Task { @MainActor in
+            observer.notifyChange()
+        }
+    }
+}
 
 @MainActor
 final class MacSettingsActionContextBox {
@@ -108,6 +165,7 @@ final class MacSettingsPlugin:
     private let localization: PluginLocalization
     private let openSystemSettings: (URL) -> Void
     private var isExpanded = false
+    private var inputDeviceObserver: MacSettingsInputDeviceObserver?
     private nonisolated(unsafe) var externalObservers: [NSObjectProtocol] = []
 
     init(
@@ -139,6 +197,10 @@ final class MacSettingsPlugin:
         }
         controller.onPermissionAction = { [weak self] permissionID in
             self?.handlePermissionAction(id: permissionID)
+        }
+        controller.onOpenSystemSettings = openSystemSettings
+        inputDeviceObserver = MacSettingsInputDeviceObserver { [weak controller] in
+            controller?.scheduleExternalRefresh()
         }
     }
 
@@ -262,6 +324,11 @@ final class MacSettingsPlugin:
                     ActionParameterDefinition(id: ActionID.profileID, title: "配置 ID", kind: .string),
                 ],
                 risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: "应用 Mac 设置配置？",
+                    message: "MacTools 将打开配置预览。确认选择后，所选设置才会更改。",
+                    confirmButtonTitle: "打开预览"
+                ),
                 externalInvocationPolicy: .allowed,
                 capabilities: [.foregroundInteractive]
             ),
@@ -327,6 +394,8 @@ final class MacSettingsPlugin:
                   let record = controller.catalog[SystemSettingID(rawValue: settingID)],
                   case .boolean = record.definition.schema,
                   let state = controller.rowStates[record.id],
+                  state.errorMessage == nil,
+                  !state.isApplying,
                   isControllable(state.availability) else {
                 return .unavailable("此设置当前不可用。")
             }
@@ -427,6 +496,7 @@ final class MacSettingsPlugin:
 
     func activate(context: PluginRuntimeContext) {
         guard externalObservers.isEmpty else { return }
+        inputDeviceObserver?.start()
         let center = NotificationCenter.default
         externalObservers.append(center.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
@@ -439,6 +509,7 @@ final class MacSettingsPlugin:
 
     func deactivate(reason: PluginDeactivationReason) {
         controller.cancelRefresh()
+        inputDeviceObserver?.stop()
         let center = NotificationCenter.default
         let distributed = DistributedNotificationCenter.default()
         for observer in externalObservers {
@@ -556,9 +627,7 @@ final class MacSettingsPlugin:
         }
         controller.setDensity(payload.density)
         for profile in payload.profiles {
-            var draft = controller.makeDraft(from: profile)
-            draft.name = profile.name
-            _ = controller.saveDraft(draft, replacing: profile)
+            guard controller.restorePortableProfile(profile) else { return false }
         }
         return true
     }
@@ -620,7 +689,10 @@ final class MacSettingsPlugin:
     private func featureControl(_ record: SystemSettingRecord) -> PluginPanelControl? {
         guard let state = controller.rowStates[record.id], let value = state.value else { return nil }
         let id = ControlID.settingPrefix + record.id.rawValue
-        let enabled = isControllable(state.availability) && !state.isApplying
+        let enabled = isControllable(state.availability)
+            && state.errorMessage == nil
+            && !state.isApplying
+            && !controller.isApplyingProfile
         switch (record.definition.schema, value) {
         case let (.boolean, .boolean(isOn)):
             return PluginPanelControl(

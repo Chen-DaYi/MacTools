@@ -42,6 +42,13 @@ private enum UniversalAccessPreferencesError: LocalizedError {
     }
 }
 
+private enum TrackpadSecondaryClickMode: String {
+    case off
+    case twoFingers = "two-fingers"
+    case bottomRight = "bottom-right"
+    case bottomLeft = "bottom-left"
+}
+
 @MainActor
 private final class TrackpadPreferencesClient {
     typealias BooleanGetter = @convention(c) (AnyObject, Selector) -> Bool
@@ -95,6 +102,44 @@ private final class TrackpadPreferencesClient {
 
     func setTrackingSpeed(_ value: Double) throws {
         try setDoubleValue(value, setter: "setTrackSpeedRaw:")
+    }
+
+    func secondaryClickMode() throws -> TrackpadSecondaryClickMode {
+        if try booleanValue(getter: "twoFingerSecondaryClick") {
+            return .twoFingers
+        }
+        switch try integerValue(getter: "cornerClickBehavior") {
+        case 0: return .off
+        case 1: return .bottomLeft
+        case 2: return .bottomRight
+        default:
+            throw SystemSettingAdapterError.unreadable
+        }
+    }
+
+    func setSecondaryClickMode(_ mode: TrackpadSecondaryClickMode) throws {
+        switch mode {
+        case .off:
+            try setBooleanValue(false, setter: "setTwoFingerSecondaryClick:")
+            try setIntegerValue(0, setter: "setCornerClickBehavior:")
+        case .twoFingers:
+            try setIntegerValue(0, setter: "setCornerClickBehavior:")
+            try setBooleanValue(true, setter: "setTwoFingerSecondaryClick:")
+        case .bottomRight:
+            try setBooleanValue(false, setter: "setTwoFingerSecondaryClick:")
+            try setIntegerValue(2, setter: "setCornerClickBehavior:")
+        case .bottomLeft:
+            try setBooleanValue(false, setter: "setTwoFingerSecondaryClick:")
+            try setIntegerValue(1, setter: "setCornerClickBehavior:")
+        }
+    }
+
+    func scrollSpeed() throws -> Double {
+        try doubleValue(getter: "scrollSpeedRaw")
+    }
+
+    func setScrollSpeed(_ value: Double) throws {
+        try setDoubleValue(value, setter: "setScrollSpeedRaw:")
     }
 
     private func booleanValue(getter name: String) throws -> Bool {
@@ -175,6 +220,83 @@ private final class TrackpadPreferencesClient {
               let methodEncoding = method_getTypeEncoding(method),
               String(cString: methodEncoding) == encoding else {
             throw SystemSettingAdapterError.unsupported("此 macOS 版本不支持即时更新触控板设置。")
+        }
+        return unsafeBitCast(method_getImplementation(method), to: type)
+    }
+}
+
+@MainActor
+private final class MousePreferencesClient {
+    typealias DoubleGetter = @convention(c) (AnyObject, Selector) -> Double
+    typealias DoubleSetter = @convention(c) (AnyObject, Selector, Double) -> Void
+
+    static let shared = MousePreferencesClient()
+
+    private let handle: UnsafeMutableRawPointer?
+    private let backend: NSObject?
+
+    private init() {
+        let path = "/System/Library/PrivateFrameworks/PreferencePanesSupport.framework/Versions/A/PreferencePanesSupport"
+        let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL)
+        self.handle = handle
+
+        guard handle != nil,
+              let backendClass = NSClassFromString("MTMouseGesturesBackEnd"),
+              let shared = (backendClass as AnyObject)
+                .perform(NSSelectorFromString("sharedInstance"))?
+                .takeUnretainedValue() as? NSObject else {
+            backend = nil
+            return
+        }
+        backend = shared
+    }
+
+    func scrollSpeed() throws -> Double {
+        try doubleValue(getter: "scrollSpeedRaw")
+    }
+
+    func setScrollSpeed(_ value: Double) throws {
+        try setDoubleValue(value, setter: "setScrollSpeedRaw:")
+    }
+
+    private func doubleValue(getter name: String) throws -> Double {
+        let selector = NSSelectorFromString(name)
+        let function: DoubleGetter = try implementation(
+            selector: selector,
+            encoding: "d16@0:8",
+            as: DoubleGetter.self
+        )
+        return function(try requireBackend(), selector)
+    }
+
+    private func setDoubleValue(_ value: Double, setter name: String) throws {
+        let selector = NSSelectorFromString(name)
+        let function: DoubleSetter = try implementation(
+            selector: selector,
+            encoding: "v24@0:8d16",
+            as: DoubleSetter.self
+        )
+        function(try requireBackend(), selector, value)
+    }
+
+    private func requireBackend() throws -> NSObject {
+        guard handle != nil, let backend else {
+            throw SystemSettingAdapterError.unsupported("此 macOS 版本不支持即时更新鼠标设置。")
+        }
+        return backend
+    }
+
+    private func implementation<T>(
+        selector: Selector,
+        encoding: String,
+        as type: T.Type
+    ) throws -> T {
+        let backend = try requireBackend()
+        guard let backendClass = object_getClass(backend),
+              let method = class_getInstanceMethod(backendClass, selector),
+              let methodEncoding = method_getTypeEncoding(method),
+              String(cString: methodEncoding) == encoding else {
+            throw SystemSettingAdapterError.unsupported("此 macOS 版本不支持即时更新鼠标设置。")
         }
         return unsafeBitCast(method_getImplementation(method), to: type)
     }
@@ -336,6 +458,30 @@ private final class UniversalAccessRuntimeClient {
 
     func setScrollZoomModifiers(_ modifiers: Int) throws {
         try function("UAScrollZoomSetModifiers", as: IntegerSetter.self)(Int64(modifiers))
+    }
+
+    func fullKeyboardAccessEnabled() throws -> Bool {
+        try function("UAKeyboardAccessIsEnabled", as: BooleanGetter.self)()
+    }
+
+    func setFullKeyboardAccessEnabled(_ enabled: Bool) throws {
+        try function("UAKeyboardAccessSetEnabled", as: BooleanSetter.self)(enabled)
+    }
+
+    func stickyKeysEnabled() throws -> Bool {
+        try function("UAStickyKeysIsEnabled", as: BooleanGetter.self)()
+    }
+
+    func setStickyKeysEnabled(_ enabled: Bool) throws {
+        try function("UAStickyKeysSetEnabled", as: BooleanSetter.self)(enabled)
+    }
+
+    func slowKeysEnabled() throws -> Bool {
+        try function("UASlowKeysIsEnabled", as: BooleanGetter.self)()
+    }
+
+    func setSlowKeysEnabled(_ enabled: Bool) throws {
+        try function("UASlowKeysSetEnabled", as: BooleanSetter.self)(enabled)
     }
 
     private func function<T>(_ symbol: String, as type: T.Type) throws -> T {
@@ -882,6 +1028,142 @@ extension UniversalAccessSystemSettingAdapter {
                 try UniversalAccessRuntimeClient.shared.setScrollZoomModifiers(raw)
             }
         )
+    }
+
+    static func fullKeyboardAccess() -> UniversalAccessSystemSettingAdapter {
+        boolean(
+            read: { try UniversalAccessRuntimeClient.shared.fullKeyboardAccessEnabled() },
+            write: { try UniversalAccessRuntimeClient.shared.setFullKeyboardAccessEnabled($0) }
+        )
+    }
+
+    static func stickyKeys() -> UniversalAccessSystemSettingAdapter {
+        boolean(
+            read: { try UniversalAccessRuntimeClient.shared.stickyKeysEnabled() },
+            write: { try UniversalAccessRuntimeClient.shared.setStickyKeysEnabled($0) }
+        )
+    }
+
+    static func slowKeys() -> UniversalAccessSystemSettingAdapter {
+        boolean(
+            read: { try UniversalAccessRuntimeClient.shared.slowKeysEnabled() },
+            write: { try UniversalAccessRuntimeClient.shared.setSlowKeysEnabled($0) }
+        )
+    }
+
+    private static func boolean(
+        read: @escaping () throws -> Bool,
+        write: @escaping (Bool) throws -> Void
+    ) -> UniversalAccessSystemSettingAdapter {
+        UniversalAccessSystemSettingAdapter(
+            read: { .boolean(try read()) },
+            write: { value in
+                guard case let .boolean(enabled) = value else {
+                    throw SystemSettingAdapterError.invalidValue
+                }
+                try write(enabled)
+            }
+        )
+    }
+}
+
+@MainActor
+final class TrackpadSecondaryClickSystemSettingAdapter: SystemSettingAdapter {
+    typealias Reader = () throws -> String
+    typealias Writer = (String) throws -> Void
+
+    private let readSelection: Reader
+    private let writeSelection: Writer
+
+    init(
+        read: @escaping Reader,
+        write: @escaping Writer
+    ) {
+        readSelection = read
+        writeSelection = write
+    }
+
+    convenience init() {
+        self.init(
+            read: { try TrackpadPreferencesClient.shared.secondaryClickMode().rawValue },
+            write: { id in
+                guard let mode = TrackpadSecondaryClickMode(rawValue: id) else {
+                    throw SystemSettingAdapterError.invalidValue
+                }
+                try TrackpadPreferencesClient.shared.setSecondaryClickMode(mode)
+            }
+        )
+    }
+
+    func read() async throws -> SystemSettingValue {
+        .choice(id: try readSelection())
+    }
+
+    func apply(_ value: SystemSettingValue) async throws {
+        guard case let .choice(id) = value else {
+            throw SystemSettingAdapterError.invalidValue
+        }
+        try writeSelection(id)
+    }
+}
+
+@MainActor
+final class LiveScrollSpeedSystemSettingAdapter: SystemSettingAdapter {
+    typealias Reader = () throws -> Double
+    typealias Writer = (Double) throws -> Void
+
+    private let range: ClosedRange<Double>
+    private let tolerance: Double
+    private let readSpeed: Reader
+    private let writeSpeed: Writer
+
+    init(
+        range: ClosedRange<Double> = 0 ... 10,
+        tolerance: Double = 0.01,
+        read: @escaping Reader,
+        write: @escaping Writer
+    ) {
+        self.range = range
+        self.tolerance = tolerance
+        readSpeed = read
+        writeSpeed = write
+    }
+
+    static func trackpad() -> LiveScrollSpeedSystemSettingAdapter {
+        LiveScrollSpeedSystemSettingAdapter(
+            read: { try TrackpadPreferencesClient.shared.scrollSpeed() },
+            write: { try TrackpadPreferencesClient.shared.setScrollSpeed($0) }
+        )
+    }
+
+    static func mouse() -> LiveScrollSpeedSystemSettingAdapter {
+        LiveScrollSpeedSystemSettingAdapter(
+            read: { try MousePreferencesClient.shared.scrollSpeed() },
+            write: { try MousePreferencesClient.shared.setScrollSpeed($0) }
+        )
+    }
+
+    func read() async throws -> SystemSettingValue {
+        .decimal(try readSpeed() * 10)
+    }
+
+    func apply(_ value: SystemSettingValue) async throws {
+        guard case let .decimal(speed) = value,
+              speed.isFinite,
+              range.contains(speed) else {
+            throw SystemSettingAdapterError.invalidValue
+        }
+        try writeSpeed(speed / 10)
+    }
+
+    func verify(_ expectedValue: SystemSettingValue) async throws -> SystemSettingVerification {
+        guard case let .decimal(expected) = expectedValue else {
+            throw SystemSettingAdapterError.invalidValue
+        }
+        let actual = try readSpeed() * 10
+        return abs(actual - expected) <= tolerance
+            ? .verified(.decimal(actual))
+            : .mismatch(actual: .decimal(actual))
     }
 }
 

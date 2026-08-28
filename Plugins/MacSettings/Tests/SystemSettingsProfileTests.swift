@@ -79,6 +79,20 @@ final class SystemSettingsProfileTests: XCTestCase {
         }
     }
 
+    func testAsyncProfileFileReaderRejectsOversizedFiles() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mactools-profile-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(repeating: 0, count: 17).write(to: url)
+
+        do {
+            _ = try await SystemSettingsProfileFileReader.read(from: url, maximumFileSize: 16)
+            XCTFail("Expected the bounded reader to reject an oversized file")
+        } catch {
+            XCTAssertEqual(error as? SystemSettingsProfileCodecError, .fileTooLarge)
+        }
+    }
+
     func testPlannerSkipsMatchesAndSupportsPerChangeSelection() {
         let first = makeTestRecord(
             id: "first",
@@ -111,6 +125,83 @@ final class SystemSettingsProfileTests: XCTestCase {
         XCTAssertTrue(plan.items[1].isSelected)
         XCTAssertFalse(plan.selecting([]).items[1].isSelected)
         XCTAssertTrue(plan.items[1].isSelected, "Selecting a plan must not mutate the saved immutable plan")
+    }
+
+    func testPlannerAndExecutionRejectNonPortableSettings() async {
+        let adapter = DeterministicSystemSettingAdapter(value: .boolean(false))
+        let record = makeTestRecord(
+            id: "local-only",
+            title: "Local Only",
+            portability: .deviceSpecific,
+            adapter: adapter
+        )
+        let catalog = makeTestCatalog([record])
+        let profile = SystemSettingsProfile(
+            name: "Unsafe",
+            entries: [.init(settingID: record.id, desiredValue: .boolean(true), category: .finder)]
+        )
+        let plan = SystemSettingsProfilePlanner.makePlan(
+            profile: profile,
+            catalog: catalog,
+            currentValues: [record.id: .boolean(false)],
+            availability: [record.id: .available]
+        )
+
+        XCTAssertEqual(plan.items.first?.status, .unsupported("此设置不能通过配置应用。"))
+        XCTAssertFalse(plan.items.first?.isSelected ?? true)
+
+        let forcedPlan = SystemSettingsProfileApplyPlan(
+            profileID: profile.id,
+            profileName: profile.name,
+            items: [
+                .init(
+                    settingID: record.id,
+                    title: record.definition.title,
+                    currentValue: .boolean(false),
+                    desiredValue: .boolean(true),
+                    status: .ready,
+                    isSelected: true
+                ),
+            ]
+        )
+        let report = await SystemSettingsProfileApplyCoordinator(catalog: catalog).apply(plan: forcedPlan)
+        XCTAssertEqual(report.results.first?.kind, .unsupported)
+        XCTAssertTrue(adapter.appliedValues.isEmpty)
+    }
+
+    func testProfileApplyReadsLiveValueImmediatelyBeforeWriting() async {
+        let adapter = DeterministicSystemSettingAdapter(value: .integer(0))
+        let record = makeTestRecord(
+            id: "integer",
+            title: "Integer",
+            schema: .integer(range: 0 ... 2, step: 1),
+            defaultValue: .integer(0),
+            adapter: adapter
+        )
+        let catalog = makeTestCatalog([record])
+        let plan = SystemSettingsProfileApplyPlan(
+            profileID: UUID(),
+            profileName: "Live",
+            items: [
+                .init(
+                    settingID: record.id,
+                    title: record.definition.title,
+                    currentValue: .integer(0),
+                    desiredValue: .integer(2),
+                    status: .ready,
+                    isSelected: true
+                ),
+            ]
+        )
+        adapter.value = .integer(1)
+
+        let coordinator = SystemSettingsProfileApplyCoordinator(catalog: catalog)
+        let report = await coordinator.apply(plan: plan)
+        XCTAssertEqual(report.results.first?.previousValue, .integer(1))
+        XCTAssertEqual(report.rollbackPoint.entries.first?.value, .integer(1))
+
+        _ = await coordinator.rollback(report.rollbackPoint)
+        XCTAssertEqual(adapter.value, .integer(1))
     }
 
     func testApplyReportsPartialResultsAndRollsBackVerificationFailure() async {
@@ -147,7 +238,56 @@ final class SystemSettingsProfileTests: XCTestCase {
         XCTAssertEqual(report.results.map(\.kind), [.appliedAndVerified, .failedAndRolledBack])
         XCTAssertTrue(report.hasPartialSuccess)
         XCTAssertEqual(mismatchAdapter.rollbackValues, [.boolean(false)])
-        XCTAssertEqual(report.rollbackPoint.entries.count, 2)
+        XCTAssertEqual(report.rollbackPoint.entries.map(\.settingID), [successful.id])
+    }
+
+    func testUnavailableProfileResultsPreserveTheirActualReason() async {
+        let catalog = makeTestCatalog([])
+        let plan = SystemSettingsProfileApplyPlan(
+            profileID: UUID(),
+            profileName: "Unavailable",
+            items: [
+                .init(
+                    settingID: "provider",
+                    title: "Provider",
+                    currentValue: nil,
+                    desiredValue: .boolean(true),
+                    status: .unavailable(.provider, "Missing provider"),
+                    isSelected: false
+                ),
+                .init(
+                    settingID: "hardware",
+                    title: "Hardware",
+                    currentValue: nil,
+                    desiredValue: .boolean(true),
+                    status: .unavailable(.hardware, "Missing hardware"),
+                    isSelected: false
+                ),
+                .init(
+                    settingID: "permission",
+                    title: "Permission",
+                    currentValue: nil,
+                    desiredValue: .boolean(true),
+                    status: .unavailable(.permission, "Missing permission"),
+                    isSelected: false
+                ),
+                .init(
+                    settingID: "version",
+                    title: "Version",
+                    currentValue: nil,
+                    desiredValue: .boolean(true),
+                    status: .unavailable(.systemVersion, "Unsupported version"),
+                    isSelected: false
+                ),
+            ]
+        )
+
+        let report = await SystemSettingsProfileApplyCoordinator(catalog: catalog).apply(plan: plan)
+
+        XCTAssertEqual(
+            report.results.map(\.kind),
+            [.providerUnavailable, .hardwareUnavailable, .permissionMissing, .systemVersionUnavailable]
+        )
     }
 
     func testExportContainsNoSensitiveOrExecutableData() throws {

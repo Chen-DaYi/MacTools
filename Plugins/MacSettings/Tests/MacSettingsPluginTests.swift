@@ -51,10 +51,12 @@ final class MacSettingsPluginTests: XCTestCase {
 
         plugin.handlePermissionAction(id: requirement.id)
         controller.openSystemSettings(for: protectedFirst.id)
-        XCTAssertEqual(openedURLs.count, 2)
-        XCTAssertTrue(openedURLs.allSatisfy {
+        controller.openSystemSettings(for: ordinary.id)
+        XCTAssertEqual(openedURLs.count, 3)
+        XCTAssertTrue(openedURLs.prefix(2).allSatisfy {
             $0.absoluteString.contains("Privacy_AllFiles")
         })
+        XCTAssertTrue(openedURLs[2].absoluteString.contains("com.apple.Settings"))
     }
 
     func testPluginDefaultsToAllSettingsAndPublishesFeaturePanelFavorites() throws {
@@ -173,6 +175,75 @@ final class MacSettingsPluginTests: XCTestCase {
         XCTAssertEqual(controller.rowStates[record.id]?.verification, .verified)
     }
 
+    func testRuntimeReadFailureDisablesActionsAndFeaturePanelControls() async throws {
+        let adapter = DeterministicSystemSettingAdapter(value: .boolean(false))
+        adapter.readError = SystemSettingAdapterError.unsupported("Device unavailable")
+        let record = makeTestRecord(
+            id: "failed",
+            title: "Failed",
+            executionClass: .hardwareDependent,
+            adapter: adapter
+        )
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([record]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+        let plugin = MacSettingsPlugin(controller: controller)
+        controller.toggleFavorite(record.id)
+        await controller.refresh(record)
+        plugin.handleAction(.setDisclosureExpanded(true))
+
+        let reference = ActionReference(
+            key: ActionKey(providerID: "mac-settings", actionID: "set-boolean"),
+            parameters: try ActionParameterSet([
+                "setting-id": .string(record.id.rawValue),
+                "enabled": .boolean(true),
+            ])
+        )
+        XCTAssertEqual(
+            plugin.actionAvailability(for: reference),
+            .unavailable("此设置当前不可用。")
+        )
+        XCTAssertEqual(plugin.primaryPanelState.detail?.controls.first?.isEnabled, false)
+        guard case .hardwareUnavailable? = controller.rowStates[record.id]?.availability else {
+            return XCTFail("Expected a shared hardware-unavailable state")
+        }
+    }
+
+    func testPortableRestorePreservesUnknownProfileEntries() throws {
+        let record = makeTestRecord(
+            id: "future.setting",
+            title: "Future",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let sourceController = MacSettingsController(
+            catalog: makeTestCatalog([record]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+        var draft = sourceController.makeDraft()
+        draft.name = "Forward Compatible"
+        draft.setDesiredValue(.boolean(true), for: record.id)
+        XCTAssertTrue(sourceController.saveDraft(draft))
+        let sourcePlugin = MacSettingsPlugin(controller: sourceController)
+        let sourceBackup = try XCTUnwrap(sourcePlugin.makePortablePreferencesBackup())
+
+        let targetController = MacSettingsController(
+            catalog: makeTestCatalog([]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+        let targetPlugin = MacSettingsPlugin(controller: targetController)
+        XCTAssertTrue(targetPlugin.restorePortablePreferencesReportingResult(from: sourceBackup))
+        let roundTripBackup = try XCTUnwrap(targetPlugin.makePortablePreferencesBackup())
+
+        XCTAssertTrue(String(decoding: roundTripBackup, as: UTF8.self).contains("future.setting"))
+    }
+
     func testDeactivationCancelsRefreshAndExternalObservers() {
         let controller = MacSettingsController(
             catalog: makeTestCatalog([]),
@@ -215,5 +286,22 @@ final class MacSettingsPluginTests: XCTestCase {
             )),
             .excluded
         )
+    }
+
+    func testProfileActionProvidesRequiredConfirmationCopy() throws {
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+        let plugin = MacSettingsPlugin(controller: controller)
+        let definition = try XCTUnwrap(
+            plugin.actionDefinitions.first { $0.key.actionID == "apply-profile" }
+        )
+
+        XCTAssertEqual(definition.risk, .confirmationRequired)
+        XCTAssertNotNil(definition.confirmation)
+        XCTAssertTrue(definition.capabilities.contains(.foregroundInteractive))
     }
 }

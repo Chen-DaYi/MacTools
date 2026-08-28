@@ -6,75 +6,20 @@ import MacToolsPluginKit
 struct MacSettingsWorkspaceView: View {
     @ObservedObject var controller: MacSettingsController
     @FocusState private var searchFocused: Bool
+    @FocusState private var focusedSettingID: SystemSettingID?
 
     var body: some View {
-        HSplitView {
-            sidebar
-                .frame(minWidth: 190, idealWidth: 220, maxWidth: 270)
-
-            content
-                .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
-        }
+        content
+            .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: controller.searchFocusRequest) {
             searchFocused = true
         }
         .task {
+            searchFocused = true
             if controller.rowStates.values.contains(where: \.isLoading) {
                 controller.refresh()
             }
         }
-    }
-
-    private var sidebar: some View {
-        List(selection: $controller.destination) {
-            Section("当前 Mac") {
-                sidebarRow("所有设置", image: "slider.horizontal.3", destination: .all)
-                sidebarRow("个人收藏", image: "star", destination: .favorites)
-                sidebarRow("最近更改", image: "clock.arrow.circlepath", destination: .recent)
-                sidebarRow(
-                    "需要关注",
-                    image: "exclamationmark.triangle",
-                    destination: .attention,
-                    count: controller.attentionCount
-                )
-            }
-
-            Section("类别") {
-                ForEach(controller.availableCategories) { category in
-                    sidebarRow(
-                        category.title,
-                        image: category.systemImage,
-                        destination: .category(category)
-                    )
-                }
-            }
-
-            Section("高级") {
-                sidebarRow("配置", image: "square.stack.3d.up", destination: .profiles)
-                sidebarRow("导入与导出", image: "arrow.up.arrow.down.square", destination: .importExport)
-                sidebarRow("更改历史", image: "list.bullet.rectangle", destination: .history)
-            }
-        }
-        .listStyle(.sidebar)
-        .accessibilityLabel("Mac 设置导航")
-    }
-
-    private func sidebarRow(
-        _ title: String,
-        image: String,
-        destination: MacSettingsDestination,
-        count: Int = 0
-    ) -> some View {
-        HStack {
-            Label(title, systemImage: image)
-            Spacer()
-            if count > 0 {
-                Text("\(count)")
-                    .font(PluginSettingsTheme.Typography.statusBadge)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .tag(destination)
     }
 
     @ViewBuilder
@@ -94,37 +39,60 @@ struct MacSettingsWorkspaceView: View {
     private var liveSettings: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                TextField("搜索设置", text: $controller.searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($searchFocused)
-                    .accessibilityLabel("搜索 Mac 设置")
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
 
-                Picker("密度", selection: Binding(
-                    get: { controller.density },
-                    set: { newDensity in controller.setDensity(newDensity) }
-                )) {
-                    Text("舒适").tag(MacSettingsWorkspaceDensity.comfortable)
-                    Text("紧凑").tag(MacSettingsWorkspaceDensity.compact)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 120)
+                    TextField("搜索所有 Mac 设置", text: $controller.searchText)
+                        .textFieldStyle(.plain)
+                        .focused($searchFocused)
+                        .accessibilityLabel("搜索所有 Mac 设置")
+                        .onMoveCommand { direction in
+                            guard direction == .down else { return }
+                            moveKeyboardFocus(from: nil, movingForward: true)
+                        }
 
-                Button {
-                    controller.refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .frame(width: 16, height: 16)
+                    if !controller.searchText.isEmpty {
+                        Button {
+                            controller.searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("清除搜索")
+                    }
                 }
-                .frame(width: 28, height: 28)
-                .help("刷新当前值")
+                .padding(.horizontal, 10)
+                .frame(height: 32)
+                .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+
+                paletteMenu
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
 
+            if let scopeTitle = controller.paletteScopeTitle {
+                HStack(spacing: 6) {
+                    Text(scopeTitle)
+                        .font(PluginSettingsTheme.Typography.statusBadge)
+                    Button {
+                        controller.showPaletteHome()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("显示设置首页")
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Divider()
 
-            if controller.visibleRecords.isEmpty {
+            if controller.paletteSections.isEmpty {
                 ContentUnavailableView(
                     emptyTitle,
                     systemImage: emptyImage,
@@ -132,58 +100,137 @@ struct MacSettingsWorkspaceView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-                        ForEach(groupedRecords, id: \.0) { category, records in
-                            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                                Label(category.title, systemImage: category.systemImage)
-                                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                                    .foregroundStyle(.secondary)
-
-                                VStack(spacing: 0) {
-                                    ForEach(records, id: \.id) { record in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(controller.paletteSections, id: \.id) { section in
+                                Section {
+                                    ForEach(section.records, id: \.id) { record in
                                         MacSettingRow(
-                                            record: record,
-                                            state: controller.rowStates[record.id],
-                                            isFavorite: controller.favoriteIDs.contains(record.id),
-                                            density: controller.density,
-                                            onApply: { controller.apply($0, to: record.id) },
-                                            onFavorite: { controller.toggleFavorite(record.id) },
-                                            favoriteIndex: controller.destination == .favorites
-                                                ? controller.favoriteIDs.firstIndex(of: record.id)
-                                                : nil,
-                                            favoriteCount: controller.favoriteIDs.count,
-                                            onMoveFavorite: { controller.moveFavorite(record.id, by: $0) },
-                                            onOpenSystemSettings: { controller.openSystemSettings(for: record.id) }
-                                        )
-                                        if record.id != records.last?.id {
-                                            Divider().padding(.leading, 42)
+                                        record: record,
+                                        state: controller.rowStates[record.id],
+                                        isFavorite: controller.favoriteIDs.contains(record.id),
+                                        showsCategory: section.kind != .category,
+                                        isKeyboardFocused: focusedSettingID == record.id,
+                                        onApply: { controller.apply($0, to: record.id) },
+                                        onFavorite: { controller.toggleFavorite(record.id) },
+                                        favoriteIndex: controller.destination == .favorites
+                                            ? controller.favoriteIDs.firstIndex(of: record.id)
+                                            : nil,
+                                        favoriteCount: controller.favoriteIDs.count,
+                                        onMoveFavorite: { controller.moveFavorite(record.id, by: $0) },
+                                        onOpenSystemSettings: { controller.openSystemSettings(for: record.id) }
+                                    )
+                                        .id(record.id)
+                                        .focused($focusedSettingID, equals: record.id)
+                                        .onMoveCommand { direction in
+                                            switch direction {
+                                            case .up:
+                                                moveKeyboardFocus(from: record.id, movingForward: false)
+                                            case .down:
+                                                moveKeyboardFocus(from: record.id, movingForward: true)
+                                            default:
+                                                break
+                                            }
+                                        }
+                                        if record.id != section.records.last?.id {
+                                            Divider()
                                         }
                                     }
+                                } header: {
+                                    HStack {
+                                        Text(section.title)
+                                            .font(PluginSettingsTheme.Typography.sectionTitle)
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        Text("\(section.records.count)")
+                                            .font(PluginSettingsTheme.Typography.statusBadge)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .padding(.top, PluginSettingsTheme.Spacing.section)
+                                    .padding(.bottom, PluginSettingsTheme.Spacing.sectionHeaderContent)
+                                    .background(.background)
                                 }
-                                .pluginSettingsCardBackground(.standard)
                             }
                         }
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 18)
                     }
-                    .padding(18)
+                    .onChange(of: focusedSettingID) {
+                        guard let focusedSettingID else { return }
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo(focusedSettingID, anchor: .center)
+                        }
+                    }
                 }
+            }
+        }
+        .onChange(of: controller.searchText) {
+            if !controller.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                controller.destination = .all
             }
         }
     }
 
-    private var groupedRecords: [(SystemSettingCategory, [SystemSettingRecord])] {
-        controller.availableCategories.compactMap { category in
-            let records = controller.visibleRecords.filter { $0.definition.category == category }
-            return records.isEmpty ? nil : (category, records)
+    private var keyboardSettingIDs: [SystemSettingID] {
+        controller.paletteSections.flatMap { $0.records.map(\.id) }
+    }
+
+    private func moveKeyboardFocus(
+        from currentID: SystemSettingID?,
+        movingForward: Bool
+    ) {
+        switch MacSettingsKeyboardNavigation.target(
+            from: currentID,
+            movingForward: movingForward,
+            settingIDs: keyboardSettingIDs
+        ) {
+        case .search:
+            focusedSettingID = nil
+            searchFocused = true
+        case let .setting(id):
+            searchFocused = false
+            focusedSettingID = id
         }
     }
 
+    private var paletteMenu: some View {
+        Menu {
+            Button("已固定") { controller.destination = .favorites }
+                .disabled(controller.favoriteIDs.isEmpty)
+            Button("最近更改") { controller.destination = .recent }
+                .disabled(controller.history.isEmpty)
+            Button("需要关注（\(controller.attentionCount)）") { controller.destination = .attention }
+                .disabled(controller.attentionCount == 0)
+
+            Divider()
+
+            Button("配置") { controller.destination = .profiles }
+            Button("导入与导出") { controller.destination = .importExport }
+            Button("更改历史") { controller.destination = .history }
+
+            Divider()
+
+            Button("刷新当前值") { controller.refresh() }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .frame(width: 22, height: 22)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 28, height: 28)
+        .accessibilityLabel("更多 Mac 设置操作")
+    }
+
     private var emptyTitle: String {
+        if !controller.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "未找到设置"
+        }
         switch controller.destination {
-        case .favorites: "暂无收藏"
-        case .attention: "无需关注"
-        case .recent: "暂无最近更改"
-        default: "未找到设置"
+        case .favorites: return "暂无固定设置"
+        case .attention: return "无需关注"
+        case .recent: return "暂无最近更改"
+        default: return "搜索 Mac 设置"
         }
     }
 
@@ -192,11 +239,14 @@ struct MacSettingsWorkspaceView: View {
     }
 
     private var emptyDescription: String {
+        if !controller.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "尝试其他名称、类别或关键词。"
+        }
         switch controller.destination {
-        case .favorites: "点按设置旁的星标，即可在这里快速访问。"
-        case .attention: "当前没有失败、缺少条件或待完成的设置。"
-        case .recent: "通过 MacTools 更改设置后会显示在这里。"
-        default: "尝试其他关键词或类别。"
+        case .favorites: return "从设置的更多菜单中选择“固定”，即可快速访问。"
+        case .attention: return "当前没有失败、缺少条件或待完成的设置。"
+        case .recent: return "通过 MacTools 更改设置后会显示在这里。"
+        default: return "输入名称或关键词，即可直接查看和更改设置。"
         }
     }
 }
@@ -205,7 +255,8 @@ private struct MacSettingRow: View {
     let record: SystemSettingRecord
     let state: SystemSettingRowState?
     let isFavorite: Bool
-    let density: MacSettingsWorkspaceDensity
+    let showsCategory: Bool
+    let isKeyboardFocused: Bool
     let onApply: (SystemSettingValue) -> Void
     let onFavorite: () -> Void
     let favoriteIndex: Int?
@@ -218,22 +269,19 @@ private struct MacSettingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: detailsExpanded ? 10 : 0) {
             HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Image(systemName: record.definition.systemImage)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22)
-
                 VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                    HStack(spacing: 6) {
-                        Text(record.definition.title)
-                            .font(PluginSettingsTheme.Typography.rowTitle)
-                            .lineLimit(1)
-                        availabilityBadge
-                    }
-                    if density == .comfortable {
-                        Text(record.definition.description)
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                    Text(record.definition.title)
+                        .font(PluginSettingsTheme.Typography.rowTitle)
+                        .lineLimit(1)
+                    if showsCategory || showsAvailabilityBadge {
+                        HStack(spacing: 6) {
+                            if showsCategory {
+                                Text(record.definition.category.title)
+                                    .font(PluginSettingsTheme.Typography.rowDescription)
+                                    .foregroundStyle(.secondary)
+                            }
+                            availabilityBadge
+                        }
                     }
                     if let error = state?.errorMessage {
                         Text(error)
@@ -245,56 +293,56 @@ private struct MacSettingRow: View {
 
                 Spacer(minLength: 12)
 
-                if state?.isLoading == true || state?.isApplying == true {
-                    ProgressView().controlSize(.small)
-                } else {
-                    settingControl
-                }
-
-                Button(action: onFavorite) {
-                    Image(systemName: isFavorite ? "star.fill" : "star")
-                        .foregroundStyle(isFavorite ? .yellow : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help(isFavorite ? "取消收藏" : "添加到收藏")
-                .accessibilityLabel(isFavorite ? "取消收藏 \(record.definition.title)" : "收藏 \(record.definition.title)")
-
-                if let favoriteIndex {
-                    Button { onMoveFavorite(-1) } label: {
-                        Image(systemName: "chevron.up")
+                Group {
+                    if state?.isLoading == true || state?.isApplying == true {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        settingControl
                     }
-                    .buttonStyle(.plain)
-                    .disabled(favoriteIndex == 0)
-                    .help("在功能面板中前移")
-                    .accessibilityLabel("前移收藏 \(record.definition.title)")
-
-                    Button { onMoveFavorite(1) } label: {
-                        Image(systemName: "chevron.down")
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(favoriteIndex == favoriteCount - 1)
-                    .help("在功能面板中后移")
-                    .accessibilityLabel("后移收藏 \(record.definition.title)")
                 }
+                .frame(minWidth: 180, idealWidth: 240, maxWidth: 280, alignment: .trailing)
+                .accessibilityLabel(record.definition.title)
 
                 Button {
                     detailsExpanded.toggle()
                 } label: {
                     Image(systemName: detailsExpanded ? "chevron.up" : "info.circle")
+                        .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.plain)
-                .help("设置详情")
-                .accessibilityLabel("显示 \(record.definition.title) 的详情")
+                .frame(width: 24)
+                .accessibilityLabel(
+                    detailsExpanded
+                        ? "隐藏 \(record.definition.title) 的详情"
+                        : "显示 \(record.definition.title) 的详情"
+                )
             }
 
             if detailsExpanded {
-                HStack(alignment: .top, spacing: 12) {
-                    Color.clear.frame(width: 22, height: 1)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(detailText)
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(record.definition.description)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                    Text(detailText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.tertiary)
+                        .textSelection(.enabled)
+                    HStack(spacing: 8) {
+                        Button(isFavorite ? "取消固定" : "固定", action: onFavorite)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                        if let favoriteIndex {
+                            Button("向上移动") { onMoveFavorite(-1) }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .disabled(favoriteIndex == 0)
+                            Button("向下移动") { onMoveFavorite(1) }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .disabled(favoriteIndex == favoriteCount - 1)
+                        }
+
                         if record.definition.destination != nil {
                             Button("在系统设置中打开", action: onOpenSystemSettings)
                                 .buttonStyle(.bordered)
@@ -305,17 +353,39 @@ private struct MacSettingRow: View {
             }
         }
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-        .padding(.vertical, density == .compact ? 7 : PluginSettingsTheme.Spacing.rowVertical)
+        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
         .contentShape(Rectangle())
         .focusable()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(accessibilityDescription)
+        .accessibilityLabel(record.definition.title)
+        .accessibilityValue(accessibilityValueDescription)
+        .accessibilityHint(record.definition.description)
+        .onKeyPress(.space) {
+            guard isKeyboardFocused,
+                  state?.isApplying != true,
+                  state?.errorMessage == nil,
+                  isDirectlyControllable(state?.availability ?? .unsupported("")),
+                  case let .boolean(enabled)? = state?.value else {
+                return .ignored
+            }
+            onApply(.boolean(!enabled))
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard isKeyboardFocused else { return .ignored }
+            detailsExpanded.toggle()
+            return .handled
+        }
     }
 
     @ViewBuilder
     private var settingControl: some View {
         let availability = state?.availability ?? .unsupported("无法读取状态。")
-        if isDirectlyControllable(availability), let value = state?.value {
+        if state?.errorMessage != nil, record.definition.destination != nil {
+            Button("打开系统设置", action: onOpenSystemSettings)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        } else if isDirectlyControllable(availability), let value = state?.value {
             SystemSettingValueControl(
                 schema: record.definition.schema,
                 value: value,
@@ -365,11 +435,7 @@ private struct MacSettingRow: View {
             case .unsupported, .systemVersionUnsupported:
                 badge("不支持", color: .secondary)
             case .available:
-                if state.verification == .verified {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .help("已验证")
-                } else if state.verification == .unverified {
+                if state.verification == .unverified {
                     badge("未验证", color: .orange)
                 }
             }
@@ -383,6 +449,18 @@ private struct MacSettingRow: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color.opacity(0.1), in: Capsule())
+    }
+
+    private var showsAvailabilityBadge: Bool {
+        guard let state else { return false }
+        switch state.availability {
+        case .available:
+            return state.verification == .unverified
+        case .requiresLogout, .requiresRestart, .guidedManual, .hardwareUnavailable,
+             .providerUnavailable, .permissionMissing, .managedOnly, .unsupported,
+             .systemVersionUnsupported:
+            return true
+        }
     }
 
     private var detailText: String {
@@ -400,10 +478,10 @@ private struct MacSettingRow: View {
         return "\(execution)。\n\(record.definition.implementationNote)"
     }
 
-    private var accessibilityDescription: String {
-        let value = state?.value?.conciseDescription ?? "未知"
-        let favorite = isFavorite ? "，已收藏" : ""
-        return "\(record.definition.title)，当前值 \(value)\(favorite)。\(record.definition.description)"
+    private var accessibilityValueDescription: String {
+        let value = state?.value.map(record.definition.displayDescription(for:)) ?? "未知"
+        let favorite = isFavorite ? "，已固定" : ""
+        return "当前值 \(value)\(favorite)，\(statusText(for: state?.availability ?? .unsupported("无法读取状态。")))"
     }
 
     private func isDirectlyControllable(_ availability: SystemSettingAvailability) -> Bool {
@@ -594,7 +672,7 @@ private struct MacSettingsHistoryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            pageHeader("更改历史", description: "仅记录通过 MacTools 完成的本地更改。") {
+            pageHeader("更改历史", description: "仅记录通过 MacTools 完成的本地更改。", onBack: controller.showPalette) {
                 Button("清除历史", action: controller.clearHistory)
                     .disabled(controller.history.isEmpty)
             }
@@ -608,7 +686,7 @@ private struct MacSettingsHistoryView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(change.settingTitle)
                                 .font(PluginSettingsTheme.Typography.rowTitle)
-                            Text("\(change.previousValue.conciseDescription) → \(change.newValue.conciseDescription)")
+                            Text("\(valueDescription(change.previousValue, settingID: change.settingID)) → \(valueDescription(change.newValue, settingID: change.settingID))")
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .foregroundStyle(.secondary)
                             Text(change.date, format: .dateTime.year().month().day().hour().minute())
@@ -630,6 +708,14 @@ private struct MacSettingsHistoryView: View {
             }
         }
     }
+
+    private func valueDescription(
+        _ value: SystemSettingValue,
+        settingID: SystemSettingID
+    ) -> String {
+        controller.catalog[settingID]?.definition.displayDescription(for: value)
+            ?? value.conciseDescription
+    }
 }
 
 private struct MacSettingsProfilesView: View {
@@ -640,7 +726,7 @@ private struct MacSettingsProfilesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            pageHeader("配置", description: "保存并选择性应用一组期望设置。") {
+            pageHeader("配置", description: "保存并选择性应用一组期望设置。", onBack: controller.showPalette) {
                 Button("新建配置") {
                     editingProfile = nil
                     editorDraft = controller.makeDraft()
@@ -821,7 +907,7 @@ private struct MacSettingsProfileEditorView: View {
                                                 VStack(alignment: .leading, spacing: 3) {
                                                     Text(record.definition.title)
                                                         .font(PluginSettingsTheme.Typography.rowTitle)
-                                                    Text("当前：\(controller.rowStates[record.id]?.value?.conciseDescription ?? "未知")")
+                                                    Text("当前：\(controller.rowStates[record.id]?.value.map(record.definition.displayDescription(for:)) ?? "未知")")
                                                         .font(PluginSettingsTheme.Typography.rowDescription)
                                                         .foregroundStyle(.secondary)
                                                 }
@@ -833,6 +919,8 @@ private struct MacSettingsProfileEditorView: View {
                                                     compact: true,
                                                     onChange: { draft.setDesiredValue($0, for: record.id) }
                                                 )
+                                                .accessibilityLabel("\(record.definition.title) 的期望值")
+                                                .accessibilityValue(record.definition.displayDescription(for: draft.items[index].desiredValue))
                                             }
                                             .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
                                             .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
@@ -864,7 +952,7 @@ private struct MacSettingsProfilePlanView: View {
                 Spacer()
                 Button("应用所选更改") { controller.applyActivePlan() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!plan.items.contains(where: { $0.isSelected }))
+                    .disabled(controller.isApplyingProfile || !plan.items.contains(where: { $0.isSelected }))
             }
 
             VStack(spacing: 0) {
@@ -879,13 +967,15 @@ private struct MacSettingsProfilePlanView: View {
                             }
                         ))
                         .labelsHidden()
-                        .disabled(!item.status.canSelect)
+                        .disabled(controller.isApplyingProfile || !item.status.canSelect)
+                        .accessibilityLabel("应用 \(item.title)")
+                        .accessibilityValue(item.isSelected ? "已选择" : "未选择")
                         Text(item.title).frame(maxWidth: .infinity, alignment: .leading)
-                        Text(item.currentValue?.conciseDescription ?? "未知")
+                        Text(valueDescription(item.currentValue, settingID: item.settingID))
                             .frame(width: 90, alignment: .trailing)
                             .foregroundStyle(.secondary)
                         Image(systemName: "arrow.right").foregroundStyle(.tertiary)
-                        Text(item.desiredValue.conciseDescription)
+                        Text(valueDescription(item.desiredValue, settingID: item.settingID))
                             .frame(width: 90, alignment: .leading)
                         Text(planStatusText(item.status))
                             .font(PluginSettingsTheme.Typography.statusBadge)
@@ -909,6 +999,7 @@ private struct MacSettingsProfilePlanView: View {
                             Button("回滚此次应用") { controller.rollbackLastApply() }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
+                                .disabled(controller.isApplyingProfile)
                         }
                     }
                     ForEach(report.results) { result in
@@ -928,6 +1019,15 @@ private struct MacSettingsProfilePlanView: View {
                 .pluginSettingsCardBackground(.recessed)
             }
         }
+    }
+
+    private func valueDescription(
+        _ value: SystemSettingValue?,
+        settingID: SystemSettingID
+    ) -> String {
+        guard let value else { return "未知" }
+        return controller.catalog[settingID]?.definition.displayDescription(for: value)
+            ?? value.conciseDescription
     }
 
     private func planStatusText(_ status: SystemSettingsProfilePlanStatus) -> String {
@@ -955,6 +1055,9 @@ private struct MacSettingsProfilePlanView: View {
         case .guidedManual: "手动步骤"
         case .unsupported: "不支持"
         case .providerUnavailable: "提供方不可用"
+        case .hardwareUnavailable: "硬件不可用"
+        case .permissionMissing: "缺少权限"
+        case .systemVersionUnavailable: "系统版本不支持"
         case .failedAndRolledBack: "失败并已回滚"
         case .failedWithoutRollback: "失败，未能回滚"
         case .verificationUnavailable: "已应用但无法验证"
@@ -971,7 +1074,7 @@ private struct MacSettingsImportExportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            pageHeader("导入与导出", description: "导入文件始终先预览；不会自动更改任何设置。") {
+            pageHeader("导入与导出", description: "导入文件始终先预览；不会自动更改任何设置。", onBack: controller.showPalette) {
                 Button("导入配置…") { importsFile = true }
                     .buttonStyle(.borderedProminent)
             }
@@ -1052,9 +1155,18 @@ private struct MacSettingsImportExportView: View {
         ) { result in
             guard case let .success(urls) = result, let url = urls.first else { return }
             let didAccess = url.startAccessingSecurityScopedResource()
-            defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-            guard let data = try? Data(contentsOf: url) else { return }
-            controller.importProfile(data: data)
+            Task { @MainActor in
+                defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let data = try await SystemSettingsProfileFileReader.read(
+                        from: url,
+                        maximumFileSize: SystemSettingsProfileCodec.maximumFileSize
+                    )
+                    controller.importProfile(data: data)
+                } catch {
+                    controller.reportProfileImportFailure(error)
+                }
+            }
         }
         .fileExporter(
             isPresented: $exportsFile,
@@ -1082,12 +1194,21 @@ private struct MacSettingsProfileDocument: FileDocument {
     }
 }
 
+@MainActor
 private func pageHeader<Trailing: View>(
     _ title: String,
     description: String,
+    onBack: @escaping () -> Void,
     @ViewBuilder trailing: () -> Trailing
 ) -> some View {
     HStack(alignment: .center) {
+        Button(action: onBack) {
+            Image(systemName: "chevron.left")
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("返回设置搜索")
+
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(PluginSettingsTheme.Typography.pageTitle)
             Text(description)

@@ -242,6 +242,50 @@ final class SystemSettingAdapterTests: XCTestCase {
         XCTAssertEqual(verification, .mismatch(actual: .boolean(false)))
     }
 
+    func testTrackpadSecondaryClickAdapterAppliesAndVerifiesGestureChoice() async throws {
+        var selection = "two-fingers"
+        var writes: [String] = []
+        let adapter = TrackpadSecondaryClickSystemSettingAdapter(
+            read: { selection },
+            write: {
+                selection = $0
+                writes.append($0)
+            }
+        )
+
+        let initialValue = try await adapter.read()
+        XCTAssertEqual(initialValue, .choice(id: "two-fingers"))
+        try await adapter.apply(.choice(id: "bottom-left"))
+        let verification = try await adapter.verify(.choice(id: "bottom-left"))
+        XCTAssertEqual(verification, .verified(.choice(id: "bottom-left")))
+        XCTAssertEqual(writes, ["bottom-left"])
+    }
+
+    func testLiveScrollSpeedAdapterMapsTenPointScaleToRuntimeRawValue() async throws {
+        var rawSpeed = 0.3
+        var writes: [Double] = []
+        let adapter = LiveScrollSpeedSystemSettingAdapter(
+            read: { rawSpeed },
+            write: {
+                rawSpeed = $0
+                writes.append($0)
+            }
+        )
+
+        let initialValue = try await adapter.read()
+        XCTAssertEqual(initialValue, .decimal(3))
+        try await adapter.apply(.decimal(7.5))
+        let verification = try await adapter.verify(.decimal(7.5))
+        XCTAssertEqual(verification, .verified(.decimal(7.5)))
+        XCTAssertEqual(writes, [0.75])
+        do {
+            try await adapter.apply(.decimal(11))
+            XCTFail("Expected an out-of-range value to fail")
+        } catch {
+            XCTAssertEqual(error as? SystemSettingAdapterError, .invalidValue)
+        }
+    }
+
     func testValueSchemasRejectWrongTypesAndOutOfRangeValues() {
         XCTAssertFalse(SystemSettingValueSchema.boolean.accepts(.integer(1)))
         XCTAssertFalse(SystemSettingValueSchema.integer(range: 1 ... 5, step: 1).accepts(.integer(6)))

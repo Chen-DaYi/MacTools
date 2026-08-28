@@ -3,6 +3,51 @@ import XCTest
 
 @MainActor
 final class MacSettingsControllerTests: XCTestCase {
+    func testKeyboardNavigationMovesBetweenSearchAndVisibleRows() {
+        let ids: [SystemSettingID] = ["first", "second", "third"]
+
+        XCTAssertEqual(
+            MacSettingsKeyboardNavigation.target(
+                from: nil,
+                movingForward: true,
+                settingIDs: ids
+            ),
+            .setting("first")
+        )
+        XCTAssertEqual(
+            MacSettingsKeyboardNavigation.target(
+                from: "second",
+                movingForward: true,
+                settingIDs: ids
+            ),
+            .setting("third")
+        )
+        XCTAssertEqual(
+            MacSettingsKeyboardNavigation.target(
+                from: "second",
+                movingForward: false,
+                settingIDs: ids
+            ),
+            .setting("first")
+        )
+        XCTAssertEqual(
+            MacSettingsKeyboardNavigation.target(
+                from: "first",
+                movingForward: false,
+                settingIDs: ids
+            ),
+            .search
+        )
+        XCTAssertEqual(
+            MacSettingsKeyboardNavigation.target(
+                from: "third",
+                movingForward: true,
+                settingIDs: ids
+            ),
+            .setting("third")
+        )
+    }
+
     func testVerifiedApplyUpdatesOnlyOneRowAndRecordsBoundedHistory() async {
         let firstAdapter = DeterministicSystemSettingAdapter(value: .boolean(false))
         let secondAdapter = DeterministicSystemSettingAdapter(value: .boolean(true))
@@ -67,6 +112,45 @@ final class MacSettingsControllerTests: XCTestCase {
         XCTAssertEqual(controller.history.first?.verification, .unverified)
     }
 
+    func testSlowRefreshCannotOverwriteACompletedApply() async {
+        let adapter = FirstReadSuspendingSystemSettingAdapter(value: .boolean(false))
+        let record = makeTestRecord(id: "race", title: "Race", adapter: adapter)
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([record]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+
+        controller.refresh()
+        while !adapter.firstReadStarted { await Task.yield() }
+        let applied = await controller.applyAndWait(.boolean(true), to: record)
+        XCTAssertTrue(applied)
+        adapter.resumeFirstRead(with: .boolean(false))
+        while controller.isRefreshing { await Task.yield() }
+
+        XCTAssertEqual(controller.rowStates[record.id]?.value, .boolean(true))
+        XCTAssertEqual(adapter.value, .boolean(true))
+    }
+
+    func testChoiceDisplayDescriptionUsesLocalizedOptionTitle() {
+        let record = makeTestRecord(
+            id: "choice",
+            title: "Choice",
+            schema: .choice(options: [
+                .init(id: "internal-left", title: "左侧"),
+                .init(id: "internal-right", title: "右侧"),
+            ]),
+            defaultValue: .choice(id: "internal-left"),
+            adapter: DeterministicSystemSettingAdapter(value: .choice(id: "internal-left"))
+        )
+
+        XCTAssertEqual(
+            record.definition.displayDescription(for: .choice(id: "internal-right")),
+            "右侧"
+        )
+    }
+
     func testFavoritesPreserveOrderingAndRemainControllable() async {
         let first = makeTestRecord(
             id: "first",
@@ -129,6 +213,94 @@ final class MacSettingsControllerTests: XCTestCase {
         XCTAssertTrue(controller.needsAttention(provider.id))
         controller.destination = .attention
         XCTAssertEqual(controller.visibleRecords.map(\.id), [provider.id])
+    }
+
+    func testPaletteHomeShowsEverySettingGroupedByCategory() {
+        let accessibility = makeTestRecord(
+            id: "accessibility",
+            title: "Accessibility",
+            category: .accessibility,
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let finder = makeTestRecord(
+            id: "finder",
+            title: "Finder",
+            category: .finder,
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let unavailable = makeTestRecord(
+            id: "unavailable",
+            title: "Unavailable",
+            category: .finder,
+            executionClass: .existingPluginProvider,
+            requirements: .init(existingProviderID: "missing"),
+            adapter: UnavailableSystemSettingAdapter(message: "Missing")
+        )
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([accessibility, finder, unavailable]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+
+        controller.toggleFavorite(finder.id)
+
+        XCTAssertEqual(
+            controller.paletteSections.map(\.id),
+            ["category.accessibility", "category.finder"]
+        )
+        XCTAssertEqual(controller.paletteSections[0].records.map(\.id), [accessibility.id])
+        XCTAssertEqual(controller.paletteSections[1].records.map(\.id), [finder.id, unavailable.id])
+    }
+
+    func testPaletteSearchAlwaysSearchesTheFullCatalog() {
+        let first = makeTestRecord(
+            id: "first",
+            title: "First",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let second = makeTestRecord(
+            id: "second",
+            title: "Second",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([first, second]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+
+        controller.toggleFavorite(first.id)
+        controller.destination = .favorites
+        controller.searchText = "Second"
+
+        XCTAssertEqual(controller.paletteSections.map(\.kind), [.searchResults])
+        XCTAssertEqual(controller.paletteSections[0].records.map(\.id), [second.id])
+    }
+
+    func testReturningFromSecondaryToolsPreservesSearchUntilHomeIsRequested() {
+        let record = makeTestRecord(
+            id: "setting",
+            title: "Setting",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([record]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+
+        controller.searchText = "Setting"
+        controller.destination = .profiles
+        controller.showPalette()
+        XCTAssertEqual(controller.destination, .all)
+        XCTAssertEqual(controller.searchText, "Setting")
+
+        controller.showPaletteHome()
+        XCTAssertEqual(controller.destination, .all)
+        XCTAssertTrue(controller.searchText.isEmpty)
     }
 
     func testHistoryStoreBoundsCountAndAge() {

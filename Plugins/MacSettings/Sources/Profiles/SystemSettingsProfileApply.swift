@@ -7,7 +7,7 @@ enum SystemSettingsProfilePlanStatus: Equatable, Sendable {
     case requiresRestart
     case guidedManual
     case unsupported(String)
-    case unavailable(String)
+    case unavailable(SystemSettingsProfileUnavailability, String)
     case verificationUnavailable
     case invalidValue
     case unknownSetting
@@ -20,6 +20,13 @@ enum SystemSettingsProfilePlanStatus: Equatable, Sendable {
             false
         }
     }
+}
+
+enum SystemSettingsProfileUnavailability: Equatable, Sendable {
+    case provider
+    case hardware
+    case permission
+    case systemVersion
 }
 
 struct SystemSettingsProfilePlanItem: Identifiable, Equatable, Sendable {
@@ -97,6 +104,17 @@ enum SystemSettingsProfilePlanner {
                 )
             }
             let definition = record.definition
+            guard definition.isProfileEligible,
+                  !definition.isSensitive,
+                  definition.portability == .portable else {
+                return item(
+                    record,
+                    entry,
+                    currentValues,
+                    .unsupported("此设置不能通过配置应用。"),
+                    selected: false
+                )
+            }
             guard definition.schema.accepts(entry.desiredValue) else {
                 return item(record, entry, currentValues, .invalidValue, selected: false)
             }
@@ -113,11 +131,11 @@ enum SystemSettingsProfilePlanner {
             case .requiresRestart:
                 status = .requiresRestart
             case let .providerUnavailable(providerID):
-                status = .unavailable("缺少插件：\(providerID)")
+                status = .unavailable(.provider, "缺少插件：\(providerID)")
             case let .hardwareUnavailable(hardware):
-                status = .unavailable("缺少硬件：\(hardware)")
+                status = .unavailable(.hardware, "缺少硬件：\(hardware)")
             case let .permissionMissing(permission):
-                status = .unavailable("缺少权限：\(permission)")
+                status = .unavailable(.permission, "缺少权限：\(permission)")
             case .guidedManual:
                 status = .guidedManual
             case .managedOnly:
@@ -125,7 +143,7 @@ enum SystemSettingsProfilePlanner {
             case let .unsupported(reason):
                 status = .unsupported(reason)
             case .systemVersionUnsupported:
-                status = .unavailable("当前 macOS 版本不受支持。")
+                status = .unavailable(.systemVersion, "当前 macOS 版本不受支持。")
             }
             return item(record, entry, currentValues, status, selected: status.canSelect)
         }
@@ -164,6 +182,9 @@ enum SystemSettingsProfileApplyResultKind: String, Codable, Sendable {
     case guidedManual
     case unsupported
     case providerUnavailable
+    case hardwareUnavailable
+    case permissionMissing
+    case systemVersionUnavailable
     case failedAndRolledBack
     case failedWithoutRollback
     case verificationUnavailable
@@ -174,6 +195,21 @@ struct SystemSettingsProfileApplyResult: Identifiable, Equatable, Sendable {
     let title: String
     let kind: SystemSettingsProfileApplyResultKind
     let message: String?
+    let previousValue: SystemSettingValue?
+
+    init(
+        settingID: SystemSettingID,
+        title: String,
+        kind: SystemSettingsProfileApplyResultKind,
+        message: String?,
+        previousValue: SystemSettingValue? = nil
+    ) {
+        self.settingID = settingID
+        self.title = title
+        self.kind = kind
+        self.message = message
+        self.previousValue = previousValue
+    }
 
     var id: SystemSettingID { settingID }
 }
@@ -218,12 +254,20 @@ final class SystemSettingsProfileApplyCoordinator {
         plan: SystemSettingsProfileApplyPlan,
         date: Date = Date()
     ) async -> SystemSettingsProfileApplyReport {
-        let rollbackEntries = plan.items.compactMap { item -> SystemSettingRollbackSnapshotEntry? in
-            guard item.isSelected,
-                  let record = catalog[item.settingID],
-                  record.definition.canRollback,
-                  let currentValue = item.currentValue else { return nil }
-            return .init(settingID: item.settingID, value: currentValue)
+        var results: [SystemSettingsProfileApplyResult] = []
+        var rollbackEntries: [SystemSettingRollbackSnapshotEntry] = []
+        for item in plan.items {
+            let result = await apply(item: item)
+            results.append(result)
+            if item.isSelected,
+               let previousValue = result.previousValue,
+               let record = catalog[item.settingID],
+               record.definition.canRollback,
+               previousValue != item.desiredValue,
+               [.appliedAndVerified, .pendingLogout, .pendingRestart, .verificationUnavailable]
+                   .contains(result.kind) {
+                rollbackEntries.append(.init(settingID: item.settingID, value: previousValue))
+            }
         }
         let rollbackPoint = SystemSettingRollbackPoint(
             id: UUID(),
@@ -231,10 +275,6 @@ final class SystemSettingsProfileApplyCoordinator {
             profileID: plan.profileID,
             entries: rollbackEntries
         )
-        var results: [SystemSettingsProfileApplyResult] = []
-        for item in plan.items {
-            results.append(await apply(item: item))
-        }
         return .init(
             id: UUID(),
             planID: plan.id,
@@ -277,14 +317,21 @@ final class SystemSettingsProfileApplyCoordinator {
         item: SystemSettingsProfilePlanItem
     ) async -> SystemSettingsProfileApplyResult {
         guard item.isSelected else {
-            let kind: SystemSettingsProfileApplyResultKind = switch item.status {
-            case .alreadyMatches: .alreadyMatched
-            case .guidedManual: .guidedManual
-            case .unsupported, .invalidValue, .unknownSetting: .unsupported
-            case .unavailable: .providerUnavailable
-            default: .skippedByUser
+            let outcome: (SystemSettingsProfileApplyResultKind, String?) = switch item.status {
+            case .alreadyMatches: (.alreadyMatched, nil)
+            case .guidedManual: (.guidedManual, "需要在系统设置中手动完成。")
+            case let .unsupported(message): (.unsupported, message)
+            case .invalidValue: (.unsupported, "配置中的值不适用于此设置。")
+            case .unknownSetting: (.unsupported, "未知设置不会被执行。")
+            case let .unavailable(reason, message): (resultKind(for: reason), message)
+            default: (.skippedByUser, nil)
             }
-            return .init(settingID: item.settingID, title: item.title, kind: kind, message: nil)
+            return .init(
+                settingID: item.settingID,
+                title: item.title,
+                kind: outcome.0,
+                message: outcome.1
+            )
         }
         guard let record = catalog[item.settingID] else {
             return .init(
@@ -292,6 +339,40 @@ final class SystemSettingsProfileApplyCoordinator {
                 title: item.title,
                 kind: .unsupported,
                 message: "未知设置不会被执行。"
+            )
+        }
+        guard record.definition.isProfileEligible,
+              !record.definition.isSensitive,
+              record.definition.portability == .portable,
+              record.definition.schema.accepts(item.desiredValue) else {
+            return .init(
+                settingID: item.settingID,
+                title: item.title,
+                kind: .unsupported,
+                message: "此设置不能通过配置应用。"
+            )
+        }
+        let currentValue: SystemSettingValue
+        do {
+            currentValue = try await record.adapter.read()
+            guard record.definition.schema.accepts(currentValue) else {
+                throw SystemSettingAdapterError.invalidValue
+            }
+        } catch {
+            return .init(
+                settingID: item.settingID,
+                title: item.title,
+                kind: .failedWithoutRollback,
+                message: error.localizedDescription
+            )
+        }
+        if currentValue == item.desiredValue {
+            return .init(
+                settingID: item.settingID,
+                title: item.title,
+                kind: .alreadyMatched,
+                message: nil,
+                previousValue: currentValue
             )
         }
         do {
@@ -304,36 +385,57 @@ final class SystemSettingsProfileApplyCoordinator {
                 case .requiresRestart: .pendingRestart
                 default: .appliedAndVerified
                 }
-                return .init(settingID: item.settingID, title: item.title, kind: kind, message: nil)
+                return .init(
+                    settingID: item.settingID,
+                    title: item.title,
+                    kind: kind,
+                    message: nil,
+                    previousValue: currentValue
+                )
             case .unavailable:
                 return .init(
                     settingID: item.settingID,
                     title: item.title,
                     kind: .verificationUnavailable,
-                    message: "已写入，但无法验证当前值。"
+                    message: "已写入，但无法验证当前值。",
+                    previousValue: currentValue
                 )
             case let .mismatch(actual):
                 return await rollbackAfterFailure(
                     record: record,
                     item: item,
-                    message: "验证结果为 \(actual.conciseDescription)。"
+                    previousValue: currentValue,
+                    message: "验证结果为 \(record.definition.displayDescription(for: actual))。"
                 )
             }
         } catch {
             return await rollbackAfterFailure(
                 record: record,
                 item: item,
+                previousValue: currentValue,
                 message: error.localizedDescription
             )
+        }
+    }
+
+    private func resultKind(
+        for reason: SystemSettingsProfileUnavailability
+    ) -> SystemSettingsProfileApplyResultKind {
+        switch reason {
+        case .provider: .providerUnavailable
+        case .hardware: .hardwareUnavailable
+        case .permission: .permissionMissing
+        case .systemVersion: .systemVersionUnavailable
         }
     }
 
     private func rollbackAfterFailure(
         record: SystemSettingRecord,
         item: SystemSettingsProfilePlanItem,
+        previousValue: SystemSettingValue,
         message: String
     ) async -> SystemSettingsProfileApplyResult {
-        guard record.definition.canRollback, let current = item.currentValue else {
+        guard record.definition.canRollback else {
             return .init(
                 settingID: item.settingID,
                 title: item.title,
@@ -342,8 +444,8 @@ final class SystemSettingsProfileApplyCoordinator {
             )
         }
         do {
-            try await record.adapter.rollback(to: current)
-            let verification = try await record.adapter.verify(current)
+            try await record.adapter.rollback(to: previousValue)
+            let verification = try await record.adapter.verify(previousValue)
             guard case .verified = verification else {
                 return .init(
                     settingID: item.settingID,
@@ -356,7 +458,8 @@ final class SystemSettingsProfileApplyCoordinator {
                 settingID: item.settingID,
                 title: item.title,
                 kind: .failedAndRolledBack,
-                message: message
+                message: message,
+                previousValue: previousValue
             )
         } catch {
             return .init(

@@ -7,12 +7,12 @@ final class SystemSettingCatalogTests: XCTestCase {
     func testBuiltInCatalogIsCuratedAndValid() throws {
         let catalog = try MacSettingsCatalogFactory.make { nil }
 
-        XCTAssertEqual(catalog.records.count, 48)
+        XCTAssertEqual(catalog.records.count, 47)
         XCTAssertEqual(Set(catalog.records.map(\.id)).count, catalog.records.count)
         XCTAssertTrue(catalog.records.allSatisfy { $0.definition.schema.isValid })
         XCTAssertTrue(catalog.records.allSatisfy { !$0.definition.searchTerms.isEmpty })
         XCTAssertTrue(catalog.records.contains { $0.definition.executionClass == .existingPluginProvider })
-        XCTAssertTrue(catalog.records.contains { $0.definition.executionClass == .guidedManual })
+        XCTAssertFalse(catalog.records.contains { $0.definition.executionClass == .guidedManual })
 
         XCTAssertEqual(
             catalog["accessibility.three-finger-drag"]?.definition.executionClass,
@@ -56,8 +56,18 @@ final class SystemSettingCatalogTests: XCTestCase {
         )
         XCTAssertEqual(
             catalog["input.scroll-speed"]?.definition.executionClass,
-            .guidedManual
+            .hardwareDependent
         )
+        XCTAssertEqual(
+            catalog["input.mouse-scroll-speed"]?.definition.executionClass,
+            .hardwareDependent
+        )
+        XCTAssertEqual(catalog["accessibility.full-keyboard-access"]?.definition.executionClass, .directVerified)
+        XCTAssertEqual(catalog["accessibility.sticky-keys"]?.definition.executionClass, .directVerified)
+        XCTAssertEqual(catalog["accessibility.slow-keys"]?.definition.executionClass, .directVerified)
+        XCTAssertEqual(catalog["input.secondary-click"]?.definition.executionClass, .hardwareDependent)
+        XCTAssertNil(catalog["network.wifi"])
+        XCTAssertNil(catalog["power.low-power-mode"])
         XCTAssertEqual(catalog["dock.size"]?.definition.executionClass, .directVerified)
         XCTAssertEqual(
             catalog["finder.warn-empty-trash"]?.definition.executionClass,
@@ -71,7 +81,10 @@ final class SystemSettingCatalogTests: XCTestCase {
             catalog["display.night-shift"]?.definition.executionClass,
             .existingPluginProvider
         )
-        XCTAssertEqual(Set(catalog.records.map(\.definition.category)), Set(SystemSettingCategory.allCases))
+        XCTAssertEqual(
+            Set(catalog.records.map(\.definition.category)),
+            Set(SystemSettingCategory.allCases).subtracting([.power, .network])
+        )
         XCTAssertTrue(catalog["accessibility.three-finger-drag"]?.definition.isProfileEligible == true)
         XCTAssertTrue(catalog["accessibility.pointer-size"]?.definition.isProfileEligible == true)
         XCTAssertTrue(catalog["accessibility.keyboard-zoom"]?.definition.isProfileEligible == true)
