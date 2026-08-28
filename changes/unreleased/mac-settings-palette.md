@@ -6,7 +6,7 @@ area: Mac Settings
 
 Mac Settings now uses a compact search-first palette with direct inline controls, a responsive category-grouped inventory when search is empty, and secondary tools in one overflow menu.
 
-Mac Settings can now directly control more accessibility options, secondary-click gestures, and device-specific scroll speeds.
+Mac Settings includes three-finger drag, pointer size, zoom gestures, tap to click, and device-specific scroll speeds. Pinned controls show all available choices.
 
 Wi-Fi power and Low Power Mode were removed because they are ordinary temporary, device-dependent controls already available from Control Center.
 

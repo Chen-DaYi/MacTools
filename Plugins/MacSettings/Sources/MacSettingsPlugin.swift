@@ -495,6 +495,7 @@ final class MacSettingsPlugin:
     }
 
     func activate(context: PluginRuntimeContext) {
+        controller.activate()
         guard externalObservers.isEmpty else { return }
         inputDeviceObserver?.start()
         let center = NotificationCenter.default
@@ -508,7 +509,7 @@ final class MacSettingsPlugin:
     }
 
     func deactivate(reason: PluginDeactivationReason) {
-        controller.cancelRefresh()
+        controller.deactivate()
         inputDeviceObserver?.stop()
         let center = NotificationCenter.default
         let distributed = DistributedNotificationCenter.default()
@@ -712,8 +713,8 @@ final class MacSettingsPlugin:
         case let (.choice(options), .choice(selectionID)):
             return PluginPanelControl(
                 id: id,
-                kind: .segmented,
-                options: options.prefix(3).map { .init(id: $0.id, title: $0.title) },
+                kind: options.count > 3 ? .selectList : .segmented,
+                options: options.map { .init(id: $0.id, title: $0.title) },
                 selectedOptionID: selectionID,
                 dateValue: nil,
                 minimumDate: nil,

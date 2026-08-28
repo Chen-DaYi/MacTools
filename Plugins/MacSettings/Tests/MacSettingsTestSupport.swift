@@ -3,6 +3,38 @@ import Foundation
 import MacToolsPluginKit
 
 @MainActor
+final class InMemoryFinderPreferencesStore: FinderPreferencesStoring {
+    var domains: [String: [String: SystemSettingStoredPreference]]
+    var failNextWriteAfterFirstKey = false
+    var ignoreNextPathWrite = false
+    private(set) var writes: [String] = []
+
+    init(domains: [String: [String: SystemSettingStoredPreference]] = [:]) {
+        self.domains = domains
+    }
+
+    func read(keys: [String], domain: String) throws -> [String: SystemSettingStoredPreference] {
+        Dictionary(uniqueKeysWithValues: keys.map { ($0, domains[domain]?[$0] ?? .missing) })
+    }
+
+    func write(_ values: [String: SystemSettingStoredPreference], domain: String) throws {
+        for key in values.keys.sorted() {
+            writes.append("\(domain).\(key)")
+            if ignoreNextPathWrite, key == "NewWindowTargetPath" {
+                ignoreNextPathWrite = false
+                continue
+            }
+            if values[key] == .missing { domains[domain, default: [:]][key] = nil }
+            else { domains[domain, default: [:]][key] = values[key] }
+            if failNextWriteAfterFirstKey {
+                failNextWriteAfterFirstKey = false
+                throw SystemSettingAdapterError.writeFailed("Injected partial write")
+            }
+        }
+    }
+}
+
+@MainActor
 final class MacSettingsTestStorage: PluginStorage {
     private var values: [String: Any] = [:]
 
@@ -25,16 +57,17 @@ final class MacSettingsTestStorage: PluginStorage {
 final class FirstReadSuspendingSystemSettingAdapter: SystemSettingAdapter {
     var value: SystemSettingValue
     private(set) var firstReadStarted = false
-    private var readCount = 0
+    var suspendNextRead: Bool
     private var firstReadContinuation: CheckedContinuation<SystemSettingValue, Error>?
 
-    init(value: SystemSettingValue) {
+    init(value: SystemSettingValue, suspendsFirstRead: Bool = true) {
         self.value = value
+        self.suspendNextRead = suspendsFirstRead
     }
 
     func read() async throws -> SystemSettingValue {
-        readCount += 1
-        guard readCount == 1 else { return value }
+        guard suspendNextRead else { return value }
+        suspendNextRead = false
         firstReadStarted = true
         return try await withCheckedThrowingContinuation { continuation in
             firstReadContinuation = continuation
@@ -52,6 +85,21 @@ final class FirstReadSuspendingSystemSettingAdapter: SystemSettingAdapter {
 
     func verify(_ expectedValue: SystemSettingValue) async throws -> SystemSettingVerification {
         value == expectedValue ? .verified(value) : .mismatch(actual: value)
+    }
+}
+
+@MainActor
+final class RollbackFailingSystemSettingAdapter: SystemSettingAdapter {
+    var value: SystemSettingValue = .boolean(false)
+    var failsRollback = true
+    private(set) var rollbackAttempts = 0
+
+    func read() async throws -> SystemSettingValue { value }
+    func apply(_ value: SystemSettingValue) async throws { self.value = value }
+    func rollback(to value: SystemSettingValue) async throws {
+        rollbackAttempts += 1
+        if failsRollback { throw SystemSettingAdapterError.writeFailed("Injected rollback failure") }
+        self.value = value
     }
 }
 

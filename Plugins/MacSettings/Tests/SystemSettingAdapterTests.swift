@@ -4,6 +4,123 @@ import MacToolsPluginKit
 
 @MainActor
 final class SystemSettingAdapterTests: XCTestCase {
+    func testFinderExtensionsUseGlobalDomainAndRestoreAbsentKeysAndLegacyOverride() async throws {
+        let store = InMemoryFinderPreferencesStore(domains: [
+            "com.apple.finder": ["AppleShowAllExtensions": .boolean(true)],
+        ])
+        let adapter = FinderExtensionsSystemSettingAdapter(store: store)
+        let original = try await adapter.snapshot()
+        XCTAssertEqual(original.value, .boolean(true))
+        try await adapter.apply(.boolean(true))
+        let applied = try await adapter.verify(.boolean(true))
+        XCTAssertEqual(applied, .verified(.boolean(true)))
+        XCTAssertEqual(store.domains[UserDefaults.globalDomain]?["AppleShowAllExtensions"], .boolean(true))
+        XCTAssertNil(store.domains["com.apple.finder"]?["AppleShowAllExtensions"])
+        let restored = try await adapter.restore(original)
+        XCTAssertEqual(restored, .verified(.boolean(true)))
+        XCTAssertNil(store.domains[UserDefaults.globalDomain]?["AppleShowAllExtensions"])
+        XCTAssertEqual(store.domains["com.apple.finder"]?["AppleShowAllExtensions"], .boolean(true))
+    }
+
+    func testFinderDestinationReadsNativeCustomUnknownAndAbsentPreferences() async throws {
+        let store = InMemoryFinderPreferencesStore()
+        let adapter = FinderWindowDestinationSystemSettingAdapter(store: store)
+        let absent = try await adapter.read()
+        XCTAssertEqual(absent, .choice(id: "PfAF"))
+        for option in FinderWindowDestination.options {
+            store.domains["com.apple.finder"] = ["NewWindowTarget": .string(option.id)]
+            let current = try await adapter.read()
+            XCTAssertEqual(current, .choice(id: option.id))
+        }
+        let url = URL(filePath: "/private/tmp/My Projects/资料", directoryHint: .isDirectory)
+        store.domains["com.apple.finder"] = [
+            "NewWindowTarget": .string("PfLo"), "NewWindowTargetPath": .string(url.absoluteString),
+        ]
+        let custom = try await adapter.read()
+        XCTAssertEqual(custom, .url(url))
+        store.domains["com.apple.finder"]?["NewWindowTarget"] = .string("PfXX")
+        let unknown = try await adapter.snapshot()
+        XCTAssertEqual(unknown.value, .choice(id: "PfXX"))
+        XCTAssertTrue(SystemSettingValueSchema.directoryChoice(options: FinderWindowDestination.options).accepts(unknown.value))
+        do {
+            try await adapter.apply(unknown.value)
+            XCTFail("Unknown targets must be preserved, not offered as new writes")
+        } catch { XCTAssertEqual(error as? SystemSettingAdapterError, .invalidValue) }
+        let restored = try await adapter.restore(unknown)
+        XCTAssertEqual(restored, .verified(unknown.value))
+    }
+
+    func testFinderDestinationWritesAndVerifiesBothTargetAndPath() async throws {
+        let store = InMemoryFinderPreferencesStore()
+        let home = URL(filePath: "/private/tmp/Finder Home", directoryHint: .isDirectory)
+        var validated: [URL] = []
+        let adapter = FinderWindowDestinationSystemSettingAdapter(
+            store: store, homeDirectory: home, validateDirectory: { validated.append($0) }
+        )
+        for option in FinderWindowDestination.options {
+            try await adapter.apply(.choice(id: option.id))
+            let result = try await adapter.verify(.choice(id: option.id))
+            XCTAssertEqual(result, .verified(.choice(id: option.id)))
+        }
+        XCTAssertEqual(validated.count, 5, "Recents does not require a physical directory")
+        XCTAssertEqual(store.domains["com.apple.finder"]?["NewWindowTargetPath"], .string(
+            home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true).absoluteString
+        ))
+        store.domains["com.apple.finder"]?["NewWindowTargetPath"] = .string("file:///wrong/")
+        let mismatch = try await adapter.verify(.choice(id: "PfID"))
+        XCTAssertEqual(mismatch, .mismatch(actual: .choice(id: "PfID")), "Matching target alone is insufficient")
+        try await adapter.apply(.choice(id: "PfAF"))
+        XCTAssertNil(store.domains["com.apple.finder"]?["NewWindowTargetPath"])
+    }
+
+    func testFinderDestinationValidatesCustomDirectoryBeforeMutation() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = InMemoryFinderPreferencesStore()
+        let adapter = FinderWindowDestinationSystemSettingAdapter(store: store)
+        try await adapter.apply(.url(directory))
+        let original = try await adapter.snapshot()
+        for invalid in [URL(string: "https://example.com/folder")!, directory.appendingPathComponent("missing")] {
+            let writeCount = store.writes.count
+            do {
+                try await adapter.apply(.url(invalid))
+                XCTFail("Invalid or missing directories must not be written")
+            } catch { }
+            XCTAssertEqual(store.writes.count, writeCount)
+        }
+        let after = try await adapter.snapshot()
+        XCTAssertEqual(after, original)
+    }
+
+    func testFinderSnapshotRejectsExtraPreferenceKeysBeforeWriting() async throws {
+        let store = InMemoryFinderPreferencesStore()
+        let adapter = FinderWindowDestinationSystemSettingAdapter(store: store)
+        var snapshot = try await adapter.snapshot()
+        snapshot.restoration?["UnrelatedPreference"] = .string("injected")
+        do {
+            _ = try await adapter.restore(snapshot)
+            XCTFail("Restoration must only accept its exact allowlist")
+        } catch { XCTAssertEqual(error as? SystemSettingAdapterError, .invalidValue) }
+        XCTAssertTrue(store.writes.isEmpty)
+        do {
+            _ = try await adapter.restore(.init(value: .choice(id: "PfHm")))
+            XCTFail("Legacy entries cannot promise exact rollback without their original keys")
+        } catch { }
+        XCTAssertTrue(store.writes.isEmpty)
+    }
+
+    func testNativeFinderPreferencesStorePreservesTypesAndRemovesKeysInIsolatedDomain() throws {
+        let domain = "cc.ggbond.mactools.tests.finder.\(UUID().uuidString)"
+        let store = CoreFoundationFinderPreferencesStore()
+        defer { try? store.write(["flag": .missing, "path": .missing], domain: domain) }
+        try store.write(["flag": .boolean(false), "path": .string("file:///tmp/a%20b/")], domain: domain)
+        let values = try store.read(keys: ["flag", "path", "absent"], domain: domain)
+        XCTAssertEqual(values, ["flag": .boolean(false), "path": .string("file:///tmp/a%20b/"), "absent": .missing])
+        try store.write(["flag": .missing], domain: domain)
+        XCTAssertEqual(try store.read(keys: ["flag"], domain: domain)["flag"], .missing)
+    }
+
     func testDomainDefaultsAdapterReadsAndWritesExternalSystemDomainStore() async throws {
         let store = InMemorySystemDefaultsDomainStore(
             domains: ["com.apple.dock": ["tilesize": NSNumber(value: 128.0)]]

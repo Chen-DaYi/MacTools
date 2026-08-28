@@ -197,6 +197,38 @@ final class PluginHostComponentSupportTests: XCTestCase {
         )
     }
 
+    func testExplicitAutomationPermissionButtonOpensSystemSettingsWithoutPassiveNavigation() {
+        let plugin = MockComponentPanelPlugin(
+            id: "automation",
+            permissionRequirements: [.init(
+                id: "automation", kind: .automation, title: "Automation", description: "Allow System Events"
+            )],
+            isPermissionGranted: false
+        )
+        var openedURLs: [URL] = []
+        let host = makeHost(plugins: [plugin], openPermissionSettings: { openedURLs.append($0) })
+        plugin.requestPermissionGuidance?("automation")
+        XCTAssertTrue(openedURLs.isEmpty)
+        host.performPermissionAction(pluginID: "automation", permissionID: "automation")
+        XCTAssertEqual(openedURLs.map(\.absoluteString), [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+        ])
+    }
+
+    func testLegacyFullDiskAccessIsNotRoutedToAutomationSettings() {
+        let plugin = MockComponentPanelPlugin(
+            id: "disk",
+            permissionRequirements: [.init(
+                id: "full-disk-access", kind: .automation, title: "Full Disk Access", description: "Protected files"
+            )]
+        )
+        var openedURLs: [URL] = []
+        let host = makeHost(plugins: [plugin], openPermissionSettings: { openedURLs.append($0) })
+        host.performPermissionAction(pluginID: "disk", permissionID: "full-disk-access")
+        XCTAssertTrue(openedURLs.isEmpty)
+        XCTAssertEqual(plugin.handledPermissionIDs, ["full-disk-access"])
+    }
+
     func testShortcutsInSameSharedBindingGroupCanUseSameBinding() {
         let binding = ShortcutBinding(keyCode: 18, modifiers: [.command, .option])
         let componentPanelPlugin = MockComponentPanelPlugin(
@@ -868,7 +900,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
         dynamicPluginManager: DynamicPluginManager? = nil,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180),
-        pluginStateChangeRebuildDelay: Duration = .milliseconds(80)
+        pluginStateChangeRebuildDelay: Duration = .milliseconds(80),
+        openPermissionSettings: @escaping (URL) -> Void = { _ in }
     ) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -882,7 +915,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: displayConfigurationObserver,
             displayTopologyRefreshDelay: displayTopologyRefreshDelay,
-            pluginStateChangeRebuildDelay: pluginStateChangeRebuildDelay
+            pluginStateChangeRebuildDelay: pluginStateChangeRebuildDelay,
+            openPermissionSettings: openPermissionSettings
         )
     }
 
@@ -964,6 +998,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     private(set) var surfaceEvents: [SurfaceEvent] = []
     private(set) var shortcutBindingChanges: [ShortcutBindingChange] = []
     private let isPermissionGranted: Bool
+    private(set) var handledPermissionIDs: [String] = []
 
     init(
         id: String,
@@ -1027,7 +1062,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
         PluginPermissionState(isGranted: isPermissionGranted, footnote: nil)
     }
 
-    func handlePermissionAction(id: String) {}
+    func handlePermissionAction(id: String) { handledPermissionIDs.append(id) }
     func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
     func shortcutBindingDidChange(id: String, binding: ShortcutBinding?) {

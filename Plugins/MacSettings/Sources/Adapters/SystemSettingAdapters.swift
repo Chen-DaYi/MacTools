@@ -516,9 +516,21 @@ protocol SystemSettingAdapter: AnyObject {
     func apply(_ value: SystemSettingValue) async throws
     func verify(_ expectedValue: SystemSettingValue) async throws -> SystemSettingVerification
     func rollback(to value: SystemSettingValue) async throws
+    func snapshot() async throws -> SystemSettingSnapshot
+    func restore(_ snapshot: SystemSettingSnapshot) async throws -> SystemSettingVerification
 }
 
 extension SystemSettingAdapter {
+    func snapshot() async throws -> SystemSettingSnapshot {
+        .init(value: try await read())
+    }
+
+    func restore(_ snapshot: SystemSettingSnapshot) async throws -> SystemSettingVerification {
+        guard snapshot.restoration == nil else { throw SystemSettingAdapterError.invalidValue }
+        try await rollback(to: snapshot.value)
+        return try await verify(snapshot.value)
+    }
+
     func verify(_ expectedValue: SystemSettingValue) async throws -> SystemSettingVerification {
         let value = try await read()
         return value == expectedValue ? .verified(value) : .mismatch(actual: value)

@@ -508,6 +508,8 @@ final class PluginHost: ObservableObject {
     /// emits typed requests but never manipulates windows or popovers directly.
     var appPresentationHandler: ((AppPresentationRequest) -> Void)?
 
+    private let openPermissionSettings: (URL) -> Void
+
     /// The app shell installs this to present source-appropriate feedback for actions invoked from
     /// headless surfaces such as global shortcuts and trackpad gestures.
     var actionExecutionFeedbackHandler: ((
@@ -579,7 +581,8 @@ final class PluginHost: ObservableObject {
         displayTopologyRefreshDelay: Duration = .milliseconds(180),
         pluginStateChangeRebuildDelay: Duration = .milliseconds(80),
         loadDynamicPluginsOnInit: Bool = true,
-        actionURLScheme: String = RightClickURLRouter.bundleURLSchemes().sorted().first ?? "mactools"
+        actionURLScheme: String = RightClickURLRouter.bundleURLSchemes().sorted().first ?? "mactools",
+        openPermissionSettings: @escaping (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
     ) {
         let preferencesBackupChangeReporter = providedPreferencesBackupChangeReporter
             ?? PreferencesBackupChangeReporter()
@@ -601,6 +604,7 @@ final class PluginHost: ObservableObject {
         self.automaticPreferencesBackupCoordinator = automaticPreferencesBackupCoordinator
         self.preferencesBackupChangeReporter = preferencesBackupChangeReporter
         self.globalShortcutManager = globalShortcutManager
+        self.openPermissionSettings = openPermissionSettings
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
         self.applicationActivityObserver = applicationActivityObserver
@@ -1475,6 +1479,19 @@ final class PluginHost: ObservableObject {
 
     func performPermissionAction(pluginID: String, permissionID: String) {
         guard let plugin = corePlugin(for: pluginID) else {
+            return
+        }
+
+        let requirement = guardedValue(
+            for: plugin,
+            operation: "read permission requirements",
+            plugin.permissionRequirements
+        )?.first { $0.id == permissionID }
+        if let requirement,
+           case .system(.automation) = permissionPresentationRole(for: requirement),
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
+            // Explicit button clicks should navigate; passive guidance requests retain context.
+            openPermissionSettings(url)
             return
         }
 

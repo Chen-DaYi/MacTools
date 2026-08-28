@@ -517,6 +517,29 @@ struct SystemSettingValueControl: View {
 
     var body: some View {
         switch (schema, value) {
+        case let (.directoryChoice(options), _):
+            Menu {
+                ForEach(options) { option in
+                    Button(option.title) { onChange(.choice(id: option.id)) }
+                }
+                Divider()
+                Button("其他文件夹…") {
+                    let panel = NSOpenPanel()
+                    panel.canChooseFiles = false
+                    panel.canChooseDirectories = true
+                    panel.allowsMultipleSelection = false
+                    if case let .url(url) = value { panel.directoryURL = url }
+                    PluginPresentationSafety.prepareForWindowOrdering()
+                    guard panel.runModal() == .OK, let selected = panel.url else { return }
+                    onChange(.url(selected))
+                }
+            } label: {
+                Text(directoryTitle(options: options))
+                    .lineLimit(1)
+            }
+            .frame(minWidth: 110, idealWidth: 160, maxWidth: 200)
+            .help(value.conciseDescription)
+            .disabled(!enabled)
         case let (.boolean, .boolean(isOn)):
             Toggle("", isOn: Binding(get: { isOn }, set: { onChange(.boolean($0)) }))
                 .labelsHidden()
@@ -575,6 +598,14 @@ struct SystemSettingValueControl: View {
             Text(value.conciseDescription)
                 .font(PluginSettingsTheme.Typography.monospacedValue)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func directoryTitle(options: [SystemSettingChoice]) -> String {
+        switch value {
+        case let .choice(id): options.first(where: { $0.id == id })?.title ?? "当前位置（\(id)）"
+        case let .url(url): url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent
+        default: value.conciseDescription
         }
     }
 }
@@ -741,6 +772,9 @@ private struct MacSettingsProfilesView: View {
                         profileSection("内置模板", image: "sparkles", profiles: controller.builtInTemplates, isTemplate: true)
                     }
                     profileSection("我的配置", image: "square.stack.3d.up", profiles: controller.profiles, isTemplate: false)
+                    if controller.isPreparingPlan {
+                        ProgressView("正在读取当前设置…")
+                    }
                     if let plan = controller.activePlan {
                         MacSettingsProfilePlanView(controller: controller, plan: plan)
                     }
@@ -913,7 +947,7 @@ private struct MacSettingsProfileEditorView: View {
                                                 }
                                                 Spacer()
                                                 SystemSettingValueControl(
-                                                    schema: record.definition.schema,
+                                                    schema: profileSchema(for: record.definition.schema),
                                                     value: draft.items[index].desiredValue,
                                                     enabled: true,
                                                     compact: true,
@@ -936,6 +970,11 @@ private struct MacSettingsProfileEditorView: View {
                 .padding(18)
             }
         }
+    }
+
+    private func profileSchema(for schema: SystemSettingValueSchema) -> SystemSettingValueSchema {
+        if case let .directoryChoice(options) = schema { return .choice(options: options) }
+        return schema
     }
 }
 
@@ -992,21 +1031,23 @@ private struct MacSettingsProfilePlanView: View {
             if let report = controller.lastApplyReport {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text(report.hasPartialSuccess ? "部分完成" : "已完成")
+                        Text(resultTitle(report))
                             .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                         Spacer()
-                        if !report.rollbackPoint.entries.isEmpty {
+                        if !report.rollbackPoint.entries.isEmpty,
+                           controller.lastRollbackResults?.allSatisfy({ $0.kind == .appliedAndVerified }) != true {
                             Button("回滚此次应用") { controller.rollbackLastApply() }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
                                 .disabled(controller.isApplyingProfile)
                         }
                     }
-                    ForEach(report.results) { result in
+                    ForEach(controller.lastRollbackResults ?? report.results) { result in
                         HStack {
                             Text(result.title)
                             Spacer()
-                            Text(applyResultText(result.kind))
+                            Text(controller.lastRollbackResults != nil && result.kind == .appliedAndVerified
+                                 ? "已恢复并验证" : applyResultText(result.kind))
                                 .foregroundStyle(result.kind == .appliedAndVerified ? .green : .secondary)
                             if let message = result.message {
                                 Text(message).foregroundStyle(.red).lineLimit(1)
@@ -1045,6 +1086,13 @@ private struct MacSettingsProfilePlanView: View {
         }
     }
 
+    private func resultTitle(_ report: SystemSettingsProfileApplyReport) -> String {
+        if let results = controller.lastRollbackResults {
+            return results.allSatisfy { $0.kind == .appliedAndVerified } ? "已回滚" : "回滚未完成"
+        }
+        return report.hasPartialSuccess ? "部分完成" : "已完成"
+    }
+
     private func applyResultText(_ result: SystemSettingsProfileApplyResultKind) -> String {
         switch result {
         case .appliedAndVerified: "已应用并验证"
@@ -1061,6 +1109,8 @@ private struct MacSettingsProfilePlanView: View {
         case .failedAndRolledBack: "失败并已回滚"
         case .failedWithoutRollback: "失败，未能回滚"
         case .verificationUnavailable: "已应用但无法验证"
+        case .previewChanged: "当前值已变化，请重新预览"
+        case .cancelled: "已取消"
         }
     }
 }

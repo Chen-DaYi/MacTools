@@ -109,6 +109,11 @@ struct SystemSettingsProfileDraft: Equatable {
                 category: categoryByID[$0.settingID]
             )
         }
+        // Editing the available controls must not erase deferred or future values.
+        let editedIDs = Set(items.map(\.settingID))
+        let retainedEntries = (existing?.entries ?? []).filter {
+            catalog[$0.settingID] == nil && !editedIDs.contains($0.settingID)
+        }
         return SystemSettingsProfile(
             id: existing?.id ?? UUID(),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -119,7 +124,7 @@ struct SystemSettingsProfileDraft: Equatable {
                 ?? ProcessInfo.processInfo.operatingSystemVersionString,
             sourceAppVersion: existing?.sourceAppVersion
                 ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"),
-            entries: entries
+            entries: entries + retainedEntries
         )
     }
 }
@@ -197,11 +202,13 @@ enum SystemSettingsProfileCodec {
                 errors.append(.duplicateSettingID(entry.settingID))
                 continue
             }
-            guard let record = catalog[entry.settingID] else {
+            let record = catalog[entry.settingID]
+            if record == nil {
                 warnings.append(.unknownSetting(entry.settingID))
-                continue
             }
-            let definition = record.definition
+            // Deferral must not make a known local-only or sensitive value portable.
+            guard let definition = record?.definition
+                ?? catalog.deferredDefinitions[entry.settingID] else { continue }
             if definition.isSensitive {
                 errors.append(.sensitiveSetting(entry.settingID))
             }
@@ -212,6 +219,8 @@ enum SystemSettingsProfileCodec {
             }
             if !definition.schema.accepts(entry.desiredValue) {
                 errors.append(.invalidDesiredValue(entry.settingID))
+            } else if definition.isProfileEligible && !definition.acceptsPortableValue(entry.desiredValue) {
+                errors.append(.nonPortableSetting(entry.settingID))
             }
         }
         return .init(errors: errors, warnings: warnings)
@@ -307,10 +316,9 @@ enum BuiltInSystemSettingsProfiles {
             template(
                 id: UUID(uuidString: "4DAE5F61-7812-4DA9-B6BE-F82680266DAB")!,
                 name: "专注桌面",
-                description: "隐藏程序坞和菜单栏，并关闭程序坞最近使用的 App。",
+                description: "隐藏程序坞，并关闭程序坞最近使用的 App。",
                 values: [
                     "dock.auto-hide": .boolean(true),
-                    "desktop.menu-bar-auto-hide": .boolean(true),
                     "dock.show-recents": .boolean(false),
                 ],
                 catalog: catalog

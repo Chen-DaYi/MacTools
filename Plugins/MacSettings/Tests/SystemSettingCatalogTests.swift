@@ -7,7 +7,7 @@ final class SystemSettingCatalogTests: XCTestCase {
     func testBuiltInCatalogIsCuratedAndValid() throws {
         let catalog = try MacSettingsCatalogFactory.make { nil }
 
-        XCTAssertEqual(catalog.records.count, 47)
+        XCTAssertEqual(catalog.records.count, 39)
         XCTAssertEqual(Set(catalog.records.map(\.id)).count, catalog.records.count)
         XCTAssertTrue(catalog.records.allSatisfy { $0.definition.schema.isValid })
         XCTAssertTrue(catalog.records.allSatisfy { !$0.definition.searchTerms.isEmpty })
@@ -62,10 +62,6 @@ final class SystemSettingCatalogTests: XCTestCase {
             catalog["input.mouse-scroll-speed"]?.definition.executionClass,
             .hardwareDependent
         )
-        XCTAssertEqual(catalog["accessibility.full-keyboard-access"]?.definition.executionClass, .directVerified)
-        XCTAssertEqual(catalog["accessibility.sticky-keys"]?.definition.executionClass, .directVerified)
-        XCTAssertEqual(catalog["accessibility.slow-keys"]?.definition.executionClass, .directVerified)
-        XCTAssertEqual(catalog["input.secondary-click"]?.definition.executionClass, .hardwareDependent)
         XCTAssertNil(catalog["network.wifi"])
         XCTAssertNil(catalog["power.low-power-mode"])
         XCTAssertEqual(catalog["dock.size"]?.definition.executionClass, .directVerified)
@@ -78,10 +74,6 @@ final class SystemSettingCatalogTests: XCTestCase {
             .existingPluginProvider
         )
         XCTAssertEqual(
-            catalog["display.night-shift"]?.definition.executionClass,
-            .existingPluginProvider
-        )
-        XCTAssertEqual(
             Set(catalog.records.map(\.definition.category)),
             Set(SystemSettingCategory.allCases).subtracting([.power, .network])
         )
@@ -90,6 +82,37 @@ final class SystemSettingCatalogTests: XCTestCase {
         XCTAssertTrue(catalog["accessibility.keyboard-zoom"]?.definition.isProfileEligible == true)
         XCTAssertTrue(catalog["accessibility.scroll-zoom"]?.definition.isProfileEligible == true)
         XCTAssertTrue(catalog["accessibility.scroll-zoom-modifier"]?.definition.isProfileEligible == true)
+    }
+
+    func testReleaseScopeRetainsSelectedControlsAndExcludesDeferredSettings() throws {
+        let catalog = try MacSettingsCatalogFactory.make { nil }
+        let deferredIDs: Set<SystemSettingID> = [
+            "accessibility.full-keyboard-access", "accessibility.sticky-keys",
+            "accessibility.slow-keys", "input.secondary-click", "keyboard.function-keys",
+            "screenshots.destination", "display.night-shift", "desktop.menu-bar-auto-hide",
+        ]
+        XCTAssertEqual(Set(catalog.deferredDefinitions.keys), deferredIDs)
+        for id in deferredIDs {
+            XCTAssertNil(catalog[id], "Deferred settings must not expose adapters")
+            let definition = try XCTUnwrap(catalog.deferredDefinitions[id])
+            XCTAssertFalse(catalog.search(definition.title).contains { $0.id == id })
+        }
+
+        let selectedIDs: [SystemSettingID] = [
+            "accessibility.three-finger-drag", "accessibility.pointer-size",
+            "accessibility.keyboard-zoom", "accessibility.scroll-zoom",
+            "accessibility.scroll-zoom-modifier", "input.scroll-speed",
+            "input.mouse-scroll-speed", "input.tap-to-click", "input.natural-scrolling",
+            "input.mouse-tracking-speed", "input.trackpad-tracking-speed",
+            "finder.show-all-extensions", "finder.new-window-target",
+        ]
+        for id in selectedIDs {
+            XCTAssertNotNil(catalog[id], "Selected setting must remain in the initial release: \(id)")
+        }
+        for profile in BuiltInSystemSettingsProfiles.templates(catalog: catalog) {
+            XCTAssertTrue(Set(profile.entries.map(\.settingID)).isDisjoint(with: deferredIDs))
+            XCTAssertTrue(SystemSettingsProfileCodec.validate(profile, catalog: catalog).isValid)
+        }
     }
 
     func testDisplayProvidersReadLiveActionStateAndWriteExplicitDesiredValue() async throws {

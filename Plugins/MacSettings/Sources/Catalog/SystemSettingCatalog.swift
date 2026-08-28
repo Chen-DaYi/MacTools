@@ -21,8 +21,10 @@ enum SystemSettingCatalogValidationError: Error, Equatable {
 @MainActor
 struct SystemSettingCatalog {
     let records: [SystemSettingRecord]
+    // Retain validation metadata without exposing deferred adapters to execution.
+    let deferredDefinitions: [SystemSettingID: SystemSettingDefinition]
 
-    init(records: [SystemSettingRecord]) throws {
+    init(records: [SystemSettingRecord], deferring deferredIDs: Set<SystemSettingID> = []) throws {
         var ids: Set<SystemSettingID> = []
         for record in records {
             let definition = record.definition
@@ -48,7 +50,10 @@ struct SystemSettingCatalog {
                 throw SystemSettingCatalogValidationError.sensitivePortableValue(definition.id)
             }
         }
-        self.records = records
+        self.records = records.filter { !deferredIDs.contains($0.id) }
+        self.deferredDefinitions = Dictionary(uniqueKeysWithValues: records
+            .filter { deferredIDs.contains($0.id) }
+            .map { ($0.id, $0.definition) })
     }
 
     subscript(id: SystemSettingID) -> SystemSettingRecord? {
@@ -90,6 +95,19 @@ struct SystemSettingCatalog {
 
 @MainActor
 enum MacSettingsCatalogFactory {
+    // Revisit criteria and the original 47-setting numbering are recorded in
+    // docs/superpowers/specs/2026-08-28-mac-settings-catalog-review.md.
+    private static let deferredSettingIDs: Set<SystemSettingID> = [
+        "accessibility.full-keyboard-access",
+        "accessibility.sticky-keys",
+        "accessibility.slow-keys",
+        "input.secondary-click",
+        "keyboard.function-keys",
+        "screenshots.destination",
+        "display.night-shift",
+        "desktop.menu-bar-auto-hide",
+    ]
+
     static let globalDomain = UserDefaults.globalDomain
     static let finderDomain = "com.apple.finder"
     static let dockDomain = "com.apple.dock"
@@ -381,14 +399,19 @@ enum MacSettingsCatalogFactory {
                 destination: keyboardDestination,
                 notificationName: Notification.Name("com.apple.keyboard.fnstatedidchange")
             ),
-            finderBoolean(
+            direct(
                 id: "finder.show-all-extensions",
                 title: "显示所有文件扩展名",
                 description: "在访达中显示所有文件名扩展名。",
-                key: "AppleShowAllExtensions",
-                defaultValue: false,
+                category: .finder,
+                systemImage: "doc.badge.gearshape",
+                schema: .boolean,
+                defaultValue: .boolean(false),
+                executionClass: .directRequiresRestart,
                 searchTerms: ["show extension", "filename extension", "文件后缀"],
-                executionClass: .directRequiresRestart
+                destination: finderDestination,
+                note: "Writes the global filename-extension preference and removes legacy Finder overrides. Undo restores the exact original keys, including absence. Finder may need relaunching; no filenames or per-file flags are changed.",
+                adapter: FinderExtensionsSystemSettingAdapter()
             ),
             finderBoolean(
                 id: "finder.warn-extension-change",
@@ -452,23 +475,19 @@ enum MacSettingsCatalogFactory {
                 destination: finderDestination,
                 executionClass: .directAppliesNextUse
             ),
-            defaultsChoice(
+            direct(
                 id: "finder.new-window-target",
                 title: "访达新窗口显示",
                 description: "选择新访达窗口的默认位置。",
                 category: .finder,
-                domain: finderDomain,
-                key: "NewWindowTarget",
-                defaultValue: "PfHm",
-                options: [
-                    .init(id: "PfHm", title: "个人文件夹"),
-                    .init(id: "PfDe", title: "桌面"),
-                    .init(id: "PfDo", title: "文稿"),
-                    .init(id: "PfCm", title: "电脑"),
-                ],
+                systemImage: "folder",
+                schema: .directoryChoice(options: FinderWindowDestination.options),
+                defaultValue: .choice(id: "PfAF"),
+                executionClass: .directAppliesNextUse,
                 searchTerms: ["new finder window destination", "finder opens", "新窗口位置"],
                 destination: finderDestination,
-                executionClass: .directAppliesNextUse
+                note: "Preserves the native target and path as one local rollback snapshot. Profiles accept named destinations only; custom folder URLs stay on this Mac. Verify using a new Finder window.",
+                adapter: FinderWindowDestinationSystemSettingAdapter()
             ),
             providerBoolean(
                 id: "dock.auto-hide",
@@ -767,7 +786,7 @@ enum MacSettingsCatalogFactory {
                 actionContext: actionContext
             ),
         ]
-        return try SystemSettingCatalog(records: records)
+        return try SystemSettingCatalog(records: records, deferring: deferredSettingIDs)
     }
 
     private static var finderDestination: SystemSettingSystemDestination {

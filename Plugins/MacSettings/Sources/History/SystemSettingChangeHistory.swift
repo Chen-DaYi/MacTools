@@ -11,6 +11,7 @@ struct SystemSettingChange: Identifiable, Codable, Equatable, Sendable {
     let settingID: SystemSettingID
     let settingTitle: String
     let previousValue: SystemSettingValue
+    let previousSnapshot: SystemSettingSnapshot?
     let newValue: SystemSettingValue
     let date: Date
     let verification: SystemSettingChangeVerification
@@ -24,12 +25,14 @@ struct SystemSettingChange: Identifiable, Codable, Equatable, Sendable {
         newValue: SystemSettingValue,
         date: Date = Date(),
         verification: SystemSettingChangeVerification,
-        canRollback: Bool
+        canRollback: Bool,
+        previousSnapshot: SystemSettingSnapshot? = nil
     ) {
         self.id = id
         self.settingID = settingID
         self.settingTitle = settingTitle
         self.previousValue = previousValue
+        self.previousSnapshot = previousSnapshot
         self.newValue = newValue
         self.date = date
         self.verification = verification

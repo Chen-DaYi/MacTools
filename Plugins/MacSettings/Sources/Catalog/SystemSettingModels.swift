@@ -224,11 +224,24 @@ struct SystemSettingChoice: Codable, Equatable, Hashable, Sendable, Identifiable
     let title: String
 }
 
+// These snapshots stay in local history; portable profiles contain desired values only.
+enum SystemSettingStoredPreference: Codable, Equatable, Sendable {
+    case missing
+    case boolean(Bool)
+    case string(String)
+}
+
+struct SystemSettingSnapshot: Codable, Equatable, Sendable {
+    let value: SystemSettingValue
+    var restoration: [String: SystemSettingStoredPreference]? = nil
+}
+
 enum SystemSettingValueSchema: Codable, Equatable, Sendable {
     case boolean
     case integer(range: ClosedRange<Int>, step: Int)
     case decimal(range: ClosedRange<Double>, step: Double?)
     case choice(options: [SystemSettingChoice])
+    case directoryChoice(options: [SystemSettingChoice])
     case string(maximumLength: Int)
     case url
     case color
@@ -243,6 +256,11 @@ enum SystemSettingValueSchema: Codable, Equatable, Sendable {
             value.isFinite && range.contains(value) && (step == nil || step! > 0)
         case let (.choice(options), .choice(id)):
             !id.isEmpty && options.contains { $0.id == id }
+        case let (.directoryChoice, .choice(id)):
+            // Unknown native destinations may be displayed and restored, but not newly selected.
+            !id.isEmpty && id.count <= 100
+        case let (.directoryChoice, .url(url)):
+            FinderWindowDestination.isLocalDirectoryURL(url)
         case let (.string(maximumLength), .string(value)):
             maximumLength > 0 && value.count <= maximumLength
         case (.url, .url):
@@ -265,7 +283,7 @@ enum SystemSettingValueSchema: Codable, Equatable, Sendable {
                 && range.upperBound.isFinite
                 && range.lowerBound <= range.upperBound
                 && (step == nil || (step!.isFinite && step! > 0))
-        case let .choice(options):
+        case let .choice(options), let .directoryChoice(options):
             !options.isEmpty
                 && Set(options.map(\.id)).count == options.count
                 && options.allSatisfy { !$0.id.isEmpty && !$0.title.isEmpty }
@@ -346,11 +364,23 @@ struct SystemSettingDefinition: Identifiable {
     }
 
     func displayDescription(for value: SystemSettingValue) -> String {
-        guard case let .choice(options) = schema,
-              case let .choice(id) = value else {
-            return value.conciseDescription
+        if case let .choice(id) = value {
+            switch schema {
+            case let .choice(options), let .directoryChoice(options):
+                return options.first(where: { $0.id == id })?.title ?? "当前位置（\(id)）"
+            default: break
+            }
         }
-        return options.first(where: { $0.id == id })?.title ?? id
+        return value.conciseDescription
+    }
+
+    func acceptsPortableValue(_ value: SystemSettingValue) -> Bool {
+        guard isProfileEligible, schema.accepts(value) else { return false }
+        if case let .directoryChoice(options) = schema {
+            guard case let .choice(id) = value else { return false }
+            return options.contains { $0.id == id }
+        }
+        return true
     }
 }
 

@@ -3,6 +3,157 @@ import XCTest
 
 @MainActor
 final class SystemSettingsProfileTests: XCTestCase {
+    func testFinderProfileRechecksPairedPathEvenWhenTargetStillMatches() async throws {
+        let store = InMemoryFinderPreferencesStore()
+        let adapter = FinderWindowDestinationSystemSettingAdapter(store: store, validateDirectory: { _ in })
+        let record = makeTestRecord(
+            id: "finder.new-window-target", title: "Destination",
+            schema: .directoryChoice(options: FinderWindowDestination.options),
+            defaultValue: .choice(id: "PfAF"), adapter: adapter
+        )
+        let catalog = makeTestCatalog([record])
+        let controller = MacSettingsController(catalog: catalog, storage: MacSettingsTestStorage())
+        try await adapter.apply(.choice(id: "PfDe"))
+        let profile = SystemSettingsProfile(name: "Desktop", entries: [
+            .init(settingID: record.id, desiredValue: .choice(id: "PfDe"), category: .finder),
+        ])
+        let matchingPlan = try await controller.makePlan(for: profile)
+        XCTAssertEqual(matchingPlan.items.first?.status, .alreadyMatches)
+        store.domains["com.apple.finder"]?["NewWindowTargetPath"] = .string("file:///tmp/elsewhere/")
+        let writeCount = store.writes.count
+        let staleReport = await SystemSettingsProfileApplyCoordinator(catalog: catalog).apply(plan: matchingPlan)
+        XCTAssertEqual(staleReport.results.first?.kind, .previewChanged)
+        XCTAssertEqual(store.writes.count, writeCount)
+        let freshPlan = try await controller.makePlan(for: profile)
+        XCTAssertEqual(freshPlan.items.first?.status, .ready)
+        XCTAssertEqual(freshPlan.items.first?.currentValue, .choice(id: "PfDe"))
+        let report = await SystemSettingsProfileApplyCoordinator(catalog: catalog).apply(plan: freshPlan)
+        XCTAssertEqual(report.results.first?.kind, .appliedAndVerified)
+        XCTAssertEqual(report.rollbackPoint.entries.count, 1)
+    }
+
+    func testFinderProfileAllowsNamedLocationsButRejectsLocalPathsAndUnknownTargets() async throws {
+        let catalog = try MacSettingsCatalogFactory.make { nil }
+        for option in FinderWindowDestination.options {
+            let profile = SystemSettingsProfile(name: "Named", entries: [
+                .init(settingID: "finder.new-window-target", desiredValue: .choice(id: option.id), category: .finder),
+            ])
+            let data = try SystemSettingsProfileCodec.encode(profile, catalog: catalog)
+            XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("file:"))
+            XCTAssertEqual(try SystemSettingsProfileCodec.decode(data, catalog: catalog).0.entries, profile.entries)
+        }
+        for value in [SystemSettingValue.url(URL(filePath: "/private/tmp/private-project")), .choice(id: "PfXX")] {
+            let profile = SystemSettingsProfile(name: "Local", entries: [
+                .init(settingID: "finder.new-window-target", desiredValue: value, category: .finder),
+            ])
+            XCTAssertThrowsError(try SystemSettingsProfileCodec.encode(profile, catalog: catalog))
+            let forcedPlan = SystemSettingsProfileApplyPlan(profileID: profile.id, profileName: profile.name, items: [
+                .init(settingID: "finder.new-window-target", title: "Destination", currentValue: nil,
+                      desiredValue: value, status: .ready, isSelected: true),
+            ])
+            let report = await SystemSettingsProfileApplyCoordinator(catalog: catalog).apply(plan: forcedPlan)
+            XCTAssertEqual(report.results.first?.kind, .unsupported)
+        }
+    }
+
+    func testFinderProfileRollbackRestoresCustomAndAbsentDestinationKeys() async throws {
+        let originals: [[String: SystemSettingStoredPreference]] = [
+            [:],
+            ["NewWindowTarget": .string("PfLo"), "NewWindowTargetPath": .string("file:///tmp/original%20path/")],
+        ]
+        for original in originals {
+            let store = InMemoryFinderPreferencesStore(domains: ["com.apple.finder": original])
+            let adapter = FinderWindowDestinationSystemSettingAdapter(store: store, validateDirectory: { _ in })
+            let record = makeTestRecord(
+                id: "finder.new-window-target", title: "Destination",
+                schema: .directoryChoice(options: FinderWindowDestination.options),
+                defaultValue: .choice(id: "PfAF"), adapter: adapter
+            )
+            let catalog = makeTestCatalog([record])
+            let plan = SystemSettingsProfileApplyPlan(profileID: UUID(), profileName: "Named destination", items: [
+                .init(settingID: record.id, title: "Destination", currentValue: nil,
+                      desiredValue: .choice(id: "PfDe"), status: .ready, isSelected: true),
+            ])
+            let coordinator = SystemSettingsProfileApplyCoordinator(catalog: catalog)
+            let report = await coordinator.apply(plan: plan)
+            XCTAssertEqual(report.results.first?.kind, .appliedAndVerified)
+            let point = try JSONDecoder().decode(SystemSettingRollbackPoint.self, from: JSONEncoder().encode(report.rollbackPoint))
+            let results = await coordinator.rollback(point)
+            XCTAssertEqual(results.first?.kind, .appliedAndVerified)
+            XCTAssertEqual(store.domains["com.apple.finder"], original)
+        }
+    }
+
+    func testDeferredProfileValuesSurviveImportAndEditingButCannotExecute() async throws {
+        let catalog = try MacSettingsCatalogFactory.make { nil }
+        let entries = catalog.deferredDefinitions.values
+            .filter(\.isProfileEligible)
+            .sorted { $0.id.rawValue < $1.id.rawValue }
+            .map { SystemSettingsProfileEntry(
+                settingID: $0.id, desiredValue: $0.defaultValue!, category: $0.category
+            ) }
+        let profile = SystemSettingsProfile(name: "Earlier preview", entries: entries)
+        let data = try SystemSettingsProfileCodec.encode(profile, catalog: catalog)
+        let (decoded, validation) = try SystemSettingsProfileCodec.decode(data, catalog: catalog)
+        XCTAssertEqual(decoded.entries, entries)
+        XCTAssertEqual(validation.warnings, entries.map { .unknownSetting($0.settingID) })
+
+        let store = InMemorySystemSettingsProfileStore(profiles: [decoded])
+        let controller = MacSettingsController(
+            catalog: catalog, storage: MacSettingsTestStorage(), profileStore: store
+        )
+        let draft = controller.makeDraft(from: decoded)
+        XCTAssertTrue(controller.saveDraft(draft, replacing: decoded))
+        XCTAssertEqual(store.load().first?.entries, entries)
+        let plan = try await controller.makePlan(for: decoded)
+        XCTAssertTrue(plan.items.allSatisfy { $0.status == .unknownSetting && !$0.isSelected })
+
+        // Execution must also refuse deferred IDs if handed an old or forged plan.
+        let forcedPlan = SystemSettingsProfileApplyPlan(
+            profileID: profile.id, profileName: profile.name,
+            items: entries.map { .init(
+                settingID: $0.settingID, title: $0.settingID.rawValue,
+                currentValue: nil, desiredValue: $0.desiredValue, status: .ready, isSelected: true
+            ) }
+        )
+        let report = await SystemSettingsProfileApplyCoordinator(catalog: catalog).apply(plan: forcedPlan)
+        XCTAssertEqual(report.results.count, entries.count)
+        XCTAssertTrue(report.results.allSatisfy { $0.kind == .unsupported })
+        XCTAssertTrue(report.rollbackPoint.entries.isEmpty)
+    }
+
+    func testDeferralPreservesKnownProfileValidationAndLocalPathRestrictions() throws {
+        let catalog = try MacSettingsCatalogFactory.make { nil }
+        let profile = SystemSettingsProfile(name: "Invalid", entries: [
+            .init(settingID: "screenshots.destination", desiredValue: .url(
+                URL(fileURLWithPath: "/private/tmp/mac-settings-test-destination")
+            ), category: .screenshots),
+            .init(settingID: "accessibility.sticky-keys", desiredValue: .integer(1), category: .accessibility),
+        ])
+        let validation = SystemSettingsProfileCodec.validate(profile, catalog: catalog)
+        XCTAssertTrue(validation.errors.contains(.nonPortableSetting("screenshots.destination")))
+        XCTAssertTrue(validation.errors.contains(.invalidDesiredValue("accessibility.sticky-keys")))
+        XCTAssertThrowsError(try SystemSettingsProfileCodec.encode(profile, catalog: catalog))
+    }
+
+    func testAlreadyMatchingPreviewIsRecheckedWithoutApplyingUnselectedChanges() async {
+        let adapter = DeterministicSystemSettingAdapter(value: .boolean(false))
+        let record = makeTestRecord(id: "toggle", title: "Toggle", adapter: adapter)
+        let catalog = makeTestCatalog([record])
+        let profile = SystemSettingsProfile(name: "Stale", entries: [
+            .init(settingID: record.id, desiredValue: .boolean(false), category: .finder),
+        ])
+        let plan = SystemSettingsProfilePlanner.makePlan(
+            profile: profile, catalog: catalog,
+            currentValues: [record.id: .boolean(false)], availability: [record.id: .available]
+        )
+        adapter.value = .boolean(true)
+        let report = await SystemSettingsProfileApplyCoordinator(catalog: catalog).apply(plan: plan)
+        XCTAssertEqual(report.results.first?.kind, .previewChanged)
+        XCTAssertTrue(report.hasPartialSuccess)
+        XCTAssertTrue(adapter.appliedValues.isEmpty, "A stale preview must not silently select an unapproved write")
+    }
+
     func testBooleanOffIsDistinctFromExclusionAndChangingValueIncludes() {
         let adapter = DeterministicSystemSettingAdapter(value: .boolean(true))
         let record = makeTestRecord(id: "toggle", title: "Toggle", adapter: adapter)

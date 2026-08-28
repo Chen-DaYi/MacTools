@@ -113,9 +113,11 @@ final class MacSettingsController: ObservableObject {
     @Published private(set) var importedPreview: SystemSettingsImportPreview?
     @Published private(set) var activePlan: SystemSettingsProfileApplyPlan?
     @Published private(set) var lastApplyReport: SystemSettingsProfileApplyReport?
+    @Published private(set) var lastRollbackResults: [SystemSettingsProfileApplyResult]?
     @Published private(set) var density: MacSettingsWorkspaceDensity
     @Published private(set) var isRefreshing = false
     @Published private(set) var isApplyingProfile = false
+    @Published private(set) var isPreparingPlan = false
     @Published private(set) var profileErrorMessage: String?
 
     var onStateChange: (() -> Void)?
@@ -131,11 +133,16 @@ final class MacSettingsController: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var externalRefreshTask: Task<Void, Never>?
     private var profileOperationTask: Task<Void, Never>?
+    private var planPreparationTask: Task<Void, Never>?
+    private var planGeneration: UInt64 = 0
+    private var writeTasks: [SystemSettingID: Task<Bool, Never>] = [:]
+    private var isActive = true
     private var refreshGeneration: UInt64 = 0
     private var rowRevisions: [SystemSettingID: UInt64] = [:]
     private var applyingSettingIDs: Set<SystemSettingID> = []
     private var pendingRequirementIDs: Set<SystemSettingID> = []
     private var failedSettingIDs: Set<SystemSettingID> = []
+    private var rollbackFailureMessages: [SystemSettingID: String] = [:]
 
     init(
         catalog: SystemSettingCatalog,
@@ -182,6 +189,8 @@ final class MacSettingsController: ObservableObject {
         refreshTask?.cancel()
         externalRefreshTask?.cancel()
         profileOperationTask?.cancel()
+        planPreparationTask?.cancel()
+        for task in writeTasks.values { task.cancel() }
     }
 
     var visibleRecords: [SystemSettingRecord] {
@@ -308,6 +317,7 @@ final class MacSettingsController: ObservableObject {
     }
 
     func refresh() {
+        guard isActive else { return }
         refreshGeneration &+= 1
         let generation = refreshGeneration
         refreshTask?.cancel()
@@ -343,7 +353,20 @@ final class MacSettingsController: ObservableObject {
         }
     }
 
+    func activate() {
+        isActive = true
+    }
+
+    func deactivate() {
+        isActive = false
+        cancelRefresh()
+        cancelPlanPreparation()
+        profileOperationTask?.cancel()
+        for task in writeTasks.values { task.cancel() }
+    }
+
     func scheduleExternalRefresh() {
+        guard isActive else { return }
         externalRefreshTask?.cancel()
         externalRefreshTask = Task { @MainActor [weak self] in
             do {
@@ -364,7 +387,7 @@ final class MacSettingsController: ObservableObject {
         _ record: SystemSettingRecord,
         refreshGeneration expectedRefreshGeneration: UInt64?
     ) async {
-        guard !applyingSettingIDs.contains(record.id) else { return }
+        guard isActive, !applyingSettingIDs.contains(record.id) else { return }
         let rowRevision = rowRevisions[record.id, default: 0]
         let availability = SystemSettingCompatibilityEvaluator.availability(
             for: record.definition,
@@ -390,8 +413,10 @@ final class MacSettingsController: ObservableObject {
             }
             rowStates[record.id]?.availability = availability
             rowStates[record.id]?.value = value
-            rowStates[record.id]?.errorMessage = nil
-            failedSettingIDs.remove(record.id)
+            rowStates[record.id]?.errorMessage = rollbackFailureMessages[record.id]
+            if rollbackFailureMessages[record.id] == nil {
+                failedSettingIDs.remove(record.id)
+            }
         } catch {
             guard canPublishRefresh(
                 record.id,
@@ -409,24 +434,54 @@ final class MacSettingsController: ObservableObject {
     }
 
     func apply(_ value: SystemSettingValue, to settingID: SystemSettingID) {
-        guard let record = catalog[settingID],
+        guard isActive, !isPreparingPlan,
+              let record = catalog[settingID],
               record.definition.schema.accepts(value),
               let state = rowStates[settingID],
               canApply(state.availability),
               state.errorMessage == nil,
               !state.isApplying,
               !isApplyingProfile else { return }
-        Task { @MainActor [weak self] in
-            await self?.applyAndWait(value, to: record)
-        }
+        _ = startWrite(value, to: record)
     }
 
     @discardableResult
     func applyAndWait(
         _ value: SystemSettingValue,
-        to record: SystemSettingRecord
+        to record: SystemSettingRecord,
+        restoring snapshot: SystemSettingSnapshot? = nil
     ) async -> Bool {
-        guard record.definition.schema.accepts(value),
+        guard !Task.isCancelled, let task = startWrite(value, to: record, restoring: snapshot) else { return false }
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func startWrite(
+        _ value: SystemSettingValue,
+        to record: SystemSettingRecord,
+        restoring snapshot: SystemSettingSnapshot? = nil
+    ) -> Task<Bool, Never>? {
+        guard isActive, !isPreparingPlan, !isApplyingProfile,
+              writeTasks[record.id] == nil else { return nil }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            defer { writeTasks[record.id] = nil }
+            return await performApplyAndWait(value, to: record, restoring: snapshot)
+        }
+        writeTasks[record.id] = task
+        return task
+    }
+
+    private func performApplyAndWait(
+        _ value: SystemSettingValue,
+        to record: SystemSettingRecord,
+        restoring snapshot: SystemSettingSnapshot?
+    ) async -> Bool {
+        guard isActive, !Task.isCancelled,
+              record.definition.schema.accepts(value),
               let state = rowStates[record.id],
               canApply(state.availability),
               state.errorMessage == nil,
@@ -440,9 +495,12 @@ final class MacSettingsController: ObservableObject {
             applyingSettingIDs.remove(record.id)
             rowStates[record.id]?.isApplying = false
         }
-        let previousValue: SystemSettingValue
+        let previousSnapshot: SystemSettingSnapshot
         do {
-            previousValue = try await record.adapter.read()
+            previousSnapshot = try await record.adapter.snapshot()
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            return false
         } catch {
             rowStates[record.id]?.availability = runtimeFailureAvailability(for: record, error: error)
             rowStates[record.id]?.errorMessage = error.localizedDescription
@@ -451,11 +509,18 @@ final class MacSettingsController: ObservableObject {
             return false
         }
 
+        let previousValue = previousSnapshot.value
         rowStates[record.id]?.value = value
         rowStates[record.id]?.errorMessage = nil
         do {
-            try await record.adapter.apply(value)
-            let verification = try await record.adapter.verify(value)
+            let verification: SystemSettingVerification
+            if let snapshot {
+                guard snapshot.value == value else { throw SystemSettingAdapterError.invalidValue }
+                verification = try await record.adapter.restore(snapshot)
+            } else {
+                try await record.adapter.apply(value)
+                verification = try await record.adapter.verify(value)
+            }
             switch verification {
             case .verified:
                 rowStates[record.id]?.verification = .verified
@@ -465,7 +530,7 @@ final class MacSettingsController: ObservableObject {
             case let .mismatch(actual):
                 let rolledBack = await rollbackAfterFailedApply(
                     record: record,
-                    previousValue: previousValue
+                    previousSnapshot: previousSnapshot
                 )
                 rowStates[record.id]?.value = rolledBack ? previousValue : actual
                 rowStates[record.id]?.verification = .failed
@@ -485,14 +550,19 @@ final class MacSettingsController: ObservableObject {
                 || record.definition.executionClass == .directRequiresRestart {
                 pendingRequirementIDs.insert(record.id)
             }
-            if previousValue != value, !record.definition.isSensitive {
+            var didChange = previousValue != value
+            if previousSnapshot.restoration != nil {
+                didChange = previousSnapshot != (try await record.adapter.snapshot())
+            }
+            if didChange, !record.definition.isSensitive {
                 let change = SystemSettingChange(
                     settingID: record.id,
                     settingTitle: record.definition.title,
                     previousValue: previousValue,
                     newValue: value,
                     verification: verification == .unavailable ? .unverified : .verified,
-                    canRollback: record.definition.canRollback
+                    canRollback: record.definition.canRollback,
+                    previousSnapshot: previousSnapshot
                 )
                 history = historyStore.append(change, referenceDate: change.date)
                 rowStates[record.id]?.changedAt = change.date
@@ -502,7 +572,7 @@ final class MacSettingsController: ObservableObject {
         } catch {
             let rolledBack = await rollbackAfterFailedApply(
                 record: record,
-                previousValue: previousValue
+                previousSnapshot: previousSnapshot
             )
             if rolledBack {
                 rowStates[record.id]?.value = previousValue
@@ -523,12 +593,11 @@ final class MacSettingsController: ObservableObject {
 
     private func rollbackAfterFailedApply(
         record: SystemSettingRecord,
-        previousValue: SystemSettingValue
+        previousSnapshot: SystemSettingSnapshot
     ) async -> Bool {
         guard record.definition.canRollback else { return false }
         do {
-            try await record.adapter.rollback(to: previousValue)
-            guard case .verified = try await record.adapter.verify(previousValue) else {
+            guard case .verified = try await record.adapter.restore(previousSnapshot) else {
                 return false
             }
             return true
@@ -576,7 +645,10 @@ final class MacSettingsController: ObservableObject {
 
     func rollback(_ change: SystemSettingChange) {
         guard change.canRollback, let record = catalog[change.settingID] else { return }
-        apply(change.previousValue, to: record.id)
+        _ = startWrite(
+            change.previousValue, to: record,
+            restoring: change.previousSnapshot ?? .init(value: change.previousValue)
+        )
     }
 
     func openSystemSettings(for settingID: SystemSettingID) {
@@ -608,11 +680,14 @@ final class MacSettingsController: ObservableObject {
             profileDescription: profile?.profileDescription ?? "",
             items: catalog.records.filter(\.definition.isProfileEligible).map { record in
                 let existing = entryByID[record.id]
+                let current = rowStates[record.id]?.value.flatMap {
+                    record.definition.acceptsPortableValue($0) ? $0 : nil
+                }
                 return .init(
                     settingID: record.id,
                     isIncluded: existing != nil,
                     desiredValue: existing?.desiredValue
-                        ?? rowStates[record.id]?.value
+                        ?? current
                         ?? record.definition.defaultValue
                         ?? .string("")
                 )
@@ -671,12 +746,14 @@ final class MacSettingsController: ObservableObject {
     }
 
     func importProfile(data: Data) {
+        guard isActive, !isApplyingProfile else { return }
         do {
             let decoded = try SystemSettingsProfileCodec.decode(data, catalog: catalog)
             importedPreview = .init(profile: decoded.0, validation: decoded.1)
-            activePlan = makePlan(for: decoded.0)
+            preparePlan(for: decoded.0)
             profileErrorMessage = nil
         } catch {
+            cancelPlanPreparation()
             importedPreview = nil
             activePlan = nil
             profileErrorMessage = "无法导入配置：\(error.localizedDescription)"
@@ -684,6 +761,7 @@ final class MacSettingsController: ObservableObject {
     }
 
     func reportProfileImportFailure(_ error: Error) {
+        cancelPlanPreparation()
         importedPreview = nil
         activePlan = nil
         profileErrorMessage = "无法导入配置：\(error.localizedDescription)"
@@ -700,19 +778,71 @@ final class MacSettingsController: ObservableObject {
         try SystemSettingsProfileCodec.encode(profile, catalog: catalog)
     }
 
-    func makePlan(for profile: SystemSettingsProfile) -> SystemSettingsProfileApplyPlan {
-        SystemSettingsProfilePlanner.makePlan(
+    func makePlan(for profile: SystemSettingsProfile) async throws -> SystemSettingsProfileApplyPlan {
+        var currentValues: [SystemSettingID: SystemSettingValue] = [:]
+        var availability: [SystemSettingID: SystemSettingAvailability] = [:]
+        var nonMatchingIDs: Set<SystemSettingID> = []
+        for entry in profile.entries {
+            try Task.checkCancellation()
+            guard let record = catalog[entry.settingID] else { continue }
+            let compatible = SystemSettingCompatibilityEvaluator.availability(
+                for: record.definition,
+                environment: environment
+            )
+            availability[entry.settingID] = compatible
+            guard record.definition.isProfileEligible, canApply(compatible) else { continue }
+            do {
+                let snapshot = try await record.adapter.snapshot()
+                let current = snapshot.value
+                guard record.definition.schema.accepts(current) else {
+                    throw SystemSettingAdapterError.invalidValue
+                }
+                currentValues[entry.settingID] = current
+                if current == entry.desiredValue, snapshot.restoration != nil,
+                   try await record.adapter.verify(entry.desiredValue) != .verified(entry.desiredValue) {
+                    nonMatchingIDs.insert(entry.settingID)
+                }
+            } catch {
+                availability[entry.settingID] = runtimeFailureAvailability(for: record, error: error)
+            }
+            try Task.checkCancellation()
+        }
+        return SystemSettingsProfilePlanner.makePlan(
             profile: profile,
             catalog: catalog,
-            currentValues: rowStates.compactMapValues(\.value),
-            availability: rowStates.mapValues(\.availability)
+            currentValues: currentValues,
+            availability: availability,
+            nonMatchingIDs: nonMatchingIDs
         )
     }
 
     func preparePlan(for profile: SystemSettingsProfile) {
-        guard !isApplyingProfile else { return }
-        activePlan = makePlan(for: profile)
+        guard isActive, !isApplyingProfile, writeTasks.isEmpty else { return }
+        cancelPlanPreparation()
+        let generation = planGeneration
+        activePlan = nil
         lastApplyReport = nil
+        lastRollbackResults = nil
+        isPreparingPlan = true
+        planPreparationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if planGeneration == generation {
+                    isPreparingPlan = false
+                    planPreparationTask = nil
+                }
+            }
+            guard let plan = try? await makePlan(for: profile),
+                  !Task.isCancelled, isActive, planGeneration == generation else { return }
+            activePlan = plan
+        }
+    }
+
+    private func cancelPlanPreparation() {
+        planGeneration &+= 1
+        planPreparationTask?.cancel()
+        planPreparationTask = nil
+        isPreparingPlan = false
     }
 
     func updatePlanSelection(_ selectedIDs: Set<SystemSettingID>) {
@@ -721,7 +851,8 @@ final class MacSettingsController: ObservableObject {
     }
 
     func applyActivePlan() {
-        guard let plan = activePlan,
+        guard isActive, !isPreparingPlan, writeTasks.isEmpty,
+              let plan = activePlan,
               !isApplyingProfile,
               applyingSettingIDs.isEmpty else { return }
         let settingIDs = Set(plan.items.filter(\.isSelected).map(\.settingID))
@@ -730,13 +861,13 @@ final class MacSettingsController: ObservableObject {
             guard let self else { return }
             defer { finishProfileOperation(settingIDs: settingIDs) }
             let report = await applyCoordinator.apply(plan: plan)
-            guard !Task.isCancelled else { return }
             lastApplyReport = report
+            lastRollbackResults = nil
             for result in report.results {
                 if [.appliedAndVerified, .pendingLogout, .pendingRestart, .verificationUnavailable].contains(result.kind),
                    let item = plan.items.first(where: { $0.settingID == result.settingID }),
                    let previous = result.previousValue,
-                   previous != item.desiredValue,
+                   (previous != item.desiredValue || result.previousSnapshot?.restoration != nil),
                    let record = catalog[result.settingID],
                    !record.definition.isSensitive {
                     let change = SystemSettingChange(
@@ -745,12 +876,19 @@ final class MacSettingsController: ObservableObject {
                         previousValue: previous,
                         newValue: item.desiredValue,
                         verification: result.kind == .verificationUnavailable ? .unverified : .verified,
-                        canRollback: record.definition.canRollback
+                        canRollback: record.definition.canRollback,
+                        previousSnapshot: result.previousSnapshot
                     )
                     history = historyStore.append(change, referenceDate: change.date)
+                    rowStates[result.settingID]?.value = item.desiredValue
+                    rowStates[result.settingID]?.verification = result.kind == .verificationUnavailable
+                        ? .unverified : .verified
+                    rowStates[result.settingID]?.errorMessage = nil
+                    rollbackFailureMessages[result.settingID] = nil
+                    failedSettingIDs.remove(result.settingID)
                     rowStates[result.settingID]?.changedAt = change.date
                 }
-                if let record = catalog[result.settingID] {
+                if isActive, !Task.isCancelled, let record = catalog[result.settingID] {
                     applyingSettingIDs.remove(result.settingID)
                     rowStates[result.settingID]?.isApplying = false
                     await refresh(record)
@@ -776,21 +914,63 @@ final class MacSettingsController: ObservableObject {
     }
 
     func rollbackLastApply() {
-        guard let point = lastApplyReport?.rollbackPoint,
+        guard isActive, !isPreparingPlan, writeTasks.isEmpty,
+              let originalPoint = lastApplyReport?.rollbackPoint,
               !isApplyingProfile,
               applyingSettingIDs.isEmpty else { return }
+        let restoredIDs = Set((lastRollbackResults ?? [])
+            .filter { $0.kind == .appliedAndVerified }.map(\.settingID))
+        let point = SystemSettingRollbackPoint(
+            id: originalPoint.id,
+            createdAt: originalPoint.createdAt,
+            profileID: originalPoint.profileID,
+            entries: originalPoint.entries.filter { !restoredIDs.contains($0.settingID) }
+        )
+        guard !point.entries.isEmpty else { return }
         let settingIDs = Set(point.entries.map(\.settingID))
         guard beginProfileOperation(settingIDs: settingIDs) else { return }
         profileOperationTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { finishProfileOperation(settingIDs: settingIDs) }
             let results = await applyCoordinator.rollback(point)
-            guard !Task.isCancelled else { return }
+            var outcomes = Dictionary(uniqueKeysWithValues: (lastRollbackResults ?? []).map {
+                ($0.settingID, $0)
+            })
+            for result in results { outcomes[result.settingID] = result }
+            lastRollbackResults = originalPoint.entries.compactMap { outcomes[$0.settingID] }
             for result in results {
                 if let record = catalog[result.settingID] {
                     applyingSettingIDs.remove(result.settingID)
                     rowStates[result.settingID]?.isApplying = false
-                    await refresh(record)
+                    if isActive, !Task.isCancelled { await refresh(record) }
+                    if result.kind == .appliedAndVerified,
+                       let restoredValue = point.entries.first(where: { $0.settingID == result.settingID })?.value {
+                        rowStates[result.settingID]?.value = restoredValue
+                        rowStates[result.settingID]?.verification = .verified
+                        rowStates[result.settingID]?.errorMessage = nil
+                        rollbackFailureMessages[result.settingID] = nil
+                        failedSettingIDs.remove(result.settingID)
+                        if let previous = result.previousValue,
+                           (previous != restoredValue || result.previousSnapshot?.restoration != nil),
+                           !record.definition.isSensitive {
+                            let change = SystemSettingChange(
+                                settingID: record.id,
+                                settingTitle: result.title,
+                                previousValue: previous,
+                                newValue: restoredValue,
+                                verification: .verified,
+                                canRollback: record.definition.canRollback,
+                                previousSnapshot: result.previousSnapshot
+                            )
+                            history = historyStore.append(change, referenceDate: change.date)
+                            rowStates[result.settingID]?.changedAt = change.date
+                        }
+                    } else {
+                        failedSettingIDs.insert(result.settingID)
+                        rowStates[result.settingID]?.verification = .failed
+                        rowStates[result.settingID]?.errorMessage = result.message
+                        rollbackFailureMessages[result.settingID] = result.message ?? "回滚未完成，请重试。"
+                    }
                 }
             }
             onStateChange?()
@@ -800,7 +980,10 @@ final class MacSettingsController: ObservableObject {
     func undoMostRecentChange() async -> Bool {
         guard let change = history.first(where: \.canRollback),
               let record = catalog[change.settingID] else { return false }
-        return await applyAndWait(change.previousValue, to: record)
+        return await applyAndWait(
+            change.previousValue, to: record,
+            restoring: change.previousSnapshot ?? .init(value: change.previousValue)
+        )
     }
 
     func needsAttention(_ settingID: SystemSettingID) -> Bool {
@@ -889,7 +1072,7 @@ final class MacSettingsController: ObservableObject {
     }
 
     private func beginProfileOperation(settingIDs: Set<SystemSettingID>) -> Bool {
-        guard !isApplyingProfile,
+        guard isActive, !isPreparingPlan, writeTasks.isEmpty, !isApplyingProfile,
               profileOperationTask == nil,
               applyingSettingIDs.isDisjoint(with: settingIDs) else { return false }
         isApplyingProfile = true

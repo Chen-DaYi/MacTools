@@ -4,6 +4,68 @@ import MacToolsPluginKit
 
 @MainActor
 final class MacSettingsPluginTests: XCTestCase {
+    func testDeferredSettingsCannotReappearThroughFavoritesOrActions() async throws {
+        let catalog = try MacSettingsCatalogFactory.make { nil }
+        let storage = MacSettingsTestStorage()
+        let retainedID: SystemSettingID = "finder.show-all-extensions"
+        storage.set(
+            [retainedID.rawValue] + catalog.deferredDefinitions.keys.map(\.rawValue),
+            forKey: "favorite-setting-ids"
+        )
+        let controller = MacSettingsController(catalog: catalog, storage: storage)
+        // Inspect the production catalog without running live system reads or writes.
+        controller.deactivate()
+        let plugin = MacSettingsPlugin(controller: controller)
+        plugin.handleAction(.setDisclosureExpanded(true))
+
+        XCTAssertEqual(controller.visibleRecords.count, 39)
+        XCTAssertEqual(controller.favoriteIDs, [retainedID])
+        XCTAssertEqual(plugin.primaryPanelState.detail?.controls.count, 2)
+        let draftIDs = Set(controller.makeDraft().items.map(\.settingID))
+        XCTAssertTrue(draftIDs.isDisjoint(with: catalog.deferredDefinitions.keys))
+        let settingActions = plugin.actionCatalogEntries.filter {
+            $0.reference.key.actionID == "open-setting"
+        }
+        XCTAssertEqual(settingActions.count, 39)
+
+        for id in catalog.deferredDefinitions.keys {
+            for actionID in ["open-setting", "set-boolean"] {
+                let reference = ActionReference(
+                    key: ActionKey(providerID: "mac-settings", actionID: actionID),
+                    parameters: try ActionParameterSet([
+                        "setting-id": .string(id.rawValue), "enabled": .boolean(true),
+                    ])
+                )
+                XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+                let handle = try plugin.beginAction(.init(
+                    reference: reference, source: .test, mode: .background
+                ))
+                guard case .failed = await handle.result() else {
+                    return XCTFail("Deferred setting must not execute \(actionID): \(id)")
+                }
+            }
+        }
+    }
+
+    func testFeaturePanelPreservesAllChoicesAndSelectionBeyondThirdOption() throws {
+        let options = (1 ... 4).map { SystemSettingChoice(id: "\($0)", title: "Option \($0)") }
+        let record = makeTestRecord(
+            id: "choice", title: "Choice", schema: .choice(options: options),
+            defaultValue: .choice(id: "4"),
+            adapter: DeterministicSystemSettingAdapter(value: .choice(id: "4"))
+        )
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([record]), storage: MacSettingsTestStorage()
+        )
+        controller.toggleFavorite(record.id)
+        let plugin = MacSettingsPlugin(controller: controller)
+        plugin.handleAction(.setDisclosureExpanded(true))
+        let control = try XCTUnwrap(plugin.primaryPanelState.detail?.controls.first)
+        XCTAssertEqual(control.kind, .selectList)
+        XCTAssertEqual(control.options.map(\.id), options.map(\.id))
+        XCTAssertEqual(control.selectedOptionID, "4")
+    }
+
     func testFullDiskAccessPermissionDerivesAffectedSettingsAndRoutesActions() throws {
         let protectedFirst = makeTestRecord(
             id: "protected.first",
@@ -255,6 +317,76 @@ final class MacSettingsPluginTests: XCTestCase {
         plugin.activate(context: .init(pluginID: "mac-settings"))
         plugin.deactivate(reason: .disabled)
         XCTAssertFalse(controller.isRefreshing)
+    }
+
+    func testDeactivationCancelsProfileBeforeTheNextWriteAndAllowsReactivation() async {
+        let firstAdapter = FirstReadSuspendingSystemSettingAdapter(value: .boolean(false), suspendsFirstRead: false)
+        let secondAdapter = DeterministicSystemSettingAdapter(value: .boolean(false))
+        let first = makeTestRecord(id: "first", title: "First", adapter: firstAdapter)
+        let second = makeTestRecord(id: "second", title: "Second", adapter: secondAdapter)
+        let controller = MacSettingsController(catalog: makeTestCatalog([first, second]), storage: MacSettingsTestStorage())
+        let plugin = MacSettingsPlugin(controller: controller)
+        controller.preparePlan(for: .init(name: "Cancel", entries: [
+            .init(settingID: first.id, desiredValue: .boolean(true), category: .finder),
+            .init(settingID: second.id, desiredValue: .boolean(true), category: .finder),
+        ]))
+        while controller.isPreparingPlan { await Task.yield() }
+        firstAdapter.suspendNextRead = true
+        controller.applyActivePlan()
+        while !firstAdapter.firstReadStarted { await Task.yield() }
+        plugin.deactivate(reason: .disabled)
+        firstAdapter.resumeFirstRead(with: .boolean(false))
+        while controller.isApplyingProfile { await Task.yield() }
+
+        XCTAssertEqual(firstAdapter.value, .boolean(false))
+        XCTAssertTrue(secondAdapter.appliedValues.isEmpty)
+        XCTAssertEqual(controller.lastApplyReport?.results.map(\.kind), [.cancelled, .cancelled])
+        XCTAssertTrue(controller.history.isEmpty)
+        let disabledWrite = await controller.applyAndWait(.boolean(true), to: second)
+        XCTAssertFalse(disabledWrite)
+        controller.activate()
+        let reactivatedWrite = await controller.applyAndWait(.boolean(true), to: second)
+        XCTAssertTrue(reactivatedWrite)
+    }
+
+    func testDeactivationCancelsAnInlineWriteSuspendedBeforeMutation() async {
+        let adapter = FirstReadSuspendingSystemSettingAdapter(value: .boolean(false))
+        let record = makeTestRecord(id: "toggle", title: "Toggle", adapter: adapter)
+        let controller = MacSettingsController(catalog: makeTestCatalog([record]), storage: MacSettingsTestStorage())
+        let plugin = MacSettingsPlugin(controller: controller)
+        let operation = Task { await controller.applyAndWait(.boolean(true), to: record) }
+        while !adapter.firstReadStarted { await Task.yield() }
+        plugin.deactivate(reason: .disabled)
+        adapter.resumeFirstRead(with: .boolean(false))
+        let result = await operation.value
+        XCTAssertFalse(result)
+        XCTAssertEqual(adapter.value, .boolean(false))
+        XCTAssertFalse(controller.rowStates[record.id]?.isApplying ?? true)
+    }
+
+    func testCancelledProfileRetainsCompletedChangesAndTheirRollbackPoint() async {
+        let completed = DeterministicSystemSettingAdapter(value: .boolean(false))
+        let pending = FirstReadSuspendingSystemSettingAdapter(value: .boolean(false), suspendsFirstRead: false)
+        let first = makeTestRecord(id: "first", title: "First", adapter: completed)
+        let second = makeTestRecord(id: "second", title: "Second", adapter: pending)
+        let controller = MacSettingsController(catalog: makeTestCatalog([first, second]), storage: MacSettingsTestStorage())
+        let plugin = MacSettingsPlugin(controller: controller)
+        controller.preparePlan(for: .init(name: "Partial", entries: [
+            .init(settingID: first.id, desiredValue: .boolean(true), category: .finder),
+            .init(settingID: second.id, desiredValue: .boolean(true), category: .finder),
+        ]))
+        while controller.isPreparingPlan { await Task.yield() }
+        pending.suspendNextRead = true
+        controller.applyActivePlan()
+        while !pending.firstReadStarted { await Task.yield() }
+        plugin.deactivate(reason: .disabled)
+        pending.resumeFirstRead(with: .boolean(false))
+        while controller.isApplyingProfile { await Task.yield() }
+        XCTAssertEqual(controller.lastApplyReport?.results.map(\.kind), [.appliedAndVerified, .cancelled])
+        XCTAssertEqual(controller.lastApplyReport?.rollbackPoint.entries.map(\.settingID), [first.id])
+        XCTAssertEqual(controller.history.map(\.settingID), [first.id])
+        XCTAssertEqual(controller.rowStates[first.id]?.value, .boolean(true))
+        XCTAssertEqual(pending.value, .boolean(false))
     }
 
     func testProfileActionBackupRequiresItsPortableProfilePayload() throws {

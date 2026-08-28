@@ -3,6 +3,187 @@ import XCTest
 
 @MainActor
 final class MacSettingsControllerTests: XCTestCase {
+    func testFinderDestinationUndoAfterReloadRestoresExactCustomPath() async throws {
+        let url = URL(filePath: "/private/tmp/Original Projects", directoryHint: .isDirectory)
+        let original: [String: SystemSettingStoredPreference] = [
+            "NewWindowTarget": .string("PfLo"), "NewWindowTargetPath": .string(url.absoluteString),
+        ]
+        let store = InMemoryFinderPreferencesStore(domains: ["com.apple.finder": original])
+        let adapter = FinderWindowDestinationSystemSettingAdapter(store: store, validateDirectory: { _ in })
+        let record = makeTestRecord(
+            id: "finder.new-window-target", title: "Destination",
+            schema: .directoryChoice(options: FinderWindowDestination.options),
+            defaultValue: .choice(id: "PfAF"), adapter: adapter
+        )
+        let storage = MacSettingsTestStorage()
+        let controller = MacSettingsController(catalog: makeTestCatalog([record]), storage: storage)
+        await controller.refresh(record)
+        XCTAssertNil(controller.rowStates[record.id]?.errorMessage)
+        XCTAssertEqual(controller.rowStates[record.id]?.value, .url(url))
+        XCTAssertEqual(controller.makeDraft().items.first?.desiredValue, .choice(id: "PfAF"))
+        let applied = await controller.applyAndWait(.choice(id: "PfDe"), to: record)
+        XCTAssertTrue(applied)
+        let reloaded = MacSettingsController(catalog: makeTestCatalog([record]), storage: storage)
+        XCTAssertEqual(reloaded.history.first?.previousSnapshot?.restoration, original)
+        let undone = await reloaded.undoMostRecentChange()
+        XCTAssertTrue(undone)
+        XCTAssertEqual(store.domains["com.apple.finder"], original)
+        XCTAssertEqual(reloaded.rowStates[record.id]?.value, .url(url))
+    }
+
+    func testFinderPartialWriteAndVerificationFailureRestoreCompleteOriginalState() async throws {
+        for failsWrite in [true, false] {
+            let original: [String: SystemSettingStoredPreference] = [
+                "NewWindowTarget": .string("PfLo"), "NewWindowTargetPath": .string("file:///tmp/original%20path/"),
+            ]
+            let store = InMemoryFinderPreferencesStore(domains: ["com.apple.finder": original])
+            store.failNextWriteAfterFirstKey = failsWrite
+            store.ignoreNextPathWrite = !failsWrite
+            let record = makeTestRecord(
+                id: "finder.new-window-target", title: "Destination",
+                schema: .directoryChoice(options: FinderWindowDestination.options),
+                defaultValue: .choice(id: "PfAF"),
+                adapter: FinderWindowDestinationSystemSettingAdapter(store: store, validateDirectory: { _ in })
+            )
+            let controller = MacSettingsController(catalog: makeTestCatalog([record]), storage: MacSettingsTestStorage())
+            let applied = await controller.applyAndWait(.choice(id: "PfDe"), to: record)
+            XCTAssertFalse(applied)
+            XCTAssertEqual(store.domains["com.apple.finder"], original)
+            XCTAssertTrue(controller.history.isEmpty)
+        }
+    }
+
+    func testFinderExtensionsUndoRestoresAbsenceEvenWhenBooleanDidNotChange() async throws {
+        let store = InMemoryFinderPreferencesStore()
+        let record = makeTestRecord(
+            id: "finder.show-all-extensions", title: "Extensions",
+            adapter: FinderExtensionsSystemSettingAdapter(store: store)
+        )
+        let controller = MacSettingsController(catalog: makeTestCatalog([record]), storage: MacSettingsTestStorage())
+        let applied = await controller.applyAndWait(.boolean(false), to: record)
+        XCTAssertTrue(applied)
+        XCTAssertEqual(controller.history.count, 1, "An explicit false is different from an absent key")
+        let undone = await controller.undoMostRecentChange()
+        XCTAssertTrue(undone)
+        XCTAssertNil(store.domains[UserDefaults.globalDomain]?["AppleShowAllExtensions"])
+    }
+
+    func testCancellingCallerStopsInlineWriteBeforeMutation() async {
+        let adapter = FirstReadSuspendingSystemSettingAdapter(value: .boolean(false))
+        let record = makeTestRecord(id: "toggle", title: "Toggle", adapter: adapter)
+        let controller = MacSettingsController(catalog: makeTestCatalog([record]), storage: MacSettingsTestStorage())
+        let operation = Task { await controller.applyAndWait(.boolean(true), to: record) }
+        while !adapter.firstReadStarted { await Task.yield() }
+        operation.cancel()
+        adapter.resumeFirstRead(with: .boolean(false))
+        let result = await operation.value
+        XCTAssertFalse(result)
+        XCTAssertEqual(adapter.value, .boolean(false))
+        XCTAssertTrue(controller.history.isEmpty)
+    }
+
+    func testDeactivationCancelsRollbackBeforeAnyFurtherRestoration() async {
+        let firstAdapter = DeterministicSystemSettingAdapter(value: .boolean(false))
+        let secondAdapter = FirstReadSuspendingSystemSettingAdapter(value: .boolean(false), suspendsFirstRead: false)
+        let first = makeTestRecord(id: "first", title: "First", adapter: firstAdapter)
+        let second = makeTestRecord(id: "second", title: "Second", adapter: secondAdapter)
+        let controller = MacSettingsController(catalog: makeTestCatalog([first, second]), storage: MacSettingsTestStorage())
+        controller.preparePlan(for: .init(name: "Rollback", entries: [
+            .init(settingID: first.id, desiredValue: .boolean(true), category: .finder),
+            .init(settingID: second.id, desiredValue: .boolean(true), category: .finder),
+        ]))
+        while controller.isPreparingPlan { await Task.yield() }
+        controller.applyActivePlan()
+        while controller.isApplyingProfile { await Task.yield() }
+        secondAdapter.suspendNextRead = true
+        controller.rollbackLastApply()
+        while !secondAdapter.firstReadStarted { await Task.yield() }
+        controller.deactivate()
+        secondAdapter.resumeFirstRead(with: .boolean(true))
+        while controller.isApplyingProfile { await Task.yield() }
+        XCTAssertEqual(controller.lastRollbackResults?.map(\.kind), [.cancelled, .cancelled])
+        XCTAssertTrue(firstAdapter.rollbackValues.isEmpty)
+        XCTAssertEqual(secondAdapter.value, .boolean(true))
+    }
+
+    func testProfilePreviewReadsLiveValuesInsteadOfInitialDefaults() async throws {
+        let adapter = DeterministicSystemSettingAdapter(value: .boolean(true))
+        let record = makeTestRecord(id: "toggle", title: "Toggle", adapter: adapter)
+        let controller = MacSettingsController(catalog: makeTestCatalog([record]), storage: MacSettingsTestStorage())
+        let profile = SystemSettingsProfile(name: "Fresh", entries: [
+            .init(settingID: record.id, desiredValue: .boolean(false), category: .finder),
+        ])
+
+        controller.preparePlan(for: profile)
+        XCTAssertTrue(controller.isPreparingPlan)
+        XCTAssertNil(controller.activePlan)
+        while controller.isPreparingPlan { await Task.yield() }
+
+        let item = try XCTUnwrap(controller.activePlan?.items.first)
+        XCTAssertEqual(item.currentValue, .boolean(true))
+        XCTAssertEqual(item.status, .ready)
+        XCTAssertTrue(item.isSelected)
+        controller.applyActivePlan()
+        while controller.isApplyingProfile { await Task.yield() }
+        XCTAssertEqual(adapter.value, .boolean(false))
+        XCTAssertEqual(controller.lastApplyReport?.results.first?.kind, .appliedAndVerified)
+    }
+
+    func testNewPreviewSupersedesAnOlderSuspendedRead() async {
+        let adapter = FirstReadSuspendingSystemSettingAdapter(value: .boolean(true))
+        let record = makeTestRecord(id: "toggle", title: "Toggle", adapter: adapter)
+        let controller = MacSettingsController(catalog: makeTestCatalog([record]), storage: MacSettingsTestStorage())
+        let first = SystemSettingsProfile(name: "Old", entries: [
+            .init(settingID: record.id, desiredValue: .boolean(false), category: .finder),
+        ])
+        let second = SystemSettingsProfile(name: "New", entries: [
+            .init(settingID: record.id, desiredValue: .boolean(true), category: .finder),
+        ])
+        controller.preparePlan(for: first)
+        while !adapter.firstReadStarted { await Task.yield() }
+        controller.preparePlan(for: second)
+        while controller.isPreparingPlan { await Task.yield() }
+        adapter.resumeFirstRead(with: .boolean(false))
+        await Task.yield()
+        XCTAssertEqual(controller.activePlan?.profileID, second.id)
+        XCTAssertEqual(controller.activePlan?.items.first?.status, .alreadyMatches)
+    }
+
+    func testRollbackFailureRemainsVisibleAndRetryOnlyRestoresUnresolvedSettings() async throws {
+        let successful = RollbackFailingSystemSettingAdapter()
+        successful.failsRollback = false
+        let failing = RollbackFailingSystemSettingAdapter()
+        let first = makeTestRecord(id: "first", title: "First", adapter: successful)
+        let second = makeTestRecord(id: "second", title: "Second", adapter: failing)
+        let controller = MacSettingsController(catalog: makeTestCatalog([first, second]), storage: MacSettingsTestStorage())
+        controller.preparePlan(for: .init(name: "Rollback", entries: [
+            .init(settingID: first.id, desiredValue: .boolean(true), category: .finder),
+            .init(settingID: second.id, desiredValue: .boolean(true), category: .finder),
+        ]))
+        while controller.isPreparingPlan { await Task.yield() }
+        controller.applyActivePlan()
+        while controller.isApplyingProfile { await Task.yield() }
+        controller.rollbackLastApply()
+        while controller.isApplyingProfile { await Task.yield() }
+
+        XCTAssertEqual(controller.lastRollbackResults?.map(\.kind), [.appliedAndVerified, .failedWithoutRollback])
+        XCTAssertEqual(failing.value, .boolean(true))
+        await controller.refresh(second)
+        XCTAssertEqual(controller.rowStates[second.id]?.errorMessage, "Injected rollback failure")
+        XCTAssertTrue(controller.needsAttention(second.id))
+
+        failing.failsRollback = false
+        controller.rollbackLastApply()
+        while controller.isApplyingProfile { await Task.yield() }
+        XCTAssertEqual(successful.rollbackAttempts, 1)
+        XCTAssertEqual(failing.rollbackAttempts, 2)
+        XCTAssertEqual(failing.value, .boolean(false))
+        XCTAssertEqual(controller.lastRollbackResults?.map(\.kind), [.appliedAndVerified, .appliedAndVerified])
+        XCTAssertNil(controller.rowStates[second.id]?.errorMessage)
+        XCTAssertFalse(controller.needsAttention(second.id))
+        XCTAssertEqual(controller.history.count, 4)
+    }
+
     func testKeyboardNavigationMovesBetweenSearchAndVisibleRows() {
         let ids: [SystemSettingID] = ["first", "second", "third"]
 
