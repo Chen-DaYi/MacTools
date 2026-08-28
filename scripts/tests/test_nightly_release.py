@@ -345,6 +345,47 @@ class NightlyReleaseTests(unittest.TestCase):
             [],
         )
 
+    def test_retention_selects_only_abandoned_nightly_drafts(self) -> None:
+        releases = [
+            {
+                "databaseId": 101,
+                "tagName": "nightly-6-1",
+                "isDraft": True,
+                "isPrerelease": True,
+            },
+            {
+                "databaseId": 102,
+                "tagName": "nightly-7-1",
+                "isDraft": False,
+                "isPrerelease": True,
+            },
+            {
+                "databaseId": 103,
+                "tagName": "v1.2.1",
+                "isDraft": True,
+                "isPrerelease": False,
+            },
+            {
+                "databaseId": 104,
+                "tagName": "nightly-8-1",
+                "isDraft": True,
+                "isPrerelease": False,
+            },
+        ]
+
+        self.assertEqual(nightly_release.stale_nightly_draft_ids(releases), [101])
+
+    def test_retention_rejects_a_matching_draft_without_a_valid_release_id(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "positive integer"):
+            nightly_release.stale_nightly_draft_ids([
+                {
+                    "databaseId": None,
+                    "tagName": "nightly-6-1",
+                    "isDraft": True,
+                    "isPrerelease": True,
+                }
+            ])
+
 
 class NightlyCLIVerificationTests(unittest.TestCase):
     def setUp(self) -> None:

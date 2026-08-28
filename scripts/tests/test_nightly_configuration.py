@@ -231,6 +231,14 @@ class NightlyConfigurationTests(unittest.TestCase):
 
     def test_nightly_workflow_is_gated_manual_and_fail_closed(self) -> None:
         workflow = (REPO_ROOT / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
+        release_step = workflow.split(
+            "- name: Create immutable-by-workflow draft prerelease",
+            1,
+        )[1].split("\n      - name:", 1)[0]
+        publication_step = workflow.split(
+            "- name: Upload and publish verified Nightly assets",
+            1,
+        )[1].split("\n      - name:", 1)[0]
 
         self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("vars.ENABLE_NIGHTLY_RELEASES == 'true'", workflow)
@@ -249,6 +257,15 @@ class NightlyConfigurationTests(unittest.TestCase):
         self.assertIn("NIGHTLY_APPCAST_RELATIVE_PATH", workflow)
         self.assertIn("unexpected publication state", workflow)
         self.assertIn("unexpectedly replaced the stable Latest release", workflow)
+        self.assertIn('echo "release_id=$NIGHTLY_RELEASE_ID" >> "$GITHUB_OUTPUT"', release_step)
+        self.assertIn('RELEASE_CATALOG_PATH="$RUNNER_TEMP/catalog.json"', publication_step)
+        self.assertIn('cp "$SIGNED_PLUGIN_CATALOG_PATH" "$RELEASE_CATALOG_PATH"', publication_step)
+        self.assertIn('"$RELEASE_CATALOG_PATH"', publication_step)
+        self.assertNotIn('#catalog.json', publication_step)
+        self.assertIn("id: nightly_release", workflow)
+        self.assertIn("Cleanup incomplete Nightly draft", workflow)
+        self.assertIn("stale-draft-ids", workflow)
+        self.assertIn('gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$NIGHTLY_RELEASE_ID"', workflow)
         self.assertIn("preflight-app-plugin-catalog.swift", workflow)
         self.assertIn("Verify plugin catalog signing key", workflow)
         self.assertIn("verify-plugin-catalog-key-pair.sh", workflow)

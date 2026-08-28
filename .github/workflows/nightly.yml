@@ -454,6 +454,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Create immutable-by-workflow draft prerelease
+        id: nightly_release
         if: steps.nightly_gate.outputs.decision == 'publish'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -470,10 +471,21 @@ jobs:
             --title "MacTools Nightly — Unstable ($BUILD_NUMBER)" \
             --notes-file "$RELEASE_NOTES_PATH"
 
+          NIGHTLY_RELEASE_ID="$(gh release view "$TAG" --json databaseId --jq .databaseId)"
+          [[ "$NIGHTLY_RELEASE_ID" =~ ^[0-9]+$ ]] || { echo "Cannot determine the created Nightly release ID." >&2; exit 1; }
+          echo "release_id=$NIGHTLY_RELEASE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Upload and publish verified Nightly assets
+        if: steps.nightly_gate.outputs.decision == 'publish'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_CATALOG_PATH="$RUNNER_TEMP/catalog.json"
+          cp "$SIGNED_PLUGIN_CATALOG_PATH" "$RELEASE_CATALOG_PATH"
           assets=(
-            "$DMG_PATH#MacTools-Nightly.dmg"
-            "$SHA256_PATH#MacTools-Nightly.sha256"
-            "$SIGNED_PLUGIN_CATALOG_PATH#catalog.json"
+            "$DMG_PATH"
+            "$SHA256_PATH"
+            "$RELEASE_CATALOG_PATH"
           )
           while IFS= read -r asset; do
             [[ -n "$asset" ]] && assets+=("$asset")
@@ -511,8 +523,16 @@ jobs:
           gh api --paginate --slurp \
             "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             > "$RELEASE_PAGES_PATH"
-          jq 'flatten | map({tagName: .tag_name, isDraft: .draft, isPrerelease: .prerelease, publishedAt: .published_at})' \
+          jq 'flatten | map({databaseId: .id, tagName: .tag_name, isDraft: .draft, isPrerelease: .prerelease, publishedAt: .published_at})' \
             "$RELEASE_PAGES_PATH" > "$RELEASES_PATH"
+
+          scripts/nightly-release.py stale-draft-ids \
+            --input "$RELEASES_PATH" \
+            > "$RUNNER_TEMP/stale-nightly-draft-ids.txt"
+          while IFS= read -r stale_draft_id; do
+            [[ -n "$stale_draft_id" ]] || continue
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$stale_draft_id"
+          done < "$RUNNER_TEMP/stale-nightly-draft-ids.txt"
 
           PRESERVE_TAG_ARGS=()
           COMMITTED_APPCAST_PATH="$RUNNER_TEMP/committed-nightly-appcast.xml"
@@ -590,6 +610,29 @@ jobs:
           fi
           git commit -m "ci: publish MacTools Nightly $BUILD_NUMBER"
           git push origin HEAD:main
+
+      - name: Cleanup incomplete Nightly draft
+        if: steps.nightly_gate.outputs.decision == 'publish' && failure() && steps.nightly_release.outputs.release_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NIGHTLY_RELEASE_ID="${{ steps.nightly_release.outputs.release_id }}"
+          if ! RELEASE_STATE="$(gh api "repos/$GITHUB_REPOSITORY/releases/$NIGHTLY_RELEASE_ID" \
+            --jq '[.tag_name, .draft, .target_commitish] | @tsv')"; then
+            echo "The incomplete Nightly release no longer exists; no cleanup is needed."
+            exit 0
+          fi
+          IFS=$'\t' read -r RELEASE_TAG RELEASE_IS_DRAFT RELEASE_TARGET <<< "$RELEASE_STATE"
+          if [[ "$RELEASE_TAG" != "$TAG" || "$RELEASE_TARGET" != "$SOURCE_SHA" ]]; then
+            echo "Refusing to delete a Nightly release that does not match this workflow run." >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_IS_DRAFT" == "true" ]]; then
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$NIGHTLY_RELEASE_ID"
+            echo "Deleted incomplete Nightly draft $TAG."
+          else
+            echo "Nightly release $TAG is already published; preserving it."
+          fi
 
       - name: Cleanup keychain
         if: always() && steps.nightly_gate.outputs.decision == 'publish'
