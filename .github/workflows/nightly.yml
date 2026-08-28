@@ -586,7 +586,6 @@ jobs:
             .github/workflows/plugin-release.yml
 
           cp "$SIGNED_PLUGIN_CATALOG_PATH" "$RUNNER_TEMP/nightly-plugin-catalog.json"
-          cp "$NIGHTLY_APPCAST_PATH" "$RUNNER_TEMP/nightly-appcast.xml"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
@@ -594,7 +593,7 @@ jobs:
           mkdir -p "$(dirname "$NIGHTLY_PLUGIN_CATALOG_RELATIVE_PATH")"
           mkdir -p "$(dirname "$NIGHTLY_APPCAST_RELATIVE_PATH")"
           cp "$RUNNER_TEMP/nightly-plugin-catalog.json" "$NIGHTLY_PLUGIN_CATALOG_RELATIVE_PATH"
-          cp "$RUNNER_TEMP/nightly-appcast.xml" "$NIGHTLY_APPCAST_RELATIVE_PATH"
+          cp "$NIGHTLY_APPCAST_PATH" "$NIGHTLY_APPCAST_RELATIVE_PATH"
           git add "$NIGHTLY_PLUGIN_CATALOG_RELATIVE_PATH" "$NIGHTLY_APPCAST_RELATIVE_PATH"
 
           CHANGED_PATHS="$(git diff --cached --name-only)"

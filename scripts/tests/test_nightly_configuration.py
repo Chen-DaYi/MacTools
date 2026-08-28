@@ -239,6 +239,10 @@ class NightlyConfigurationTests(unittest.TestCase):
             "- name: Upload and publish verified Nightly assets",
             1,
         )[1].split("\n      - name:", 1)[0]
+        metadata_publication_step = workflow.split(
+            "- name: Publish dedicated Nightly catalog and appcast last",
+            1,
+        )[1].split("\n      - name:", 1)[0]
 
         self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("vars.ENABLE_NIGHTLY_RELEASES == 'true'", workflow)
@@ -262,6 +266,14 @@ class NightlyConfigurationTests(unittest.TestCase):
         self.assertIn('cp "$SIGNED_PLUGIN_CATALOG_PATH" "$RELEASE_CATALOG_PATH"', publication_step)
         self.assertIn('"$RELEASE_CATALOG_PATH"', publication_step)
         self.assertNotIn('#catalog.json', publication_step)
+        self.assertNotIn(
+            'cp "$NIGHTLY_APPCAST_PATH" "$RUNNER_TEMP/nightly-appcast.xml"',
+            metadata_publication_step,
+        )
+        self.assertIn(
+            'cp "$NIGHTLY_APPCAST_PATH" "$NIGHTLY_APPCAST_RELATIVE_PATH"',
+            metadata_publication_step,
+        )
         self.assertIn("id: nightly_release", workflow)
         self.assertIn("Cleanup incomplete Nightly draft", workflow)
         self.assertIn("stale-draft-ids", workflow)
