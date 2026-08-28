@@ -116,8 +116,10 @@ class NightlyConfigurationTests(unittest.TestCase):
 
     def test_nightly_catalog_uses_the_schema_generators_compatibility_floor(self) -> None:
         workflow = (REPO_ROOT / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
+        builder = (REPO_ROOT / "scripts/plugins/build-plugin-release-assets.sh").read_text(encoding="utf-8")
 
         self.assertNotIn("PLUGIN_CATALOG_MINIMUM_HOST_VERSION", workflow)
+        self.assertIn('catalog_args+=(--nightly-build-number "$NIGHTLY_BUILD_NUMBER")', builder)
 
     def test_nightly_helpers_embed_distinct_signing_identifiers_without_changing_stable(self) -> None:
         for directory, plugin_id in [("FanControl", "fan-control"), ("BatteryChargeLimit", "battery-charge-limit")]:

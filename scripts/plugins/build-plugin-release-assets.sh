@@ -201,6 +201,9 @@ catalog_args=(
 if [[ -n "$MINIMUM_HOST_VERSION" ]]; then
     catalog_args+=(--minimum-host-version "$MINIMUM_HOST_VERSION")
 fi
+if [[ -n "$NIGHTLY_BUILD_NUMBER" ]]; then
+    catalog_args+=(--nightly-build-number "$NIGHTLY_BUILD_NUMBER")
+fi
 if [[ -n "$RELEASE_NOTES_URL" ]]; then
     catalog_args+=(--release-notes-url "$RELEASE_NOTES_URL")
 fi
