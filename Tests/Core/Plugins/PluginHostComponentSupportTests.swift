@@ -155,6 +155,22 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(item.missingPermissionCards.map(\.permissionID), ["accessibility"])
     }
 
+    func testNativeFinderExtensionPermissionUsesExtensionPresentation() {
+        let plugin = MockComponentPanelPlugin(
+            id: "component",
+            permissionRequirements: [
+                PluginPermissionRequirement(
+                    id: "native-extension",
+                    kind: .finderExtension,
+                    title: "Finder Extension",
+                    description: "Enable the Finder extension."
+                )
+            ]
+        )
+        let cards = makeHost(plugins: [plugin]).permissionCards
+        XCTAssertEqual(cards.first?.iconSystemImage, "puzzlepiece.extension")
+    }
+
     func testPermissionGuidanceRequestDoesNotChangeSettingsPage() {
         let plugin = MockComponentPanelPlugin(
             id: "component",

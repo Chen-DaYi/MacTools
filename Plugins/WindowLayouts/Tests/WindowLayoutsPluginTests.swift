@@ -32,7 +32,7 @@ final class WindowLayoutsPluginTests: XCTestCase {
         )
     }
 
-    func testAppIntentsAndRunLinksAreExposed() throws {
+    func testProviderDoesNotVetoSystemExposureAndRunLinksAreAllowed() throws {
         let plugin = makePlugin()
         let definition = try XCTUnwrap(plugin.actionDefinitions.first)
         let reference = ActionReference(key: definition.key)
@@ -214,6 +214,126 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertEqual(plugin.actionShortcutAssignmentRevision, initialRevision + 1)
     }
 
+    func testModifierDragIsOptInPublishesExactClaimAndPausesForConflict() {
+        let session = MockWindowModifierDragSession()
+        let plugin = makePlugin(modifierDragSession: session)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "window-layouts"))
+        XCTAssertTrue(plugin.activeInputGestureClaims.isEmpty)
+        XCTAssertEqual(session.startCount, 0)
+
+        plugin.setModifierDragEnabled(true)
+
+        XCTAssertEqual(session.startCount, 1)
+        XCTAssertEqual(session.configuredModifiers, [.control, .option])
+        XCTAssertEqual(
+            plugin.activeInputGestureClaims.map(\.id),
+            ["pointer.move.modifiers.6"]
+        )
+
+        plugin.setModifierDragModifiers([.shift, .command])
+        XCTAssertEqual(session.configuredModifiers, [.shift, .command])
+        XCTAssertEqual(
+            plugin.activeInputGestureClaims.map(\.id),
+            ["pointer.move.modifiers.9"]
+        )
+
+        let conflict = PluginInputGestureConflict(
+            claim: PluginInputGestureClaim(
+                id: "pointer.move.modifiers.9",
+                title: "Modifier Drag"
+            ),
+            ownerPluginID: "other-plugin",
+            ownerPluginTitle: "Other Plugin"
+        )
+        var stateChangeCount = 0
+        plugin.onStateChange = { stateChangeCount += 1 }
+        plugin.inputGestureConflictsDidChange([conflict])
+
+        XCTAssertEqual(session.stopCount, 1)
+        XCTAssertEqual(
+            plugin.activeInputGestureClaims.map(\.id),
+            ["pointer.move.modifiers.9"],
+            "A paused owner must retain its claim so conflict resolution stays stable"
+        )
+        XCTAssertEqual(stateChangeCount, 0)
+
+        let configureCountAfterConflict = session.configureCount
+        plugin.inputGestureConflictsDidChange([conflict])
+        XCTAssertEqual(session.stopCount, 1)
+        XCTAssertEqual(session.configureCount, configureCountAfterConflict)
+        XCTAssertEqual(stateChangeCount, 0)
+
+        let startCountBeforeResume = session.startCount
+        plugin.inputGestureConflictsDidChange([])
+        XCTAssertEqual(session.startCount, startCountBeforeResume + 1)
+        XCTAssertEqual(stateChangeCount, 0)
+    }
+
+    func testModifierDragMonitorStartupFailureSuppressesClaimAndSupportsRetry() throws {
+        let session = MockWindowModifierDragSession()
+        session.startResult = .failure(.eventTapUnavailable)
+        let plugin = makePlugin(modifierDragSession: session)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "window-layouts"))
+        plugin.setModifierDragEnabled(true)
+
+        XCTAssertTrue(plugin.activeInputGestureClaims.isEmpty)
+        XCTAssertFalse(session.isRunning)
+        XCTAssertEqual(session.startCount, 1)
+        XCTAssertEqual(session.stopCount, 1)
+        XCTAssertEqual(
+            try modifierDragFooter(in: plugin),
+            plugin.localizedKey(
+                "error.modifierDragMonitorUnavailable",
+                "无法启动全局指针监控。请关闭后重新开启修饰键拖移。"
+            )
+        )
+
+        session.startResult = .success(())
+        plugin.setModifierDragEnabled(false)
+        plugin.setModifierDragEnabled(true)
+
+        XCTAssertTrue(session.isRunning)
+        XCTAssertEqual(session.startCount, 2)
+        XCTAssertEqual(
+            plugin.activeInputGestureClaims.map(\.id),
+            ["pointer.move.modifiers.6"]
+        )
+    }
+
+    func testModifierDragFooterHidesInactiveConflictsAndClearsRuntimeErrors() throws {
+        let session = MockWindowModifierDragSession()
+        let plugin = makePlugin(modifierDragSession: session)
+        let disabledFooter = try modifierDragFooter(in: plugin)
+
+        plugin.inputGestureConflictsDidChange([
+            PluginInputGestureConflict(
+                claim: PluginInputGestureClaim(
+                    id: "pointer.move.modifiers.6",
+                    title: "Modifier Drag"
+                ),
+                ownerPluginID: "other-plugin",
+                ownerPluginTitle: "Other Plugin"
+            )
+        ])
+        XCTAssertEqual(try modifierDragFooter(in: plugin), disabledFooter)
+
+        plugin.inputGestureConflictsDidChange([])
+        plugin.setModifierDragEnabled(true)
+        let activeFooter = try modifierDragFooter(in: plugin)
+
+        session.onFailure(.windowCannotMove)
+        XCTAssertNotEqual(try modifierDragFooter(in: plugin), activeFooter)
+
+        session.onSuccess()
+        XCTAssertEqual(try modifierDragFooter(in: plugin), activeFooter)
+
+        session.onFailure(.windowCannotMove)
+        plugin.handleSettingsAction(.invoke(controlID: "reset"))
+        XCTAssertEqual(try modifierDragFooter(in: plugin), disabledFooter)
+    }
+
     func testCustomCommandEditorPublishesPreviewShortcutAndHeaderActions() throws {
         let plugin = makePlugin()
         plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
@@ -275,9 +395,26 @@ final class WindowLayoutsPluginTests: XCTestCase {
         )
         XCTAssertEqual(plugin.customCommandShortcutBinding(for: id), binding)
 
-        plugin.clearCustomCommandShortcut(for: id)
+        XCTAssertEqual(plugin.clearCustomCommandShortcut(for: id), .accepted)
 
         XCTAssertNil(plugin.customCommandShortcutBinding(for: id))
+    }
+
+    func testCustomCommandShortcutClearReportsHostFailure() throws {
+        let plugin = makePlugin()
+        plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first(where: {
+            $0.key.actionID.hasPrefix("custom.")
+        }))
+        let id = try XCTUnwrap(UUID(uuidString: String(
+            definition.key.actionID.dropFirst("custom.".count)
+        )))
+        plugin.applyActionShortcutPreset = { _, _ in "Shortcut storage failed" }
+
+        XCTAssertEqual(
+            plugin.clearCustomCommandShortcut(for: id),
+            .rejected("Shortcut storage failed")
+        )
     }
 
     func testDeletingCustomCommandClearsItsShortcutBeforeRemovingAction() throws {
@@ -316,20 +453,9 @@ final class WindowLayoutsPluginTests: XCTestCase {
         let id = try XCTUnwrap(UUID(uuidString: String(
             definition.key.actionID.dropFirst("custom.".count)
         )))
-        let binding = ShortcutBinding(
-            keyCode: UInt16(kVK_ANSI_L),
-            modifiers: [.control, .option]
-        )
-        plugin.previewActionShortcutPreset = { actionIDs, proposedBindings in
-            PluginActionShortcutPresetPreview(items: actionIDs.map { actionID in
-                PluginActionShortcutPresetPreviewItem(
-                    actionID: actionID,
-                    currentBinding: binding,
-                    proposedBinding: proposedBindings[actionID]
-                )
-            })
+        plugin.performActionShortcutReplacementTransaction = { _, _, _ in
+            "Shortcut storage failed"
         }
-        plugin.applyActionShortcutPreset = { _, _ in "Shortcut storage failed" }
 
         XCTAssertFalse(plugin.deleteCustomCommand(id))
 
@@ -368,6 +494,46 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertNotNil(plugin.customCommandDeletionError)
     }
 
+    func testCustomCommandDeleteFailureUsesTransactionToRestoreEveryShortcut() throws {
+        let storage = WindowLayoutsMemoryStorage()
+        let plugin = makePlugin(storage: storage)
+        plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first(where: {
+            $0.key.actionID.hasPrefix("custom.")
+        }))
+        let id = try XCTUnwrap(UUID(uuidString: String(
+            definition.key.actionID.dropFirst("custom.".count)
+        )))
+        let originalBindings = [
+            ShortcutBinding(
+                keyCode: UInt16(kVK_ANSI_L),
+                modifiers: [.control, .option]
+            ),
+            ShortcutBinding(
+                keyCode: UInt16(kVK_ANSI_M),
+                modifiers: [.control, .option]
+            ),
+        ]
+        var bindings = originalBindings
+        plugin.performActionShortcutReplacementTransaction = { _, _, mutation in
+            let snapshot = bindings
+            bindings = []
+            if let error = mutation() {
+                bindings = snapshot
+                return error
+            }
+            return nil
+        }
+        storage.rejectLibraryWrites = true
+
+        XCTAssertFalse(plugin.deleteCustomCommand(id))
+
+        XCTAssertEqual(bindings, originalBindings)
+        XCTAssertTrue(plugin.actionDefinitions.contains(where: {
+            $0.key.actionID == definition.key.actionID
+        }))
+    }
+
     func testCustomCommandShortcutReportsHostValidationConflict() throws {
         let plugin = makePlugin()
         plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
@@ -398,7 +564,7 @@ final class WindowLayoutsPluginTests: XCTestCase {
             anchor: .center
         )
         XCTAssertEqual(
-            WindowCustomCommandPreviewLayout(command: centered)
+            WindowCustomCommandPreviewLayout(command: centered, gap: 0)
                 .windowFrame(in: CGSize(width: 160, height: 100)),
             CGRect(x: 32, y: 25, width: 96, height: 50)
         )
@@ -412,10 +578,73 @@ final class WindowLayoutsPluginTests: XCTestCase {
             offsetY: 90
         )
         XCTAssertEqual(
-            WindowCustomCommandPreviewLayout(command: offsetTopRight)
+            WindowCustomCommandPreviewLayout(command: offsetTopRight, gap: 0)
                 .windowFrame(in: CGSize(width: 200, height: 100)),
             CGRect(x: 80, y: 10, width: 100, height: 40)
         )
+
+        var clampedBottomRight = offsetTopRight
+        clampedBottomRight.anchor = .bottomRight
+        clampedBottomRight.offsetX = 500
+        clampedBottomRight.offsetY = 500
+        XCTAssertEqual(
+            WindowCustomCommandPreviewLayout(command: clampedBottomRight, gap: 0)
+                .windowFrame(in: CGSize(width: 200, height: 100)),
+            CGRect(x: 100, y: 60, width: 100, height: 40)
+        )
+    }
+
+    func testCustomCommandPreviewLayoutMatchesExecutionGeometryWithGap() {
+        let command = WindowCustomCommand(
+            name: "Gap",
+            width: .fraction(0.5),
+            height: .fraction(0.4),
+            anchor: .topLeft,
+            offsetX: -50,
+            offsetY: -50
+        )
+        let referenceSize = CGSize(width: 1440, height: 900)
+        let expected = WindowLayoutCalculator().customFrame(
+            for: command,
+            windowFrame: CGRect(x: 288, y: 180, width: 864, height: 540),
+            visibleFrame: CGRect(origin: .zero, size: referenceSize),
+            gap: 17
+        )
+
+        let preview = WindowCustomCommandPreviewLayout(command: command, gap: 17)
+            .windowFrame(in: referenceSize)
+
+        XCTAssertEqual(preview, expected)
+        XCTAssertNotEqual(
+            preview,
+            WindowCustomCommandPreviewLayout(command: command, gap: 0)
+                .windowFrame(in: referenceSize)
+        )
+    }
+
+    func testUpdatingCustomCommandNormalizesBlankNameAndPersistsOtherEdits() throws {
+        let plugin = makePlugin()
+        plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first(where: {
+            $0.key.actionID.hasPrefix("custom.")
+        }))
+        let id = try XCTUnwrap(UUID(uuidString: String(
+            definition.key.actionID.dropFirst("custom.".count)
+        )))
+        var command = try XCTUnwrap(plugin.customCommand(id: id))
+        command.name = "  \n "
+        command.width = .fraction(0.35)
+        command.anchor = .bottomRight
+
+        XCTAssertTrue(plugin.updateCustomCommand(command))
+
+        let stored = try XCTUnwrap(plugin.customCommand(id: command.id))
+        XCTAssertEqual(
+            stored.name,
+            plugin.localizedKey("settings.custom.defaultName", "自定义布局")
+        )
+        XCTAssertEqual(stored.width, .fraction(0.35))
+        XCTAssertEqual(stored.anchor, .bottomRight)
     }
 
     func testActionExecutionUsesCommittedGapAndReset() async throws {
@@ -583,9 +812,32 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertEqual(executor.customExecutions.map(\.name), [definition.title])
     }
 
+    func testCustomRunLinkPolicyChangeRequestsImmediateSafetyRebuild() throws {
+        let plugin = makePlugin()
+        plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
+        let actionID = try XCTUnwrap(plugin.actionDefinitions.first(where: {
+            $0.key.actionID.hasPrefix("custom.")
+        })?.key.actionID)
+        let id = try XCTUnwrap(UUID(uuidString: String(actionID.dropFirst("custom.".count))))
+        var customCommand = try XCTUnwrap(plugin.customCommand(id: id))
+        var safetyChangeCount = 0
+        plugin.onActionSafetyStateChange = { safetyChangeCount += 1 }
+
+        customCommand.allowExternalInvocation = false
+        XCTAssertTrue(plugin.updateCustomCommand(customCommand))
+
+        XCTAssertEqual(safetyChangeCount, 1)
+        XCTAssertEqual(
+            plugin.actionDefinitions.first(where: { $0.key.actionID == actionID })?
+                .externalInvocationPolicy,
+            .unavailable
+        )
+    }
+
     private func makePlugin(
         executor: MockWindowLayoutExecutor? = nil,
         storage: PluginStorage? = nil,
+        modifierDragSession: (any WindowModifierDragSessionManaging)? = nil,
         accessibilityTrusted: @escaping @MainActor @Sendable () -> Bool = { true }
     ) -> WindowLayoutsPlugin {
         WindowLayoutsPlugin(
@@ -594,9 +846,20 @@ final class WindowLayoutsPluginTests: XCTestCase {
                 storage: storage ?? WindowLayoutsMemoryStorage()
             ),
             executor: executor ?? MockWindowLayoutExecutor(),
+            makeModifierDragSession: {
+                modifierDragSession ?? MockWindowModifierDragSession()
+            },
             accessibilityTrusted: accessibilityTrusted,
             requestAccessibilityTrust: { _ in accessibilityTrusted() }
         )
+    }
+
+    private func modifierDragFooter(in plugin: WindowLayoutsPlugin) throws -> String? {
+        guard case let .form(sections) = try XCTUnwrap(plugin.settingsPage).body else {
+            XCTFail("Expected Window Layouts form settings")
+            return nil
+        }
+        return try XCTUnwrap(sections.first(where: { $0.id == "modifier-drag" })).footer
     }
 
     private func configureShortcutHost(
@@ -618,6 +881,48 @@ final class WindowLayoutsPluginTests: XCTestCase {
             }
             return nil
         }
+        plugin.performActionShortcutReplacementTransaction = {
+            actionIDs, bindings, mutation in
+            let snapshot = state.bindings
+            for actionID in actionIDs {
+                state.bindings[actionID] = bindings[actionID]
+            }
+            if let error = mutation() {
+                state.bindings = snapshot
+                return error
+            }
+            return nil
+        }
+    }
+}
+
+@MainActor
+private final class MockWindowModifierDragSession: WindowModifierDragSessionManaging {
+    var onFailure: (WindowLayoutError) -> Void = { _ in }
+    var onSuccess: () -> Void = {}
+    private(set) var configuredModifiers: ShortcutModifiers?
+    private(set) var configureCount = 0
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+    private(set) var isRunning = false
+    var startResult: Result<Void, WindowModifierDragMonitorStartError> = .success(())
+
+    func configure(modifiers: ShortcutModifiers) {
+        configureCount += 1
+        configuredModifiers = modifiers
+    }
+
+    func start() -> Result<Void, WindowModifierDragMonitorStartError> {
+        startCount += 1
+        if case .success = startResult {
+            isRunning = true
+        }
+        return startResult
+    }
+
+    func stop() {
+        stopCount += 1
+        isRunning = false
     }
 }
 

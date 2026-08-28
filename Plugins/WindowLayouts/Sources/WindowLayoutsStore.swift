@@ -9,6 +9,8 @@ final class WindowLayoutsStore {
         static let cyclesHalves = "cycles-halves"
         static let respectsStageManager = "respects-stage-manager"
         static let showsCommandFeedback = "shows-command-feedback"
+        static let modifierDragEnabled = "modifier-drag.enabled"
+        static let modifierDragModifiers = "modifier-drag.modifiers"
         static let shortcutPreset = "shortcut-preset"
         static let library = "library.v1"
         static let quarantinedLibrary = "library.v1.quarantined"
@@ -32,10 +34,13 @@ final class WindowLayoutsStore {
     private(set) var cyclesHalves: Bool
     private(set) var respectsStageManager: Bool
     private(set) var showsCommandFeedback: Bool
+    private(set) var modifierDragEnabled: Bool
+    private(set) var modifierDragModifiers: ShortcutModifiers
     private(set) var shortcutPreset: WindowShortcutPreset
     private(set) var customCommands: [WindowCustomCommand] = []
     private(set) var revision: UInt64 = 0
     var onMutation: (() -> Void)?
+    var onSafetyPolicyMutation: (() -> Void)?
 
     init(storage: PluginStorage) {
         self.storage = storage
@@ -45,6 +50,16 @@ final class WindowLayoutsStore {
         self.cyclesHalves = (storage.object(forKey: StorageKey.cyclesHalves) as? NSNumber)?.boolValue ?? false
         self.respectsStageManager = (storage.object(forKey: StorageKey.respectsStageManager) as? NSNumber)?.boolValue ?? true
         self.showsCommandFeedback = (storage.object(forKey: StorageKey.showsCommandFeedback) as? NSNumber)?.boolValue ?? false
+        self.modifierDragEnabled = (storage.object(forKey: StorageKey.modifierDragEnabled) as? NSNumber)?.boolValue ?? false
+        let storedModifierRawValue = (storage.object(forKey: StorageKey.modifierDragModifiers) as? NSNumber)?.uint8Value
+        let storedModifiers = storedModifierRawValue.map(ShortcutModifiers.init(rawValue:))
+        if let storedModifiers,
+           storedModifiers.containsOnlySupportedValues,
+           !storedModifiers.isEmpty {
+            self.modifierDragModifiers = storedModifiers
+        } else {
+            self.modifierDragModifiers = Self.defaultModifierDragModifiers
+        }
         let storedShortcutPreset = storage.string(forKey: StorageKey.shortcutPreset)
         self.shortcutPreset = WindowShortcutPreset(storedValue: storedShortcutPreset)
         if storedShortcutPreset == "raycast" || storedShortcutPreset == "rectangle" {
@@ -52,6 +67,8 @@ final class WindowLayoutsStore {
         }
         reloadLibrary()
     }
+
+    static let defaultModifierDragModifiers: ShortcutModifiers = [.control, .option]
 
     func setGap(_ gap: Double) {
         let gap = Self.clampedGap(gap)
@@ -78,6 +95,19 @@ final class WindowLayoutsStore {
         recordMutation()
     }
 
+    func setModifierDragEnabled(_ enabled: Bool) {
+        modifierDragEnabled = enabled
+        storage.set(enabled, forKey: StorageKey.modifierDragEnabled)
+        recordMutation()
+    }
+
+    func setModifierDragModifiers(_ modifiers: ShortcutModifiers) {
+        guard !modifiers.isEmpty, modifiers.containsOnlySupportedValues else { return }
+        modifierDragModifiers = modifiers
+        storage.set(modifiers.rawValue, forKey: StorageKey.modifierDragModifiers)
+        recordMutation()
+    }
+
     func setShortcutPreset(_ preset: WindowShortcutPreset) {
         shortcutPreset = preset
         storage.set(preset.rawValue, forKey: StorageKey.shortcutPreset)
@@ -89,10 +119,14 @@ final class WindowLayoutsStore {
         cyclesHalves = false
         respectsStageManager = true
         showsCommandFeedback = false
+        modifierDragEnabled = false
+        modifierDragModifiers = Self.defaultModifierDragModifiers
         storage.removeObject(forKey: StorageKey.gap)
         storage.removeObject(forKey: StorageKey.cyclesHalves)
         storage.removeObject(forKey: StorageKey.respectsStageManager)
         storage.removeObject(forKey: StorageKey.showsCommandFeedback)
+        storage.removeObject(forKey: StorageKey.modifierDragEnabled)
+        storage.removeObject(forKey: StorageKey.modifierDragModifiers)
         recordMutation()
     }
 
@@ -113,11 +147,16 @@ final class WindowLayoutsStore {
         guard let index = customCommands.firstIndex(where: { $0.id == command.id })
         else { return false }
         guard let normalized = normalizedCommand(command) else { return false }
+        let externalInvocationPolicyChanged =
+            customCommands[index].allowExternalInvocation != normalized.allowExternalInvocation
         var updated = customCommands
         updated[index] = normalized
         guard persist(customCommands: updated) else { return false }
         customCommands = updated
         recordMutation()
+        if externalInvocationPolicyChanged {
+            onSafetyPolicyMutation?()
+        }
         return true
     }
 

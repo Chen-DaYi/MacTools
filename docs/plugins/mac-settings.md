@@ -25,6 +25,8 @@ The decoder accepts only the versioned document schema, stable setting IDs, cata
 
 ## Provider reuse
 
+The source manifest publishes the upstream catalog's localized product, privacy, setup, and action descriptors. Its eight stable action definitions are covered by the shared manifest/runtime consistency test. Full Disk Access is conditional on pointer-size persistence and is explained in setup guidance rather than declared as a requirement for every action; provider-backed controls retain their providers' own permission checks.
+
 Dark Mode, Dock auto-hide, menu bar auto-hide, Stage Manager, True Tone, and Night Shift writes are delegated to their existing canonical action providers. `PluginActionExecutionHostContext` is intentionally narrow: it supports live action lookup and execution through the host-owned registry/executor, so composed writes retain provider availability and safety behavior.
 
 Profile-backed action references declare `requiresPluginPreferences` during preferences backup. Navigation and explicit typed setting actions are self-contained; history-based Undo is excluded because history is intentionally local and nonportable.

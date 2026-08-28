@@ -27,6 +27,34 @@ final class WindowLayoutsStoreTests: XCTestCase {
         XCTAssertFalse(WindowLayoutsStore(storage: storage).showsCommandFeedback)
     }
 
+    func testPersistsAndResetsModifierDragConfiguration() {
+        let storage = StoreMemoryStorage()
+        let store = WindowLayoutsStore(storage: storage)
+
+        XCTAssertFalse(store.modifierDragEnabled)
+        XCTAssertEqual(store.modifierDragModifiers, [.control, .option])
+
+        store.setModifierDragModifiers([.shift, .command])
+        store.setModifierDragEnabled(true)
+
+        let reloaded = WindowLayoutsStore(storage: storage)
+        XCTAssertTrue(reloaded.modifierDragEnabled)
+        XCTAssertEqual(reloaded.modifierDragModifiers, [.shift, .command])
+
+        reloaded.reset()
+        let reset = WindowLayoutsStore(storage: storage)
+        XCTAssertFalse(reset.modifierDragEnabled)
+        XCTAssertEqual(reset.modifierDragModifiers, [.control, .option])
+    }
+
+    func testRejectsEmptyModifierDragCombination() {
+        let store = WindowLayoutsStore(storage: StoreMemoryStorage())
+
+        store.setModifierDragModifiers([])
+
+        XCTAssertEqual(store.modifierDragModifiers, [.control, .option])
+    }
+
     func testMigratesLegacyBrandedShortcutPresetNames() {
         let raycastStorage = StoreMemoryStorage()
         raycastStorage.set("raycast", forKey: "shortcut-preset")
@@ -71,6 +99,22 @@ final class WindowLayoutsStoreTests: XCTestCase {
         XCTAssertNotEqual(copy.actionID, command.actionID)
         XCTAssertEqual(copy.width, .points(900))
         XCTAssertEqual(copy.anchor, .top)
+    }
+
+    func testCustomRunLinkPolicyNotifiesSafetyRegistryOnlyForPersistedChanges() throws {
+        let store = WindowLayoutsStore(storage: StoreMemoryStorage())
+        var command = try XCTUnwrap(store.addCustomCommand(name: "Safety"))
+        var safetyMutationCount = 0
+        store.onSafetyPolicyMutation = { safetyMutationCount += 1 }
+
+        command.name = "Renamed"
+        XCTAssertTrue(store.updateCustomCommand(command))
+        XCTAssertEqual(safetyMutationCount, 0)
+
+        command.allowExternalInvocation = false
+        XCTAssertTrue(store.updateCustomCommand(command))
+        XCTAssertTrue(store.updateCustomCommand(command))
+        XCTAssertEqual(safetyMutationCount, 1)
     }
 
     func testDuplicateKeepsCopySuffixAtNameLengthBoundary() throws {

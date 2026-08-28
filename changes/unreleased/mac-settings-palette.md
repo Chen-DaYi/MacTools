@@ -11,3 +11,5 @@ Mac Settings can now directly control more accessibility options, secondary-clic
 Wi-Fi power and Low Power Mode were removed because they are ordinary temporary, device-dependent controls already available from Control Center.
 
 Keyboard navigation, VoiceOver labels, serialized writes, live profile snapshots, portable restore, hardware refreshes, fallbacks, and result details are now more reliable.
+
+The plugin catalog now describes Mac Settings setup requirements, local data use, and supported actions before installation.

@@ -23,6 +23,8 @@ final class MacToolsAppRuntime {
     private var statusItemController: MenuBarStatusItemController?
     private var actionGridOverlayController: ActionGridOverlayController?
     private var appIntentCatalogCancellable: AnyCancellable?
+    private var cliBrokerActivationCancellable: AnyCancellable?
+    private lazy var cliHostBridge = CLIHostBridge()
     private lazy var settingsRecoveryScheduler = SettingsRecoveryScheduler { [weak self] in
         self?.windowRouter?.showSettings()
     }
@@ -78,10 +80,11 @@ final class MacToolsAppRuntime {
         pluginHost.installFocusedHostWindowProvider { [weak windowRouter] in
             windowRouter?.focusedWindowLayoutTarget
         }
-        pluginHost.actionExecutionFeedbackHandler = { [weak self] source, reference, outcome in
+        pluginHost.actionExecutionFeedbackHandler = { [weak self] source, reference, actionTitle, outcome in
             self?.presentHeadlessActionFeedback(
                 source: source,
                 reference: reference,
+                actionTitle: actionTitle,
                 outcome: outcome
             )
         }
@@ -105,6 +108,7 @@ final class MacToolsAppRuntime {
             menuBarPanelThemeStore: menuBarPanelThemeStore
         )
 
+        startCLIHostIfAvailable()
         bootstrapDynamicPlugins()
     }
 
@@ -120,6 +124,9 @@ final class MacToolsAppRuntime {
 
     func terminate() {
         settingsRecoveryScheduler.cancel()
+        cliBrokerActivationCancellable?.cancel()
+        cliBrokerActivationCancellable = nil
+        cliHostBridge.stop()
         pluginHost.flushAutomaticPreferencesBackupBeforeTermination()
         pluginHost.automationController.stopAutomaticRules()
         actionGridOverlayController?.close(restoringFocus: false)
@@ -130,17 +137,17 @@ final class MacToolsAppRuntime {
     private func presentHeadlessActionFeedback(
         source: ActionExecutionSource,
         reference: ActionReference,
+        actionTitle: String?,
         outcome: ActionExecutionOutcome
     ) {
         guard reference.key.providerID == "window-layouts",
-              source == .globalShortcut || source == .trackpadGesture,
-              case let .success(action) = pluginHost.actionRegistry.registeredAction(for: reference)
+              source == .globalShortcut || source == .trackpadGesture
         else {
             return
         }
 
         if let feedback = WindowLayoutActionFeedback.feedback(
-            actionTitle: action.definition.title,
+            actionTitle: actionTitle,
             outcome: outcome
         ) {
             runLinkFeedbackPresenter.present(feedback)
@@ -189,6 +196,21 @@ final class MacToolsAppRuntime {
         automationStartupCoordinator.actionRegistryDidBecomeReady()
         appIntentCoordinator.actionRegistryDidBecomeReady()
         activateAppURLRouter()
+    }
+
+    private func startCLIHostIfAvailable() {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return
+        }
+        cliBrokerActivationCancellable = NotificationCenter.default.publisher(
+            for: NSApplication.didBecomeActiveNotification
+        )
+        .sink { _ in
+            Task { @MainActor in
+                CLIBrokerServiceController.shared.applicationDidBecomeActive()
+            }
+        }
+        cliHostBridge.start()
     }
 
     private func activateAppURLRouter() {
