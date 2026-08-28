@@ -14,6 +14,7 @@ public enum PluginActionHostExecutionResult: Equatable, Sendable {
 public struct PluginActionExecutionHostContext {
     private let itemHandler: (ActionReference) -> ActionSurfaceCatalogItem?
     private let executionHandler: (ActionReference, ActionExecutionSource) async -> PluginActionHostExecutionResult
+    private let providerSettingsHandler: (String) -> Void
 
     public init(
         item: @escaping (ActionReference) -> ActionSurfaceCatalogItem?,
@@ -22,12 +23,26 @@ public struct PluginActionExecutionHostContext {
             ActionExecutionSource
         ) async -> PluginActionHostExecutionResult
     ) {
+        self.init(item: item, execute: execute, openProviderSettings: { _ in })
+    }
+
+    public init(
+        item: @escaping (ActionReference) -> ActionSurfaceCatalogItem?,
+        execute: @escaping (ActionReference, ActionExecutionSource) async -> PluginActionHostExecutionResult,
+        openProviderSettings: @escaping (String) -> Void
+    ) {
         self.itemHandler = item
         self.executionHandler = execute
+        self.providerSettingsHandler = openProviderSettings
     }
 
     public func item(for reference: ActionReference) -> ActionSurfaceCatalogItem? {
         itemHandler(reference)
+    }
+
+    /// Explicit user navigation to an installed provider or its installation/enablement surface.
+    public func openProviderSettings(providerID: String) {
+        providerSettingsHandler(providerID)
     }
 
     public func execute(

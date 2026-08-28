@@ -37,6 +37,8 @@ final class InMemoryFinderPreferencesStore: FinderPreferencesStoring {
 @MainActor
 final class MacSettingsTestStorage: PluginStorage {
     private var values: [String: Any] = [:]
+    var failingNextWriteKey: String?
+    var failingWriteKeys: Set<String> = []
 
     func object(forKey key: String) -> Any? { values[key] }
     func data(forKey key: String) -> Data? { values[key] as? Data }
@@ -44,7 +46,14 @@ final class MacSettingsTestStorage: PluginStorage {
     func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
     func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
-    func set(_ value: Any?, forKey key: String) { values[key] = value }
+    func set(_ value: Any?, forKey key: String) {
+        if failingWriteKeys.contains(key) { return }
+        if failingNextWriteKey == key {
+            failingNextWriteKey = nil
+            return
+        }
+        values[key] = value
+    }
     func removeObject(forKey key: String) { values[key] = nil }
     func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
         guard values[key] == nil, let value = values[legacyKey] else { return }

@@ -32,6 +32,8 @@ protocol SystemSettingsProfileStoring: AnyObject {
     func save(_ profile: SystemSettingsProfile) -> Bool
     @discardableResult
     func remove(id: UUID) -> Bool
+    @discardableResult
+    func replaceAll(_ profiles: [SystemSettingsProfile]) -> Bool
 }
 
 @MainActor
@@ -69,22 +71,30 @@ final class SystemSettingsProfileStore: SystemSettingsProfileStoring {
         } else {
             profiles.append(profile)
         }
-        profiles.sort { $0.modifiedAt > $1.modifiedAt }
+        return replaceAll(profiles)
+    }
+
+    func replaceAll(_ profiles: [SystemSettingsProfile]) -> Bool {
         guard profiles.count <= 100,
-              let data = try? encoder.encode(profiles),
+              Set(profiles.map(\.id)).count == profiles.count,
+              let data = try? encoder.encode(profiles.sorted { $0.modifiedAt > $1.modifiedAt }),
               data.count <= SystemSettingsProfileCodec.maximumFileSize else {
             return false
         }
+        let previous = storage.data(forKey: Key.profiles)
         storage.set(data, forKey: Key.profiles)
-        return storage.data(forKey: Key.profiles) == data
+        guard storage.data(forKey: Key.profiles) == data else {
+            if let previous { storage.set(previous, forKey: Key.profiles) }
+            else { storage.removeObject(forKey: Key.profiles) }
+            return false
+        }
+        return true
     }
 
     @discardableResult
     func remove(id: UUID) -> Bool {
         let updated = load().filter { $0.id != id }
-        guard let data = try? encoder.encode(updated) else { return false }
-        storage.set(data, forKey: Key.profiles)
-        return storage.data(forKey: Key.profiles) == data
+        return replaceAll(updated)
     }
 }
 
@@ -108,6 +118,12 @@ final class InMemorySystemSettingsProfileStore: SystemSettingsProfileStoring {
 
     func remove(id: UUID) -> Bool {
         profiles.removeAll { $0.id == id }
+        return true
+    }
+
+    func replaceAll(_ profiles: [SystemSettingsProfile]) -> Bool {
+        guard profiles.count <= 100, Set(profiles.map(\.id)).count == profiles.count else { return false }
+        self.profiles = profiles
         return true
     }
 }

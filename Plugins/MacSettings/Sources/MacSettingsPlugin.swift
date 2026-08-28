@@ -199,6 +199,9 @@ final class MacSettingsPlugin:
             self?.handlePermissionAction(id: permissionID)
         }
         controller.onOpenSystemSettings = openSystemSettings
+        controller.onOpenProviderSettings = { [weak actionContextBox] providerID in
+            actionContextBox?.context?.openProviderSettings(providerID: providerID)
+        }
         inputDeviceObserver = MacSettingsInputDeviceObserver { [weak controller] in
             controller?.scheduleExternalRefresh()
         }
@@ -385,7 +388,7 @@ final class MacSettingsPlugin:
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         switch reference.key.actionID {
         case ActionID.undo:
-            return controller.history.contains(where: \.canRollback)
+            return controller.mostRecentUndoableChange != nil
                 ? .available
                 : .unavailable("没有可撤销的更改。")
         case ActionID.setBoolean:
@@ -395,7 +398,7 @@ final class MacSettingsPlugin:
                   case .boolean = record.definition.schema,
                   let state = controller.rowStates[record.id],
                   state.errorMessage == nil,
-                  !state.isApplying,
+                  !state.isApplying, controller.canEditSettings,
                   isControllable(state.availability) else {
                 return .unavailable("此设置当前不可用。")
             }
@@ -619,18 +622,9 @@ final class MacSettingsPlugin:
               payload.profiles.allSatisfy({
                   SystemSettingsProfileCodec.validate($0, catalog: controller.catalog).isValid
               }) else { return false }
-        let favoriteSet = Set(payload.favorites)
-        for id in controller.favoriteIDs where !favoriteSet.contains(id) {
-            controller.toggleFavorite(id)
-        }
-        for id in payload.favorites where !controller.favoriteIDs.contains(id) {
-            controller.toggleFavorite(id)
-        }
-        controller.setDensity(payload.density)
-        for profile in payload.profiles {
-            guard controller.restorePortableProfile(profile) else { return false }
-        }
-        return true
+        return controller.restorePortablePreferences(
+            favorites: payload.favorites, density: payload.density, profiles: payload.profiles
+        )
     }
 
     func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
@@ -693,7 +687,7 @@ final class MacSettingsPlugin:
         let enabled = isControllable(state.availability)
             && state.errorMessage == nil
             && !state.isApplying
-            && !controller.isApplyingProfile
+            && controller.canEditSettings
         switch (record.definition.schema, value) {
         case let (.boolean, .boolean(isOn)):
             return PluginPanelControl(
@@ -801,14 +795,15 @@ final class MacSettingsPlugin:
             "night-shift",
             "stage-manager",
         ]
-        let available = Set(providerIDs.filter { providerID in
+        let availability = Dictionary(uniqueKeysWithValues: providerIDs.map { providerID in
             let reference = ActionReference(
                 key: ActionKey(providerID: providerID, actionID: "set-enabled"),
                 parameters: try! ActionParameterSet(["enabled": .boolean(true)])
             )
-            return actionExecutionHostContext?.item(for: reference) != nil
+            return (providerID, actionExecutionHostContext?.item(for: reference)?.availability
+                ?? .unavailable("对应的 MacTools 插件未安装或未启用。"))
         })
-        controller.updateAvailableProviderIDs(available)
+        controller.updateProviderAvailability(availability)
     }
 
     private func navigationHandle(destination: MacSettingsDestination) -> ActionExecutionHandle {

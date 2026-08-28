@@ -526,7 +526,7 @@ extension SystemSettingAdapter {
     }
 
     func restore(_ snapshot: SystemSettingSnapshot) async throws -> SystemSettingVerification {
-        guard snapshot.restoration == nil else { throw SystemSettingAdapterError.invalidValue }
+        guard !snapshot.hasRestorationData else { throw SystemSettingAdapterError.invalidValue }
         try await rollback(to: snapshot.value)
         return try await verify(snapshot.value)
     }
@@ -1180,6 +1180,49 @@ final class LiveScrollSpeedSystemSettingAdapter: SystemSettingAdapter {
 }
 
 @MainActor
+final class TrackpadBooleanPreferencesSettingAdapter: SystemSettingAdapter {
+    private let domain: String
+    private let key: String
+    private let store: any FinderPreferencesStoring
+
+    init(domain: String, key: String, store: any FinderPreferencesStoring = CoreFoundationFinderPreferencesStore()) {
+        self.domain = domain
+        self.key = key
+        self.store = store
+    }
+
+    func read() async throws -> SystemSettingValue { try await snapshot().value }
+
+    func snapshot() async throws -> SystemSettingSnapshot {
+        let state = try store.read(keys: [key], domain: domain)
+        return .init(value: try value(from: state), restoration: state)
+    }
+
+    private func value(from state: [String: SystemSettingStoredPreference]) throws -> SystemSettingValue {
+        guard Set(state.keys) == [key] else { throw SystemSettingAdapterError.invalidValue }
+        switch state[key] {
+        case .missing: return .boolean(false)
+        case let .boolean(enabled): return .boolean(enabled)
+        case let .integer(value) where value == 0 || value == 1: return .boolean(value != 0)
+        default: throw SystemSettingAdapterError.invalidValue
+        }
+    }
+
+    func apply(_ value: SystemSettingValue) async throws {
+        guard case let .boolean(enabled) = value else { throw SystemSettingAdapterError.invalidValue }
+        try store.write([key: .boolean(enabled)], domain: domain)
+    }
+
+    func restore(_ snapshot: SystemSettingSnapshot) async throws -> SystemSettingVerification {
+        guard snapshot.components == nil, let state = snapshot.restoration,
+              try value(from: state) == snapshot.value else { throw SystemSettingAdapterError.invalidValue }
+        try store.write(state, domain: domain)
+        let actual = try await self.snapshot()
+        return actual == snapshot ? .verified(actual.value) : .mismatch(actual: actual.value)
+    }
+}
+
+@MainActor
 final class CompositeBooleanSystemSettingAdapter: SystemSettingAdapter {
     private let adapters: [any SystemSettingAdapter]
 
@@ -1190,6 +1233,39 @@ final class CompositeBooleanSystemSettingAdapter: SystemSettingAdapter {
     func read() async throws -> SystemSettingValue {
         guard let first = adapters.first else { throw SystemSettingAdapterError.unreadable }
         return try await first.read()
+    }
+
+    func snapshot() async throws -> SystemSettingSnapshot {
+        var components: [String: SystemSettingSnapshot] = [:]
+        for (index, adapter) in adapters.enumerated() {
+            components[String(index)] = try await adapter.snapshot()
+        }
+        guard let first = components["0"] else { throw SystemSettingAdapterError.unreadable }
+        return .init(value: first.value, components: components)
+    }
+
+    func restore(_ snapshot: SystemSettingSnapshot) async throws -> SystemSettingVerification {
+        guard snapshot.restoration == nil, let components = snapshot.components,
+              Set(components.keys) == Set(adapters.indices.map(String.init)),
+              components["0"]?.value == snapshot.value,
+              components.values.allSatisfy({ if case .boolean = $0.value { return true }; return false }) else {
+            throw SystemSettingAdapterError.unsupported("此历史记录缺少各设备的完整快照，无法安全恢复。")
+        }
+        var firstError: Error?
+        for (index, adapter) in adapters.enumerated() {
+            let original = components[String(index)]!
+            do {
+                // An unchanged, read-only domain must not prevent recovery of another device.
+                if (try? await adapter.snapshot()) == original { continue }
+                _ = try await adapter.restore(original)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        let actual = try await self.snapshot()
+        if actual == snapshot { return .verified(actual.value) }
+        if let firstError { throw firstError }
+        return .mismatch(actual: actual.value)
     }
 
     func apply(_ value: SystemSettingValue) async throws {
@@ -1257,6 +1333,35 @@ final class LiveTrackpadBooleanSystemSettingAdapter: SystemSettingAdapter {
 
     func read() async throws -> SystemSettingValue {
         try await persistedAdapter.read()
+    }
+
+    func snapshot() async throws -> SystemSettingSnapshot {
+        let persisted = try await persistedAdapter.snapshot()
+        return .init(value: persisted.value, components: [
+            "persisted": persisted,
+            "live": .init(value: .boolean(try readLiveValue())),
+        ])
+    }
+
+    func restore(_ snapshot: SystemSettingSnapshot) async throws -> SystemSettingVerification {
+        guard snapshot.restoration == nil, let components = snapshot.components,
+              Set(components.keys) == ["persisted", "live"],
+              let persisted = components["persisted"], persisted.value == snapshot.value,
+              let live = components["live"], !live.hasRestorationData,
+              case let .boolean(enabled) = live.value else {
+            throw SystemSettingAdapterError.unsupported("此历史记录缺少设备与实时状态快照，无法安全恢复。")
+        }
+        // The runtime setter may write preferences itself. Restore the exact domains afterwards.
+        var firstError: Error?
+        do {
+            if (try? readLiveValue()) != enabled { try writeLiveValue(enabled) }
+        } catch { firstError = error }
+        do { _ = try await persistedAdapter.restore(persisted) }
+        catch { firstError = firstError ?? error }
+        let actual = try await self.snapshot()
+        if actual == snapshot { return .verified(actual.value) }
+        if let firstError { throw firstError }
+        return .mismatch(actual: actual.value)
     }
 
     func apply(_ value: SystemSettingValue) async throws {
@@ -1335,7 +1440,15 @@ final class ExistingPluginActionSettingAdapter: SystemSettingAdapter {
     }
 
     func read() async throws -> SystemSettingValue {
-        try await reader()
+        let value = try await reader()
+        let reference = try reference(value)
+        guard let item = context()?.item(for: reference) else {
+            throw SystemSettingAdapterError.unsupported("对应的 MacTools 插件不可用。")
+        }
+        guard item.availability.isAvailable else {
+            throw SystemSettingAdapterError.unsupported(item.availability.reason ?? "对应的 MacTools 插件当前不可用。")
+        }
+        return value
     }
 
     func apply(_ value: SystemSettingValue) async throws {

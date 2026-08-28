@@ -228,12 +228,16 @@ struct SystemSettingChoice: Codable, Equatable, Hashable, Sendable, Identifiable
 enum SystemSettingStoredPreference: Codable, Equatable, Sendable {
     case missing
     case boolean(Bool)
+    case integer(Int)
     case string(String)
 }
 
 struct SystemSettingSnapshot: Codable, Equatable, Sendable {
     let value: SystemSettingValue
     var restoration: [String: SystemSettingStoredPreference]? = nil
+    var components: [String: SystemSettingSnapshot]? = nil
+
+    var hasRestorationData: Bool { restoration != nil || components != nil }
 }
 
 enum SystemSettingValueSchema: Codable, Equatable, Sendable {
@@ -412,6 +416,7 @@ struct SystemSettingEnvironment: Sendable {
     let availableHardware: Set<String>
     let grantedPermissionIDs: Set<String>
     let availableProviderIDs: Set<String>
+    var unavailableProviderReasons: [String: String] = [:]
 
     static var current: SystemSettingEnvironment {
         SystemSettingEnvironment(
@@ -471,7 +476,7 @@ enum SystemSettingCompatibilityEvaluator {
         }
         if let providerID = requirements.existingProviderID,
            !environment.availableProviderIDs.contains(providerID) {
-            return .providerUnavailable(providerID)
+            return .providerUnavailable(environment.unavailableProviderReasons[providerID] ?? providerID)
         }
 
         switch definition.executionClass {

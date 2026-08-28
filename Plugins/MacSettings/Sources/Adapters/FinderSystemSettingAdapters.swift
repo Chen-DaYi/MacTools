@@ -29,6 +29,8 @@ struct CoreFoundationFinderPreferencesStore: FinderPreferencesStoring {
             case nil: value = .missing
             case let number as NSNumber where CFGetTypeID(number) == CFBooleanGetTypeID():
                 value = .boolean(number.boolValue)
+            case let number as NSNumber where ["c", "s", "i", "l", "q"].contains(String(cString: number.objCType)):
+                value = .integer(number.intValue)
             case let string as String: value = .string(string)
             default: throw SystemSettingAdapterError.unreadable
             }
@@ -47,6 +49,7 @@ struct CoreFoundationFinderPreferencesStore: FinderPreferencesStoring {
             switch value {
             case .missing: removals.append(key)
             case let .boolean(value): updates[key] = value
+            case let .integer(value): updates[key] = value
             case let .string(value): updates[key] = value
             }
         }
@@ -55,7 +58,7 @@ struct CoreFoundationFinderPreferencesStore: FinderPreferencesStoring {
             application, kCFPreferencesCurrentUser, kCFPreferencesAnyHost
         )
         guard CFPreferencesSynchronize(application, kCFPreferencesCurrentUser, kCFPreferencesAnyHost) else {
-            throw SystemSettingAdapterError.writeFailed("无法保存访达设置。")
+            throw SystemSettingAdapterError.writeFailed("无法保存系统偏好设置。")
         }
     }
 }

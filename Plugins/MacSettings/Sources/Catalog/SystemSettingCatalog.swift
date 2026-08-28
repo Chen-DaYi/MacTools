@@ -132,15 +132,13 @@ enum MacSettingsCatalogFactory {
                 note: "Uses the runtime-validated System Settings trackpad backend for an immediate hardware update, then verifies both built-in and Bluetooth preference domains.",
                 adapter: LiveTrackpadBooleanSystemSettingAdapter(
                     threeFingerDragPersistedAdapter: CompositeBooleanSystemSettingAdapter(adapters: [
-                        DefaultsSystemSettingAdapter.boolean(
+                        TrackpadBooleanPreferencesSettingAdapter(
                             domain: trackpadDomain,
-                            key: "TrackpadThreeFingerDrag",
-                            defaultValue: false
+                            key: "TrackpadThreeFingerDrag"
                         ),
-                        DefaultsSystemSettingAdapter.boolean(
+                        TrackpadBooleanPreferencesSettingAdapter(
                             domain: bluetoothTrackpadDomain,
-                            key: "TrackpadThreeFingerDrag",
-                            defaultValue: false
+                            key: "TrackpadThreeFingerDrag"
                         ),
                     ])
                 )
@@ -309,15 +307,13 @@ enum MacSettingsCatalogFactory {
                 note: "Uses the runtime-validated System Settings trackpad backend, then verifies the active tap behavior and both preference domains.",
                 adapter: LiveTrackpadBooleanSystemSettingAdapter(
                     tapToClickPersistedAdapter: CompositeBooleanSystemSettingAdapter(adapters: [
-                        DefaultsSystemSettingAdapter.boolean(
+                        TrackpadBooleanPreferencesSettingAdapter(
                             domain: trackpadDomain,
-                            key: "Clicking",
-                            defaultValue: false
+                            key: "Clicking"
                         ),
-                        DefaultsSystemSettingAdapter.boolean(
+                        TrackpadBooleanPreferencesSettingAdapter(
                             domain: bluetoothTrackpadDomain,
-                            key: "Clicking",
-                            defaultValue: false
+                            key: "Clicking"
                         ),
                     ])
                 )

@@ -53,7 +53,8 @@ final class SystemSettingChangeHistoryStore: SystemSettingChangeHistoryStoring {
     static let maximumAge: TimeInterval = 90 * 24 * 60 * 60
 
     private enum Key {
-        static let history = "change-history"
+        // Pre-release snapshots used a different shape. Leave them untouched, without migration.
+        static let history = "change-history-v2"
     }
 
     private let storage: any PluginStorage

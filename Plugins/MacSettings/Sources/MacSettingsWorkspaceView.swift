@@ -9,7 +9,15 @@ struct MacSettingsWorkspaceView: View {
     @FocusState private var focusedSettingID: SystemSettingID?
 
     var body: some View {
-        content
+        VStack(spacing: 0) {
+            if controller.operationState != .idle {
+                MacSettingsOperationBanner(controller: controller)
+            }
+            if !controller.pendingRecoveries.isEmpty || controller.recoveryPersistenceError != nil {
+                MacSettingsRecoveryView(controller: controller)
+            }
+            content
+        }
             .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: controller.searchFocusRequest) {
             searchFocused = true
@@ -109,6 +117,7 @@ struct MacSettingsWorkspaceView: View {
                                         MacSettingRow(
                                         record: record,
                                         state: controller.rowStates[record.id],
+                                        canEditSettings: controller.canEditSettings,
                                         isFavorite: controller.favoriteIDs.contains(record.id),
                                         showsCategory: section.kind != .category,
                                         isKeyboardFocused: focusedSettingID == record.id,
@@ -119,7 +128,10 @@ struct MacSettingsWorkspaceView: View {
                                             : nil,
                                         favoriteCount: controller.favoriteIDs.count,
                                         onMoveFavorite: { controller.moveFavorite(record.id, by: $0) },
-                                        onOpenSystemSettings: { controller.openSystemSettings(for: record.id) }
+                                        onOpenSystemSettings: { controller.openSystemSettings(for: record.id) },
+                                        onOpenProviderSettings: { controller.openProviderSettings(for: record.id) },
+                                        canRetry: controller.failedDesiredValues[record.id] != nil && controller.pendingRecoveries[record.id] == nil,
+                                        onRetry: { controller.retryFailedChange(record.id) }
                                     )
                                         .id(record.id)
                                         .focused($focusedSettingID, equals: record.id)
@@ -254,15 +266,19 @@ struct MacSettingsWorkspaceView: View {
 private struct MacSettingRow: View {
     let record: SystemSettingRecord
     let state: SystemSettingRowState?
+    let canEditSettings: Bool
     let isFavorite: Bool
     let showsCategory: Bool
     let isKeyboardFocused: Bool
-    let onApply: (SystemSettingValue) -> Void
+    let onApply: (SystemSettingValue) -> Bool
     let onFavorite: () -> Void
     let favoriteIndex: Int?
     let favoriteCount: Int
     let onMoveFavorite: (Int) -> Void
     let onOpenSystemSettings: () -> Void
+    let onOpenProviderSettings: () -> Void
+    let canRetry: Bool
+    let onRetry: () -> Void
 
     @State private var detailsExpanded = false
 
@@ -294,8 +310,21 @@ private struct MacSettingRow: View {
                 Spacer(minLength: 12)
 
                 Group {
-                    if state?.isLoading == true || state?.isApplying == true {
+                    if let phase = state?.operationPhase {
+                        Text(phase.title)
+                            .font(PluginSettingsTheme.Typography.statusBadge)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 100, alignment: .trailing)
+                    } else if state?.isLoading == true || state?.isApplying == true {
                         ProgressView().controlSize(.small)
+                    } else if canRetry {
+                        HStack {
+                            Button("重试", action: onRetry)
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .disabled(!canEditSettings)
+                            settingControl
+                        }
                     } else {
                         settingControl
                     }
@@ -362,14 +391,13 @@ private struct MacSettingRow: View {
         .accessibilityHint(record.definition.description)
         .onKeyPress(.space) {
             guard isKeyboardFocused,
-                  state?.isApplying != true,
+                  state?.isApplying != true, canEditSettings,
                   state?.errorMessage == nil,
                   isDirectlyControllable(state?.availability ?? .unsupported("")),
                   case let .boolean(enabled)? = state?.value else {
                 return .ignored
             }
-            onApply(.boolean(!enabled))
-            return .handled
+            return onApply(.boolean(!enabled)) ? .handled : .ignored
         }
         .onKeyPress(.return) {
             guard isKeyboardFocused else { return .ignored }
@@ -381,7 +409,12 @@ private struct MacSettingRow: View {
     @ViewBuilder
     private var settingControl: some View {
         let availability = state?.availability ?? .unsupported("无法读取状态。")
-        if state?.errorMessage != nil, record.definition.destination != nil {
+        if case let .providerUnavailable(reason) = availability {
+            Button("查看插件", action: onOpenProviderSettings)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(reason)
+        } else if state?.errorMessage != nil, record.definition.destination != nil {
             Button("打开系统设置", action: onOpenSystemSettings)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -389,7 +422,7 @@ private struct MacSettingRow: View {
             SystemSettingValueControl(
                 schema: record.definition.schema,
                 value: value,
-                enabled: state?.isApplying != true,
+                enabled: state?.isApplying != true && canEditSettings,
                 compact: true,
                 sliderPresentation: record.id == "accessibility.pointer-size"
                     ? .pointerSize
@@ -407,7 +440,7 @@ private struct MacSettingRow: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             case .providerUnavailable:
-                Button("查看插件", action: onOpenSystemSettings)
+                Button("查看插件", action: onOpenProviderSettings)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             default:
@@ -496,7 +529,7 @@ private struct MacSettingRow: View {
         case .available: "可用"
         case .requiresLogout: "需重新登录"
         case .requiresRestart: "需重新打开应用"
-        case .providerUnavailable: "插件不可用"
+        case let .providerUnavailable(reason): reason
         case .hardwareUnavailable: "硬件不可用"
         case .permissionMissing: "缺少权限"
         case .guidedManual: "手动设置"
@@ -513,14 +546,14 @@ struct SystemSettingValueControl: View {
     let enabled: Bool
     let compact: Bool
     var sliderPresentation: SystemSettingSliderPresentation = .standard
-    let onChange: (SystemSettingValue) -> Void
+    let onChange: (SystemSettingValue) -> Bool
 
     var body: some View {
         switch (schema, value) {
         case let (.directoryChoice(options), _):
             Menu {
                 ForEach(options) { option in
-                    Button(option.title) { onChange(.choice(id: option.id)) }
+                    Button(option.title) { _ = onChange(.choice(id: option.id)) }
                 }
                 Divider()
                 Button("其他文件夹…") {
@@ -531,7 +564,7 @@ struct SystemSettingValueControl: View {
                     if case let .url(url) = value { panel.directoryURL = url }
                     PluginPresentationSafety.prepareForWindowOrdering()
                     guard panel.runModal() == .OK, let selected = panel.url else { return }
-                    onChange(.url(selected))
+                    _ = onChange(.url(selected))
                 }
             } label: {
                 Text(directoryTitle(options: options))
@@ -541,14 +574,14 @@ struct SystemSettingValueControl: View {
             .help(value.conciseDescription)
             .disabled(!enabled)
         case let (.boolean, .boolean(isOn)):
-            Toggle("", isOn: Binding(get: { isOn }, set: { onChange(.boolean($0)) }))
+            Toggle("", isOn: Binding(get: { isOn }, set: { _ = onChange(.boolean($0)) }))
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .disabled(!enabled)
         case let (.choice(options), .choice(selectionID)):
             Picker("", selection: Binding(
                 get: { selectionID },
-                set: { onChange(.choice(id: $0)) }
+                set: { _ = onChange(.choice(id: $0)) }
             )) {
                 ForEach(options) { option in
                     Text(option.title).tag(option.id)
@@ -587,7 +620,7 @@ struct SystemSettingValueControl: View {
                 panel.directoryURL = url
                 PluginPresentationSafety.prepareForWindowOrdering()
                 guard panel.runModal() == .OK, let selected = panel.url else { return }
-                onChange(.url(selected))
+                _ = onChange(.url(selected))
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -622,7 +655,7 @@ private struct SystemSettingSliderControl: View {
     let fractionDigits: Int
     let enabled: Bool
     let presentation: SystemSettingSliderPresentation
-    let onCommit: (Double) -> Void
+    let onCommit: (Double) -> Bool
 
     @State private var draft: Double
 
@@ -633,7 +666,7 @@ private struct SystemSettingSliderControl: View {
         fractionDigits: Int,
         enabled: Bool,
         presentation: SystemSettingSliderPresentation,
-        onCommit: @escaping (Double) -> Void
+        onCommit: @escaping (Double) -> Bool
     ) {
         self.value = value
         self.range = range
@@ -688,9 +721,9 @@ private struct SystemSettingSliderControl: View {
     }
 
     private var slider: some View {
-            Slider(value: $draft, in: range, step: step) { editing in
-                if !editing { onCommit(draft) }
-            }
+        Slider(value: $draft, in: range, step: step) { editing in
+            if !editing, !onCommit(draft) { draft = value }
+        }
     }
 
     private var formattedDraft: String {
@@ -772,9 +805,6 @@ private struct MacSettingsProfilesView: View {
                         profileSection("内置模板", image: "sparkles", profiles: controller.builtInTemplates, isTemplate: true)
                     }
                     profileSection("我的配置", image: "square.stack.3d.up", profiles: controller.profiles, isTemplate: false)
-                    if controller.isPreparingPlan {
-                        ProgressView("正在读取当前设置…")
-                    }
                     if let plan = controller.activePlan {
                         MacSettingsProfilePlanView(controller: controller, plan: plan)
                     }
@@ -900,14 +930,20 @@ private struct MacSettingsProfileEditorView: View {
                 Button("取消", action: onCancel)
                 Button("保存") { onSave(draft) }
                     .buttonStyle(.borderedProminent)
-                    .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || !draft.items.contains(where: \.isIncluded))
+                    .disabled(controller.draftValidationMessage(draft, replacing: profile) != nil)
             }
             .padding(18)
             Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if let message = controller.draftValidationMessage(draft, replacing: profile)
+                        ?? controller.profileErrorMessage {
+                        Text(message)
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("mac-settings.profile-editor.error")
+                    }
                     TextField("配置名称", text: $draft.name)
                         .textFieldStyle(.roundedBorder)
                     TextField("说明（可选）", text: $draft.profileDescription, axis: .vertical)
@@ -951,7 +987,7 @@ private struct MacSettingsProfileEditorView: View {
                                                     value: draft.items[index].desiredValue,
                                                     enabled: true,
                                                     compact: true,
-                                                    onChange: { draft.setDesiredValue($0, for: record.id) }
+                                                    onChange: { draft.setDesiredValue($0, for: record.id); return true }
                                                 )
                                                 .accessibilityLabel("\(record.definition.title) 的期望值")
                                                 .accessibilityValue(record.definition.displayDescription(for: draft.items[index].desiredValue))
@@ -970,6 +1006,8 @@ private struct MacSettingsProfileEditorView: View {
                 .padding(18)
             }
         }
+        .onAppear { controller.clearProfileError() }
+        .onChange(of: draft) { controller.clearProfileError() }
     }
 
     private func profileSchema(for schema: SystemSettingValueSchema) -> SystemSettingValueSchema {
@@ -991,7 +1029,8 @@ private struct MacSettingsProfilePlanView: View {
                 Spacer()
                 Button("应用所选更改") { controller.applyActivePlan() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(controller.isApplyingProfile || !plan.items.contains(where: { $0.isSelected }))
+                    .disabled(!controller.canEditSettings || controller.lastApplyReport?.planID == plan.id
+                              || !plan.items.contains(where: { $0.isSelected }))
             }
 
             VStack(spacing: 0) {
@@ -1016,7 +1055,7 @@ private struct MacSettingsProfilePlanView: View {
                         Image(systemName: "arrow.right").foregroundStyle(.tertiary)
                         Text(valueDescription(item.desiredValue, settingID: item.settingID))
                             .frame(width: 90, alignment: .leading)
-                        Text(planStatusText(item.status))
+                        Text(progressText(for: item) ?? planStatusText(item.status))
                             .font(PluginSettingsTheme.Typography.statusBadge)
                             .foregroundStyle(item.status.canSelect ? .primary : .secondary)
                             .frame(width: 115, alignment: .leading)
@@ -1034,12 +1073,17 @@ private struct MacSettingsProfilePlanView: View {
                         Text(resultTitle(report))
                             .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                         Spacer()
-                        if !report.rollbackPoint.entries.isEmpty,
-                           controller.lastRollbackResults?.allSatisfy({ $0.kind == .appliedAndVerified }) != true {
-                            Button("回滚此次应用") { controller.rollbackLastApply() }
+                        if controller.canRetryFailedChanges {
+                            Button("重试未完成项…") { controller.retryFailedChanges() }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .disabled(controller.isApplyingProfile)
+                        }
+                        if !report.rollbackPoint.entries.isEmpty,
+                           controller.lastRollbackResults?.allSatisfy({ [.appliedAndVerified, .skippedByUser].contains($0.kind) }) != true {
+                            Button("撤销已应用项") { controller.rollbackLastApply() }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .disabled(controller.isApplyingProfile || controller.isPreparingPlan)
                         }
                     }
                     ForEach(controller.lastRollbackResults ?? report.results) { result in
@@ -1088,9 +1132,28 @@ private struct MacSettingsProfilePlanView: View {
 
     private func resultTitle(_ report: SystemSettingsProfileApplyReport) -> String {
         if let results = controller.lastRollbackResults {
-            return results.allSatisfy { $0.kind == .appliedAndVerified } ? "已回滚" : "回滚未完成"
+            if results.allSatisfy({ $0.kind == .appliedAndVerified }) { return "已回滚" }
+            return results.allSatisfy { [.appliedAndVerified, .skippedByUser].contains($0.kind) }
+                ? "已处理恢复" : "回滚未完成"
         }
-        return report.hasPartialSuccess ? "部分完成" : "已完成"
+        if !report.hasPartialSuccess { return "已完成" }
+        return report.results.contains { [.appliedAndVerified, .pendingRestart, .pendingLogout, .alreadyMatched].contains($0.kind) }
+            ? "部分完成" : "未完成"
+    }
+
+    private func progressText(for item: SystemSettingsProfilePlanItem) -> String? {
+        if controller.isApplyingProfile, let progress = controller.operationProgress {
+            if progress.activeSettingID == item.settingID { return progress.phase?.title }
+            if let result = progress.results.first(where: { $0.settingID == item.settingID }) {
+                if controller.operationState == .restoring, result.kind == .appliedAndVerified { return "已恢复并验证" }
+                return applyResultText(result.kind)
+            }
+            return item.isSelected ? "等待中" : nil
+        }
+        if let result = controller.lastRollbackResults?.first(where: { $0.settingID == item.settingID }) {
+            return result.kind == .appliedAndVerified ? "已恢复并验证" : applyResultText(result.kind)
+        }
+        return controller.lastApplyReport?.results.first { $0.settingID == item.settingID }.map { applyResultText($0.kind) }
     }
 
     private func applyResultText(_ result: SystemSettingsProfileApplyResultKind) -> String {

@@ -3685,7 +3685,7 @@ final class PluginHost: ObservableObject {
     private func makePluginActionExecutionHostContext() -> PluginActionExecutionHostContext {
         PluginActionExecutionHostContext(
             item: { [weak self] reference in
-                self?.actionSurfaceItem(for: reference)
+                self?.actionSurfaceItem(for: reference, livePresentation: true)
             },
             execute: { [weak self] reference, source in
                 guard let self else {
@@ -3716,6 +3716,13 @@ final class PluginHost: ObservableObject {
                     return .cancelled
                 case .rejected:
                     return .failed(message: FeatureL10n.string("无法执行操作。"))
+                }
+            },
+            openProviderSettings: { [weak self] providerID in
+                guard let self, PluginPackageManifestLoader.isValidPluginID(providerID) else { return }
+                let reference = ActionReference(key: ActionKey(providerID: providerID, actionID: "set-enabled"))
+                if !self.presentActionOwner(for: reference) {
+                    self.presentPluginMarketplace()
                 }
             }
         )
@@ -3752,21 +3759,34 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func actionSurfaceItem(for reference: ActionReference) -> ActionSurfaceCatalogItem? {
+    private func actionSurfaceItem(
+        for reference: ActionReference,
+        livePresentation: Bool = false
+    ) -> ActionSurfaceCatalogItem? {
         guard case let .success(action) = actionRegistry.registeredAction(for: reference) else {
             return nil
         }
         let ownerTitle = actionSurfaceOwnerTitle(providerID: reference.key.providerID)
+        var entry = action.catalogEntry
+        if livePresentation {
+            guard let plugin = activePlugins.first(where: { $0.metadata.id == reference.key.providerID }),
+                  let provider = plugin as? any PluginActionProviding else { return nil }
+            // Composed settings verify immediately after execution, before the UI rebuild debounce.
+            // Read the provider's current snapshot instead of the registry's presentation cache.
+            entry = guardedValue(
+                for: plugin, operation: "read live action presentation", provider.actionCatalogEntries
+            )?.first { $0.reference == reference }
+        }
         return ActionSurfaceCatalogItem(
             reference: reference,
-            title: action.catalogEntry?.title ?? action.definition.title,
-            subtitle: action.catalogEntry?.subtitle,
+            title: entry?.title ?? action.definition.title,
+            subtitle: entry?.subtitle,
             ownerTitle: ownerTitle,
             systemImage: action.definition.systemImage,
             availability: actionRegistry.availability(for: reference),
             isSafe: action.definition.risk == .safe,
             canOpenOwner: canPresentActionOwner(for: reference),
-            presentationState: action.catalogEntry?.presentationState
+            presentationState: entry?.presentationState
         )
     }
 

@@ -119,8 +119,7 @@ final class SystemSettingCatalogTests: XCTestCase {
         var executedReference: ActionReference?
         let context = PluginActionExecutionHostContext(
             item: { reference in
-                guard reference.key.providerID == "display-true-color",
-                      reference.key.actionID == "toggle" else { return nil }
+                guard reference.key.providerID == "display-true-color" else { return nil }
                 return ActionSurfaceCatalogItem(
                     reference: reference,
                     title: "True Tone",

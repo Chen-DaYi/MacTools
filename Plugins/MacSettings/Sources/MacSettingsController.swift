@@ -87,6 +87,7 @@ struct SystemSettingRowState: Equatable {
     var verification: SystemSettingRowVerification?
     var errorMessage: String?
     var changedAt: Date?
+    var operationPhase: SystemSettingOperationPhase? = nil
 }
 
 struct SystemSettingsImportPreview: Equatable {
@@ -99,6 +100,7 @@ final class MacSettingsController: ObservableObject {
     private enum StorageKey {
         static let favorites = "favorite-setting-ids"
         static let density = "workspace-density"
+        static let recoveries = "pending-recovery-v1"
     }
 
     let catalog: SystemSettingCatalog
@@ -116,14 +118,18 @@ final class MacSettingsController: ObservableObject {
     @Published private(set) var lastRollbackResults: [SystemSettingsProfileApplyResult]?
     @Published private(set) var density: MacSettingsWorkspaceDensity
     @Published private(set) var isRefreshing = false
-    @Published private(set) var isApplyingProfile = false
-    @Published private(set) var isPreparingPlan = false
+    @Published private(set) var operationState: SystemSettingsOperationState = .idle
+    @Published private(set) var operationProgress: SystemSettingsOperationProgress?
+    @Published private(set) var pendingRecoveries: [SystemSettingID: SystemSettingRecovery] = [:]
+    @Published private(set) var recoveryPersistenceError: String?
+    @Published private(set) var failedDesiredValues: [SystemSettingID: SystemSettingValue] = [:]
     @Published private(set) var profileErrorMessage: String?
 
     var onStateChange: (() -> Void)?
     var onPersistentPreferencesChange: (() -> Void)?
     var onPermissionAction: ((String) -> Void)?
     var onOpenSystemSettings: ((URL) -> Void)?
+    var onOpenProviderSettings: ((String) -> Void)?
 
     private let storage: any PluginStorage
     private let historyStore: any SystemSettingChangeHistoryStoring
@@ -143,6 +149,10 @@ final class MacSettingsController: ObservableObject {
     private var pendingRequirementIDs: Set<SystemSettingID> = []
     private var failedSettingIDs: Set<SystemSettingID> = []
     private var rollbackFailureMessages: [SystemSettingID: String] = [:]
+    private var retryBaseReport: SystemSettingsProfileApplyReport?
+
+    var isPreparingPlan: Bool { operationState == .preparing }
+    var isApplyingProfile: Bool { operationState == .applying || operationState == .restoring }
 
     init(
         catalog: SystemSettingCatalog,
@@ -182,6 +192,19 @@ final class MacSettingsController: ObservableObject {
                 errorMessage: nil,
                 changedAt: history.first(where: { $0.settingID == record.id })?.date
             )
+        }
+        if let data = storage.data(forKey: StorageKey.recoveries),
+           let entries = try? JSONDecoder().decode([SystemSettingRecovery].self, from: data) {
+            for entry in entries {
+                guard let record = catalog[entry.settingID], record.definition.canRollback,
+                      record.definition.schema.accepts(entry.original.value) else { continue }
+                pendingRecoveries[entry.settingID] = entry
+                // Persisted observations are not evidence of the current macOS state.
+                pendingRecoveries[entry.settingID]?.current = nil
+                rollbackFailureMessages[entry.settingID] = entry.message
+                rowStates[entry.settingID]?.errorMessage = entry.message
+                failedSettingIDs.insert(entry.settingID)
+            }
         }
     }
 
@@ -300,19 +323,34 @@ final class MacSettingsController: ObservableObject {
     }
 
     func updateAvailableProviderIDs(_ providerIDs: Set<String>) {
-        guard environment.availableProviderIDs != providerIDs else { return }
+        updateProviderAvailability(Dictionary(uniqueKeysWithValues: providerIDs.map { ($0, .available) }))
+    }
+
+    func updateProviderAvailability(_ providers: [String: ActionAvailability]) {
+        let providerIDs = Set(providers.filter { $0.value.isAvailable }.keys)
+        let reasons = providers.filter { !$0.value.isAvailable }.mapValues { $0.reason ?? "插件当前不可用。" }
+        guard environment.availableProviderIDs != providerIDs
+            || environment.unavailableProviderReasons != reasons else { return }
         environment = SystemSettingEnvironment(
             systemVersion: environment.systemVersion,
             availableHardware: environment.availableHardware,
             grantedPermissionIDs: environment.grantedPermissionIDs,
-            availableProviderIDs: providerIDs
+            availableProviderIDs: providerIDs,
+            unavailableProviderReasons: reasons
         )
-        for record in catalog.records {
+        for record in catalog.records where record.definition.requirements.existingProviderID != nil {
+            rowRevisions[record.id, default: 0] &+= 1
             rowStates[record.id]?.availability = SystemSettingCompatibilityEvaluator.availability(
                 for: record.definition,
                 environment: environment
             )
+            if let providerID = record.definition.requirements.existingProviderID,
+               providerIDs.contains(providerID), rollbackFailureMessages[record.id] == nil {
+                rowStates[record.id]?.errorMessage = nil
+                failedSettingIDs.remove(record.id)
+            }
         }
+        scheduleExternalRefresh()
         onStateChange?()
     }
 
@@ -355,6 +393,7 @@ final class MacSettingsController: ObservableObject {
 
     func activate() {
         isActive = true
+        onStateChange?()
     }
 
     func deactivate() {
@@ -363,6 +402,7 @@ final class MacSettingsController: ObservableObject {
         cancelPlanPreparation()
         profileOperationTask?.cancel()
         for task in writeTasks.values { task.cancel() }
+        onStateChange?()
     }
 
     func scheduleExternalRefresh() {
@@ -402,7 +442,10 @@ final class MacSettingsController: ObservableObject {
         }
         rowStates[record.id]?.isLoading = true
         do {
-            let value = try await record.adapter.read()
+            let recoverySnapshot = pendingRecoveries[record.id] != nil ? try await record.adapter.snapshot() : nil
+            let value: SystemSettingValue
+            if let recoverySnapshot { value = recoverySnapshot.value }
+            else { value = try await record.adapter.read() }
             guard canPublishRefresh(
                 record.id,
                 rowRevision: rowRevision,
@@ -413,6 +456,10 @@ final class MacSettingsController: ObservableObject {
             }
             rowStates[record.id]?.availability = availability
             rowStates[record.id]?.value = value
+            if let recoverySnapshot {
+                pendingRecoveries[record.id]?.current = recoverySnapshot
+                persistRecoveries()
+            }
             rowStates[record.id]?.errorMessage = rollbackFailureMessages[record.id]
             if rollbackFailureMessages[record.id] == nil {
                 failedSettingIDs.remove(record.id)
@@ -428,21 +475,29 @@ final class MacSettingsController: ObservableObject {
                 error: error
             )
             rowStates[record.id]?.errorMessage = error.localizedDescription
+            if pendingRecoveries[record.id] != nil {
+                pendingRecoveries[record.id]?.current = nil
+                rowStates[record.id]?.value = nil
+                persistRecoveries()
+            }
             failedSettingIDs.insert(record.id)
         }
         rowStates[record.id]?.isLoading = false
     }
 
-    func apply(_ value: SystemSettingValue, to settingID: SystemSettingID) {
-        guard isActive, !isPreparingPlan,
+    var canEditSettings: Bool { isActive && operationState == .idle && pendingRecoveries.isEmpty }
+    var canResolveRecovery: Bool { isActive && operationState == .idle && writeTasks.isEmpty }
+
+    @discardableResult
+    func apply(_ value: SystemSettingValue, to settingID: SystemSettingID) -> Bool {
+        guard canEditSettings,
               let record = catalog[settingID],
               record.definition.schema.accepts(value),
               let state = rowStates[settingID],
               canApply(state.availability),
               state.errorMessage == nil,
-              !state.isApplying,
-              !isApplyingProfile else { return }
-        _ = startWrite(value, to: record)
+              !state.isApplying else { return false }
+        return startWrite(value, to: record) != nil
     }
 
     @discardableResult
@@ -464,7 +519,7 @@ final class MacSettingsController: ObservableObject {
         to record: SystemSettingRecord,
         restoring snapshot: SystemSettingSnapshot? = nil
     ) -> Task<Bool, Never>? {
-        guard isActive, !isPreparingPlan, !isApplyingProfile,
+        guard canEditSettings,
               writeTasks[record.id] == nil else { return nil }
         let task = Task { @MainActor [weak self] in
             guard let self else { return false }
@@ -491,9 +546,11 @@ final class MacSettingsController: ObservableObject {
         rowRevisions[record.id, default: 0] &+= 1
         rowStates[record.id]?.isApplying = true
         rowStates[record.id]?.isLoading = false
+        setRowPhase(.reading, for: record.id)
         defer {
             applyingSettingIDs.remove(record.id)
             rowStates[record.id]?.isApplying = false
+            setRowPhase(nil, for: record.id)
         }
         let previousSnapshot: SystemSettingSnapshot
         do {
@@ -510,15 +567,19 @@ final class MacSettingsController: ObservableObject {
         }
 
         let previousValue = previousSnapshot.value
+        failedDesiredValues[record.id] = value
         rowStates[record.id]?.value = value
         rowStates[record.id]?.errorMessage = nil
         do {
             let verification: SystemSettingVerification
             if let snapshot {
                 guard snapshot.value == value else { throw SystemSettingAdapterError.invalidValue }
+                setRowPhase(.restoring, for: record.id)
                 verification = try await record.adapter.restore(snapshot)
             } else {
+                setRowPhase(.applying, for: record.id)
                 try await record.adapter.apply(value)
+                setRowPhase(.verifying, for: record.id)
                 verification = try await record.adapter.verify(value)
             }
             switch verification {
@@ -532,7 +593,8 @@ final class MacSettingsController: ObservableObject {
                     record: record,
                     previousSnapshot: previousSnapshot
                 )
-                rowStates[record.id]?.value = rolledBack ? previousValue : actual
+                rowStates[record.id]?.value = rolledBack ? previousValue
+                    : (pendingRecoveries[record.id] != nil ? pendingRecoveries[record.id]?.current?.value : actual)
                 rowStates[record.id]?.verification = .failed
                 rowStates[record.id]?.errorMessage = rolledBack
                     ? "验证失败，已恢复原值。"
@@ -546,12 +608,13 @@ final class MacSettingsController: ObservableObject {
                 return false
             }
             failedSettingIDs.remove(record.id)
+            failedDesiredValues[record.id] = nil
             if record.definition.executionClass == .directRequiresLogout
                 || record.definition.executionClass == .directRequiresRestart {
                 pendingRequirementIDs.insert(record.id)
             }
             var didChange = previousValue != value
-            if previousSnapshot.restoration != nil {
+            if previousSnapshot.hasRestorationData {
                 didChange = previousSnapshot != (try await record.adapter.snapshot())
             }
             if didChange, !record.definition.isSensitive {
@@ -596,12 +659,15 @@ final class MacSettingsController: ObservableObject {
         previousSnapshot: SystemSettingSnapshot
     ) async -> Bool {
         guard record.definition.canRollback else { return false }
+        setRowPhase(.restoring, for: record.id)
         do {
             guard case .verified = try await record.adapter.restore(previousSnapshot) else {
+                await retainRecovery(record: record, original: previousSnapshot, message: "恢复未完成，请选择重试恢复或保留当前值。")
                 return false
             }
             return true
         } catch {
+            await retainRecovery(record: record, original: previousSnapshot, message: "恢复未完成：\(error.localizedDescription)")
             return false
         }
     }
@@ -649,6 +715,11 @@ final class MacSettingsController: ObservableObject {
             change.previousValue, to: record,
             restoring: change.previousSnapshot ?? .init(value: change.previousValue)
         )
+    }
+
+    func openProviderSettings(for settingID: SystemSettingID) {
+        guard let providerID = catalog[settingID]?.definition.requirements.existingProviderID else { return }
+        onOpenProviderSettings?(providerID)
     }
 
     func openSystemSettings(for settingID: SystemSettingID) {
@@ -702,12 +773,66 @@ final class MacSettingsController: ObservableObject {
     ) -> Bool {
         let saved = draft.makeProfile(existing: profile, catalog: catalog)
         let validation = SystemSettingsProfileCodec.validate(saved, catalog: catalog)
-        guard validation.isValid, !saved.entries.isEmpty, profileStore.save(saved) else {
-            profileErrorMessage = "配置至少需要包含一个有效设置。"
+        if let message = draftValidationMessage(draft, replacing: profile) {
+            profileErrorMessage = message
+            return false
+        }
+        guard validation.isValid, profileStore.save(saved) else {
+            profileErrorMessage = "无法保存配置，请检查配置数量与存储空间后重试。"
             return false
         }
         profiles = profileStore.load()
         profileErrorMessage = nil
+        onPersistentPreferencesChange?()
+        onStateChange?()
+        return true
+    }
+
+    func draftValidationMessage(
+        _ draft: SystemSettingsProfileDraft,
+        replacing profile: SystemSettingsProfile? = nil
+    ) -> String? {
+        let saved = draft.makeProfile(existing: profile, catalog: catalog)
+        if saved.name.isEmpty { return "请输入配置名称。" }
+        if saved.name.count > SystemSettingsProfileCodec.maximumNameLength { return "配置名称不能超过 120 个字符。" }
+        if saved.profileDescription.count > SystemSettingsProfileCodec.maximumDescriptionLength {
+            return "配置说明过长，请缩短后重试。"
+        }
+        if saved.entries.isEmpty { return "配置至少需要包含一个有效设置。" }
+        return SystemSettingsProfileCodec.validate(saved, catalog: catalog).isValid
+            ? nil : "配置包含无效设置，请检查所选项目。"
+    }
+
+    func clearProfileError() { profileErrorMessage = nil }
+
+    func restorePortablePreferences(
+        favorites: [SystemSettingID], density: MacSettingsWorkspaceDensity,
+        profiles restored: [SystemSettingsProfile]
+    ) -> Bool {
+        guard Set(restored.map(\.id)).count == restored.count,
+              restored.allSatisfy({ SystemSettingsProfileCodec.validate($0, catalog: catalog).isValid }) else { return false }
+        let previousProfiles = profileStore.load()
+        var merged = previousProfiles.filter { old in !restored.contains { $0.id == old.id } }
+        merged.append(contentsOf: restored)
+        // Validate and persist the complete profile set in one operation before changing other fields.
+        guard profileStore.replaceAll(merged) else { return false }
+        let previousFavorites = storage.object(forKey: StorageKey.favorites)
+        let previousDensity = storage.object(forKey: StorageKey.density)
+        var seen: Set<SystemSettingID> = []
+        let favorites = favorites.filter { catalog[$0] != nil && seen.insert($0).inserted }
+        let rawFavorites = favorites.map(\.rawValue)
+        storage.set(rawFavorites, forKey: StorageKey.favorites)
+        storage.set(density.rawValue, forKey: StorageKey.density)
+        guard storage.stringArray(forKey: StorageKey.favorites) == rawFavorites,
+              storage.string(forKey: StorageKey.density) == density.rawValue else {
+            storage.set(previousFavorites, forKey: StorageKey.favorites)
+            storage.set(previousDensity, forKey: StorageKey.density)
+            _ = profileStore.replaceAll(previousProfiles)
+            return false
+        }
+        favoriteIDs = favorites
+        self.density = density
+        profiles = profileStore.load()
         onPersistentPreferencesChange?()
         onStateChange?()
         return true
@@ -725,16 +850,6 @@ final class MacSettingsController: ObservableObject {
             onPersistentPreferencesChange?()
             onStateChange?()
         }
-    }
-
-    @discardableResult
-    func restorePortableProfile(_ profile: SystemSettingsProfile) -> Bool {
-        let validation = SystemSettingsProfileCodec.validate(profile, catalog: catalog)
-        guard validation.isValid, profileStore.save(profile) else { return false }
-        profiles = profileStore.load()
-        onPersistentPreferencesChange?()
-        onStateChange?()
-        return true
     }
 
     func removeProfile(_ profile: SystemSettingsProfile) {
@@ -798,7 +913,7 @@ final class MacSettingsController: ObservableObject {
                     throw SystemSettingAdapterError.invalidValue
                 }
                 currentValues[entry.settingID] = current
-                if current == entry.desiredValue, snapshot.restoration != nil,
+                if current == entry.desiredValue, snapshot.hasRestorationData,
                    try await record.adapter.verify(entry.desiredValue) != .verified(entry.desiredValue) {
                     nonMatchingIDs.insert(entry.settingID)
                 }
@@ -817,19 +932,20 @@ final class MacSettingsController: ObservableObject {
     }
 
     func preparePlan(for profile: SystemSettingsProfile) {
-        guard isActive, !isApplyingProfile, writeTasks.isEmpty else { return }
+        guard isActive, !isApplyingProfile, writeTasks.isEmpty, pendingRecoveries.isEmpty else { return }
         cancelPlanPreparation()
         let generation = planGeneration
         activePlan = nil
         lastApplyReport = nil
         lastRollbackResults = nil
-        isPreparingPlan = true
+        retryBaseReport = nil
+        transitionOperation(to: .preparing)
         planPreparationTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer {
                 if planGeneration == generation {
-                    isPreparingPlan = false
                     planPreparationTask = nil
+                    transitionOperation(to: .idle)
                 }
             }
             guard let plan = try? await makePlan(for: profile),
@@ -842,7 +958,7 @@ final class MacSettingsController: ObservableObject {
         planGeneration &+= 1
         planPreparationTask?.cancel()
         planPreparationTask = nil
-        isPreparingPlan = false
+        if isPreparingPlan { transitionOperation(to: .idle) }
     }
 
     func updatePlanSelection(_ selectedIDs: Set<SystemSettingID>) {
@@ -851,23 +967,24 @@ final class MacSettingsController: ObservableObject {
     }
 
     func applyActivePlan() {
-        guard isActive, !isPreparingPlan, writeTasks.isEmpty,
+        guard canEditSettings, writeTasks.isEmpty,
               let plan = activePlan,
               !isApplyingProfile,
               applyingSettingIDs.isEmpty else { return }
         let settingIDs = Set(plan.items.filter(\.isSelected).map(\.settingID))
-        guard beginProfileOperation(settingIDs: settingIDs) else { return }
+        guard beginProfileOperation(settingIDs: settingIDs, state: .applying, total: plan.items.count) else { return }
         profileOperationTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { finishProfileOperation(settingIDs: settingIDs) }
-            let report = await applyCoordinator.apply(plan: plan)
+            let attempt = await applyCoordinator.apply(plan: plan, onProgress: receiveProgress)
+            let report = mergedRetryReport(attempt)
             lastApplyReport = report
             lastRollbackResults = nil
-            for result in report.results {
+            for result in attempt.results {
                 if [.appliedAndVerified, .pendingLogout, .pendingRestart, .verificationUnavailable].contains(result.kind),
                    let item = plan.items.first(where: { $0.settingID == result.settingID }),
                    let previous = result.previousValue,
-                   (previous != item.desiredValue || result.previousSnapshot?.restoration != nil),
+                   (previous != item.desiredValue || result.previousSnapshot?.hasRestorationData == true),
                    let record = catalog[result.settingID],
                    !record.definition.isSensitive {
                     let change = SystemSettingChange(
@@ -900,6 +1017,9 @@ final class MacSettingsController: ObservableObject {
                     failedSettingIDs.insert(result.settingID)
                     rowStates[result.settingID]?.errorMessage = result.message
                     if let record = catalog[result.settingID] {
+                        if result.kind == .failedWithoutRollback, let original = result.previousSnapshot {
+                            await retainRecovery(record: record, original: original, message: result.message ?? "恢复未完成。")
+                        }
                         rowStates[result.settingID]?.availability = runtimeFailureAvailability(
                             for: record,
                             message: result.message ?? "无法应用设置。"
@@ -919,7 +1039,7 @@ final class MacSettingsController: ObservableObject {
               !isApplyingProfile,
               applyingSettingIDs.isEmpty else { return }
         let restoredIDs = Set((lastRollbackResults ?? [])
-            .filter { $0.kind == .appliedAndVerified }.map(\.settingID))
+            .filter { [.appliedAndVerified, .skippedByUser].contains($0.kind) }.map(\.settingID))
         let point = SystemSettingRollbackPoint(
             id: originalPoint.id,
             createdAt: originalPoint.createdAt,
@@ -928,11 +1048,13 @@ final class MacSettingsController: ObservableObject {
         )
         guard !point.entries.isEmpty else { return }
         let settingIDs = Set(point.entries.map(\.settingID))
-        guard beginProfileOperation(settingIDs: settingIDs) else { return }
+        guard beginProfileOperation(settingIDs: settingIDs, state: .restoring, total: point.entries.count) else { return }
         profileOperationTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { finishProfileOperation(settingIDs: settingIDs) }
-            let results = await applyCoordinator.rollback(point)
+            let results = await applyCoordinator.rollback(point) { event in
+                receiveRestorationProgress(event, point: point)
+            }
             var outcomes = Dictionary(uniqueKeysWithValues: (lastRollbackResults ?? []).map {
                 ($0.settingID, $0)
             })
@@ -949,9 +1071,11 @@ final class MacSettingsController: ObservableObject {
                         rowStates[result.settingID]?.verification = .verified
                         rowStates[result.settingID]?.errorMessage = nil
                         rollbackFailureMessages[result.settingID] = nil
+                        pendingRecoveries[result.settingID] = nil
+                        persistRecoveries()
                         failedSettingIDs.remove(result.settingID)
                         if let previous = result.previousValue,
-                           (previous != restoredValue || result.previousSnapshot?.restoration != nil),
+                           (previous != restoredValue || result.previousSnapshot?.hasRestorationData == true),
                            !record.definition.isSensitive {
                             let change = SystemSettingChange(
                                 settingID: record.id,
@@ -970,6 +1094,10 @@ final class MacSettingsController: ObservableObject {
                         rowStates[result.settingID]?.verification = .failed
                         rowStates[result.settingID]?.errorMessage = result.message
                         rollbackFailureMessages[result.settingID] = result.message ?? "回滚未完成，请重试。"
+                        if result.kind != .cancelled,
+                           let original = point.entries.first(where: { $0.settingID == result.settingID }) {
+                            await retainRecovery(record: record, original: original.snapshot ?? .init(value: original.value), message: result.message ?? "恢复未完成。")
+                        }
                     }
                 }
             }
@@ -977,8 +1105,20 @@ final class MacSettingsController: ObservableObject {
         }
     }
 
+    var mostRecentUndoableChange: SystemSettingChange? {
+        guard canEditSettings else { return nil }
+        return history.first { change in
+            guard change.canRollback, let record = catalog[change.settingID],
+                  record.definition.canRollback,
+                  record.definition.schema.accepts(change.previousValue),
+                  let state = rowStates[change.settingID] else { return false }
+            return canApply(state.availability) && state.errorMessage == nil
+                && !state.isApplying && writeTasks[change.settingID] == nil
+        }
+    }
+
     func undoMostRecentChange() async -> Bool {
-        guard let change = history.first(where: \.canRollback),
+        guard let change = mostRecentUndoableChange,
               let record = catalog[change.settingID] else { return false }
         return await applyAndWait(
             change.previousValue, to: record,
@@ -1071,17 +1211,19 @@ final class MacSettingsController: ObservableObject {
         return .unsupported(message)
     }
 
-    private func beginProfileOperation(settingIDs: Set<SystemSettingID>) -> Bool {
+    private func beginProfileOperation(
+        settingIDs: Set<SystemSettingID>, state: SystemSettingsOperationState, total: Int
+    ) -> Bool {
         guard isActive, !isPreparingPlan, writeTasks.isEmpty, !isApplyingProfile,
               profileOperationTask == nil,
               applyingSettingIDs.isDisjoint(with: settingIDs) else { return false }
-        isApplyingProfile = true
         for id in settingIDs {
             applyingSettingIDs.insert(id)
             rowRevisions[id, default: 0] &+= 1
             rowStates[id]?.isApplying = true
             rowStates[id]?.isLoading = false
         }
+        transitionOperation(to: state, progress: .init(total: total))
         return true
     }
 
@@ -1089,9 +1231,214 @@ final class MacSettingsController: ObservableObject {
         for id in settingIDs {
             applyingSettingIDs.remove(id)
             rowStates[id]?.isApplying = false
+            rowStates[id]?.operationPhase = nil
         }
-        isApplyingProfile = false
         profileOperationTask = nil
+        transitionOperation(to: .idle, progress: operationProgress)
+    }
+
+    private func transitionOperation(
+        to state: SystemSettingsOperationState, progress: SystemSettingsOperationProgress? = nil
+    ) {
+        operationState = state
+        operationProgress = progress
+        onStateChange?()
+    }
+
+    private func setRowPhase(_ phase: SystemSettingOperationPhase?, for id: SystemSettingID) {
+        rowStates[id]?.operationPhase = phase
+        onStateChange?()
+    }
+
+    private func receiveProgress(_ event: SystemSettingsProgressEvent) {
+        switch event {
+        case let .phase(id, phase):
+            operationProgress?.activeSettingID = id
+            operationProgress?.phase = phase
+            rowStates[id]?.operationPhase = phase
+        case let .finished(result):
+            operationProgress?.results.append(result)
+            operationProgress?.activeSettingID = nil
+            operationProgress?.phase = nil
+            rowStates[result.settingID]?.operationPhase = nil
+            if operationState == .applying {
+                switch result.kind {
+                case .appliedAndVerified, .pendingLogout, .pendingRestart, .verificationUnavailable, .alreadyMatched:
+                    rowStates[result.settingID]?.value = activePlan?.items.first { $0.settingID == result.settingID }?.desiredValue
+                    rowStates[result.settingID]?.verification = result.kind == .verificationUnavailable ? .unverified : .verified
+                case .failedAndRolledBack:
+                    rowStates[result.settingID]?.value = result.previousValue
+                    rowStates[result.settingID]?.verification = .failed
+                case .failedWithoutRollback:
+                    if let original = result.previousSnapshot {
+                        stageRecovery(for: result.settingID, original: original, message: result.message ?? "恢复未完成。")
+                    }
+                default:
+                    break
+                }
+            }
+        }
+        onStateChange?()
+    }
+
+    private func receiveRestorationProgress(_ event: SystemSettingsProgressEvent, point: SystemSettingRollbackPoint) {
+        if case let .finished(result) = event, result.kind == .appliedAndVerified {
+            rowStates[result.settingID]?.value = point.entries.first { $0.settingID == result.settingID }?.value
+            rowStates[result.settingID]?.verification = .verified
+        } else if case let .finished(result) = event, result.kind == .failedWithoutRollback,
+                  let entry = point.entries.first(where: { $0.settingID == result.settingID }) {
+            stageRecovery(for: result.settingID, original: entry.snapshot ?? .init(value: entry.value),
+                          message: result.message ?? "恢复未完成。")
+        }
+        receiveProgress(event)
+    }
+
+    func cancelOperation() {
+        if isPreparingPlan { cancelPlanPreparation() }
+        else { profileOperationTask?.cancel() }
+        // In-flight writes finish verification/recovery before becoming idle.
+    }
+
+    func retryFailedChange(_ id: SystemSettingID) {
+        guard canEditSettings, let value = failedDesiredValues[id], let record = catalog[id] else { return }
+        rowStates[id]?.availability = SystemSettingCompatibilityEvaluator.availability(for: record.definition, environment: environment)
+        rowStates[id]?.errorMessage = nil
+        apply(value, to: id)
+    }
+
+    var canRetryFailedChanges: Bool {
+        canEditSettings && lastRollbackResults == nil && !retryableItems.isEmpty
+    }
+
+    private var retryableItems: [SystemSettingsProfilePlanItem] {
+        let retryKinds: Set<SystemSettingsProfileApplyResultKind> = [
+            .failedAndRolledBack, .failedWithoutRollback, .cancelled, .previewChanged,
+            .providerUnavailable, .permissionMissing, .hardwareUnavailable, .verificationUnavailable,
+        ]
+        let ids = Set((lastApplyReport?.results ?? []).filter { retryKinds.contains($0.kind) }.map(\.settingID))
+        return (activePlan?.items ?? []).filter { $0.isSelected && ids.contains($0.settingID) }
+    }
+
+    func retryFailedChanges() {
+        guard canRetryFailedChanges, writeTasks.isEmpty, let plan = activePlan,
+              let previousReport = lastApplyReport else { return }
+        let profile = SystemSettingsProfile(id: plan.profileID, name: plan.profileName, entries: retryableItems.map {
+            .init(settingID: $0.settingID, desiredValue: $0.desiredValue, category: catalog[$0.settingID]?.definition.category)
+        })
+        preparePlan(for: profile)
+        retryBaseReport = previousReport
+        lastApplyReport = previousReport
+        destination = .profiles
+    }
+
+    private func mergedRetryReport(_ attempt: SystemSettingsProfileApplyReport) -> SystemSettingsProfileApplyReport {
+        guard let base = retryBaseReport else { return attempt }
+        var results = base.results
+        for result in attempt.results {
+            if let index = results.firstIndex(where: { $0.settingID == result.settingID }) { results[index] = result }
+            else { results.append(result) }
+        }
+        var entries = base.rollbackPoint.entries
+        for entry in attempt.rollbackPoint.entries where !entries.contains(where: { $0.settingID == entry.settingID }) {
+            entries.append(entry)
+        }
+        return .init(id: attempt.id, planID: attempt.planID, completedAt: attempt.completedAt, results: results,
+                     rollbackPoint: .init(id: base.rollbackPoint.id, createdAt: base.rollbackPoint.createdAt,
+                                          profileID: base.rollbackPoint.profileID, entries: entries))
+    }
+
+    @discardableResult
+    private func persistRecoveries() -> Bool {
+        let entries = pendingRecoveries.values.sorted { $0.id.rawValue < $1.id.rawValue }
+        guard let data = try? JSONEncoder().encode(entries) else {
+            recoveryPersistenceError = "恢复记录未保存，请勿退出应用。"
+            return false
+        }
+        storage.set(data, forKey: StorageKey.recoveries)
+        guard storage.data(forKey: StorageKey.recoveries) == data else {
+            recoveryPersistenceError = "恢复记录未保存，请勿退出应用。处理恢复后可重试保存。"
+            return false
+        }
+        recoveryPersistenceError = nil
+        return true
+    }
+
+    func retrySavingRecoveries() {
+        guard canResolveRecovery else { return }
+        persistRecoveries()
+        onStateChange?()
+    }
+
+    private func stageRecovery(for id: SystemSettingID, original: SystemSettingSnapshot, message: String) {
+        // Save the recovery target before any further asynchronous observation can stall.
+        pendingRecoveries[id] = .init(settingID: id,
+            original: pendingRecoveries[id]?.original ?? original, current: nil, message: message)
+        rollbackFailureMessages[id] = message
+        rowStates[id]?.value = nil
+        persistRecoveries()
+        onStateChange?()
+    }
+
+    private func retainRecovery(record: SystemSettingRecord, original: SystemSettingSnapshot, message: String) async {
+        stageRecovery(for: record.id, original: original, message: message)
+        let current = try? await record.adapter.snapshot()
+        pendingRecoveries[record.id]?.current = current
+        rowStates[record.id]?.value = current?.value
+        persistRecoveries()
+        onStateChange?()
+    }
+
+    func retryRecovery(_ id: SystemSettingID) {
+        guard let recovery = pendingRecoveries[id], let record = catalog[id],
+              beginProfileOperation(settingIDs: [id], state: .restoring, total: 1) else { return }
+        let point = SystemSettingRollbackPoint(id: UUID(), createdAt: Date(), profileID: UUID(), entries: [
+            .init(settingID: id, value: recovery.original.value, snapshot: recovery.original),
+        ])
+        profileOperationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { finishProfileOperation(settingIDs: [id]) }
+            let results = await applyCoordinator.rollback(point) { event in
+                receiveRestorationProgress(event, point: point)
+            }
+            guard let result = results.first else { return }
+            if result.kind == .appliedAndVerified {
+                pendingRecoveries[id] = nil
+                rollbackFailureMessages[id] = nil
+                failedSettingIDs.remove(id)
+                rowStates[id]?.value = recovery.original.value
+                rowStates[id]?.verification = .verified
+                rowStates[id]?.errorMessage = nil
+                rowStates[id]?.availability = SystemSettingCompatibilityEvaluator.availability(for: record.definition, environment: environment)
+                if let index = lastRollbackResults?.firstIndex(where: { $0.settingID == id }) {
+                    lastRollbackResults?[index] = result
+                }
+                persistRecoveries()
+            } else if result.kind != .cancelled {
+                await retainRecovery(record: record, original: recovery.original, message: result.message ?? recovery.message)
+                rowStates[id]?.errorMessage = pendingRecoveries[id]?.message
+            }
+        }
+    }
+
+    func keepCurrentValues(_ id: SystemSettingID) {
+        guard isActive, operationState == .idle, writeTasks.isEmpty,
+              let recovery = pendingRecoveries.removeValue(forKey: id) else { return }
+        guard persistRecoveries() else {
+            pendingRecoveries[id] = recovery
+            onStateChange?()
+            return
+        }
+        rollbackFailureMessages[id] = nil
+        failedSettingIDs.remove(id)
+        failedDesiredValues[id] = nil
+        rowStates[id]?.errorMessage = nil
+        rowStates[id]?.verification = .unverified
+        if let index = lastRollbackResults?.firstIndex(where: { $0.settingID == id }), let record = catalog[id] {
+            lastRollbackResults?[index] = .init(settingID: id, title: record.definition.title,
+                                               kind: .skippedByUser, message: "已保留当前值。")
+        }
+        onStateChange?()
+        scheduleExternalRefresh()
     }
 
     private func canRead(_ availability: SystemSettingAvailability) -> Bool {

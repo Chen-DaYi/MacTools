@@ -265,18 +265,25 @@ final class SystemSettingsProfileApplyCoordinator {
 
     func apply(
         plan: SystemSettingsProfileApplyPlan,
-        date: Date = Date()
+        date: Date = Date(),
+        onProgress: (SystemSettingsProgressEvent) -> Void = { _ in }
     ) async -> SystemSettingsProfileApplyReport {
         var results: [SystemSettingsProfileApplyResult] = []
         var rollbackEntries: [SystemSettingRollbackSnapshotEntry] = []
+        var needsRecovery = false
         for item in plan.items {
-            let result = await apply(item: item)
+            let result = needsRecovery && item.isSelected
+                ? result(item, kind: .cancelled, message: "恢复未完成，剩余设置未执行。")
+                : await apply(item: item, onProgress: onProgress)
             results.append(result)
+            if result.kind == .failedWithoutRollback, result.previousSnapshot != nil { needsRecovery = true }
+            onProgress(.finished(result))
+            await Task.yield()
             if item.isSelected,
                let previousValue = result.previousValue,
                let record = catalog[item.settingID],
                record.definition.canRollback,
-               (previousValue != item.desiredValue || result.previousSnapshot?.restoration != nil),
+               (previousValue != item.desiredValue || result.previousSnapshot?.hasRestorationData == true),
                [.appliedAndVerified, .pendingLogout, .pendingRestart, .verificationUnavailable]
                    .contains(result.kind) {
                 rollbackEntries.append(.init(
@@ -300,19 +307,22 @@ final class SystemSettingsProfileApplyCoordinator {
     }
 
     func rollback(
-        _ point: SystemSettingRollbackPoint
+        _ point: SystemSettingRollbackPoint,
+        onProgress: (SystemSettingsProgressEvent) -> Void = { _ in }
     ) async -> [SystemSettingsProfileApplyResult] {
         var results: [SystemSettingsProfileApplyResult] = []
         for entry in point.entries.reversed() {
             guard let record = catalog[entry.settingID] else { continue }
             do {
                 try Task.checkCancellation()
+                onProgress(.phase(entry.settingID, .reading))
                 let previousSnapshot = try await record.adapter.snapshot()
                 try Task.checkCancellation()
                 guard entry.snapshot == nil || entry.snapshot?.value == entry.value else {
                     throw SystemSettingAdapterError.invalidValue
                 }
                 // Settle the current restoration before observing cancellation for the next entry.
+                onProgress(.phase(entry.settingID, .restoring))
                 let verification = try await record.adapter.restore(entry.snapshot ?? .init(value: entry.value))
                 let succeeded: Bool
                 if case .verified = verification { succeeded = true } else { succeeded = false }
@@ -339,12 +349,15 @@ final class SystemSettingsProfileApplyCoordinator {
                     message: error.localizedDescription
                 ))
             }
+            if let result = results.last { onProgress(.finished(result)) }
+            await Task.yield()
         }
         return results
     }
 
     private func apply(
-        item: SystemSettingsProfilePlanItem
+        item: SystemSettingsProfilePlanItem,
+        onProgress: (SystemSettingsProgressEvent) -> Void
     ) async -> SystemSettingsProfileApplyResult {
         if !item.isSelected, item.status == .alreadyMatches {
             guard let record = catalog[item.settingID],
@@ -353,10 +366,11 @@ final class SystemSettingsProfileApplyCoordinator {
             }
             do {
                 try Task.checkCancellation()
+                onProgress(.phase(item.settingID, .reading))
                 let snapshot = try await record.adapter.snapshot()
                 try Task.checkCancellation()
                 var matches = snapshot.value == item.desiredValue
-                if matches, snapshot.restoration != nil {
+                if matches, snapshot.hasRestorationData {
                     matches = try await record.adapter.verify(item.desiredValue) == .verified(item.desiredValue)
                 }
                 return matches
@@ -408,12 +422,13 @@ final class SystemSettingsProfileApplyCoordinator {
         let alreadyMatches: Bool
         do {
             try Task.checkCancellation()
+            onProgress(.phase(item.settingID, .reading))
             previousSnapshot = try await record.adapter.snapshot()
             try Task.checkCancellation()
             guard record.definition.schema.accepts(previousSnapshot.value) else {
                 throw SystemSettingAdapterError.invalidValue
             }
-            if previousSnapshot.value == item.desiredValue, previousSnapshot.restoration != nil {
+            if previousSnapshot.value == item.desiredValue, previousSnapshot.hasRestorationData {
                 alreadyMatches = try await record.adapter.verify(item.desiredValue) == .verified(item.desiredValue)
             } else {
                 alreadyMatches = previousSnapshot.value == item.desiredValue
@@ -441,7 +456,9 @@ final class SystemSettingsProfileApplyCoordinator {
         }
         do {
             // Cancellation stops new settings; an in-flight mutation still needs verification/recovery.
+            onProgress(.phase(item.settingID, .applying))
             try await record.adapter.apply(item.desiredValue)
+            onProgress(.phase(item.settingID, .verifying))
             let verification = try await record.adapter.verify(item.desiredValue)
             switch verification {
             case .verified:
@@ -468,6 +485,7 @@ final class SystemSettingsProfileApplyCoordinator {
                     previousSnapshot: previousSnapshot
                 )
             case let .mismatch(actual):
+                onProgress(.phase(item.settingID, .restoring))
                 return await rollbackAfterFailure(
                     record: record,
                     item: item,
@@ -476,6 +494,7 @@ final class SystemSettingsProfileApplyCoordinator {
                 )
             }
         } catch {
+            onProgress(.phase(item.settingID, .restoring))
             return await rollbackAfterFailure(
                 record: record,
                 item: item,
@@ -525,7 +544,9 @@ final class SystemSettingsProfileApplyCoordinator {
                     settingID: item.settingID,
                     title: item.title,
                     kind: .failedWithoutRollback,
-                    message: "\(message) 回滚验证失败。"
+                    message: "\(message) 回滚验证失败。",
+                    previousValue: previousSnapshot.value,
+                    previousSnapshot: previousSnapshot
                 )
             }
             return .init(
@@ -541,7 +562,9 @@ final class SystemSettingsProfileApplyCoordinator {
                 settingID: item.settingID,
                 title: item.title,
                 kind: .failedWithoutRollback,
-                message: "\(message) 回滚失败：\(error.localizedDescription)"
+                message: "\(message) 回滚失败：\(error.localizedDescription)",
+                previousValue: previousSnapshot.value,
+                previousSnapshot: previousSnapshot
             )
         }
     }
