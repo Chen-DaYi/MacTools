@@ -146,16 +146,6 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-if [[ -z "$MINIMUM_HOST_VERSION" ]]; then
-    # This is the catalog schema compatibility floor, not the newest package's
-    # host requirement. Individual entries retain their manifest minimums.
-    MINIMUM_HOST_VERSION="1.2.1"
-fi
-if [[ -z "$MINIMUM_HOST_VERSION" ]]; then
-    echo "Unable to determine the catalog minimum host version." >&2
-    exit 1
-fi
-
 ASSETS_DIR="${ASSETS_DIR:-$DIST_DIR/Assets}"
 rm -rf "$ASSETS_DIR"
 mkdir -p "$ASSETS_DIR" "$(dirname "$CATALOG_OUTPUT")"
@@ -207,8 +197,10 @@ catalog_args=(
     --base-url "$BASE_URL"
     --output "$CATALOG_OUTPUT"
     --plugins-root "$SOURCE_DIR"
-    --minimum-host-version "$MINIMUM_HOST_VERSION"
 )
+if [[ -n "$MINIMUM_HOST_VERSION" ]]; then
+    catalog_args+=(--minimum-host-version "$MINIMUM_HOST_VERSION")
+fi
 if [[ -n "$RELEASE_NOTES_URL" ]]; then
     catalog_args+=(--release-notes-url "$RELEASE_NOTES_URL")
 fi

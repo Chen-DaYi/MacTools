@@ -344,7 +344,6 @@ jobs:
               --signed-catalog-output "$SIGNED_PLUGIN_CATALOG_PATH" \
               --sign-identity "$SIGNING_IDENTITY" \
               --configuration Nightly \
-              --minimum-host-version "$PLUGIN_CATALOG_MINIMUM_HOST_VERSION" \
               --release-notes-url "$PLUGIN_RELEASE_NOTES_URL" \
               --nightly-build-number "$BUILD_NUMBER"
 

@@ -114,6 +114,11 @@ class NightlyConfigurationTests(unittest.TestCase):
         self.assertIn('for plugin_filter in "${PLUGIN_FILTERS[@]-}"; do', script)
         self.assertIn('[[ -n "$plugin_filter" ]] || continue', script)
 
+    def test_nightly_catalog_uses_the_schema_generators_compatibility_floor(self) -> None:
+        workflow = (REPO_ROOT / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
+
+        self.assertNotIn("PLUGIN_CATALOG_MINIMUM_HOST_VERSION", workflow)
+
     def test_nightly_helpers_embed_distinct_signing_identifiers_without_changing_stable(self) -> None:
         for directory, plugin_id in [("FanControl", "fan-control"), ("BatteryChargeLimit", "battery-charge-limit")]:
             with self.subTest(plugin=plugin_id):

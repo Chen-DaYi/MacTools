@@ -135,6 +135,7 @@ class NightlyReleaseTests(unittest.TestCase):
         self.assertEqual(metadata["TAG"], "nightly-512-3")
         self.assertNotIn("PROJECT_NAME", metadata)
         self.assertEqual(metadata["PLUGIN_KIT_VERSION"], "5")
+        self.assertNotIn("PLUGIN_CATALOG_MINIMUM_HOST_VERSION", metadata)
         self.assertEqual(
             metadata["NIGHTLY_PLUGIN_CATALOG_RELATIVE_PATH"],
             "docs/nightly/plugins/v5/catalog.json",
