@@ -97,6 +97,17 @@ class NightlyConfigurationTests(unittest.TestCase):
             workflow,
         )
 
+    def test_ci_workflows_use_their_configured_build_products_and_have_sufficient_timeout(self) -> None:
+        build_workflow = (REPO_ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        nightly_workflow = (REPO_ROOT / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
+
+        self.assertIn("timeout-minutes: 60", build_workflow)
+        self.assertIn(
+            './scripts/plugins/verify-plugin-kit-v5-binary-compatibility.sh \\\n'
+            '            "$DERIVED_DATA/Build/Products/Debug"',
+            nightly_workflow,
+        )
+
     def test_nightly_helpers_embed_distinct_signing_identifiers_without_changing_stable(self) -> None:
         for directory, plugin_id in [("FanControl", "fan-control"), ("BatteryChargeLimit", "battery-charge-limit")]:
             with self.subTest(plugin=plugin_id):
