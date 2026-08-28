@@ -180,7 +180,8 @@ fi
 if [[ -n "$PRODUCTS_DIR" ]]; then
     build_args+=(--products-dir "$PRODUCTS_DIR")
 fi
-for plugin_filter in "${PLUGIN_FILTERS[@]}"; do
+for plugin_filter in "${PLUGIN_FILTERS[@]-}"; do
+    [[ -n "$plugin_filter" ]] || continue
     build_args+=(--plugin "$plugin_filter")
 done
 

@@ -108,6 +108,12 @@ class NightlyConfigurationTests(unittest.TestCase):
             nightly_workflow,
         )
 
+    def test_nightly_plugin_builder_accepts_an_empty_filter_list_on_system_bash(self) -> None:
+        script = (REPO_ROOT / "scripts/plugins/build-plugin-release-assets.sh").read_text(encoding="utf-8")
+
+        self.assertIn('for plugin_filter in "${PLUGIN_FILTERS[@]-}"; do', script)
+        self.assertIn('[[ -n "$plugin_filter" ]] || continue', script)
+
     def test_nightly_helpers_embed_distinct_signing_identifiers_without_changing_stable(self) -> None:
         for directory, plugin_id in [("FanControl", "fan-control"), ("BatteryChargeLimit", "battery-charge-limit")]:
             with self.subTest(plugin=plugin_id):
