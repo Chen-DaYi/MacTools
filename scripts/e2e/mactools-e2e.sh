@@ -1790,6 +1790,7 @@ verify_code_session() {
         -only-testing:MacToolsTests/SidecarPluginTests \
         -only-testing:MacToolsTests/StageManagerPluginTests \
         -only-testing:MacToolsTests/SystemMutePluginTests \
+        -only-testing:MacToolsTests/SystemPowerPluginTests \
         -only-testing:MacToolsTests/SystemSoftRestartPluginTests \
         -only-testing:MacToolsTests/TranslatorPluginTests \
         -only-testing:MacToolsTests/WindowLayoutsPluginTests \
