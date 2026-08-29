@@ -140,7 +140,19 @@ final class MacSettingsPlugin:
         let profiles: [SystemSettingsProfile]
     }
 
-    let metadata: PluginMetadata
+    var metadata: PluginMetadata {
+        PluginMetadata(
+            id: "mac-settings",
+            title: localization.string("metadata.title", defaultValue: "Mac Settings"),
+            iconName: "slider.horizontal.3",
+            iconTint: .accentColor,
+            order: 18,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "Search and adjust common settings for this Mac in one place."
+            )
+        )
+    }
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
         menuActionBehavior: .keepPresented
@@ -180,17 +192,6 @@ final class MacSettingsPlugin:
         self.actionContextBox = actionContextBox
         self.localization = localization
         self.openSystemSettings = openSystemSettings
-        self.metadata = PluginMetadata(
-            id: "mac-settings",
-            title: localization.string("metadata.title", defaultValue: "Mac 设置"),
-            iconName: "slider.horizontal.3",
-            iconTint: .accentColor,
-            order: 18,
-            defaultDescription: localization.string(
-                "metadata.description",
-                defaultValue: "搜索并集中调整当前 Mac 的常用设置"
-            )
-        )
         controller.onStateChange = { [weak self] in self?.onStateChange?() }
         controller.onPersistentPreferencesChange = { [weak self] in
             self?.onPersistentPreferencesChange?()
@@ -209,7 +210,7 @@ final class MacSettingsPlugin:
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: "\(controller.favoriteIDs.count) 个收藏 · \(controller.attentionCount) 项需关注",
+            subtitle: MacSettingsStrings.format("Pinned: %@ · Needs attention: %@", "\(controller.favoriteIDs.count)", "\(controller.attentionCount)"),
             isOn: controller.attentionCount > 0,
             isExpanded: isExpanded,
             isEnabled: true,
@@ -222,7 +223,7 @@ final class MacSettingsPlugin:
     var permissionRequirements: [PluginPermissionRequirement] {
         let affectedSettings = settingsRequiringPermission(MacSettingsPermission.fullDiskAccess)
             .map(\.definition.title)
-            .joined(separator: "、")
+            .formatted(.list(type: .and).locale(PluginRuntimeLocalization.locale))
         guard !affectedSettings.isEmpty else { return [] }
         return [
             PluginPermissionRequirement(
@@ -232,11 +233,11 @@ final class MacSettingsPlugin:
                 kind: .automation,
                 title: localization.string(
                     "permission.fullDiskAccess.title",
-                    defaultValue: "完全磁盘访问"
+                    defaultValue: "Full Disk Access"
                 ),
                 description: localization.format(
                     "permission.fullDiskAccess.descriptionFormat",
-                    defaultValue: "用于更改受 macOS 保护的设置。当前需要此权限：%@。",
+                    defaultValue: "Used to change settings protected by macOS. Currently required for: %@.",
                     affectedSettings
                 )
             ),
@@ -257,48 +258,48 @@ final class MacSettingsPlugin:
         [
             navigationAction(
                 id: ActionID.open,
-                title: "打开 Mac 设置",
+                title: MacSettingsStrings.text("Open Mac Settings"),
                 description: metadata.defaultDescription,
                 parameters: []
             ),
             navigationAction(
                 id: ActionID.openFavorites,
-                title: "打开 Mac 设置收藏",
-                description: "打开可直接控制的常用设置。",
+                title: MacSettingsStrings.text("Open Pinned Mac Settings"),
+                description: MacSettingsStrings.text("Open frequently used settings with direct controls."),
                 parameters: []
             ),
             navigationAction(
                 id: ActionID.openCategory,
-                title: "打开 Mac 设置类别",
-                description: "打开指定的 Mac 设置类别。",
+                title: MacSettingsStrings.text("Open Mac Settings Category"),
+                description: MacSettingsStrings.text("Open a specific Mac Settings category."),
                 parameters: [
                     ActionParameterDefinition(
                         id: ActionID.category,
-                        title: "类别",
+                        title: MacSettingsStrings.text("Category"),
                         kind: .string
                     ),
                 ]
             ),
             navigationAction(
                 id: ActionID.openSetting,
-                title: "打开 Mac 设置项目",
-                description: "打开指定的 Mac 设置并保留可直接使用的控件。",
+                title: MacSettingsStrings.text("Open Mac Setting"),
+                description: MacSettingsStrings.text("Open a specific Mac setting with its direct controls."),
                 parameters: [
                     ActionParameterDefinition(
                         id: ActionID.settingID,
-                        title: "设置 ID",
+                        title: MacSettingsStrings.text("Setting ID"),
                         kind: .string
                     ),
                 ]
             ),
             navigationAction(
                 id: ActionID.search,
-                title: "搜索 Mac 设置",
-                description: "打开 Mac 设置并搜索标题、说明和别名。",
+                title: MacSettingsStrings.text("Search Mac Settings"),
+                description: MacSettingsStrings.text("Open Mac Settings and search titles, descriptions, and aliases."),
                 parameters: [
                     ActionParameterDefinition(
                         id: ActionID.query,
-                        title: "搜索内容",
+                        title: MacSettingsStrings.text("Search Query"),
                         kind: .string,
                         isRequired: false
                     ),
@@ -306,39 +307,39 @@ final class MacSettingsPlugin:
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setBoolean),
-                title: "设置 Mac 布尔设置",
-                description: "明确打开或关闭支持的 Mac 设置。",
+                title: MacSettingsStrings.text("Set Mac Setting On or Off"),
+                description: MacSettingsStrings.text("Explicitly turn a supported Mac setting on or off."),
                 keywords: ["Mac 设置", "打开设置", "关闭设置"],
                 systemImage: "switch.2",
                 parameters: [
-                    ActionParameterDefinition(id: ActionID.settingID, title: "设置 ID", kind: .string),
-                    ActionParameterDefinition(id: ActionID.enabled, title: "打开", kind: .boolean),
+                    ActionParameterDefinition(id: ActionID.settingID, title: MacSettingsStrings.text("Setting ID"), kind: .string),
+                    ActionParameterDefinition(id: ActionID.enabled, title: MacSettingsStrings.text("On"), kind: .boolean),
                 ],
                 externalInvocationPolicy: .allowed,
                 capabilities: [.automatic, .background, .foregroundInteractive]
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.applyProfile),
-                title: "应用 Mac 设置配置",
-                description: "预览并应用已保存的设置配置。",
+                title: MacSettingsStrings.text("Apply Mac Settings Profile"),
+                description: MacSettingsStrings.text("Preview and apply a saved settings profile."),
                 keywords: ["配置", "profile", "应用设置"],
                 systemImage: "square.stack.3d.up",
                 parameters: [
-                    ActionParameterDefinition(id: ActionID.profileID, title: "配置 ID", kind: .string),
+                    ActionParameterDefinition(id: ActionID.profileID, title: MacSettingsStrings.text("Profile ID"), kind: .string),
                 ],
                 risk: .confirmationRequired,
                 confirmation: ActionConfirmation(
-                    title: "应用 Mac 设置配置？",
-                    message: "MacTools 将打开配置预览。确认选择后，所选设置才会更改。",
-                    confirmButtonTitle: "打开预览"
+                    title: MacSettingsStrings.text("Apply Mac Settings profile?"),
+                    message: MacSettingsStrings.text("MacTools will open a profile preview. Settings change only after you confirm your selection."),
+                    confirmButtonTitle: MacSettingsStrings.text("Open Preview")
                 ),
                 externalInvocationPolicy: .allowed,
                 capabilities: [.foregroundInteractive]
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.undo),
-                title: "撤销最近的 Mac 设置更改",
-                description: "恢复最近一个支持回滚的设置。",
+                title: MacSettingsStrings.text("Undo Last Mac Settings Change"),
+                description: MacSettingsStrings.text("Restore the most recent setting that supports rollback."),
                 keywords: ["撤销设置", "undo setting", "恢复"],
                 systemImage: "arrow.uturn.backward",
                 externalInvocationPolicy: .allowed,
@@ -349,9 +350,9 @@ final class MacSettingsPlugin:
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
-            ActionCatalogEntry(reference: reference(ActionID.open), title: "打开 Mac 设置"),
-            ActionCatalogEntry(reference: reference(ActionID.openFavorites), title: "打开 Mac 设置收藏"),
-            ActionCatalogEntry(reference: reference(ActionID.undo), title: "撤销最近的 Mac 设置更改"),
+            ActionCatalogEntry(reference: reference(ActionID.open), title: MacSettingsStrings.text("Open Mac Settings")),
+            ActionCatalogEntry(reference: reference(ActionID.openFavorites), title: MacSettingsStrings.text("Open Pinned Mac Settings")),
+            ActionCatalogEntry(reference: reference(ActionID.undo), title: MacSettingsStrings.text("Undo Last Mac Settings Change")),
         ] + controller.availableCategories.map { category in
             ActionCatalogEntry(
                 reference: ActionReference(
@@ -360,7 +361,7 @@ final class MacSettingsPlugin:
                         ActionID.category: .string(category.rawValue),
                     ])
                 ),
-                title: "打开类别 · \(category.title)"
+                title: MacSettingsStrings.format("Open Category · %@", "\(category.title)")
             )
         } + controller.catalog.records.map { record in
             ActionCatalogEntry(
@@ -370,7 +371,7 @@ final class MacSettingsPlugin:
                         ActionID.settingID: .string(record.id.rawValue),
                     ])
                 ),
-                title: "打开设置 · \(record.definition.title)"
+                title: MacSettingsStrings.format("Open Setting · %@", "\(record.definition.title)")
             )
         } + controller.profiles.map { profile in
             ActionCatalogEntry(
@@ -380,7 +381,7 @@ final class MacSettingsPlugin:
                         ActionID.profileID: .string(profile.id.uuidString.lowercased()),
                     ])
                 ),
-                title: "应用配置 · \(profile.name)"
+                title: MacSettingsStrings.format("Apply Profile · %@", "\(profile.name)")
             )
         }
     }
@@ -390,7 +391,7 @@ final class MacSettingsPlugin:
         case ActionID.undo:
             return controller.mostRecentUndoableChange != nil
                 ? .available
-                : .unavailable("没有可撤销的更改。")
+                : .unavailable(MacSettingsStrings.text("There are no changes to undo."))
         case ActionID.setBoolean:
             guard let settingID = stringParameter(ActionID.settingID, in: reference),
                   case .boolean? = reference.parameters[ActionID.enabled],
@@ -400,20 +401,20 @@ final class MacSettingsPlugin:
                   state.errorMessage == nil,
                   !state.isApplying, controller.canEditSettings,
                   isControllable(state.availability) else {
-                return .unavailable("此设置当前不可用。")
+                return .unavailable(MacSettingsStrings.text("This setting is currently unavailable."))
             }
             return .available
         case ActionID.applyProfile:
             guard let profileID = stringParameter(ActionID.profileID, in: reference),
                   let uuid = UUID(uuidString: profileID),
                   controller.profiles.contains(where: { $0.id == uuid }) else {
-                return .unavailable("配置不可用。")
+                return .unavailable(MacSettingsStrings.text("The profile is unavailable."))
             }
             return .available
         case ActionID.openSetting:
             guard let settingID = stringParameter(ActionID.settingID, in: reference),
                   controller.catalog[SystemSettingID(rawValue: settingID)] != nil else {
-                return .unavailable("设置不可用。")
+                return .unavailable(MacSettingsStrings.text("The setting is unavailable."))
             }
             return .available
         default:
@@ -432,7 +433,12 @@ final class MacSettingsPlugin:
                   let category = SystemSettingCategory(rawValue: rawCategory) else {
                 return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
             }
-            return navigationHandle(destination: .category(category))
+            return ActionExecutionHandle { [weak self] in
+                guard let self else { return .failed(message: PluginKitLocalization.actionUnavailable) }
+                controller.showCategoryResults(category)
+                requestSettingsPresentation?()
+                return .succeeded()
+            }
         case ActionID.openSetting:
             guard let rawID = stringParameter(ActionID.settingID, in: invocation.reference),
                   let record = controller.catalog[SystemSettingID(rawValue: rawID)] else {
@@ -440,8 +446,7 @@ final class MacSettingsPlugin:
             }
             return ActionExecutionHandle { [weak self] in
                 guard let self else { return .failed(message: PluginKitLocalization.actionUnavailable) }
-                controller.destination = .category(record.definition.category)
-                controller.searchText = record.definition.title
+                controller.showSetting(record.id)
                 requestSettingsPresentation?()
                 return .succeeded()
             }
@@ -479,14 +484,14 @@ final class MacSettingsPlugin:
                 controller.preparePlan(for: profile)
                 controller.destination = .profiles
                 requestSettingsPresentation?()
-                return .succeeded(message: "请预览并选择要应用的更改。")
+                return .succeeded(message: MacSettingsStrings.text("Preview and select the changes to apply."))
             }
         case ActionID.undo:
             return ActionExecutionHandle { [weak controller] in
                 guard let controller else { return .failed(message: PluginKitLocalization.actionUnavailable) }
                 return await controller.undoMostRecentChange()
                     ? .succeeded()
-                    : .failed(message: "没有可撤销的更改。")
+                    : .failed(message: MacSettingsStrings.text("There are no changes to undo."))
             }
         default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
@@ -573,7 +578,7 @@ final class MacSettingsPlugin:
             isGranted: isGranted,
             footnote: isGranted ? nil : localization.string(
                 "permission.fullDiskAccess.footnote",
-                defaultValue: "在系统设置中授权后，请退出并重新打开 MacTools。"
+                defaultValue: "After granting access in System Settings, quit and reopen MacTools."
             )
         )
     }
@@ -672,7 +677,7 @@ final class MacSettingsPlugin:
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "打开所有设置…",
+            actionTitle: MacSettingsStrings.text("Open All Settings…"),
             actionIconSystemName: "arrow.up.forward.app",
             actionBehavior: .dismissBeforeHandling,
             showsLeadingDivider: !favoriteControls.isEmpty,
@@ -700,7 +705,7 @@ final class MacSettingsPlugin:
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: "\(record.definition.title) · \(isOn ? "开" : "关")",
+                actionTitle: "\(record.definition.title) · \(isOn ? MacSettingsStrings.text("On") : MacSettingsStrings.text("Off"))",
                 actionIconSystemName: isOn ? "checkmark.circle.fill" : "circle",
                 isEnabled: enabled
             )
@@ -774,7 +779,7 @@ final class MacSettingsPlugin:
             sliderValue: value,
             sliderBounds: bounds,
             sliderStep: step,
-            valueLabel: value.formatted(.number.precision(.fractionLength(0 ... 1))),
+            valueLabel: value.formatted(.number.precision(.fractionLength(0 ... 1)).locale(PluginRuntimeLocalization.locale)),
             isEnabled: enabled
         )
     }
@@ -796,12 +801,13 @@ final class MacSettingsPlugin:
             "stage-manager",
         ]
         let availability = Dictionary(uniqueKeysWithValues: providerIDs.map { providerID in
+            let isAppearance = providerID == "appearance"
             let reference = ActionReference(
-                key: ActionKey(providerID: providerID, actionID: "set-enabled"),
-                parameters: try! ActionParameterSet(["enabled": .boolean(true)])
+                key: ActionKey(providerID: providerID, actionID: isAppearance ? "set-mode" : "set-enabled"),
+                parameters: try! ActionParameterSet(isAppearance ? ["mode": .string("auto")] : ["enabled": .boolean(true)])
             )
             return (providerID, actionExecutionHostContext?.item(for: reference)?.availability
-                ?? .unavailable("对应的 MacTools 插件未安装或未启用。"))
+                ?? .unavailable(MacSettingsStrings.text("The required MacTools plugin is not installed or enabled.")))
         })
         controller.updateProviderAvailability(availability)
     }
@@ -809,7 +815,8 @@ final class MacSettingsPlugin:
     private func navigationHandle(destination: MacSettingsDestination) -> ActionExecutionHandle {
         ActionExecutionHandle { [weak self] in
             guard let self else { return .failed(message: PluginKitLocalization.actionUnavailable) }
-            controller.destination = destination
+            if destination == .favorites { controller.showFavorites() }
+            else { controller.destination = destination }
             requestSettingsPresentation?()
             return .succeeded()
         }

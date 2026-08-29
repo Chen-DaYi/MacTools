@@ -6,9 +6,9 @@ Reviewed branch: `codex/issue-325-mac-settings`, starting at `ab823a0b`
 
 ## Accepted scope
 
-Include **39 settings in the first release**, defer **8 settings**, and permanently remove **0**. Accepted on 2026-08-28 after the user added items **1–5, 10–15, 19, and 26** to the original recommendation; item 13 was already included. The original numbering below remains stable for future discussions.
+Include **44 settings in the first release**, defer **7 settings**, and permanently remove **0**. The original 39/8 decision was accepted on 2026-08-28. The menu-bar policy was promoted after replacing its Boolean model with all four native modes, and four independent desktop item/widget controls were added as items 48–51. The original numbering below remains stable for future discussions.
 
-The production catalog enforces this scope. All 47 definitions remain in source, but deferred adapters are excluded from catalog lookup, palette search, favorites, actions, new profile drafts, and built-in templates. Their definitions remain available only for profile validation. Valid deferred values from an earlier profile remain preserved with warnings and are never executed; local-only paths remain prohibited in portable profiles. Deferral here does not remove independent plugins such as Night Shift or Auto Hide Menu Bar.
+The production catalog enforces this scope. All 51 definitions remain in source, but deferred adapters are excluded from catalog lookup, palette search, favorites, actions, new profile drafts, and built-in templates. Their definitions remain available only for profile validation. Valid deferred values from an earlier profile remain preserved with warnings and are never executed; local-only paths remain prohibited in portable profiles. Deferral here does not remove independent plugins such as Night Shift.
 
 - **Keep** means include in the first-release scope, subject to the release gates below. It does not mean that unit tests have established live macOS compatibility or that every implementation condition below is complete.
 - **Defer** means keep the feature in the backlog, but do not expose it in this plugin's first release. These entries have no placeholder controls; a future guided link needs its own review.
@@ -60,17 +60,21 @@ Prioritize validation of the newly included accessibility, input, and Finder con
 | 38 | `screenshots.floating-thumbnail` | Show screenshot floating thumbnail | Keep | Useful workflow preference; verify on the next screenshot and check interaction with the Screenshot app. |
 | 39 | `screenshots.window-shadow` | Include window shadow | Keep | Useful for documentation and design captures. Explain that it affects window captures, not all screenshot types. |
 | 40 | `screenshots.destination` | Screenshot destination | Defer | Validate an existing writable directory immediately before saving, handle removal/unmounting, and preserve native destinations such as Clipboard; keep it out of portable profiles. |
-| 41 | `appearance.dark-mode` | Dark mode | Keep | Reuse the existing provider. Label this as a manual light/dark override and do not imply that the Boolean represents automatic appearance scheduling. |
+| 41 | `appearance.dark-mode` | System appearance | Keep | Reuse the provider's typed Auto / Light / Dark policy action, independently of the currently rendered theme. Profiles and Undo preserve Auto; older Boolean profile values retain their explicit Light/Dark intent. |
 | 42 | `appearance.show-scroll-bars` | Show scroll bars | Keep | Useful accessibility/discoverability preference with a small choice set; verify behavior in supporting apps. |
 | 43 | `appearance.scroll-bar-click-jumps-to-spot` | Click scroll bar to jump to spot | Keep | Clear reversible behavior; explain jump-to-spot versus page scrolling and verify in a native scroll view. |
 | 44 | `display.true-tone` | True Tone | Keep | Reuse the existing provider and hardware availability. Clarify display scope and verify that provider presentation state refreshes after a change. |
 | 45 | `display.night-shift` | Night Shift | Defer | Separate a temporary override from the saved schedule and color temperature before treating it as a portable configuration value. |
-| 46 | `desktop.menu-bar-auto-hide` | Automatically hide the menu bar | Defer | The Boolean model needs a scope audit for desktop/full-screen modes; preserve the original mode instead of flattening it during profile apply/rollback. |
+| 46 | `desktop.menu-bar-auto-hide` | Automatically hide the menu bar | Keep | Uses the canonical provider's Always, On Desktop Only, In Full Screen Only, and Never modes. Apply and rollback preserve the exact policy instead of flattening it to a Boolean; verify visible behavior in desktop and full-screen spaces before release. |
 | 47 | `desktop.stage-manager` | Stage Manager | Keep | Reuse the existing provider and verify its live state. Keep this as an explicit enable/disable action without changing related window options. |
+| 48 | `desktop.show-items-on-desktop` | Show items on desktop | Keep | Independent inverted WindowManager preference with immediate change notifications and stored-value verification; verify Finder icons appear and disappear without relaunching. |
+| 49 | `desktop.show-items-in-stage-manager` | Show items in Stage Manager | Keep | Preserve this separately from standard desktop items and Stage Manager enablement; verify while Stage Manager is active. |
+| 50 | `desktop.show-widgets-on-desktop` | Show widgets on desktop | Keep | Independent WindowManager preference with immediate change notifications; verify existing desktop widgets without changing widget placement. |
+| 51 | `desktop.show-widgets-in-stage-manager` | Show widgets in Stage Manager | Keep | Preserve this separately from standard desktop widgets; verify while Stage Manager is active. |
 
 ## Deferred backlog
 
-All eight items below are **deferred, unassigned, and unscheduled**. Revisit them when planning the next plugin version after the initial release; that is a review checkpoint, not a promise to ship all eight then. Record the proposed version, owner, evidence, and decision here when work resumes. Keep the original IDs and numbering.
+All seven items below are **deferred, unassigned, and unscheduled**. Revisit them when planning the next plugin version after the initial release; that is a review checkpoint, not a promise to ship all seven then. Record the proposed version, owner, evidence, and decision here when work resumes. Keep the original IDs and numbering.
 
 | # | Stable setting ID | Reason for deferral | Required evidence before inclusion |
 | --- | --- | --- | --- |
@@ -81,7 +85,6 @@ All eight items below are **deferred, unassigned, and unscheduled**. Revisit the
 | 18 | `keyboard.function-keys` | A global preference does not establish behavior on every keyboard. | Test built-in and external keyboards, Fn/Globe interactions, device removal, and actual F-key behavior; disclose unsupported hardware. |
 | 40 | `screenshots.destination` | Local paths and native destinations need a richer model. | Revalidate directory existence/writability before writes; test unmount/removal and Clipboard/native destinations; keep paths out of portable profiles. |
 | 45 | `display.night-shift` | Temporary override, schedule, and color temperature have different semantics. | Model override versus saved schedule explicitly; preserve schedule/temperature during apply and rollback; test provider availability and display scope. |
-| 46 | `desktop.menu-bar-auto-hide` | A Boolean may discard desktop/full-screen distinctions. | Model all supported visibility modes; preserve the exact original mode during apply/rollback; test desktop and full-screen behavior. |
 
 For each proposed reintroduction:
 
@@ -109,7 +112,7 @@ Items 19 and 26 now have dedicated adapters and complete local rollback snapshot
 
 Finder follow-up on 2026-08-28: dedicated adapters now use exact-domain native preferences, distinguish absent keys, preserve legacy overrides and paired destination paths, and keep local paths out of portable profiles. The 79-test focused suite passed, and the unsigned dynamic bundle built successfully. A separate read-only probe of the built plugin accepted this Mac's current extension visibility and Recents destination without applying or restoring settings. Actual Finder-window behavior, visible filename changes, and UI/VoiceOver checks remain unperformed; the live checks above are still required before release.
 
-Scope-change verification on 2026-08-28: 52 focused XCTest tests passed on macOS 27 beta, 196 repository script tests passed, and the unsigned Mac Settings dynamic bundle built successfully. Changelog validation, whitespace checks, and a source/document check confirmed all 47 IDs exactly once in the decision table, with the same eight deferred IDs in code and backlog. No live hardware behavior or UI/VoiceOver validation was performed for this scope change; the gates above remain open.
+Scope-change verification on 2026-08-28: 52 focused XCTest tests passed on macOS 27 beta, 196 repository script tests passed, and the unsigned Mac Settings dynamic bundle built successfully. On 2026-08-29, the catalog expanded to 51 definitions: 44 included and seven deferred. Focused tests cover the four-state menu-bar mapping, partial-write restoration, provider routing, and the added catalog schemas. Live desktop/full-screen and Stage Manager behavior still requires the recorded release checks.
 
 The catalog/adapters were inspected in [SystemSettingCatalog.swift](../../../Plugins/MacSettings/Sources/Catalog/SystemSettingCatalog.swift) and [SystemSettingAdapters.swift](../../../Plugins/MacSettings/Sources/Adapters/SystemSettingAdapters.swift). Adapter-specific concerns above come from that implementation; they are not claims of Apple-documented support for private symbols or preference domains. The five review fixes and their deterministic regression tests are separate from this release recommendation.
 

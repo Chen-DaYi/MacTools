@@ -16,6 +16,22 @@ struct SystemSettingsProfileEntry: Codable, Equatable, Sendable, Identifiable {
     var id: SystemSettingID { settingID }
 }
 
+extension SystemSettingsProfileEntry {
+    // Preserve the stable setting ID and existing explicit Light/Dark profile intent.
+    // This does not migrate history or infer Auto from an old Boolean observation.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        settingID = try container.decode(SystemSettingID.self, forKey: .settingID)
+        category = try container.decodeIfPresent(SystemSettingCategory.self, forKey: .category)
+        let value = try container.decode(SystemSettingValue.self, forKey: .desiredValue)
+        if settingID == "appearance.dark-mode", case let .boolean(dark) = value {
+            desiredValue = .choice(id: dark ? "dark" : "light")
+        } else {
+            desiredValue = value
+        }
+    }
+}
+
 struct SystemSettingsProfile: Codable, Equatable, Sendable, Identifiable {
     static let currentFormatVersion = 1
 
@@ -157,11 +173,11 @@ enum SystemSettingsProfileCodecError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .fileTooLarge:
-            "配置文件超过 1 MiB 限制。"
+            MacSettingsStrings.text("The profile exceeds the 1 MiB limit.")
         case .malformedFile:
-            "配置文件格式无效。"
+            MacSettingsStrings.text("The profile format is invalid.")
         case .validationFailed:
-            "配置包含不受支持或无效的设置。"
+            MacSettingsStrings.text("The profile contains unsupported or invalid settings.")
         }
     }
 }
@@ -303,8 +319,8 @@ enum BuiltInSystemSettingsProfiles {
         [
             template(
                 id: UUID(uuidString: "2B5D31BB-82A4-4E38-9177-0604ED5D6F80")!,
-                name: "访达效率",
-                description: "显示文件扩展名、路径栏和状态栏，并优先搜索当前文件夹。",
+                name: MacSettingsStrings.text("Finder Productivity"),
+                description: MacSettingsStrings.text("Show filename extensions, the path bar, and the status bar, and search the current folder by default."),
                 values: [
                     "finder.show-all-extensions": .boolean(true),
                     "finder.show-path-bar": .boolean(true),
@@ -315,11 +331,28 @@ enum BuiltInSystemSettingsProfiles {
             ),
             template(
                 id: UUID(uuidString: "4DAE5F61-7812-4DA9-B6BE-F82680266DAB")!,
-                name: "专注桌面",
-                description: "隐藏程序坞，并关闭程序坞最近使用的 App。",
+                name: MacSettingsStrings.text("Focused Desktop"),
+                description: MacSettingsStrings.text("Hide the Dock and disable recent apps in the Dock."),
                 values: [
                     "dock.auto-hide": .boolean(true),
                     "dock.show-recents": .boolean(false),
+                ],
+                catalog: catalog
+            ),
+            template(
+                id: UUID(uuidString: "3DE73F6D-2B52-4641-92D7-3FE6FA22B701")!,
+                name: MacSettingsStrings.text("Zen"),
+                description: MacSettingsStrings.text(
+                    "Hide the Dock and menu bar, remove recent Dock apps, and hide desktop items and widgets."
+                ),
+                values: [
+                    "dock.auto-hide": .boolean(true),
+                    "dock.show-recents": .boolean(false),
+                    "desktop.menu-bar-auto-hide": .choice(id: "always"),
+                    "desktop.show-items-on-desktop": .boolean(false),
+                    "desktop.show-items-in-stage-manager": .boolean(false),
+                    "desktop.show-widgets-on-desktop": .boolean(false),
+                    "desktop.show-widgets-in-stage-manager": .boolean(false),
                 ],
                 catalog: catalog
             ),

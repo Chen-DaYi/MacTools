@@ -47,6 +47,16 @@ enum MacSettingsKeyboardFocusTarget: Equatable {
     case setting(SystemSettingID)
 }
 
+enum MacSettingsWorkspaceFocus: Hashable {
+    case search
+    case setting(SystemSettingID)
+}
+
+struct MacSettingsSettingFocusRequest: Equatable {
+    let sequence: Int
+    let settingID: SystemSettingID
+}
+
 enum MacSettingsKeyboardNavigation {
     static func target(
         from currentID: SystemSettingID?,
@@ -108,6 +118,7 @@ final class MacSettingsController: ObservableObject {
     @Published var destination: MacSettingsDestination = .all
     @Published var searchText = ""
     @Published private(set) var searchFocusRequest = 0
+    @Published private(set) var settingFocusRequest: MacSettingsSettingFocusRequest?
     @Published private(set) var rowStates: [SystemSettingID: SystemSettingRowState] = [:]
     @Published private(set) var favoriteIDs: [SystemSettingID]
     @Published private(set) var history: [SystemSettingChange]
@@ -136,6 +147,7 @@ final class MacSettingsController: ObservableObject {
     private let profileStore: any SystemSettingsProfileStoring
     private let applyCoordinator: SystemSettingsProfileApplyCoordinator
     private var environment: SystemSettingEnvironment
+    private var settingFocusSequence = 0
     private var refreshTask: Task<Void, Never>?
     private var externalRefreshTask: Task<Void, Never>?
     private var profileOperationTask: Task<Void, Never>?
@@ -225,13 +237,14 @@ final class MacSettingsController: ObservableObject {
         if !query.isEmpty {
             let records = catalog.search(query)
             guard !records.isEmpty else { return [] }
-            return [.init(id: "search-results", kind: .searchResults, title: "搜索结果", records: records)]
+            return [.init(id: "search-results", kind: .searchResults, title: MacSettingsStrings.text("Search Results"), records: records)]
         }
 
         switch destination {
         case .all:
-            return availableCategories.compactMap { category in
-                let records = records(for: .category(category))
+            let pinnedIDs = Set(favoriteIDs)
+            let categories: [MacSettingsPaletteSection] = availableCategories.compactMap { category in
+                let records = records(for: .category(category)).filter { !pinnedIDs.contains($0.id) }
                 guard !records.isEmpty else { return nil }
                 return .init(
                     id: "category.\(category.rawValue)",
@@ -240,12 +253,13 @@ final class MacSettingsController: ObservableObject {
                     records: records
                 )
             }
+            return section(kind: .favorites, title: MacSettingsStrings.text("Pinned"), records: favoriteRecords) + categories
         case .favorites:
-            return section(kind: .favorites, title: "已固定", records: favoriteRecords)
+            return section(kind: .favorites, title: MacSettingsStrings.text("Pinned"), records: favoriteRecords)
         case .recent:
-            return section(kind: .recent, title: "最近更改", records: recentRecords)
+            return section(kind: .recent, title: MacSettingsStrings.text("Recently Changed"), records: recentRecords)
         case .attention:
-            return section(kind: .attention, title: "需要关注", records: attentionRecords)
+            return section(kind: .attention, title: MacSettingsStrings.text("Needs Attention"), records: attentionRecords)
         case let .category(category):
             return section(
                 id: "category.\(category.rawValue)",
@@ -255,17 +269,6 @@ final class MacSettingsController: ObservableObject {
             )
         case .profiles, .importExport, .history:
             return []
-        }
-    }
-
-    var paletteScopeTitle: String? {
-        guard searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        switch destination {
-        case .favorites: return "已固定"
-        case .recent: return "最近更改"
-        case .attention: return "需要关注"
-        case let .category(category): return category.title
-        default: return nil
         }
     }
 
@@ -312,6 +315,28 @@ final class MacSettingsController: ObservableObject {
         searchFocusRequest &+= 1
     }
 
+    func showCategoryResults(_ category: SystemSettingCategory) {
+        destination = .all
+        searchText = category.title
+        searchFocusRequest &+= 1
+    }
+
+    func showSetting(_ settingID: SystemSettingID) {
+        guard catalog[settingID] != nil else { return }
+        destination = .all
+        searchText = ""
+        settingFocusSequence &+= 1
+        settingFocusRequest = .init(
+            sequence: settingFocusSequence,
+            settingID: settingID
+        )
+    }
+
+    func consumeSettingFocusRequest(_ request: MacSettingsSettingFocusRequest) {
+        guard settingFocusRequest == request else { return }
+        settingFocusRequest = nil
+    }
+
     func showPalette() {
         destination = .all
         searchFocusRequest &+= 1
@@ -328,7 +353,7 @@ final class MacSettingsController: ObservableObject {
 
     func updateProviderAvailability(_ providers: [String: ActionAvailability]) {
         let providerIDs = Set(providers.filter { $0.value.isAvailable }.keys)
-        let reasons = providers.filter { !$0.value.isAvailable }.mapValues { $0.reason ?? "插件当前不可用。" }
+        let reasons = providers.filter { !$0.value.isAvailable }.mapValues { $0.reason ?? MacSettingsStrings.text("The plugin is currently unavailable.") }
         guard environment.availableProviderIDs != providerIDs
             || environment.unavailableProviderReasons != reasons else { return }
         environment = SystemSettingEnvironment(
@@ -597,11 +622,11 @@ final class MacSettingsController: ObservableObject {
                     : (pendingRecoveries[record.id] != nil ? pendingRecoveries[record.id]?.current?.value : actual)
                 rowStates[record.id]?.verification = .failed
                 rowStates[record.id]?.errorMessage = rolledBack
-                    ? "验证失败，已恢复原值。"
-                    : "验证失败：当前值为 \(record.definition.displayDescription(for: actual))，自动恢复失败。"
+                    ? MacSettingsStrings.text("Verification failed. The original value was restored.")
+                    : MacSettingsStrings.format("Verification failed: the current value is %@, and automatic restoration failed.", "\(record.definition.displayDescription(for: actual))")
                 rowStates[record.id]?.availability = runtimeFailureAvailability(
                     for: record,
-                    message: rowStates[record.id]?.errorMessage ?? "无法验证设置。"
+                    message: rowStates[record.id]?.errorMessage ?? MacSettingsStrings.text("Could not verify the setting.")
                 )
                 failedSettingIDs.insert(record.id)
                 onStateChange?()
@@ -642,8 +667,8 @@ final class MacSettingsController: ObservableObject {
             }
             rowStates[record.id]?.verification = .failed
             rowStates[record.id]?.errorMessage = rolledBack
-                ? "\(error.localizedDescription) 已恢复原值。"
-                : "\(error.localizedDescription) 自动恢复失败。"
+                ? MacSettingsStrings.format("%@ The original value was restored.", "\(error.localizedDescription)")
+                : MacSettingsStrings.format("%@ Automatic restoration failed.", "\(error.localizedDescription)")
             rowStates[record.id]?.availability = runtimeFailureAvailability(
                 for: record,
                 error: error
@@ -662,23 +687,32 @@ final class MacSettingsController: ObservableObject {
         setRowPhase(.restoring, for: record.id)
         do {
             guard case .verified = try await record.adapter.restore(previousSnapshot) else {
-                await retainRecovery(record: record, original: previousSnapshot, message: "恢复未完成，请选择重试恢复或保留当前值。")
+                await retainRecovery(record: record, original: previousSnapshot, message: MacSettingsStrings.text("Restoration is incomplete. Retry Restoration or Keep Current Values to continue."))
                 return false
             }
             return true
         } catch {
-            await retainRecovery(record: record, original: previousSnapshot, message: "恢复未完成：\(error.localizedDescription)")
+            await retainRecovery(record: record, original: previousSnapshot, message: MacSettingsStrings.format("Restoration is incomplete: %@", "\(error.localizedDescription)"))
             return false
         }
     }
 
     func toggleFavorite(_ settingID: SystemSettingID) {
-        if let index = favoriteIDs.firstIndex(of: settingID) {
-            favoriteIDs.remove(at: index)
+        var updatedFavoriteIDs = favoriteIDs
+        if let index = updatedFavoriteIDs.firstIndex(of: settingID) {
+            updatedFavoriteIDs.remove(at: index)
         } else if catalog[settingID] != nil {
-            favoriteIDs.append(settingID)
+            updatedFavoriteIDs.append(settingID)
         }
+        guard updatedFavoriteIDs != favoriteIDs else { return }
+        favoriteIDs = updatedFavoriteIDs
         persistFavorites()
+    }
+
+    func showFavorites() {
+        searchText = ""
+        destination = .favorites
+        onStateChange?()
     }
 
     func moveFavorites(fromOffsets: IndexSet, toOffset: Int) {
@@ -747,7 +781,7 @@ final class MacSettingsController: ObservableObject {
     func makeDraft(from profile: SystemSettingsProfile? = nil) -> SystemSettingsProfileDraft {
         let entryByID = Dictionary(uniqueKeysWithValues: (profile?.entries ?? []).map { ($0.settingID, $0) })
         return SystemSettingsProfileDraft(
-            name: profile?.name ?? "新配置",
+            name: profile?.name ?? MacSettingsStrings.text("New Profile"),
             profileDescription: profile?.profileDescription ?? "",
             items: catalog.records.filter(\.definition.isProfileEligible).map { record in
                 let existing = entryByID[record.id]
@@ -778,7 +812,7 @@ final class MacSettingsController: ObservableObject {
             return false
         }
         guard validation.isValid, profileStore.save(saved) else {
-            profileErrorMessage = "无法保存配置，请检查配置数量与存储空间后重试。"
+            profileErrorMessage = MacSettingsStrings.text("Could not save the profile. Check the profile count and available storage, then try again.")
             return false
         }
         profiles = profileStore.load()
@@ -793,14 +827,14 @@ final class MacSettingsController: ObservableObject {
         replacing profile: SystemSettingsProfile? = nil
     ) -> String? {
         let saved = draft.makeProfile(existing: profile, catalog: catalog)
-        if saved.name.isEmpty { return "请输入配置名称。" }
-        if saved.name.count > SystemSettingsProfileCodec.maximumNameLength { return "配置名称不能超过 120 个字符。" }
+        if saved.name.isEmpty { return MacSettingsStrings.text("Enter a profile name.") }
+        if saved.name.count > SystemSettingsProfileCodec.maximumNameLength { return MacSettingsStrings.text("Profile names cannot exceed 120 characters.") }
         if saved.profileDescription.count > SystemSettingsProfileCodec.maximumDescriptionLength {
-            return "配置说明过长，请缩短后重试。"
+            return MacSettingsStrings.text("The profile description is too long. Shorten it and try again.")
         }
-        if saved.entries.isEmpty { return "配置至少需要包含一个有效设置。" }
+        if saved.entries.isEmpty { return MacSettingsStrings.text("A profile must include at least one valid setting.") }
         return SystemSettingsProfileCodec.validate(saved, catalog: catalog).isValid
-            ? nil : "配置包含无效设置，请检查所选项目。"
+            ? nil : MacSettingsStrings.text("The profile contains invalid settings. Check the selected items.")
     }
 
     func clearProfileError() { profileErrorMessage = nil }
@@ -865,13 +899,12 @@ final class MacSettingsController: ObservableObject {
         do {
             let decoded = try SystemSettingsProfileCodec.decode(data, catalog: catalog)
             importedPreview = .init(profile: decoded.0, validation: decoded.1)
-            preparePlan(for: decoded.0)
             profileErrorMessage = nil
         } catch {
             cancelPlanPreparation()
             importedPreview = nil
             activePlan = nil
-            profileErrorMessage = "无法导入配置：\(error.localizedDescription)"
+            profileErrorMessage = MacSettingsStrings.format("Could not import the profile: %@", "\(error.localizedDescription)")
         }
     }
 
@@ -879,14 +912,28 @@ final class MacSettingsController: ObservableObject {
         cancelPlanPreparation()
         importedPreview = nil
         activePlan = nil
-        profileErrorMessage = "无法导入配置：\(error.localizedDescription)"
+        profileErrorMessage = MacSettingsStrings.format("Could not import the profile: %@", "\(error.localizedDescription)")
     }
 
-    func acceptImportedProfile() {
-        guard let profile = importedPreview?.profile, profileStore.save(profile) else { return }
+    @discardableResult
+    func acceptImportedProfile() -> Bool {
+        guard let profile = importedPreview?.profile else {
+            profileErrorMessage = MacSettingsStrings.text(
+                "Could not save the profile. Check the profile count and available storage, then try again."
+            )
+            return false
+        }
+        guard profileStore.save(profile) else {
+            profileErrorMessage = MacSettingsStrings.text(
+                "Could not save the profile. Check the profile count and available storage, then try again."
+            )
+            return false
+        }
         profiles = profileStore.load()
+        profileErrorMessage = nil
         onPersistentPreferencesChange?()
         onStateChange?()
+        return true
     }
 
     func exportData(for profile: SystemSettingsProfile) throws -> Data {
@@ -966,6 +1013,15 @@ final class MacSettingsController: ObservableObject {
         activePlan = activePlan?.selecting(selectedIDs)
     }
 
+    func dismissActivePlan() {
+        guard !isApplyingProfile, !isPreparingPlan else { return }
+        activePlan = nil
+        lastApplyReport = nil
+        lastRollbackResults = nil
+        retryBaseReport = nil
+        onStateChange?()
+    }
+
     func applyActivePlan() {
         guard canEditSettings, writeTasks.isEmpty,
               let plan = activePlan,
@@ -1018,11 +1074,11 @@ final class MacSettingsController: ObservableObject {
                     rowStates[result.settingID]?.errorMessage = result.message
                     if let record = catalog[result.settingID] {
                         if result.kind == .failedWithoutRollback, let original = result.previousSnapshot {
-                            await retainRecovery(record: record, original: original, message: result.message ?? "恢复未完成。")
+                            await retainRecovery(record: record, original: original, message: result.message ?? MacSettingsStrings.text("Restoration is incomplete."))
                         }
                         rowStates[result.settingID]?.availability = runtimeFailureAvailability(
                             for: record,
-                            message: result.message ?? "无法应用设置。"
+                            message: result.message ?? MacSettingsStrings.text("Could not apply the setting.")
                         )
                     }
                 default:
@@ -1093,10 +1149,10 @@ final class MacSettingsController: ObservableObject {
                         failedSettingIDs.insert(result.settingID)
                         rowStates[result.settingID]?.verification = .failed
                         rowStates[result.settingID]?.errorMessage = result.message
-                        rollbackFailureMessages[result.settingID] = result.message ?? "回滚未完成，请重试。"
+                        rollbackFailureMessages[result.settingID] = result.message ?? MacSettingsStrings.text("Rollback is incomplete. Try again.")
                         if result.kind != .cancelled,
                            let original = point.entries.first(where: { $0.settingID == result.settingID }) {
-                            await retainRecovery(record: record, original: original.snapshot ?? .init(value: original.value), message: result.message ?? "恢复未完成。")
+                            await retainRecovery(record: record, original: original.snapshot ?? .init(value: original.value), message: result.message ?? MacSettingsStrings.text("Restoration is incomplete."))
                         }
                     }
                 }
@@ -1271,7 +1327,7 @@ final class MacSettingsController: ObservableObject {
                     rowStates[result.settingID]?.verification = .failed
                 case .failedWithoutRollback:
                     if let original = result.previousSnapshot {
-                        stageRecovery(for: result.settingID, original: original, message: result.message ?? "恢复未完成。")
+                        stageRecovery(for: result.settingID, original: original, message: result.message ?? MacSettingsStrings.text("Restoration is incomplete."))
                     }
                 default:
                     break
@@ -1288,7 +1344,7 @@ final class MacSettingsController: ObservableObject {
         } else if case let .finished(result) = event, result.kind == .failedWithoutRollback,
                   let entry = point.entries.first(where: { $0.settingID == result.settingID }) {
             stageRecovery(for: result.settingID, original: entry.snapshot ?? .init(value: entry.value),
-                          message: result.message ?? "恢复未完成。")
+                          message: result.message ?? MacSettingsStrings.text("Restoration is incomplete."))
         }
         receiveProgress(event)
     }
@@ -1351,12 +1407,12 @@ final class MacSettingsController: ObservableObject {
     private func persistRecoveries() -> Bool {
         let entries = pendingRecoveries.values.sorted { $0.id.rawValue < $1.id.rawValue }
         guard let data = try? JSONEncoder().encode(entries) else {
-            recoveryPersistenceError = "恢复记录未保存，请勿退出应用。"
+            recoveryPersistenceError = MacSettingsStrings.text("Recovery records have not been saved. Do not quit the app.")
             return false
         }
         storage.set(data, forKey: StorageKey.recoveries)
         guard storage.data(forKey: StorageKey.recoveries) == data else {
-            recoveryPersistenceError = "恢复记录未保存，请勿退出应用。处理恢复后可重试保存。"
+            recoveryPersistenceError = MacSettingsStrings.text("Recovery records have not been saved. Do not quit the app. Resolve recovery, then retry saving.")
             return false
         }
         recoveryPersistenceError = nil
@@ -1435,7 +1491,7 @@ final class MacSettingsController: ObservableObject {
         rowStates[id]?.verification = .unverified
         if let index = lastRollbackResults?.firstIndex(where: { $0.settingID == id }), let record = catalog[id] {
             lastRollbackResults?[index] = .init(settingID: id, title: record.definition.title,
-                                               kind: .skippedByUser, message: "已保留当前值。")
+                                               kind: .skippedByUser, message: MacSettingsStrings.text("Current values were kept."))
         }
         onStateChange?()
         scheduleExternalRefresh()

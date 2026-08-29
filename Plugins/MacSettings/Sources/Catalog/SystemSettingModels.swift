@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct SystemSettingID: RawRepresentable, Codable, Hashable, Sendable, ExpressibleByStringLiteral {
     let rawValue: String
@@ -28,16 +29,16 @@ enum SystemSettingCategory: String, CaseIterable, Codable, Hashable, Sendable, I
 
     var title: String {
         switch self {
-        case .accessibility: "辅助功能"
-        case .input: "触控板与鼠标"
-        case .keyboard: "键盘"
-        case .finder: "访达"
-        case .desktopAndDock: "桌面与程序坞"
-        case .screenshots: "截屏"
-        case .appearance: "外观"
-        case .display: "显示器"
-        case .power: "电源"
-        case .network: "网络"
+        case .accessibility: MacSettingsStrings.text("Accessibility")
+        case .input: MacSettingsStrings.text("Trackpad & Mouse")
+        case .keyboard: MacSettingsStrings.text("Keyboard")
+        case .finder: MacSettingsStrings.text("Finder")
+        case .desktopAndDock: MacSettingsStrings.text("Desktop & Dock")
+        case .screenshots: MacSettingsStrings.text("Screenshots")
+        case .appearance: MacSettingsStrings.text("Appearance")
+        case .display: MacSettingsStrings.text("Displays")
+        case .power: MacSettingsStrings.text("Power")
+        case .network: MacSettingsStrings.text("Network")
         }
     }
 
@@ -208,20 +209,20 @@ enum SystemSettingValue: Codable, Equatable, Hashable, Sendable {
 
     var conciseDescription: String {
         switch self {
-        case let .boolean(value): value ? "开" : "关"
+        case let .boolean(value): value ? MacSettingsStrings.text("On") : MacSettingsStrings.text("Off")
         case let .integer(value): String(value)
-        case let .decimal(value): value.formatted(.number.precision(.fractionLength(0 ... 2)))
+        case let .decimal(value): value.formatted(.number.precision(.fractionLength(0 ... 2)).locale(PluginRuntimeLocalization.locale))
         case let .choice(id): id
         case let .string(value): value
         case let .url(value): value.path(percentEncoded: false)
-        case .color: "颜色"
+        case .color: MacSettingsStrings.text("Color")
         }
     }
 }
 
 struct SystemSettingChoice: Codable, Equatable, Hashable, Sendable, Identifiable {
     let id: String
-    let title: String
+    @MacSettingsLocalized var title: String
 }
 
 // These snapshots stay in local history; portable profiles contain desired values only.
@@ -302,11 +303,24 @@ struct SystemSettingSystemDestination: Codable, Equatable, Sendable {
     let anchor: String?
 
     var url: URL? {
+        // System Settings uses an opaque URL, not a //host URL or an anchor= query.
+        // Only offer destinations whose pane and optional native anchor are known.
+        let panes: Set<String> = [
+            "com.apple.Accessibility-Settings.extension", "com.apple.Appearance-Settings.extension",
+            "com.apple.Desktop-Settings.extension", "com.apple.Displays-Settings.extension",
+            "com.apple.Keyboard-Settings.extension", "com.apple.Trackpad-Settings.extension",
+            "com.apple.Mouse-Settings.extension",
+        ]
+        guard panes.contains(pane) else { return nil }
+        if let anchor {
+            let anchors: Set<String> = ["AX_FEATURE_POINTERCONTROL", "AX_CURSOR_SIZE", "AX_FEATURE_ZOOM", "AX_FEATURE_KEYBOARD"]
+            guard pane == "com.apple.Accessibility-Settings.extension", anchors.contains(anchor) else { return nil }
+        }
         var components = URLComponents()
         components.scheme = "x-apple.systempreferences"
-        components.host = pane
+        components.path = pane
         if let anchor, !anchor.isEmpty {
-            components.queryItems = [URLQueryItem(name: "anchor", value: anchor)]
+            components.percentEncodedQuery = anchor
         }
         return components.url
     }
@@ -336,8 +350,8 @@ struct SystemSettingRequirements: Codable, Equatable, Sendable {
 
 struct SystemSettingDefinition: Identifiable {
     let id: SystemSettingID
-    let title: String
-    let description: String
+    @MacSettingsLocalized var title: String
+    @MacSettingsLocalized var description: String
     let category: SystemSettingCategory
     let systemImage: String
     let schema: SystemSettingValueSchema
@@ -361,7 +375,9 @@ struct SystemSettingDefinition: Identifiable {
     }
 
     var searchDocument: String {
-        ([title, description, category.title] + searchTerms)
+        ([title, description, category.title] + searchTerms
+            + MacSettingsStrings.searchAliases(for: $title)
+            + MacSettingsStrings.searchAliases(for: $description))
             .joined(separator: " ")
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .lowercased()
@@ -371,7 +387,7 @@ struct SystemSettingDefinition: Identifiable {
         if case let .choice(id) = value {
             switch schema {
             case let .choice(options), let .directoryChoice(options):
-                return options.first(where: { $0.id == id })?.title ?? "当前位置（\(id)）"
+                return options.first(where: { $0.id == id })?.title ?? MacSettingsStrings.format("Current Location (%@)", "\(id)")
             default: break
             }
         }

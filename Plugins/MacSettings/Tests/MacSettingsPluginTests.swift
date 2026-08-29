@@ -18,7 +18,7 @@ final class MacSettingsPluginTests: XCTestCase {
         let plugin = MacSettingsPlugin(controller: controller)
         plugin.handleAction(.setDisclosureExpanded(true))
 
-        XCTAssertEqual(controller.visibleRecords.count, 39)
+        XCTAssertEqual(controller.visibleRecords.count, 44)
         XCTAssertEqual(controller.favoriteIDs, [retainedID])
         XCTAssertEqual(plugin.primaryPanelState.detail?.controls.count, 2)
         let draftIDs = Set(controller.makeDraft().items.map(\.settingID))
@@ -26,7 +26,7 @@ final class MacSettingsPluginTests: XCTestCase {
         let settingActions = plugin.actionCatalogEntries.filter {
             $0.reference.key.actionID == "open-setting"
         }
-        XCTAssertEqual(settingActions.count, 39)
+        XCTAssertEqual(settingActions.count, 44)
 
         for id in catalog.deferredDefinitions.keys {
             for actionID in ["open-setting", "set-boolean"] {
@@ -118,7 +118,7 @@ final class MacSettingsPluginTests: XCTestCase {
         XCTAssertTrue(openedURLs.prefix(2).allSatisfy {
             $0.absoluteString.contains("Privacy_AllFiles")
         })
-        XCTAssertTrue(openedURLs[2].absoluteString.contains("com.apple.Settings"))
+        XCTAssertEqual(openedURLs[2].absoluteString, "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")
     }
 
     func testPluginDefaultsToAllSettingsAndPublishesFeaturePanelFavorites() throws {
@@ -138,7 +138,7 @@ final class MacSettingsPluginTests: XCTestCase {
         controller.toggleFavorite(record.id)
         plugin.handleAction(.setDisclosureExpanded(true))
         XCTAssertEqual(plugin.primaryPanelState.detail?.controls.count, 2)
-        XCTAssertEqual(plugin.primaryPanelState.detail?.controls.first?.actionTitle, "Favorite · 关")
+        XCTAssertEqual(plugin.primaryPanelState.detail?.controls.first?.actionTitle, "Favorite · Off")
     }
 
     func testSearchActionKeepsResultsInControllableWorkspace() async throws {
@@ -202,9 +202,50 @@ final class MacSettingsPluginTests: XCTestCase {
 
         let result = await handle.result()
         XCTAssertEqual(result, .succeeded())
-        XCTAssertEqual(controller.searchText, record.definition.title)
-        XCTAssertEqual(controller.visibleRecords.map(\.id), [record.id])
+        XCTAssertEqual(controller.destination, .all)
+        XCTAssertTrue(controller.searchText.isEmpty)
+        XCTAssertEqual(controller.settingFocusRequest?.settingID, record.id)
         XCTAssertEqual(presentationCount, 1)
+
+        let firstRequest = controller.settingFocusRequest
+        _ = await (try plugin.beginAction(.init(
+            reference: reference,
+            source: .test,
+            mode: .foreground
+        ))).result()
+        XCTAssertNotEqual(controller.settingFocusRequest, firstRequest)
+        XCTAssertEqual(controller.settingFocusRequest?.settingID, record.id)
+    }
+
+    func testCategoryDeepLinkUsesVisibleSearchInsteadOfAHiddenScope() async throws {
+        let record = makeTestRecord(
+            id: "finder.extension",
+            title: "Show Extensions",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([record]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+        let plugin = MacSettingsPlugin(controller: controller)
+        let reference = ActionReference(
+            key: ActionKey(providerID: "mac-settings", actionID: "open-category"),
+            parameters: try ActionParameterSet(["category": .string(SystemSettingCategory.finder.rawValue)])
+        )
+
+        let result = await (try plugin.beginAction(.init(
+            reference: reference,
+            source: .test,
+            mode: .foreground
+        ))).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(controller.destination, .all)
+        XCTAssertEqual(controller.searchText, SystemSettingCategory.finder.title)
+        XCTAssertEqual(controller.paletteSections.map(\.kind), [.searchResults])
+        XCTAssertEqual(controller.paletteSections.flatMap(\.records).map(\.id), [record.id])
     }
 
     func testParameterizedBooleanActionUsesSameVerifiedAdapterPath() async throws {
@@ -266,7 +307,7 @@ final class MacSettingsPluginTests: XCTestCase {
         )
         XCTAssertEqual(
             plugin.actionAvailability(for: reference),
-            .unavailable("此设置当前不可用。")
+            .unavailable("This setting is currently unavailable.")
         )
         XCTAssertEqual(plugin.primaryPanelState.detail?.controls.first?.isEnabled, false)
         guard case .hardwareUnavailable? = controller.rowStates[record.id]?.availability else {

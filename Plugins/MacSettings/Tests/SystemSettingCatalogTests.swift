@@ -7,7 +7,7 @@ final class SystemSettingCatalogTests: XCTestCase {
     func testBuiltInCatalogIsCuratedAndValid() throws {
         let catalog = try MacSettingsCatalogFactory.make { nil }
 
-        XCTAssertEqual(catalog.records.count, 39)
+        XCTAssertEqual(catalog.records.count, 44)
         XCTAssertEqual(Set(catalog.records.map(\.id)).count, catalog.records.count)
         XCTAssertTrue(catalog.records.allSatisfy { $0.definition.schema.isValid })
         XCTAssertTrue(catalog.records.allSatisfy { !$0.definition.searchTerms.isEmpty })
@@ -65,6 +65,20 @@ final class SystemSettingCatalogTests: XCTestCase {
         XCTAssertNil(catalog["network.wifi"])
         XCTAssertNil(catalog["power.low-power-mode"])
         XCTAssertEqual(catalog["dock.size"]?.definition.executionClass, .directVerified)
+        XCTAssertEqual(catalog["desktop.menu-bar-auto-hide"]?.definition.executionClass, .existingPluginProvider)
+        XCTAssertEqual(
+            catalog["desktop.menu-bar-auto-hide"]?.definition.schema,
+            .choice(options: [
+                .init(id: "always", title: "Always"),
+                .init(id: "desktop-only", title: "On Desktop Only"),
+                .init(id: "full-screen-only", title: "In Full Screen Only"),
+                .init(id: "never", title: "Never"),
+            ])
+        )
+        XCTAssertNotNil(catalog["desktop.show-items-on-desktop"])
+        XCTAssertNotNil(catalog["desktop.show-items-in-stage-manager"])
+        XCTAssertNotNil(catalog["desktop.show-widgets-on-desktop"])
+        XCTAssertNotNil(catalog["desktop.show-widgets-in-stage-manager"])
         XCTAssertEqual(
             catalog["finder.warn-empty-trash"]?.definition.executionClass,
             .directAppliesNextUse
@@ -89,7 +103,7 @@ final class SystemSettingCatalogTests: XCTestCase {
         let deferredIDs: Set<SystemSettingID> = [
             "accessibility.full-keyboard-access", "accessibility.sticky-keys",
             "accessibility.slow-keys", "input.secondary-click", "keyboard.function-keys",
-            "screenshots.destination", "display.night-shift", "desktop.menu-bar-auto-hide",
+            "screenshots.destination", "display.night-shift",
         ]
         XCTAssertEqual(Set(catalog.deferredDefinitions.keys), deferredIDs)
         for id in deferredIDs {
@@ -113,6 +127,38 @@ final class SystemSettingCatalogTests: XCTestCase {
             XCTAssertTrue(Set(profile.entries.map(\.settingID)).isDisjoint(with: deferredIDs))
             XCTAssertTrue(SystemSettingsProfileCodec.validate(profile, catalog: catalog).isValid)
         }
+    }
+
+    func testMenuBarProviderReadsAndWritesExactFourStateMode() async throws {
+        var executedReference: ActionReference?
+        let context = PluginActionExecutionHostContext(
+            item: { reference in
+                guard reference.key.providerID == "auto-hide-menu-bar",
+                      reference.parameters["mode"] == .string("desktop-only") else { return nil }
+                return ActionSurfaceCatalogItem(
+                    reference: reference,
+                    title: "On Desktop Only",
+                    subtitle: nil,
+                    ownerTitle: "Menu Bar",
+                    systemImage: "menubar.rectangle",
+                    availability: .available,
+                    isSafe: true,
+                    presentationState: .active
+                )
+            },
+            execute: { reference, _ in
+                executedReference = reference
+                return .succeeded(message: nil)
+            }
+        )
+        let catalog = try MacSettingsCatalogFactory.make { context }
+        let record = try XCTUnwrap(catalog["desktop.menu-bar-auto-hide"])
+
+        let currentValue = try await record.adapter.read()
+        XCTAssertEqual(currentValue, .choice(id: "desktop-only"))
+        try await record.adapter.apply(.choice(id: "full-screen-only"))
+        XCTAssertEqual(executedReference?.key.actionID, "set-mode")
+        XCTAssertEqual(executedReference?.parameters["mode"], .string("full-screen-only"))
     }
 
     func testDisplayProvidersReadLiveActionStateAndWriteExplicitDesiredValue() async throws {

@@ -8,7 +8,7 @@ struct MacSettingsOperationBanner: View {
         HStack(spacing: 12) {
             if let progress = controller.operationProgress {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("已处理 \(progress.completed) / \(progress.total) 项")
+                    Text(MacSettingsStrings.format("Processed %@ of %@", "\(progress.completed)", "\(progress.total)"))
                         .monospacedDigit()
                     ProgressView(value: Double(progress.completed), total: Double(max(1, progress.total)))
                         .frame(width: 150)
@@ -18,13 +18,13 @@ struct MacSettingsOperationBanner: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ProgressView().controlSize(.small)
-                Text("正在读取当前值…")
+                Text(MacSettingsStrings.text("Reading current values…"))
                 Spacer()
             }
-            Button("停止") { controller.cancelOperation() }
+            Button(MacSettingsStrings.text("Stop")) { controller.cancelOperation() }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("当前设置完成验证或恢复后停止，不会开始后续更改。")
+                .help(MacSettingsStrings.text("Stop after the current setting finishes verification or restoration. No further changes will start."))
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
         .frame(height: 42)
@@ -36,9 +36,9 @@ struct MacSettingsOperationBanner: View {
 
     private var activeTitle: String {
         guard let progress = controller.operationProgress,
-              let id = progress.activeSettingID else { return "正在整理结果…" }
+              let id = progress.activeSettingID else { return MacSettingsStrings.text("Preparing results…") }
         let title = controller.catalog[id]?.definition.title ?? id.rawValue
-        return "\(title) · \(progress.phase?.title ?? "处理中")"
+        return "\(title) · \(progress.phase?.title ?? MacSettingsStrings.text("Processing"))"
     }
 }
 
@@ -49,18 +49,18 @@ struct MacSettingsRecoveryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Label(controller.pendingRecoveries.isEmpty ? "恢复记录未保存" : "恢复未完成", systemImage: "exclamationmark.triangle")
+                Label(controller.pendingRecoveries.isEmpty ? MacSettingsStrings.text("Recovery Records Not Saved") : MacSettingsStrings.text("Restoration Incomplete"), systemImage: "exclamationmark.triangle")
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.orange)
                 if !controller.pendingRecoveries.isEmpty {
-                    Text("原始快照已保留。请先处理以下项目，再应用其他更改。")
+                    Text(MacSettingsStrings.text("Original snapshots have been retained. Resolve these items before applying other changes."))
                         .font(PluginSettingsTheme.Typography.rowDescription)
                 }
                 if let error = controller.recoveryPersistenceError {
                     Text(error)
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.red)
-                    Button("重试保存恢复记录") { controller.retrySavingRecoveries() }
+                    Button(MacSettingsStrings.text("Retry Saving Recovery Records")) { controller.retrySavingRecoveries() }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .disabled(!controller.canResolveRecovery)
@@ -71,8 +71,8 @@ struct MacSettingsRecoveryView: View {
                             Text(controller.catalog[recovery.id]?.definition.title ?? recovery.id.rawValue)
                                 .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                             Spacer()
-                            Button("重试恢复") { controller.retryRecovery(recovery.id) }
-                            Button("保留当前值…") { keepingID = recovery.id }
+                            Button(MacSettingsStrings.text("Retry Restoration")) { controller.retryRecovery(recovery.id) }
+                            Button(MacSettingsStrings.text("Keep Current Values…")) { keepingID = recovery.id }
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -80,9 +80,9 @@ struct MacSettingsRecoveryView: View {
                         Text(recovery.message)
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary)
-                        DisclosureGroup("查看当前值与原值") {
+                        DisclosureGroup(MacSettingsStrings.text("Compare Current and Original Values")) {
                             Text(recovery.differences.isEmpty
-                                 ? "偏好值已匹配，但尚未确认恢复完成。"
+                                 ? MacSettingsStrings.text("Preference values match, but restoration has not been confirmed.")
                                  : recovery.differences.joined(separator: "\n"))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
@@ -96,16 +96,16 @@ struct MacSettingsRecoveryView: View {
         .frame(maxHeight: 230)
         .pluginSettingsCardBackground(.recessed)
         .accessibilityIdentifier("mac-settings.pending-recovery")
-        .confirmationDialog("保留当前值并放弃本次恢复？", isPresented: Binding(
+        .confirmationDialog(MacSettingsStrings.text("Keep current values and abandon this restoration?"), isPresented: Binding(
             get: { keepingID != nil }, set: { if !$0 { keepingID = nil } }
         ), titleVisibility: .visible) {
-            Button("保留当前值", role: .destructive) {
+            Button(MacSettingsStrings.text("Keep Current Values"), role: .destructive) {
                 if let id = keepingID { controller.keepCurrentValues(id) }
                 keepingID = nil
             }
-            Button("取消", role: .cancel) { keepingID = nil }
+            Button(MacSettingsStrings.text("Cancel"), role: .cancel) { keepingID = nil }
         } message: {
-            Text("这不会更改 macOS 设置，但会放弃此项目保留的恢复快照。")
+            Text(MacSettingsStrings.text("This does not change macOS settings, but discards the retained recovery snapshot for this item."))
         }
     }
 }

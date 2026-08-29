@@ -5,6 +5,9 @@ import Foundation
 import MacToolsPluginKit
 import ObjectiveC.runtime
 
+@_silgen_name("notify_post")
+private func systemNotifyPost(_ name: UnsafePointer<CChar>) -> UInt32
+
 enum SystemSettingAdapterError: LocalizedError, Equatable {
     case unreadable
     case invalidValue
@@ -15,13 +18,13 @@ enum SystemSettingAdapterError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unreadable:
-            "无法读取当前值。"
+            MacSettingsStrings.text("Could not read the current value.")
         case .invalidValue:
-            "此值不适用于该设置。"
+            MacSettingsStrings.text("This value is not valid for this setting.")
         case let .writeFailed(message):
             message
         case .verificationMismatch:
-            "设置已写入，但验证结果不一致。"
+            MacSettingsStrings.text("The setting was written, but verification did not match.")
         case let .unsupported(message):
             message
         }
@@ -38,7 +41,7 @@ private enum UniversalAccessPreferencesError: LocalizedError {
     case unavailable
 
     var errorDescription: String? {
-        "此 macOS 版本不支持即时更新该辅助功能设置。"
+        MacSettingsStrings.text("This macOS version cannot update this accessibility setting immediately.")
     }
 }
 
@@ -204,7 +207,7 @@ private final class TrackpadPreferencesClient {
 
     private func requireBackend() throws -> NSObject {
         guard handle != nil, let backend else {
-            throw SystemSettingAdapterError.unsupported("此 macOS 版本不支持即时更新触控板设置。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("This macOS version cannot update trackpad settings immediately."))
         }
         return backend
     }
@@ -219,7 +222,7 @@ private final class TrackpadPreferencesClient {
               let method = class_getInstanceMethod(backendClass, selector),
               let methodEncoding = method_getTypeEncoding(method),
               String(cString: methodEncoding) == encoding else {
-            throw SystemSettingAdapterError.unsupported("此 macOS 版本不支持即时更新触控板设置。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("This macOS version cannot update trackpad settings immediately."))
         }
         return unsafeBitCast(method_getImplementation(method), to: type)
     }
@@ -281,7 +284,7 @@ private final class MousePreferencesClient {
 
     private func requireBackend() throws -> NSObject {
         guard handle != nil, let backend else {
-            throw SystemSettingAdapterError.unsupported("此 macOS 版本不支持即时更新鼠标设置。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("This macOS version cannot update mouse settings immediately."))
         }
         return backend
     }
@@ -296,7 +299,7 @@ private final class MousePreferencesClient {
               let method = class_getInstanceMethod(backendClass, selector),
               let methodEncoding = method_getTypeEncoding(method),
               String(cString: methodEncoding) == encoding else {
-            throw SystemSettingAdapterError.unsupported("此 macOS 版本不支持即时更新鼠标设置。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("This macOS version cannot update mouse settings immediately."))
         }
         return unsafeBitCast(method_getImplementation(method), to: type)
     }
@@ -382,7 +385,7 @@ private final class UniversalAccessRuntimeClient {
         setPreference(key, value, notification)
         guard synchronizePreferences(),
               abs(getPreference(key) - value) <= 0.01 else {
-            throw SystemSettingAdapterError.writeFailed("无法保存指针大小。")
+            throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Could not save the pointer size."))
         }
         try function("UACursorSetScale", as: DoubleSetter.self)(value)
     }
@@ -407,7 +410,7 @@ private final class UniversalAccessRuntimeClient {
         ])
         guard let persisted = Double(output.trimmingCharacters(in: .whitespacesAndNewlines)),
               abs(persisted - value) <= 0.01 else {
-            throw SystemSettingAdapterError.writeFailed("无法保存指针大小。")
+            throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Could not save the pointer size."))
         }
     }
 
@@ -422,7 +425,7 @@ private final class UniversalAccessRuntimeClient {
         do {
             try process.run()
         } catch {
-            throw SystemSettingAdapterError.writeFailed("无法保存指针大小。")
+            throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Could not save the pointer size."))
         }
         process.waitUntilExit()
         let outputData = output.fileHandleForReading.readDataToEndOfFile()
@@ -430,7 +433,7 @@ private final class UniversalAccessRuntimeClient {
         guard process.terminationStatus == 0 else {
             _ = errorData
             throw SystemSettingAdapterError.writeFailed(
-                "更改指针大小需要“完全磁盘访问”权限。授权后请退出并重新打开 MacTools。"
+                MacSettingsStrings.text("Changing pointer size requires Full Disk Access. Grant access, then quit and reopen MacTools.")
             )
         }
         return String(data: outputData, encoding: .utf8) ?? ""
@@ -563,7 +566,7 @@ struct ProcessSystemDefaultsDomainStore: SystemDefaultsDomainStoring {
             let message = String(data: result.error, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             throw SystemSettingAdapterError.writeFailed(
-                message?.isEmpty == false ? message! : "无法保存系统设置。"
+                message?.isEmpty == false ? message! : MacSettingsStrings.text("Could not save system settings.")
             )
         }
     }
@@ -607,7 +610,7 @@ struct ProcessSystemDefaultsDomainStore: SystemDefaultsDomainStoring {
         do {
             try process.run()
         } catch {
-            throw SystemSettingAdapterError.writeFailed("无法运行系统设置工具。")
+            throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Could not run the system settings tool."))
         }
         let outputData = output.fileHandleForReading.readDataToEndOfFile()
         let errorData = error.fileHandleForReading.readDataToEndOfFile()
@@ -653,7 +656,7 @@ final class DefaultsSystemSettingAdapter: SystemSettingAdapter {
         self.writeObject = {
             defaults.set($0, forKey: key)
             guard defaults.synchronize() else {
-                throw SystemSettingAdapterError.writeFailed("无法保存设置。")
+                throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Could not save the setting."))
             }
         }
         self.decode = decode
@@ -675,6 +678,9 @@ final class DefaultsSystemSettingAdapter: SystemSettingAdapter {
                 userInfo: nil,
                 deliverImmediately: true
             )
+            notificationName.rawValue.withCString { name in
+                _ = systemNotifyPost(name)
+            }
         }
     }
 }
@@ -800,7 +806,7 @@ final class DockSystemEventsSettingAdapter: SystemSettingAdapter {
 
     private static func execute(_ source: String) throws {
         guard let appleScript = NSAppleScript(source: source) else {
-            throw SystemSettingAdapterError.writeFailed("无法创建系统设置命令。")
+            throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Could not create the system settings command."))
         }
         var error: NSDictionary?
         appleScript.executeAndReturnError(&error)
@@ -808,7 +814,7 @@ final class DockSystemEventsSettingAdapter: SystemSettingAdapter {
         let message = (error[NSAppleScript.errorMessage] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         throw SystemSettingAdapterError.writeFailed(
-            message?.isEmpty == false ? message! : "无法立即应用程序坞设置。"
+            message?.isEmpty == false ? message! : MacSettingsStrings.text("Could not apply the Dock setting immediately.")
         )
     }
 }
@@ -1249,7 +1255,7 @@ final class CompositeBooleanSystemSettingAdapter: SystemSettingAdapter {
               Set(components.keys) == Set(adapters.indices.map(String.init)),
               components["0"]?.value == snapshot.value,
               components.values.allSatisfy({ if case .boolean = $0.value { return true }; return false }) else {
-            throw SystemSettingAdapterError.unsupported("此历史记录缺少各设备的完整快照，无法安全恢复。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("This history entry lacks complete device snapshots and cannot be safely restored."))
         }
         var firstError: Error?
         for (index, adapter) in adapters.enumerated() {
@@ -1281,7 +1287,7 @@ final class CompositeBooleanSystemSettingAdapter: SystemSettingAdapter {
             }
         }
         guard writeCount > 0 else {
-            throw firstError ?? SystemSettingAdapterError.writeFailed("无法保存触控板设置。")
+            throw firstError ?? SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Could not save trackpad settings."))
         }
     }
 
@@ -1349,7 +1355,7 @@ final class LiveTrackpadBooleanSystemSettingAdapter: SystemSettingAdapter {
               let persisted = components["persisted"], persisted.value == snapshot.value,
               let live = components["live"], !live.hasRestorationData,
               case let .boolean(enabled) = live.value else {
-            throw SystemSettingAdapterError.unsupported("此历史记录缺少设备与实时状态快照，无法安全恢复。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("This history entry lacks device and live-state snapshots and cannot be safely restored."))
         }
         // The runtime setter may write preferences itself. Restore the exact domains afterwards.
         var firstError: Error?
@@ -1443,10 +1449,10 @@ final class ExistingPluginActionSettingAdapter: SystemSettingAdapter {
         let value = try await reader()
         let reference = try reference(value)
         guard let item = context()?.item(for: reference) else {
-            throw SystemSettingAdapterError.unsupported("对应的 MacTools 插件不可用。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("The required MacTools plugin is unavailable."))
         }
         guard item.availability.isAvailable else {
-            throw SystemSettingAdapterError.unsupported(item.availability.reason ?? "对应的 MacTools 插件当前不可用。")
+            throw SystemSettingAdapterError.unsupported(item.availability.reason ?? MacSettingsStrings.text("The required MacTools plugin is currently unavailable."))
         }
         return value
     }
@@ -1454,7 +1460,7 @@ final class ExistingPluginActionSettingAdapter: SystemSettingAdapter {
     func apply(_ value: SystemSettingValue) async throws {
         let reference = try reference(value)
         guard let context = context() else {
-            throw SystemSettingAdapterError.unsupported("对应的 MacTools 插件不可用。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("The required MacTools plugin is unavailable."))
         }
         switch await context.execute(reference, source: .manual) {
         case .succeeded:
@@ -1462,7 +1468,7 @@ final class ExistingPluginActionSettingAdapter: SystemSettingAdapter {
         case let .failed(message), let .unavailable(message):
             throw SystemSettingAdapterError.writeFailed(message)
         case .cancelled:
-            throw SystemSettingAdapterError.writeFailed("操作已取消。")
+            throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("The operation was cancelled."))
         }
     }
 }

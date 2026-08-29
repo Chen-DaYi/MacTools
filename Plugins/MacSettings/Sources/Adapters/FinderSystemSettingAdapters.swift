@@ -41,7 +41,7 @@ struct CoreFoundationFinderPreferencesStore: FinderPreferencesStoring {
     func write(_ values: [String: SystemSettingStoredPreference], domain: String) throws {
         let application = applicationID(domain)
         guard !values.keys.contains(where: { CFPreferencesAppValueIsForced($0 as CFString, application) }) else {
-            throw SystemSettingAdapterError.writeFailed("此设置由组织管理，无法更改。")
+            throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("This setting is managed by your organization and cannot be changed."))
         }
         var updates: [String: Any] = [:]
         var removals: [String] = []
@@ -58,7 +58,7 @@ struct CoreFoundationFinderPreferencesStore: FinderPreferencesStoring {
             application, kCFPreferencesCurrentUser, kCFPreferencesAnyHost
         )
         guard CFPreferencesSynchronize(application, kCFPreferencesCurrentUser, kCFPreferencesAnyHost) else {
-            throw SystemSettingAdapterError.writeFailed("无法保存系统偏好设置。")
+            throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Could not save system preferences."))
         }
     }
 }
@@ -112,7 +112,7 @@ final class FinderExtensionsSystemSettingAdapter: SystemSettingAdapter {
 
     func restore(_ snapshot: SystemSettingSnapshot) async throws -> SystemSettingVerification {
         guard let state = snapshot.restoration else {
-            throw SystemSettingAdapterError.unsupported("此历史记录缺少完整快照，无法安全恢复。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("This history entry lacks a complete snapshot and cannot be safely restored."))
         }
         guard try value(from: state) == snapshot.value else { throw SystemSettingAdapterError.invalidValue }
         try store.write([Self.key: state["global"]!], domain: UserDefaults.globalDomain)
@@ -124,12 +124,12 @@ final class FinderExtensionsSystemSettingAdapter: SystemSettingAdapter {
 
 enum FinderWindowDestination {
     static let options: [SystemSettingChoice] = [
-        .init(id: "PfAF", title: "最近使用"),
-        .init(id: "PfHm", title: "个人文件夹"),
-        .init(id: "PfDe", title: "桌面"),
-        .init(id: "PfDo", title: "文稿"),
-        .init(id: "PfCm", title: "电脑"),
-        .init(id: "PfID", title: "iCloud 云盘"),
+        .init(id: "PfAF", title: "Recents"),
+        .init(id: "PfHm", title: "Home"),
+        .init(id: "PfDe", title: "Desktop"),
+        .init(id: "PfDo", title: "Documents"),
+        .init(id: "PfCm", title: "Computer"),
+        .init(id: "PfID", title: "iCloud Drive"),
     ]
 
     static func isLocalDirectoryURL(_ url: URL) -> Bool {
@@ -155,7 +155,7 @@ final class FinderWindowDestinationSystemSettingAdapter: SystemSettingAdapter {
         validateDirectory: @escaping (URL) throws -> Void = { url in
             let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isReadableKey])
             guard values.isDirectory == true, values.isReadable == true else {
-                throw SystemSettingAdapterError.writeFailed("请选择可读取的现有文件夹。")
+                throw SystemSettingAdapterError.writeFailed(MacSettingsStrings.text("Choose an existing, readable folder."))
             }
         }
     ) {
@@ -230,7 +230,7 @@ final class FinderWindowDestinationSystemSettingAdapter: SystemSettingAdapter {
 
     func restore(_ snapshot: SystemSettingSnapshot) async throws -> SystemSettingVerification {
         guard let state = snapshot.restoration else {
-            throw SystemSettingAdapterError.unsupported("此历史记录缺少完整快照，无法安全恢复。")
+            throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("This history entry lacks a complete snapshot and cannot be safely restored."))
         }
         guard try value(from: state) == snapshot.value else { throw SystemSettingAdapterError.invalidValue }
         // Restoration preserves the original raw URL and absence, even if the old folder is now unmounted.

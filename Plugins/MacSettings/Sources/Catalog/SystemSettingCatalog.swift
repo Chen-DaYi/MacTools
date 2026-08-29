@@ -105,7 +105,6 @@ enum MacSettingsCatalogFactory {
         "keyboard.function-keys",
         "screenshots.destination",
         "display.night-shift",
-        "desktop.menu-bar-auto-hide",
     ]
 
     static let globalDomain = UserDefaults.globalDomain
@@ -121,8 +120,8 @@ enum MacSettingsCatalogFactory {
         let records: [SystemSettingRecord] = [
             direct(
                 id: "accessibility.three-finger-drag",
-                title: "三指拖移",
-                description: "使用三根手指拖移窗口和项目。",
+                title: "Three-Finger Drag",
+                description: "Drag windows and items with three fingers.",
                 category: .accessibility,
                 systemImage: "hand.draw",
                 schema: .boolean,
@@ -145,8 +144,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "accessibility.pointer-size",
-                title: "指针大小",
-                description: "让屏幕上的指针更容易看清。",
+                title: "Pointer Size",
+                description: "Make the onscreen pointer easier to see.",
                 category: .accessibility,
                 systemImage: "cursorarrow",
                 schema: .decimal(range: 1 ... 4, step: 0.1),
@@ -159,8 +158,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "accessibility.keyboard-zoom",
-                title: "使用键盘快捷键缩放",
-                description: "使用 Option–Command 快捷键缩放屏幕。",
+                title: "Use Keyboard Shortcuts to Zoom",
+                description: "Zoom the screen using Option–Command shortcuts.",
                 category: .accessibility,
                 systemImage: "plus.magnifyingglass",
                 schema: .boolean,
@@ -172,8 +171,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "accessibility.scroll-zoom",
-                title: "使用滚动手势缩放",
-                description: "按住修饰键并滚动来缩放屏幕。",
+                title: "Use Scroll Gesture to Zoom",
+                description: "Hold a modifier key and scroll to zoom the screen.",
                 category: .accessibility,
                 systemImage: "scroll",
                 schema: .boolean,
@@ -185,8 +184,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "accessibility.scroll-zoom-modifier",
-                title: "滚动手势修饰键",
-                description: "选择配合滚动手势使用的修饰键。",
+                title: "Modifier Key for Scroll Gesture",
+                description: "Choose the modifier key to use with the scroll gesture.",
                 category: .accessibility,
                 systemImage: "command",
                 schema: .choice(options: [
@@ -209,8 +208,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "accessibility.full-keyboard-access",
-                title: "全键盘控制",
-                description: "使用 Tab 键和其他按键在屏幕控制项之间移动。",
+                title: "Full Keyboard Access",
+                description: "Use Tab and other keys to move between onscreen controls.",
                 category: .accessibility,
                 systemImage: "keyboard.badge.ellipsis",
                 schema: .boolean,
@@ -222,8 +221,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "accessibility.sticky-keys",
-                title: "粘滞键",
-                description: "依次按下修饰键来输入组合键。",
+                title: "Sticky Keys",
+                description: "Press modifier keys one at a time to enter key combinations.",
                 category: .accessibility,
                 systemImage: "command",
                 schema: .boolean,
@@ -235,8 +234,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "accessibility.slow-keys",
-                title: "慢速键",
-                description: "调整按键被接受前需要按住的时间。",
+                title: "Slow Keys",
+                description: "Adjust how long a key must be held before it is accepted.",
                 category: .accessibility,
                 systemImage: "timer",
                 schema: .boolean,
@@ -248,15 +247,15 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "input.secondary-click",
-                title: "辅助点按",
-                description: "选择使用触控板进行右键点按的手势。",
+                title: "Secondary Click",
+                description: "Choose the trackpad gesture for a secondary click.",
                 category: .input,
                 systemImage: "hand.point.up.left",
                 schema: .choice(options: [
-                    .init(id: "off", title: "关闭"),
-                    .init(id: "two-fingers", title: "双指点按"),
-                    .init(id: "bottom-right", title: "点按右下角"),
-                    .init(id: "bottom-left", title: "点按左下角"),
+                    .init(id: "off", title: "Off"),
+                    .init(id: "two-fingers", title: "Click with Two Fingers"),
+                    .init(id: "bottom-right", title: "Click in Bottom-Right Corner"),
+                    .init(id: "bottom-left", title: "Click in Bottom-Left Corner"),
                 ]),
                 defaultValue: .choice(id: "two-fingers"),
                 executionClass: .hardwareDependent,
@@ -267,8 +266,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "input.scroll-speed",
-                title: "触控板滚动速度",
-                description: "调整使用触控板滚动内容的速度。",
+                title: "Trackpad Scroll Speed",
+                description: "Adjust how quickly content scrolls with the trackpad.",
                 category: .input,
                 systemImage: "scroll",
                 schema: .decimal(range: 0 ... 10, step: 0.5),
@@ -281,8 +280,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "input.mouse-scroll-speed",
-                title: "鼠标滚动速度",
-                description: "调整使用鼠标滚轮滚动内容的速度。",
+                title: "Mouse Scroll Speed",
+                description: "Adjust how quickly content scrolls with the mouse wheel.",
                 category: .input,
                 systemImage: "computermouse",
                 schema: .decimal(range: 0 ... 10, step: 0.5),
@@ -295,8 +294,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "input.tap-to-click",
-                title: "轻点来点按",
-                description: "轻点触控板即可执行点按。",
+                title: "Tap to Click",
+                description: "Tap the trackpad to click.",
                 category: .input,
                 systemImage: "hand.tap",
                 schema: .boolean,
@@ -320,8 +319,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "input.natural-scrolling",
-                title: "自然滚动",
-                description: "按手指移动方向滚动内容。",
+                title: "Natural Scrolling",
+                description: "Move content in the direction your fingers move.",
                 category: .input,
                 domain: globalDomain,
                 key: "com.apple.swipescrolldirection",
@@ -332,8 +331,8 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsDecimal(
                 id: "input.mouse-tracking-speed",
-                title: "鼠标跟踪速度",
-                description: "调整鼠标指针移动速度。",
+                title: "Mouse Tracking Speed",
+                description: "Adjust how quickly the mouse pointer moves.",
                 category: .input,
                 key: "com.apple.mouse.scaling",
                 defaultValue: 1,
@@ -345,8 +344,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "input.trackpad-tracking-speed",
-                title: "触控板跟踪速度",
-                description: "调整触控板指针移动速度。",
+                title: "Trackpad Tracking Speed",
+                description: "Adjust how quickly the pointer moves with the trackpad.",
                 category: .input,
                 systemImage: "slider.horizontal.3",
                 schema: .decimal(range: 0 ... 3, step: 0.1),
@@ -365,8 +364,8 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsInteger(
                 id: "keyboard.key-repeat",
-                title: "按键重复速度",
-                description: "调整按住按键时字符重复的速度。",
+                title: "Key Repeat Rate",
+                description: "Adjust how quickly characters repeat when you hold a key.",
                 key: "KeyRepeat",
                 defaultValue: 6,
                 range: 1 ... 15,
@@ -375,8 +374,8 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsInteger(
                 id: "keyboard.initial-key-repeat",
-                title: "重复前延迟",
-                description: "调整按住按键后开始重复前的等待时间。",
+                title: "Delay Until Repeat",
+                description: "Adjust the delay before a held key starts repeating.",
                 key: "InitialKeyRepeat",
                 defaultValue: 25,
                 range: 10 ... 120,
@@ -385,8 +384,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "keyboard.function-keys",
-                title: "将 F1、F2 等键用作标准功能键",
-                description: "直接使用功能键，按住 Fn 键来使用特殊功能。",
+                title: "Use F1, F2, etc. as Standard Function Keys",
+                description: "Use function keys directly; hold Fn to use their special features.",
                 category: .keyboard,
                 domain: globalDomain,
                 key: "com.apple.keyboard.fnState",
@@ -397,8 +396,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "finder.show-all-extensions",
-                title: "显示所有文件扩展名",
-                description: "在访达中显示所有文件名扩展名。",
+                title: "Show All Filename Extensions",
+                description: "Show all filename extensions in Finder.",
                 category: .finder,
                 systemImage: "doc.badge.gearshape",
                 schema: .boolean,
@@ -411,8 +410,8 @@ enum MacSettingsCatalogFactory {
             ),
             finderBoolean(
                 id: "finder.warn-extension-change",
-                title: "更改扩展名之前显示警告",
-                description: "更改文件扩展名时先显示确认警告。",
+                title: "Warn Before Changing an Extension",
+                description: "Ask for confirmation before changing a filename extension.",
                 key: "FXEnableExtensionChangeWarning",
                 defaultValue: true,
                 searchTerms: ["extension warning", "change filename extension", "扩展名警告"],
@@ -420,8 +419,8 @@ enum MacSettingsCatalogFactory {
             ),
             finderBoolean(
                 id: "finder.warn-empty-trash",
-                title: "清倒废纸篓之前显示警告",
-                description: "永久移除废纸篓项目之前要求确认。",
+                title: "Warn Before Emptying the Trash",
+                description: "Ask for confirmation before permanently removing items from the Trash.",
                 key: "WarnOnEmptyTrash",
                 defaultValue: true,
                 searchTerms: ["empty trash warning", "trash confirmation", "清倒废纸篓警告"],
@@ -429,8 +428,8 @@ enum MacSettingsCatalogFactory {
             ),
             finderBoolean(
                 id: "finder.folders-first",
-                title: "按名称排序时文件夹置顶",
-                description: "在访达窗口中先显示文件夹，再显示文件。",
+                title: "Keep Folders on Top When Sorting by Name",
+                description: "Show folders before files in Finder windows.",
                 key: "_FXSortFoldersFirst",
                 defaultValue: false,
                 searchTerms: ["folders on top", "sort folders first", "文件夹置顶"],
@@ -438,8 +437,8 @@ enum MacSettingsCatalogFactory {
             ),
             finderBoolean(
                 id: "finder.show-path-bar",
-                title: "显示路径栏",
-                description: "在访达窗口底部显示当前位置路径。",
+                title: "Show Path Bar",
+                description: "Show the current location at the bottom of Finder windows.",
                 key: "ShowPathbar",
                 defaultValue: false,
                 searchTerms: ["finder path bar", "show path", "路径栏"],
@@ -447,8 +446,8 @@ enum MacSettingsCatalogFactory {
             ),
             finderBoolean(
                 id: "finder.show-status-bar",
-                title: "显示状态栏",
-                description: "在访达窗口底部显示项目数量和可用空间。",
+                title: "Show Status Bar",
+                description: "Show item counts and available space at the bottom of Finder windows.",
                 key: "ShowStatusBar",
                 defaultValue: false,
                 searchTerms: ["finder status bar", "free space", "状态栏"],
@@ -456,16 +455,16 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsChoice(
                 id: "finder.search-scope",
-                title: "执行搜索时",
-                description: "选择访达搜索默认使用的范围。",
+                title: "When Performing a Search",
+                description: "Choose the default scope for Finder searches.",
                 category: .finder,
                 domain: finderDomain,
                 key: "FXDefaultSearchScope",
                 defaultValue: "SCev",
                 options: [
-                    .init(id: "SCev", title: "搜索这台 Mac"),
-                    .init(id: "SCcf", title: "搜索当前文件夹"),
-                    .init(id: "SCsp", title: "使用上次的搜索范围"),
+                    .init(id: "SCev", title: "Search This Mac"),
+                    .init(id: "SCcf", title: "Search the Current Folder"),
+                    .init(id: "SCsp", title: "Use the Previous Search Scope"),
                 ],
                 searchTerms: ["search current folder", "finder search scope", "搜索范围"],
                 destination: finderDestination,
@@ -473,8 +472,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "finder.new-window-target",
-                title: "访达新窗口显示",
-                description: "选择新访达窗口的默认位置。",
+                title: "New Finder Windows Show",
+                description: "Choose the default location for new Finder windows.",
                 category: .finder,
                 systemImage: "folder",
                 schema: .directoryChoice(options: FinderWindowDestination.options),
@@ -487,8 +486,8 @@ enum MacSettingsCatalogFactory {
             ),
             providerBoolean(
                 id: "dock.auto-hide",
-                title: "自动隐藏程序坞",
-                description: "不使用时自动隐藏程序坞。",
+                title: "Automatically Hide the Dock",
+                description: "Hide the Dock when it is not in use.",
                 category: .desktopAndDock,
                 providerID: "auto-hide-dock",
                 actionID: "set-enabled",
@@ -501,8 +500,8 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsDecimal(
                 id: "dock.size",
-                title: "程序坞大小",
-                description: "调整程序坞图标的基础大小。",
+                title: "Dock Size",
+                description: "Adjust the base size of Dock icons.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "tilesize",
@@ -515,16 +514,16 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsChoice(
                 id: "dock.position",
-                title: "程序坞位置",
-                description: "选择程序坞显示在屏幕哪一侧。",
+                title: "Dock Position",
+                description: "Choose which edge of the screen shows the Dock.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "orientation",
                 defaultValue: "bottom",
                 options: [
-                    .init(id: "left", title: "左侧"),
-                    .init(id: "bottom", title: "底部"),
-                    .init(id: "right", title: "右侧"),
+                    .init(id: "left", title: "Left"),
+                    .init(id: "bottom", title: "Bottom"),
+                    .init(id: "right", title: "Right"),
                 ],
                 searchTerms: ["dock position", "dock left right", "程序坞位置"],
                 destination: dockDestination,
@@ -532,8 +531,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "dock.magnification",
-                title: "程序坞放大",
-                description: "指针移过图标时将其放大。",
+                title: "Dock Magnification",
+                description: "Enlarge Dock icons when the pointer moves over them.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "magnification",
@@ -544,8 +543,8 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsDecimal(
                 id: "dock.magnification-size",
-                title: "程序坞放大尺寸",
-                description: "调整程序坞图标放大后的大小。",
+                title: "Dock Magnification Size",
+                description: "Adjust the size of magnified Dock icons.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "largesize",
@@ -558,15 +557,15 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsChoice(
                 id: "dock.minimize-effect",
-                title: "最小化窗口效果",
-                description: "选择窗口最小化到程序坞时的动画。",
+                title: "Minimize Windows Using",
+                description: "Choose the animation used when minimizing windows to the Dock.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "mineffect",
                 defaultValue: "genie",
                 options: [
-                    .init(id: "genie", title: "神奇效果"),
-                    .init(id: "scale", title: "缩放效果"),
+                    .init(id: "genie", title: "Genie Effect"),
+                    .init(id: "scale", title: "Scale Effect"),
                 ],
                 searchTerms: ["minimize effect", "genie scale", "最小化动画"],
                 destination: dockDestination,
@@ -574,8 +573,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "dock.show-recents",
-                title: "在程序坞中显示最近使用的 App",
-                description: "在固定 App 旁显示最近使用的应用。",
+                title: "Show Recent Apps in the Dock",
+                description: "Show recently used apps beside pinned apps.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "show-recents",
@@ -586,8 +585,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "dock.minimize-into-application",
-                title: "将窗口最小化至应用程序图标",
-                description: "把最小化窗口收进对应的 App 图标。",
+                title: "Minimize Windows into Application Icon",
+                description: "Keep minimized windows inside their app's Dock icon.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "minimize-to-application",
@@ -598,8 +597,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "dock.animate-opening-applications",
-                title: "打开应用程序时显示动画",
-                description: "启动 App 时让程序坞图标弹跳。",
+                title: "Animate Opening Applications",
+                description: "Bounce Dock icons when apps launch.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "launchanim",
@@ -610,8 +609,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "dock.show-open-indicators",
-                title: "为打开的应用程序显示指示灯",
-                description: "在运行中的 App 图标下方显示圆点。",
+                title: "Show Indicators for Open Applications",
+                description: "Show a dot below the Dock icons of running apps.",
                 category: .desktopAndDock,
                 domain: dockDomain,
                 key: "show-process-indicators",
@@ -622,8 +621,8 @@ enum MacSettingsCatalogFactory {
             ),
             defaultsChoice(
                 id: "screenshots.format",
-                title: "截屏格式",
-                description: "选择截屏文件使用的图片格式。",
+                title: "Screenshot Format",
+                description: "Choose the image format for screenshots.",
                 category: .screenshots,
                 domain: screenshotDomain,
                 key: "type",
@@ -641,8 +640,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "screenshots.floating-thumbnail",
-                title: "显示浮动缩略图",
-                description: "截屏后在屏幕角落短暂显示预览。",
+                title: "Show Floating Thumbnail",
+                description: "Briefly show a preview in the corner after taking a screenshot.",
                 category: .screenshots,
                 domain: screenshotDomain,
                 key: "show-thumbnail",
@@ -653,8 +652,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "screenshots.window-shadow",
-                title: "包括窗口阴影",
-                description: "截取窗口时保留窗口周围的阴影。",
+                title: "Include Window Shadow",
+                description: "Include the surrounding shadow in window screenshots.",
                 category: .screenshots,
                 domain: screenshotDomain,
                 key: "disable-shadow",
@@ -666,8 +665,8 @@ enum MacSettingsCatalogFactory {
             ),
             direct(
                 id: "screenshots.destination",
-                title: "截屏存储位置",
-                description: "选择新截屏文件保存到的文件夹。",
+                title: "Screenshot Save Location",
+                description: "Choose the folder for new screenshots.",
                 category: .screenshots,
                 systemImage: "folder.badge.gearshape",
                 schema: .url,
@@ -683,33 +682,19 @@ enum MacSettingsCatalogFactory {
                     defaultValue: FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
                 )
             ),
-            providerBoolean(
-                id: "appearance.dark-mode",
-                title: "深色模式",
-                description: "在浅色与深色系统外观之间切换。",
-                category: .appearance,
-                providerID: "appearance",
-                actionID: "set-enabled",
-                readDomain: globalDomain,
-                readKey: "AppleInterfaceStyle",
-                defaultValue: false,
-                readBoolean: { ($0 as? String) == "Dark" },
-                searchTerms: ["dark mode", "light appearance", "深色外观"],
-                destination: appearanceDestination,
-                actionContext: actionContext
-            ),
+            systemAppearance(actionContext: actionContext),
             defaultsChoice(
                 id: "appearance.show-scroll-bars",
-                title: "显示滚动条",
-                description: "选择窗口中的滚动条何时可见。",
+                title: "Show Scroll Bars",
+                description: "Choose when scroll bars are visible in windows.",
                 category: .appearance,
                 domain: globalDomain,
                 key: "AppleShowScrollBars",
                 defaultValue: "Automatic",
                 options: [
-                    .init(id: "Automatic", title: "根据鼠标或触控板自动显示"),
-                    .init(id: "WhenScrolling", title: "滚动时"),
-                    .init(id: "Always", title: "始终"),
+                    .init(id: "Automatic", title: "Automatically Based on Mouse or Trackpad"),
+                    .init(id: "WhenScrolling", title: "When Scrolling"),
+                    .init(id: "Always", title: "Always"),
                 ],
                 searchTerms: ["show scroll bars", "scrollbar visibility", "显示滚动条"],
                 destination: appearanceDestination,
@@ -717,8 +702,8 @@ enum MacSettingsCatalogFactory {
             ),
             domainBoolean(
                 id: "appearance.scroll-bar-click-jumps-to-spot",
-                title: "点按滚动条时跳到点按位置",
-                description: "点按滚动条时直接移动到对应位置，而不是翻到下一页。",
+                title: "Jump to the Clicked Position in Scroll Bars",
+                description: "Click a scroll bar to jump to that position instead of the next page.",
                 category: .appearance,
                 domain: globalDomain,
                 key: "AppleScrollerPagingBehavior",
@@ -729,8 +714,8 @@ enum MacSettingsCatalogFactory {
             ),
             providerBooleanFromActionState(
                 id: "display.true-tone",
-                title: "原彩显示",
-                description: "根据环境光自动调节显示器颜色。",
+                title: "True Tone",
+                description: "Adjust display colors automatically to match ambient light.",
                 category: .display,
                 providerID: "display-true-color",
                 readActionID: "toggle",
@@ -742,8 +727,8 @@ enum MacSettingsCatalogFactory {
             ),
             providerBooleanFromActionState(
                 id: "display.night-shift",
-                title: "夜览",
-                description: "在较暗环境中让显示器颜色变暖。",
+                title: "Night Shift",
+                description: "Use warmer display colors in darker surroundings.",
                 category: .display,
                 providerID: "night-shift",
                 readActionID: "toggle",
@@ -753,24 +738,63 @@ enum MacSettingsCatalogFactory {
                 destination: displayDestination,
                 actionContext: actionContext
             ),
-            providerBoolean(
-                id: "desktop.menu-bar-auto-hide",
-                title: "自动隐藏菜单栏",
-                description: "不使用时自动隐藏菜单栏。",
+            menuBarAutoHide(actionContext: actionContext),
+            domainBoolean(
+                id: "desktop.show-items-on-desktop",
+                title: "Show Items on Desktop",
+                description: "Show files, folders, and other items on the desktop.",
                 category: .desktopAndDock,
-                providerID: "auto-hide-menu-bar",
-                actionID: "set-enabled",
-                readDomain: globalDomain,
-                readKey: "_HIHideMenuBar",
-                defaultValue: false,
-                searchTerms: ["auto hide menu bar", "menu bar disappear", "隐藏菜单栏"],
+                domain: "com.apple.WindowManager",
+                key: "StandardHideDesktopIcons",
+                defaultValue: true,
+                inverted: true,
+                searchTerms: ["desktop icons", "show desktop items", "hide desktop icons", "桌面图标", "隐藏桌面项目"],
                 destination: dockDestination,
-                actionContext: actionContext
+                notificationName: .init("com.apple.ec.WindowManager.preferences")
+            ),
+            domainBoolean(
+                id: "desktop.show-items-in-stage-manager",
+                title: "Show Items in Stage Manager",
+                description: "Show desktop items while Stage Manager is active.",
+                category: .desktopAndDock,
+                domain: "com.apple.WindowManager",
+                key: "HideDesktop",
+                defaultValue: true,
+                inverted: true,
+                searchTerms: ["stage manager desktop icons", "show desktop items", "幕前调度桌面图标"],
+                destination: dockDestination,
+                notificationName: .init("com.apple.ec.WindowManager.preferences")
+            ),
+            domainBoolean(
+                id: "desktop.show-widgets-on-desktop",
+                title: "Show Widgets on Desktop",
+                description: "Show widgets directly on the desktop.",
+                category: .desktopAndDock,
+                domain: "com.apple.WindowManager",
+                key: "StandardHideWidgets",
+                defaultValue: true,
+                inverted: true,
+                searchTerms: ["desktop widgets", "hide widgets", "show widgets", "桌面小组件", "隐藏小组件"],
+                destination: dockDestination,
+                notificationName: .init("com.apple.ec.WindowManager.preferences")
+            ),
+            domainBoolean(
+                id: "desktop.show-widgets-in-stage-manager",
+                title: "Show Widgets in Stage Manager",
+                description: "Show desktop widgets while Stage Manager is active.",
+                category: .desktopAndDock,
+                domain: "com.apple.WindowManager",
+                key: "StageManagerHideWidgets",
+                defaultValue: true,
+                inverted: true,
+                searchTerms: ["stage manager widgets", "show desktop widgets", "幕前调度小组件"],
+                destination: dockDestination,
+                notificationName: .init("com.apple.ec.WindowManager.preferences")
             ),
             providerBoolean(
                 id: "desktop.stage-manager",
-                title: "台前调度",
-                description: "整理窗口并把最近使用的 App 保留在屏幕一侧。",
+                title: "Stage Manager",
+                description: "Organize windows and keep recent apps at the side of the screen.",
                 category: .desktopAndDock,
                 providerID: "stage-manager",
                 actionID: "set-enabled",
@@ -785,17 +809,14 @@ enum MacSettingsCatalogFactory {
         return try SystemSettingCatalog(records: records, deferring: deferredSettingIDs)
     }
 
-    private static var finderDestination: SystemSettingSystemDestination {
-        .init(pane: "com.apple.Finder-Settings.extension", anchor: nil)
-    }
+    // Finder and Screenshot preferences do not have System Settings panes.
+    private static var finderDestination: SystemSettingSystemDestination? { nil }
 
     private static var dockDestination: SystemSettingSystemDestination {
         .init(pane: "com.apple.Desktop-Settings.extension", anchor: nil)
     }
 
-    private static var screenshotDestination: SystemSettingSystemDestination {
-        .init(pane: "com.apple.ScreenCapture-Settings.extension", anchor: nil)
-    }
+    private static var screenshotDestination: SystemSettingSystemDestination? { nil }
 
     private static var keyboardDestination: SystemSettingSystemDestination {
         .init(pane: "com.apple.Keyboard-Settings.extension", anchor: nil)
@@ -814,11 +835,100 @@ enum MacSettingsCatalogFactory {
     }
 
     private static var displayDestination: SystemSettingSystemDestination {
-        .init(pane: "com.apple.preference.displays", anchor: nil)
+        .init(pane: "com.apple.Displays-Settings.extension", anchor: nil)
     }
 
     private static func accessibilityDestination(_ anchor: String) -> SystemSettingSystemDestination {
-        .init(pane: "com.apple.Accessibility-Settings.extension", anchor: anchor)
+        let nativeAnchor: String = switch anchor {
+        case "PointerControl": "AX_FEATURE_POINTERCONTROL"
+        case "Display": "AX_CURSOR_SIZE"
+        case "Zoom": "AX_FEATURE_ZOOM"
+        case "Keyboard": "AX_FEATURE_KEYBOARD"
+        default: anchor
+        }
+        return .init(pane: "com.apple.Accessibility-Settings.extension", anchor: nativeAnchor)
+    }
+
+    private static func systemAppearance(actionContext: @escaping () -> PluginActionExecutionHostContext?) -> SystemSettingRecord {
+        let options: [SystemSettingChoice] = [.init(id: "auto", title: "Auto"),
+                                              .init(id: "light", title: "Light"), .init(id: "dark", title: "Dark")]
+        func reference(_ mode: String) throws -> ActionReference {
+            .init(key: .init(providerID: "appearance", actionID: "set-mode"),
+                  parameters: try .init(["mode": .string(mode)]))
+        }
+        return direct(
+            id: "appearance.dark-mode", title: "System Appearance",
+            description: "Choose Auto, Light, or Dark. macOS manages Auto; the selected mode stays Auto as the appearance changes.",
+            category: .appearance, systemImage: "circle.lefthalf.filled",
+            schema: .choice(options: options), defaultValue: .choice(id: "auto"),
+            executionClass: .existingPluginProvider, requirements: .init(existingProviderID: "appearance"),
+            searchTerms: ["appearance", "dark mode", "light appearance", "automatic appearance", "深色模式", "浅色", "自动外观"],
+            destination: appearanceDestination,
+            note: "Reads the selected appearance policy from the canonical provider; profiles and Undo preserve Auto independently of the current light/dark rendering.",
+            adapter: ExistingPluginActionSettingAdapter(reader: {
+                for option in options {
+                    if let item = actionContext()?.item(for: try reference(option.id)),
+                       item.availability.isAvailable, item.presentationState == .active {
+                        return .choice(id: option.id)
+                    }
+                }
+                throw SystemSettingAdapterError.unsupported(MacSettingsStrings.text("Could not read the appearance mode. Enable or update the Dark Mode plugin."))
+            }, reference: { value in
+                guard case let .choice(mode) = value, options.contains(where: { $0.id == mode }) else {
+                    throw SystemSettingAdapterError.invalidValue
+                }
+                return try reference(mode)
+            }, context: actionContext)
+        )
+    }
+
+    private static func menuBarAutoHide(
+        actionContext: @escaping () -> PluginActionExecutionHostContext?
+    ) -> SystemSettingRecord {
+        let options: [SystemSettingChoice] = [
+            .init(id: "always", title: "Always"),
+            .init(id: "desktop-only", title: "On Desktop Only"),
+            .init(id: "full-screen-only", title: "In Full Screen Only"),
+            .init(id: "never", title: "Never"),
+        ]
+        func reference(_ mode: String) throws -> ActionReference {
+            .init(
+                key: .init(providerID: "auto-hide-menu-bar", actionID: "set-mode"),
+                parameters: try .init(["mode": .string(mode)])
+            )
+        }
+        return direct(
+            id: "desktop.menu-bar-auto-hide",
+            title: "Automatically Hide and Show the Menu Bar",
+            description: "Choose when macOS automatically hides the menu bar.",
+            category: .desktopAndDock,
+            systemImage: "menubar.rectangle",
+            schema: .choice(options: options),
+            defaultValue: .choice(id: "never"),
+            executionClass: .existingPluginProvider,
+            requirements: .init(existingProviderID: "auto-hide-menu-bar"),
+            searchTerms: ["auto hide menu bar", "menu bar desktop full screen", "隐藏菜单栏", "全屏菜单栏"],
+            destination: dockDestination,
+            note: "Reads and writes the canonical provider's exact four-state menu-bar policy so profiles and Undo preserve desktop and full-screen behavior independently.",
+            adapter: ExistingPluginActionSettingAdapter(reader: {
+                for option in options {
+                    if let item = actionContext()?.item(for: try reference(option.id)),
+                       item.availability.isAvailable,
+                       item.presentationState == .active {
+                        return .choice(id: option.id)
+                    }
+                }
+                throw SystemSettingAdapterError.unsupported(
+                    MacSettingsStrings.text("Could not read the menu bar visibility mode. Enable or update the Auto-hide Menu Bar plugin.")
+                )
+            }, reference: { value in
+                guard case let .choice(mode) = value,
+                      options.contains(where: { $0.id == mode }) else {
+                    throw SystemSettingAdapterError.invalidValue
+                }
+                return try reference(mode)
+            }, context: actionContext)
+        )
     }
 
     private static func direct(
@@ -869,7 +979,7 @@ enum MacSettingsCatalogFactory {
         key: String,
         defaultValue: Bool,
         searchTerms: [String],
-        destination: SystemSettingSystemDestination
+        destination: SystemSettingSystemDestination?
     ) -> SystemSettingRecord {
         domainBoolean(
             id: id,
@@ -894,7 +1004,7 @@ enum MacSettingsCatalogFactory {
         defaultValue: Bool,
         inverted: Bool = false,
         searchTerms: [String],
-        destination: SystemSettingSystemDestination,
+        destination: SystemSettingSystemDestination?,
         notificationName: Notification.Name? = nil,
         dockPreference: DockSystemEventsPreference? = nil,
         executionClass: SystemSettingExecutionClass = .directVerified
@@ -994,7 +1104,7 @@ enum MacSettingsCatalogFactory {
         range: ClosedRange<Double>,
         step: Double,
         searchTerms: [String],
-        destination: SystemSettingSystemDestination,
+        destination: SystemSettingSystemDestination?,
         notificationName: Notification.Name? = nil,
         dockPreference: DockSystemEventsPreference? = nil,
         executionClass: SystemSettingExecutionClass = .directVerified
@@ -1039,7 +1149,7 @@ enum MacSettingsCatalogFactory {
         defaultValue: String,
         options: [SystemSettingChoice],
         searchTerms: [String],
-        destination: SystemSettingSystemDestination,
+        destination: SystemSettingSystemDestination?,
         notificationName: Notification.Name? = nil,
         dockPreference: DockSystemEventsPreference? = nil,
         executionClass: SystemSettingExecutionClass = .directVerified
@@ -1086,7 +1196,7 @@ enum MacSettingsCatalogFactory {
         defaultValue: Bool,
         readBoolean: @escaping (Any?) -> Bool = { ($0 as? NSNumber)?.boolValue ?? false },
         searchTerms: [String],
-        destination: SystemSettingSystemDestination,
+        destination: SystemSettingSystemDestination?,
         actionContext: @escaping () -> PluginActionExecutionHostContext?
     ) -> SystemSettingRecord {
         let store = ProcessSystemDefaultsDomainStore()
@@ -1132,7 +1242,7 @@ enum MacSettingsCatalogFactory {
         writeActionID: String,
         defaultValue: Bool,
         searchTerms: [String],
-        destination: SystemSettingSystemDestination,
+        destination: SystemSettingSystemDestination?,
         actionContext: @escaping () -> PluginActionExecutionHostContext?
     ) -> SystemSettingRecord {
         let readReference = ActionReference(

@@ -112,7 +112,7 @@ enum SystemSettingsProfilePlanner {
                     record,
                     entry,
                     currentValues,
-                    .unsupported("此设置不能通过配置应用。"),
+                    .unsupported(MacSettingsStrings.text("This setting cannot be applied through a profile.")),
                     selected: false
                 )
             }
@@ -132,19 +132,19 @@ enum SystemSettingsProfilePlanner {
             case .requiresRestart:
                 status = .requiresRestart
             case let .providerUnavailable(providerID):
-                status = .unavailable(.provider, "缺少插件：\(providerID)")
+                status = .unavailable(.provider, MacSettingsStrings.format("Missing plugin: %@", "\(providerID)"))
             case let .hardwareUnavailable(hardware):
-                status = .unavailable(.hardware, "缺少硬件：\(hardware)")
+                status = .unavailable(.hardware, MacSettingsStrings.format("Missing hardware: %@", "\(hardware)"))
             case let .permissionMissing(permission):
-                status = .unavailable(.permission, "缺少权限：\(permission)")
+                status = .unavailable(.permission, MacSettingsStrings.format("Missing permission: %@", "\(permission)"))
             case .guidedManual:
                 status = .guidedManual
             case .managedOnly:
-                status = .unsupported("此设置只能由组织管理。")
+                status = .unsupported(MacSettingsStrings.text("This setting can only be managed by your organization."))
             case let .unsupported(reason):
                 status = .unsupported(reason)
             case .systemVersionUnsupported:
-                status = .unavailable(.systemVersion, "当前 macOS 版本不受支持。")
+                status = .unavailable(.systemVersion, MacSettingsStrings.text("This macOS version is not supported."))
             }
             return item(record, entry, currentValues, status, selected: status.canSelect)
         }
@@ -273,7 +273,7 @@ final class SystemSettingsProfileApplyCoordinator {
         var needsRecovery = false
         for item in plan.items {
             let result = needsRecovery && item.isSelected
-                ? result(item, kind: .cancelled, message: "恢复未完成，剩余设置未执行。")
+                ? result(item, kind: .cancelled, message: MacSettingsStrings.text("Restoration is incomplete. Remaining settings were not applied."))
                 : await apply(item: item, onProgress: onProgress)
             results.append(result)
             if result.kind == .failedWithoutRollback, result.previousSnapshot != nil { needsRecovery = true }
@@ -330,7 +330,7 @@ final class SystemSettingsProfileApplyCoordinator {
                     settingID: entry.settingID,
                     title: record.definition.title,
                     kind: succeeded ? .appliedAndVerified : .failedWithoutRollback,
-                    message: succeeded ? nil : "回滚验证失败。",
+                    message: succeeded ? nil : MacSettingsStrings.text("Rollback verification failed."),
                     previousValue: previousSnapshot.value,
                     previousSnapshot: previousSnapshot
                 ))
@@ -339,7 +339,7 @@ final class SystemSettingsProfileApplyCoordinator {
                     settingID: entry.settingID,
                     title: record.definition.title,
                     kind: .cancelled,
-                    message: "回滚已取消。"
+                    message: MacSettingsStrings.text("Rollback was cancelled.")
                 ))
             } catch {
                 results.append(.init(
@@ -362,7 +362,7 @@ final class SystemSettingsProfileApplyCoordinator {
         if !item.isSelected, item.status == .alreadyMatches {
             guard let record = catalog[item.settingID],
                   record.definition.acceptsPortableValue(item.desiredValue) else {
-                return result(item, kind: .unsupported, message: "此设置不能通过配置应用。")
+                return result(item, kind: .unsupported, message: MacSettingsStrings.text("This setting cannot be applied through a profile."))
             }
             do {
                 try Task.checkCancellation()
@@ -375,9 +375,9 @@ final class SystemSettingsProfileApplyCoordinator {
                 }
                 return matches
                     ? result(item, kind: .alreadyMatched)
-                    : result(item, kind: .previewChanged, message: "当前值已变化，请重新预览。")
+                    : result(item, kind: .previewChanged, message: MacSettingsStrings.text("The current value has changed. Preview again."))
             } catch is CancellationError {
-                return result(item, kind: .cancelled, message: "操作已取消。")
+                return result(item, kind: .cancelled, message: MacSettingsStrings.text("The operation was cancelled."))
             } catch {
                 return result(item, kind: .previewChanged, message: error.localizedDescription)
             }
@@ -385,10 +385,10 @@ final class SystemSettingsProfileApplyCoordinator {
         guard item.isSelected else {
             let outcome: (SystemSettingsProfileApplyResultKind, String?) = switch item.status {
             case .alreadyMatches: (.alreadyMatched, nil)
-            case .guidedManual: (.guidedManual, "需要在系统设置中手动完成。")
+            case .guidedManual: (.guidedManual, MacSettingsStrings.text("Complete this step manually in System Settings."))
             case let .unsupported(message): (.unsupported, message)
-            case .invalidValue: (.unsupported, "配置中的值不适用于此设置。")
-            case .unknownSetting: (.unsupported, "未知设置不会被执行。")
+            case .invalidValue: (.unsupported, MacSettingsStrings.text("The profile's value is not valid for this setting."))
+            case .unknownSetting: (.unsupported, MacSettingsStrings.text("Unknown settings will not be applied."))
             case let .unavailable(reason, message): (resultKind(for: reason), message)
             default: (.skippedByUser, nil)
             }
@@ -404,7 +404,7 @@ final class SystemSettingsProfileApplyCoordinator {
                 settingID: item.settingID,
                 title: item.title,
                 kind: .unsupported,
-                message: "未知设置不会被执行。"
+                message: MacSettingsStrings.text("Unknown settings will not be applied.")
             )
         }
         guard record.definition.isProfileEligible,
@@ -415,7 +415,7 @@ final class SystemSettingsProfileApplyCoordinator {
                 settingID: item.settingID,
                 title: item.title,
                 kind: .unsupported,
-                message: "此设置不能通过配置应用。"
+                message: MacSettingsStrings.text("This setting cannot be applied through a profile.")
             )
         }
         let previousSnapshot: SystemSettingSnapshot
@@ -435,7 +435,7 @@ final class SystemSettingsProfileApplyCoordinator {
             }
             try Task.checkCancellation()
         } catch is CancellationError {
-            return result(item, kind: .cancelled, message: "操作已取消。")
+            return result(item, kind: .cancelled, message: MacSettingsStrings.text("The operation was cancelled."))
         } catch {
             return .init(
                 settingID: item.settingID,
@@ -480,7 +480,7 @@ final class SystemSettingsProfileApplyCoordinator {
                     settingID: item.settingID,
                     title: item.title,
                     kind: .verificationUnavailable,
-                    message: "已写入，但无法验证当前值。",
+                    message: MacSettingsStrings.text("The value was written, but its current state could not be verified."),
                     previousValue: currentValue,
                     previousSnapshot: previousSnapshot
                 )
@@ -490,7 +490,7 @@ final class SystemSettingsProfileApplyCoordinator {
                     record: record,
                     item: item,
                     previousSnapshot: previousSnapshot,
-                    message: "验证结果为 \(record.definition.displayDescription(for: actual))。"
+                    message: MacSettingsStrings.format("Verification returned %@.", "\(record.definition.displayDescription(for: actual))")
                 )
             }
         } catch {
@@ -544,7 +544,7 @@ final class SystemSettingsProfileApplyCoordinator {
                     settingID: item.settingID,
                     title: item.title,
                     kind: .failedWithoutRollback,
-                    message: "\(message) 回滚验证失败。",
+                    message: MacSettingsStrings.format("%@ Rollback verification failed.", "\(message)"),
                     previousValue: previousSnapshot.value,
                     previousSnapshot: previousSnapshot
                 )
@@ -562,7 +562,7 @@ final class SystemSettingsProfileApplyCoordinator {
                 settingID: item.settingID,
                 title: item.title,
                 kind: .failedWithoutRollback,
-                message: "\(message) 回滚失败：\(error.localizedDescription)",
+                message: MacSettingsStrings.format("%@ Rollback failed: %@", "\(message)", "\(error.localizedDescription)"),
                 previousValue: previousSnapshot.value,
                 previousSnapshot: previousSnapshot
             )

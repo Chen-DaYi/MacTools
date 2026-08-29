@@ -1,8 +1,102 @@
+import Combine
 import XCTest
 @testable import MacSettingsPlugin
 
 @MainActor
 final class MacSettingsControllerTests: XCTestCase {
+    private final class RejectingProfileStore: SystemSettingsProfileStoring {
+        func load() -> [SystemSettingsProfile] { [] }
+        func save(_ profile: SystemSettingsProfile) -> Bool { false }
+        func remove(id: UUID) -> Bool { false }
+        func replaceAll(_ profiles: [SystemSettingsProfile]) -> Bool { false }
+    }
+
+    func testImportPreviewsWithoutPreparingAnApplyPlan() throws {
+        let record = makeTestRecord(
+            id: "preview-only",
+            title: "Preview Only",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let catalog = makeTestCatalog([record])
+        let controller = MacSettingsController(
+            catalog: catalog,
+            storage: MacSettingsTestStorage(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+        let profile = SystemSettingsProfile(
+            name: "Imported",
+            entries: [SystemSettingsProfileEntry(
+                settingID: record.id,
+                desiredValue: .boolean(true),
+                category: record.definition.category
+            )]
+        )
+
+        controller.importProfile(data: try SystemSettingsProfileCodec.encode(profile, catalog: catalog))
+
+        XCTAssertEqual(controller.importedPreview?.profile.id, profile.id)
+        XCTAssertEqual(controller.importedPreview?.profile.entries, profile.entries)
+        XCTAssertNil(controller.activePlan)
+        XCTAssertFalse(controller.isPreparingPlan)
+        XCTAssertEqual(controller.operationState, .idle)
+    }
+
+    func testAcceptImportedProfileReportsSaveFailure() throws {
+        let record = makeTestRecord(
+            id: "save-failure",
+            title: "Save Failure",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let catalog = makeTestCatalog([record])
+        let controller = MacSettingsController(
+            catalog: catalog,
+            storage: MacSettingsTestStorage(),
+            profileStore: RejectingProfileStore()
+        )
+        let profile = SystemSettingsProfile(
+            name: "Imported",
+            entries: [SystemSettingsProfileEntry(
+                settingID: record.id,
+                desiredValue: .boolean(true),
+                category: record.definition.category
+            )]
+        )
+        controller.importProfile(data: try SystemSettingsProfileCodec.encode(profile, catalog: catalog))
+
+        XCTAssertFalse(controller.acceptImportedProfile())
+        XCTAssertNotNil(controller.profileErrorMessage)
+        XCTAssertTrue(controller.profiles.isEmpty)
+    }
+
+    func testAcceptImportedProfileConfirmsPersistedProfile() throws {
+        let record = makeTestRecord(
+            id: "save-success",
+            title: "Save Success",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let catalog = makeTestCatalog([record])
+        let store = InMemorySystemSettingsProfileStore()
+        let controller = MacSettingsController(
+            catalog: catalog,
+            storage: MacSettingsTestStorage(),
+            profileStore: store
+        )
+        let profile = SystemSettingsProfile(
+            name: "Imported",
+            entries: [SystemSettingsProfileEntry(
+                settingID: record.id,
+                desiredValue: .boolean(true),
+                category: record.definition.category
+            )]
+        )
+        controller.importProfile(data: try SystemSettingsProfileCodec.encode(profile, catalog: catalog))
+
+        XCTAssertTrue(controller.acceptImportedProfile())
+        XCTAssertEqual(controller.profiles.map(\.id), [profile.id])
+        XCTAssertEqual(controller.profiles.first?.entries, profile.entries)
+        XCTAssertNil(controller.profileErrorMessage)
+    }
+
     func testFinderDestinationUndoAfterReloadRestoresExactCustomPath() async throws {
         let url = URL(filePath: "/private/tmp/Original Projects", directoryHint: .isDirectory)
         let original: [String: SystemSettingStoredPreference] = [
@@ -127,6 +221,28 @@ final class MacSettingsControllerTests: XCTestCase {
         while controller.isApplyingProfile { await Task.yield() }
         XCTAssertEqual(adapter.value, .boolean(false))
         XCTAssertEqual(controller.lastApplyReport?.results.first?.kind, .appliedAndVerified)
+    }
+
+    func testDismissingProfileComparisonReturnsToTheProfileLibrary() async {
+        let record = makeTestRecord(
+            id: "toggle",
+            title: "Toggle",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([record]),
+            storage: MacSettingsTestStorage()
+        )
+        controller.preparePlan(for: SystemSettingsProfile(name: "Work", entries: [
+            .init(settingID: record.id, desiredValue: .boolean(true), category: .finder),
+        ]))
+        while controller.isPreparingPlan { await Task.yield() }
+
+        XCTAssertNotNil(controller.activePlan)
+        controller.dismissActivePlan()
+        XCTAssertNil(controller.activePlan)
+        XCTAssertNil(controller.lastApplyReport)
+        XCTAssertNil(controller.lastRollbackResults)
     }
 
     func testNewPreviewSupersedesAnOlderSuspendedRead() async {
@@ -363,6 +479,30 @@ final class MacSettingsControllerTests: XCTestCase {
         XCTAssertTrue(applied)
     }
 
+    func testTogglingFavoritePublishesAReplacementCollection() {
+        let record = makeTestRecord(
+            id: "favorite-publication",
+            title: "Favorite Publication",
+            adapter: DeterministicSystemSettingAdapter(value: .boolean(false))
+        )
+        let controller = MacSettingsController(
+            catalog: makeTestCatalog([record]),
+            storage: MacSettingsTestStorage(),
+            historyStore: InMemorySystemSettingChangeHistoryStore(),
+            profileStore: InMemorySystemSettingsProfileStore()
+        )
+        var publishedValues: [[SystemSettingID]] = []
+        let cancellable = controller.$favoriteIDs
+            .dropFirst()
+            .sink { publishedValues.append($0) }
+
+        controller.toggleFavorite(record.id)
+        controller.toggleFavorite(record.id)
+
+        XCTAssertEqual(publishedValues, [[record.id], []])
+        withExtendedLifetime(cancellable) {}
+    }
+
     func testNeedsAttentionContainsOnlyActionableStates() {
         let direct = makeTestRecord(
             id: "direct",
@@ -428,10 +568,21 @@ final class MacSettingsControllerTests: XCTestCase {
 
         XCTAssertEqual(
             controller.paletteSections.map(\.id),
-            ["category.accessibility", "category.finder"]
+            ["favorites", "category.accessibility", "category.finder"]
         )
-        XCTAssertEqual(controller.paletteSections[0].records.map(\.id), [accessibility.id])
-        XCTAssertEqual(controller.paletteSections[1].records.map(\.id), [finder.id, unavailable.id])
+        XCTAssertEqual(controller.paletteSections[0].records.map(\.id), [finder.id])
+        XCTAssertEqual(controller.paletteSections[1].records.map(\.id), [accessibility.id])
+        XCTAssertEqual(controller.paletteSections[2].records.map(\.id), [unavailable.id])
+
+        controller.searchText = "Unavailable"
+        controller.showFavorites()
+        XCTAssertEqual(controller.searchText, "")
+        XCTAssertEqual(controller.paletteSections.flatMap(\.records).map(\.id), [finder.id])
+
+        controller.destination = .all
+        controller.toggleFavorite(finder.id)
+        XCTAssertEqual(controller.paletteSections.map(\.id), ["category.accessibility", "category.finder"])
+        XCTAssertEqual(controller.paletteSections.flatMap(\.records).map(\.id), [accessibility.id, finder.id, unavailable.id])
     }
 
     func testPaletteSearchAlwaysSearchesTheFullCatalog() {

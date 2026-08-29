@@ -3,6 +3,30 @@ import XCTest
 
 @MainActor
 final class SystemSettingsProfileTests: XCTestCase {
+    func testZenTemplateUsesOnlyVerifiedDistractionFreeSettings() throws {
+        let catalog = try MacSettingsCatalogFactory.make { nil }
+        let templates = BuiltInSystemSettingsProfiles.templates(catalog: catalog)
+        let zen = try XCTUnwrap(templates.first { $0.id == UUID(uuidString: "3DE73F6D-2B52-4641-92D7-3FE6FA22B701") })
+
+        XCTAssertEqual(templates.count, 3)
+        XCTAssertEqual(zen.name, "Zen")
+        XCTAssertEqual(
+            Dictionary(uniqueKeysWithValues: zen.entries.map { ($0.settingID, $0.desiredValue) }),
+            [
+                "dock.auto-hide": .boolean(true),
+                "dock.show-recents": .boolean(false),
+                "desktop.menu-bar-auto-hide": .choice(id: "always"),
+                "desktop.show-items-on-desktop": .boolean(false),
+                "desktop.show-items-in-stage-manager": .boolean(false),
+                "desktop.show-widgets-on-desktop": .boolean(false),
+                "desktop.show-widgets-in-stage-manager": .boolean(false),
+            ]
+        )
+        XCTAssertFalse(zen.entries.contains { $0.settingID == "desktop.stage-manager" })
+        XCTAssertTrue(SystemSettingsProfileCodec.validate(zen, catalog: catalog).isValid)
+        XCTAssertTrue(zen.entries.allSatisfy { catalog[$0.settingID]?.definition.isProfileEligible == true })
+    }
+
     func testFinderProfileRechecksPairedPathEvenWhenTargetStillMatches() async throws {
         let store = InMemoryFinderPreferencesStore()
         let adapter = FinderWindowDestinationSystemSettingAdapter(store: store, validateDirectory: { _ in })
@@ -298,7 +322,7 @@ final class SystemSettingsProfileTests: XCTestCase {
             availability: [record.id: .available]
         )
 
-        XCTAssertEqual(plan.items.first?.status, .unsupported("此设置不能通过配置应用。"))
+        XCTAssertEqual(plan.items.first?.status, .unsupported("This setting cannot be applied through a profile."))
         XCTAssertFalse(plan.items.first?.isSelected ?? true)
 
         let forcedPlan = SystemSettingsProfileApplyPlan(

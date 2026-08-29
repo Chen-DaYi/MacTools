@@ -144,7 +144,7 @@ func makeTestRecord(
             canRollback: canRollback,
             verificationAvailable: verificationAvailable,
             searchTerms: [title, "test alias"],
-            destination: .init(pane: "com.apple.Settings", anchor: nil),
+            destination: .init(pane: "com.apple.Keyboard-Settings.extension", anchor: nil),
             implementationNote: "Deterministic test adapter."
         ),
         adapter: adapter

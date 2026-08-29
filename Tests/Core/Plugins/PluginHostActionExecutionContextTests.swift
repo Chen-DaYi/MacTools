@@ -2,9 +2,28 @@ import XCTest
 import MacToolsPluginKit
 @testable import MacTools
 @testable import MacSettingsPlugin
+@testable import AppearancePlugin
 
 @MainActor
 final class PluginHostActionExecutionContextTests: XCTestCase {
+    func testComposedAppearanceUsesSelectedPolicyWithoutAutomationPermission() async throws {
+        let native = HostContextAppearanceController()
+        let provider = AppearancePlugin(appearanceController: native)
+        let box = MacSettingsActionContextBox()
+        let record = try XCTUnwrap(MacSettingsCatalogFactory.make { box.context }["appearance.dark-mode"])
+        let controller = MacSettingsController(catalog: makeTestCatalog([record]), storage: MacSettingsTestStorage())
+        let plugin = MacSettingsPlugin(controller: controller, actionContextBox: box)
+        let host = makePluginHostForTests(plugins: [provider, plugin])
+        let current = try await record.adapter.read()
+        XCTAssertEqual(current, .choice(id: "auto"))
+        let succeeded = await controller.applyAndWait(.choice(id: "light"), to: record)
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(native.mode, .light)
+        XCTAssertEqual(controller.rowStates[record.id]?.value, .choice(id: "light"))
+        _ = host
+        controller.deactivate()
+    }
+
     func testCachedFavoritesFollowPreparationCompletionAndCancellation() async throws {
         for cancels in [false, true] {
             let adapter = FirstReadSuspendingSystemSettingAdapter(value: .boolean(false), suspendsFirstRead: false)
@@ -85,6 +104,13 @@ final class PluginHostActionExecutionContextTests: XCTestCase {
         XCTAssertEqual(provider.executionCount, 1)
         _ = host
     }
+}
+
+@MainActor
+private final class HostContextAppearanceController: SystemAppearanceControlling {
+    var mode = SystemAppearanceMode.auto
+    func read() throws -> SystemAppearanceSnapshot { .init(mode: mode, isDark: mode != .light) }
+    func setMode(_ mode: SystemAppearanceMode) throws { self.mode = mode }
 }
 
 @MainActor
