@@ -19,6 +19,7 @@ enum SettingsPresentationRequest: Equatable {
     case about
     case appUpdate
     case pluginMarketplace
+    case pluginMarketplaceDetail(MarketplacePluginDetailTarget)
     case pluginConfiguration(String)
     case automationWorkflow(UUID)
     case feature(FeatureSettingsPane)
@@ -1787,6 +1788,21 @@ final class PluginHost: ObservableObject {
 
     func hasPluginSettings(pluginID: String) -> Bool {
         pluginSettingsItems.contains(where: { $0.id == pluginID })
+    }
+
+    func hasMarketplaceDetail(target: MarketplacePluginDetailTarget) -> Bool {
+        guard let item = pluginManagementItems.first(where: { $0.id == target.pluginID }) else {
+            return false
+        }
+
+        guard let highlight = target.actionHighlight else {
+            return true
+        }
+
+        return item.productMetadata?.actions?.providers.contains { provider in
+            provider.id == highlight.providerID
+                && provider.staticActions.contains { $0.id == highlight.actionID }
+        } == true
     }
 
     func hasPluginSettingsSearchField(pluginID: String) -> Bool {
