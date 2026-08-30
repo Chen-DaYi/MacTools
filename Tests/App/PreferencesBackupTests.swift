@@ -414,6 +414,55 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(backup.automationRules?.map(\.id), [ruleIDs[0]])
     }
 
+    func testRepeatedExportFiltersShortcutsAndRunLinksIndependently() throws {
+        let defaults = makeDefaults()
+        let provider = BackupActionProviderPlugin()
+        let host = makeHost(plugins: [provider], defaults: defaults)
+        let references = try provider.references()
+
+        for (offset, reference) in references.prefix(2).enumerated() {
+            guard case .success = host.setActionShortcutBinding(
+                ShortcutBinding(keyCode: UInt16(30 + offset), modifiers: [.command, .control]),
+                to: reference
+            ), case .success = host.createActionRunLink(for: reference) else {
+                return XCTFail("Expected portable and local actions to be saved")
+            }
+        }
+
+        // The 1.2.0 optimized binary reused a weak capture's storage for the
+        // appearance string before filtering these shortcuts and Run Links.
+        for appearance in AppAppearancePreference.allCases {
+            defaults.set(appearance.rawValue, forKey: AppAppearancePreference.userDefaultsKey)
+            let all = PreferencesBackupSelection.all(pluginPreferenceIDs: [provider.metadata.id])
+            var shortcutsOnly = all
+            shortcutsOnly.includesRunLinks = false
+            var runLinksOnly = all
+            runLinksOnly.includesShortcuts = false
+            var withoutProviderSettings = all
+            withoutProviderSettings.pluginPreferenceIDs = []
+            let selections: [PreferencesBackupSelection?] = [
+                nil, shortcutsOnly, runLinksOnly, withoutProviderSettings, nil,
+            ]
+
+            for selection in selections {
+                let backup = host.makePreferencesBackup(selection: selection)
+                let decoded = try PreferencesBackup.decodeJSON(backup.encodedJSON())
+                let effectiveSelection = selection ?? all
+                let includesProvider = effectiveSelection.pluginPreferenceIDs.contains(provider.metadata.id)
+
+                XCTAssertEqual(decoded.application.appearancePreference, appearance.rawValue)
+                XCTAssertEqual(
+                    decoded.actionShortcutAssignments.map(\.reference),
+                    effectiveSelection.includesShortcuts && includesProvider ? [references[0]] : []
+                )
+                XCTAssertEqual(
+                    decoded.actionInvocationPresets?.map(\.reference),
+                    effectiveSelection.includesRunLinks && includesProvider ? [references[0]] : []
+                )
+            }
+        }
+    }
+
     func testActionSurfacePreferencesExcludeNestedNonPortableWorkflowReferences() throws {
         let provider = BackupActionProviderPlugin()
         let surface = BackupActionSurfacePlugin()
