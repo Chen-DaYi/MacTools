@@ -507,6 +507,7 @@ final class PluginHost: ObservableObject {
     /// The app shell installs this while the application is running. The host
     /// emits typed requests but never manipulates windows or popovers directly.
     var appPresentationHandler: ((AppPresentationRequest) -> Void)?
+    var componentDetailPresentationHandler: ((String, String) -> Void)?
 
     private let openPermissionSettings: (URL) -> Void
 
@@ -878,11 +879,11 @@ final class PluginHost: ObservableObject {
         let automationSnapshot = automationController.preferencesBackupSnapshot()
         let portableWorkflowIDs = WorkflowPortabilityAnalysis.portableWorkflowIDs(
             in: automationSnapshot.workflows,
-            referencePortability: { [weak self] reference in
-                self?.leafActionReferenceBackupPortability(
+            referencePortability: { reference in
+                self.leafActionReferenceBackupPortability(
                     reference,
                     selection: dependencySelection
-                ) ?? .unknown
+                )
             }
         )
         let portableWorkflows = automationSnapshot.workflows.filter {
@@ -891,8 +892,10 @@ final class PluginHost: ObservableObject {
         let selectedPortablePreferences = proposedPortablePreferences.filter {
             selection.pluginPreferenceIDs.contains($0.key)
         }
-        let referenceIsPortable: (ActionReference) -> Bool = { [weak self] reference in
-            self?.actionReferenceBackupPortability(
+        // These predicates never escape this synchronous export. Keep a strong
+        // capture to avoid the premature weak-storage destruction in optimized builds.
+        let referenceIsPortable: (ActionReference) -> Bool = { reference in
+            self.actionReferenceBackupPortability(
                 reference,
                 workflows: automationSnapshot.workflows,
                 portableWorkflowIDs: portableWorkflowIDs,
@@ -2024,6 +2027,32 @@ final class PluginHost: ObservableObject {
         return item
     }
 
+    func componentDetailContent(
+        pluginID: String,
+        detailID: String,
+        dismiss: @escaping () -> Void
+    ) -> PluginComponentDetailContent? {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let presenting = plugin as? any PluginComponentDetailPresenting
+        else {
+            return nil
+        }
+
+        guard let content = presenting.makeComponentDetailContent(
+            detailID: detailID,
+            dismiss: dismiss
+        ) else {
+            return nil
+        }
+
+        return guardedValue(
+            for: plugin,
+            operation: "make component detail",
+            content
+        )
+    }
+
     func setPanelSurface(_ surface: PluginPanelSurface, visible isVisible: Bool) {
         if isVisible {
             visiblePanelSurfaces.insert(surface)
@@ -2855,6 +2884,16 @@ final class PluginHost: ObservableObject {
             if let settingsPresenting = plugin as? any PluginSettingsPresenting {
                 settingsPresenting.requestSettingsPresentation = { [weak self] in
                     self?.presentPluginSettings(pluginID: pluginID)
+                }
+            }
+            if let dashboardPresenting = plugin as? any PluginDashboardPresenting {
+                dashboardPresenting.requestDashboardPresentation = { [weak self] in
+                    self?.appPresentationHandler?(.showDashboard)
+                }
+            }
+            if let componentDetailPresenting = plugin as? any PluginComponentDetailPresenting {
+                componentDetailPresenting.requestComponentDetailPresentation = { [weak self] detailID in
+                    self?.componentDetailPresentationHandler?(pluginID, detailID)
                 }
             }
             if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
@@ -4266,6 +4305,8 @@ final class PluginHost: ObservableObject {
             transactionApplying.performActionShortcutReplacementTransaction = nil
         }
         (plugin as? any PluginSettingsPresenting)?.requestSettingsPresentation = nil
+        (plugin as? any PluginDashboardPresenting)?.requestDashboardPresentation = nil
+        (plugin as? any PluginComponentDetailPresenting)?.requestComponentDetailPresentation = nil
         (plugin as? any ActionGridHostContextConsuming)?.actionGridHostContext = nil
         (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionHostContext = nil
         (plugin as? any PluginActionExecutionHostContextConsuming)?.actionExecutionHostContext = nil
