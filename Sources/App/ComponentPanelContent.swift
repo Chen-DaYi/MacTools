@@ -385,15 +385,12 @@ struct ComponentPanelContent: View {
 
     private var emptyState: some View {
         PanelPluginEmptyState(
-            title: AppL10n.plugins("plugin.components.empty.title", defaultValue: "暂无组件"),
-            systemImage: "square.grid.2x2",
-            iconTint: .purple,
+            tab: .components,
             onInstall: {
                 pluginHost.presentPluginMarketplace()
             }
         )
-        .frame(minHeight: ComponentPanelLayout.emptyContentHeight)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

@@ -700,7 +700,11 @@ struct MenuBarContent: View {
     }
 
     private var visibleFeatureListHeight: CGFloat {
-        min(featureListHeight, contentBodyHeight)
+        if pluginHost.panelItems.isEmpty {
+            return contentBodyHeight
+        }
+
+        return min(featureListHeight, contentBodyHeight)
     }
 
     private var isFeatureListScrollable: Bool {
@@ -997,14 +1001,12 @@ struct MenuBarContent: View {
         VStack(spacing: MenuBarPanelLayout.featureRowSpacing) {
             if pluginHost.panelItems.isEmpty {
                 PanelPluginEmptyState(
-                    title: AppL10n.plugins("plugin.panel.empty.title", defaultValue: "暂无插件"),
-                    systemImage: "shippingbox",
-                    iconTint: .blue,
+                    tab: .features,
                     onInstall: {
                         pluginHost.presentPluginMarketplace()
                     }
                 )
-                .frame(minHeight: MenuBarPanelLayout.emptyContentHeight)
+                .frame(height: contentBodyHeight)
             } else {
                 ForEach(pluginHost.panelItems) { item in
                     FeatureRowView(
