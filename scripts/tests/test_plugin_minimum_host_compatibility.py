@@ -69,6 +69,9 @@ NEW_API_MINIMUM_HOSTS = {
     # Shared lifecycle and presentation helpers introduced in host 1.2.
     "PluginCallbackContext": "1.2.0",
     "PluginPresentationSafety": "1.2.0",
+    "PluginDashboardPresenting": "1.2.1",
+    "PluginComponentDetailContent": "1.2.1",
+    "PluginComponentDetailPresenting": "1.2.1",
     "PluginProcessGroupLease": "1.2.0",
     "PluginSystemImage": "1.2.0",
     # Side-aware atomic keyboard output introduced in host 1.2.1.
@@ -248,6 +251,21 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
             set(),
             "Public ActionModels types used by plugins must declare their minimum host",
         )
+
+    def test_dashboard_presentation_apis_reject_host_1_2_0(self) -> None:
+        symbols = {
+            "PluginDashboardPresenting",
+            "PluginComponentDetailContent",
+            "PluginComponentDetailPresenting",
+        }
+        interfaces = (REPO_ROOT / "Sources/MacToolsPluginKit/PluginInterfaces.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertTrue(symbols <= public_top_level_type_names(interfaces))
+        for symbol in symbols:
+            self.assertEqual(NEW_API_MINIMUM_HOSTS[symbol], "1.2.1")
+            self.assertEqual(len(minimum_host_violations("probe", "1.2.0", symbol)), 1)
+            self.assertEqual(minimum_host_violations("probe", "1.2.1", symbol), [])
 
     def test_component_theme_inventory_covers_every_public_type_used_by_plugins(self) -> None:
         component_theme_symbols = public_top_level_type_names(
