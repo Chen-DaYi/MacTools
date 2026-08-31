@@ -26,15 +26,27 @@ enum SystemPowerController {
         await Task.detached(priority: .userInitiated) {
             switch operation {
             case .sleep:
-                requestSystemSleep() ? .succeeded : .failed
-            case .logOut:
-                sendLoginWindowEvent(AEEventID(kAELogOut))
-            case .restart:
-                sendLoginWindowEvent(AEEventID(kAEShowRestartDialog))
-            case .shutDown:
-                sendLoginWindowEvent(AEEventID(kAEShowShutdownDialog))
+                return requestSystemSleep() ? .succeeded : .failed
+            case .logOut, .restart, .shutDown:
+                guard let eventID = loginWindowEventID(for: operation) else {
+                    return .failed
+                }
+                return sendLoginWindowEvent(eventID)
             }
         }.value
+    }
+
+    static func loginWindowEventID(for operation: SystemPowerOperation) -> AEEventID? {
+        switch operation {
+        case .sleep:
+            nil
+        case .logOut:
+            AEEventID(kAELogOut)
+        case .restart:
+            AEEventID(kAEShowRestartDialog)
+        case .shutDown:
+            AEEventID(kAEShowShutdownDialog)
+        }
     }
 
     private static func requestSystemSleep() -> Bool {
