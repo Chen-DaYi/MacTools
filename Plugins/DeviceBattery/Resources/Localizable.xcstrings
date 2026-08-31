@@ -5332,67 +5332,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "لا يمكن الوصول إلى واجهة Rapoo HID. اسمح لـ MacTools باستخدام مراقبة الإدخال في إعدادات النظام."
+            "value": "يتعذر الوصول إلى واجهة HID الخاصة بماوس الشركة المصنعة. اسمح لـ MacTools باستخدام مراقبة الإدخال في إعدادات النظام."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kann nicht auf die HID-Schnittstelle Rapoo zugreifen. Erlauben Sie MacTools, die Eingabeüberwachung in den Systemeinstellungen zu verwenden."
+            "value": "Auf die HID-Schnittstelle der Herstellermaus kann nicht zugegriffen werden. Erlauben Sie MacTools, die Eingabeüberwachung in den Systemeinstellungen zu verwenden."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cannot access the Rapoo HID interface. Allow MacTools to use Input Monitoring in System Settings."
+            "value": "Cannot access the vendor HID mouse interface. Allow MacTools to use Input Monitoring in System Settings."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "No se puede acceder a la interfaz HID Rapoo. Permita que MacTools utilice la supervisión de entrada en la configuración del sistema."
+            "value": "No se puede acceder a la interfaz HID del ratón del fabricante. Permita que MacTools utilice la supervisión de entrada en la configuración del sistema."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Impossible d'accéder à l'interface Rapoo HID. Autorisez MacTools à utiliser la surveillance des entrées dans les paramètres système."
+            "value": "Impossible d'accéder à l'interface HID de la souris du fabricant. Autorisez MacTools à utiliser la surveillance des entrées dans les paramètres système."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo HID インターフェイスにアクセスできません。 MacTools がシステム設定で入力モニタリングを使用できるようにします。"
+            "value": "メーカー製 HID マウスのインターフェイスにアクセスできません。システム設定で MacTools に入力監視を許可してください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo HID 인터페이스에 액세스할 수 없습니다. MacTools이(가) 시스템 설정에서 입력 모니터링을 사용하도록 허용하세요."
+            "value": "제조사 HID 마우스 인터페이스에 접근할 수 없습니다. 시스템 설정에서 MacTools의 입력 모니터링 사용을 허용하세요."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Não é possível acessar a interface HID Rapoo. Permita que MacTools use o monitoramento de entrada nas configurações do sistema."
+            "value": "Não é possível acessar a interface HID do mouse do fabricante. Permita que MacTools use o monitoramento de entrada nas configurações do sistema."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Невозможно получить доступ к HID-интерфейсу Rapoo. Разрешите MacTools использовать мониторинг ввода в настройках системы."
+            "value": "Не удаётся получить доступ к HID-интерфейсу мыши производителя. Разрешите MacTools использовать мониторинг ввода в настройках системы."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法访问雷柏 HID 接口，请在系统设置中允许 MacTools 使用输入监控。"
+            "value": "无法访问厂商 HID 鼠标接口，请在系统设置中允许 MacTools 使用输入监控。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "無法訪問雷柏 HID 接口，請在系統設定中允許 MacTools 使用輸入監控。"
+            "value": "無法存取廠商 HID 滑鼠介面，請在系統設定中允許 MacTools 使用輸入監控。"
           }
         }
       }
