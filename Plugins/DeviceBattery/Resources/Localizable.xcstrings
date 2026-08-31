@@ -1208,73 +1208,73 @@
         }
       }
     },
-    "deviceKind.rapooMouse": {
+    "deviceKind.vendorHIDMouse": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo الماوس"
+            "value": "ماوس HID من الشركة المصنعة"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo Maus"
+            "value": "Hersteller-HID-Maus"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo mouse"
+            "value": "Vendor HID mouse"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo ratón"
+            "value": "Ratón HID del fabricante"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Souris Rapoo"
+            "value": "Souris HID du fabricant"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo マウス"
+            "value": "HID マウス（メーカー製）"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo 마우스"
+            "value": "제조사 HID 마우스"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "rato Rapoo"
+            "value": "Rato HID do fabricante"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rapoo мышь"
+            "value": "Мышь производителя (HID)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "雷柏鼠标"
+            "value": "厂商 HID 鼠标"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "雷柏滑鼠"
+            "value": "廠商 HID 滑鼠"
           }
         }
       }
@@ -3693,7 +3693,7 @@
         }
       }
     },
-    "rapoo.detail.idle": {
+    "vendorHID.detail.idle": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -3764,7 +3764,7 @@
         }
       }
     },
-    "rapoo.detail.noDevice": {
+    "vendorHID.detail.noDevice": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -3835,7 +3835,7 @@
         }
       }
     },
-    "rapoo.detail.permissionDenied": {
+    "vendorHID.detail.permissionDenied": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -3906,7 +3906,7 @@
         }
       }
     },
-    "rapoo.detail.scanning": {
+    "vendorHID.detail.scanning": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -3977,7 +3977,7 @@
         }
       }
     },
-    "rapoo.detail.waitingForReport": {
+    "vendorHID.detail.waitingForReport": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -4119,7 +4119,78 @@
         }
       }
     },
-    "rapoo.error.openFailed": {
+    "mchose.deviceName.fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ماوس MCHOSE"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCHOSE Maus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCHOSE mouse"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ratón MCHOSE"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Souris MCHOSE"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCHOSE マウス"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCHOSE 마우스"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "rato MCHOSE"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мышь MCHOSE"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "迈从鼠标"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "邁從滑鼠"
+          }
+        }
+      }
+    },
+    "vendorHID.error.openFailed": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -4619,33 +4690,143 @@
     "settings.source.appleMobile.description": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "قراءة أجهزة Apple المحمولة الموثوقة والمتصلة عبر USB أو Wi-Fi." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Liest vertrauenswürdige Apple-Mobilgeräte über USB oder WLAN." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Read trusted Apple mobile devices connected over USB or Wi-Fi." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Lee dispositivos móviles Apple de confianza conectados por USB o Wi-Fi." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Lit les appareils mobiles Apple approuvés connectés par USB ou Wi-Fi." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "USB または Wi-Fi で接続された信頼済み Apple モバイルデバイスを読み取ります。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "USB 또는 Wi-Fi로 연결된 신뢰하는 Apple 모바일 기기를 읽습니다." } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Lê dispositivos móveis Apple confiáveis conectados por USB ou Wi-Fi." } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Читает доверенные мобильные устройства Apple через USB или Wi-Fi." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "读取已信任并通过 USB 或 Wi-Fi 连接的 Apple 移动设备。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "讀取已信任並透過 USB 或 Wi-Fi 連接的 Apple 行動裝置。" } }
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "قراءة أجهزة Apple المحمولة الموثوقة والمتصلة عبر USB أو Wi-Fi."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liest vertrauenswürdige Apple-Mobilgeräte über USB oder WLAN."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read trusted Apple mobile devices connected over USB or Wi-Fi."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lee dispositivos móviles Apple de confianza conectados por USB o Wi-Fi."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lit les appareils mobiles Apple approuvés connectés par USB ou Wi-Fi."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "USB または Wi-Fi で接続された信頼済み Apple モバイルデバイスを読み取ります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "USB 또는 Wi-Fi로 연결된 신뢰하는 Apple 모바일 기기를 읽습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lê dispositivos móveis Apple confiáveis conectados por USB ou Wi-Fi."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Читает доверенные мобильные устройства Apple через USB или Wi-Fi."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取已信任并通过 USB 或 Wi-Fi 连接的 Apple 移动设备。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀取已信任並透過 USB 或 Wi-Fi 連接的 Apple 行動裝置。"
+          }
+        }
       }
     },
     "settings.source.appleMobile.title": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "iPhone وiPad وApple Watch" } },
-        "de": { "stringUnit": { "state": "translated", "value": "iPhone, iPad und Apple Watch" } },
-        "en": { "stringUnit": { "state": "translated", "value": "iPhone, iPad, and Apple Watch" } },
-        "es": { "stringUnit": { "state": "translated", "value": "iPhone, iPad y Apple Watch" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "iPhone, iPad et Apple Watch" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "iPhone、iPad、Apple Watch" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "iPhone, iPad 및 Apple Watch" } },
-        "pt": { "stringUnit": { "state": "translated", "value": "iPhone, iPad e Apple Watch" } },
-        "ru": { "stringUnit": { "state": "translated", "value": "iPhone, iPad и Apple Watch" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "iPhone、iPad 与 Apple Watch" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "iPhone、iPad 與 Apple Watch" } }
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone وiPad وApple Watch"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone, iPad und Apple Watch"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone, iPad, and Apple Watch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone, iPad y Apple Watch"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone, iPad et Apple Watch"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone、iPad、Apple Watch"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone, iPad 및 Apple Watch"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone, iPad e Apple Watch"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone, iPad и Apple Watch"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone、iPad 与 Apple Watch"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone、iPad 與 Apple Watch"
+          }
+        }
       }
     },
     "settings.source.bluetooth.description": {
@@ -4932,7 +5113,7 @@
         }
       }
     },
-    "settings.source.rapoo.description": {
+    "settings.source.vendorHID.description": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -5003,7 +5184,7 @@
         }
       }
     },
-    "settings.source.rapoo.title": {
+    "settings.source.vendorHID.title": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
