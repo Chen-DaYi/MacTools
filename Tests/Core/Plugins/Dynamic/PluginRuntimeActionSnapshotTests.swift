@@ -40,6 +40,7 @@ import SavedScriptsPlugin
 import SidecarPlugin
 import StageManagerPlugin
 import SystemMutePlugin
+import SystemPowerPlugin
 import SystemSoftRestartPlugin
 import TranslatorPlugin
 import WindowLayoutsPlugin
@@ -323,6 +324,7 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
         .init(pluginID: "sidecar", makeProvider: SidecarPluginFactory.makeProvider),
         .init(pluginID: "stage-manager", makeProvider: StageManagerPluginFactory.makeProvider),
         .init(pluginID: "system-mute", makeProvider: SystemMutePluginFactory.makeProvider),
+        .init(pluginID: "system-power", makeProvider: SystemPowerPluginFactory.makeProvider),
         .init(pluginID: "system-soft-restart", makeProvider: SystemSoftRestartPluginFactory.makeProvider),
         .init(pluginID: "translator", makeProvider: TranslatorPluginFactory.makeProvider),
         .init(pluginID: "window-layouts", makeProvider: WindowLayoutsPluginFactory.makeProvider),
