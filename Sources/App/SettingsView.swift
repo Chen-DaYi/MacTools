@@ -3076,6 +3076,13 @@ private struct PluginSettingsDetailPane: View {
         .onDisappear {
             pluginHost.setPluginSettingsPage(item.pluginID, visible: false)
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            // Permission changes are completed in System Settings while MacTools is inactive.
+            // Refresh every provider once on return so form and workspace cards use current state.
+            pluginHost.refreshAll()
+        }
     }
 
     private func applySearchRevealRequest(
@@ -3131,9 +3138,9 @@ private struct PluginFormPage: View {
 
     var body: some View {
         SettingsGroupedFormPageScaffold(introduction: item.introductionConfiguration) { widths in
-            if !item.permissionCards.isEmpty {
+            if !item.missingPermissionCards.isEmpty {
                 Section {
-                    ForEach(item.permissionCards) { card in
+                    ForEach(item.missingPermissionCards) { card in
                         PermissionSettingsRow(
                             card: card,
                             statusColor: statusColor(for: card.statusTone),
@@ -3149,6 +3156,7 @@ private struct PluginFormPage: View {
                             entryID: card.id
                         )
                         .settingsGroupedFormRowWidth(widths.sectionLayout)
+                        .listRowBackground(Color.orange.opacity(0.08))
                     }
                 } header: {
                     SettingsGroupedFormSectionHeader(
@@ -3156,9 +3164,10 @@ private struct PluginFormPage: View {
                             "plugins.configuration.section.permissions",
                             defaultValue: "权限"
                         ),
-                        systemImage: "lock.shield",
+                        systemImage: "exclamationmark.shield",
                         layoutWidth: widths.readableContent
                     )
+                    .foregroundStyle(.orange)
                 }
             }
 
@@ -3365,6 +3374,7 @@ private struct PluginWorkspacePage: View {
                         spacing: SettingsPageLayout.introductionContentSpacing
                     ) {
                         introduction
+                        workspacePermissions
                         workspaceContent
                     }
                 }
@@ -3374,6 +3384,7 @@ private struct PluginWorkspacePage: View {
                     spacing: SettingsPageLayout.introductionContentSpacing
                 ) {
                     introduction
+                    workspacePermissions
                     workspaceContent
                         .frame(maxHeight: .infinity, alignment: .topLeading)
                 }
@@ -3385,6 +3396,57 @@ private struct PluginWorkspacePage: View {
         SettingsPageIntroduction(
             configuration: item.introductionConfiguration
         )
+    }
+
+    @ViewBuilder
+    private var workspacePermissions: some View {
+        if !item.missingPermissionCards.isEmpty {
+            VStack(
+                alignment: .leading,
+                spacing: PluginSettingsTheme.Spacing.sectionHeaderContent
+            ) {
+                Label(
+                    AppL10n.settings(
+                        "plugins.configuration.section.permissions",
+                        defaultValue: "权限"
+                    ),
+                    systemImage: "exclamationmark.shield"
+                )
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+                .foregroundStyle(.orange)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(item.missingPermissionCards.enumerated()), id: \.element.id) { index, card in
+                        PermissionSettingsRow(
+                            card: card,
+                            statusColor: statusColor(for: card.statusTone),
+                            onAction: {
+                                pluginHost.performPermissionAction(
+                                    pluginID: card.pluginID,
+                                    permissionID: card.permissionID
+                                )
+                            }
+                        )
+                        .pluginSettingsSearchAnchor(
+                            pluginID: card.pluginID,
+                            entryID: card.id
+                        )
+                        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+
+                        if index < item.missingPermissionCards.count - 1 {
+                            Divider()
+                                .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
+                        }
+                    }
+                }
+                .pluginSettingsCardBackground(.standard)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.orange.opacity(0.65))
+                        .frame(width: 3)
+                }
+            }
+        }
     }
 
     private var workspaceContent: some View {

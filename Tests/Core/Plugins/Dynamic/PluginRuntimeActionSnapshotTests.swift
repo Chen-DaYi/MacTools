@@ -31,6 +31,7 @@ import KeepAwakePlugin
 import LaunchControlPlugin
 import LaunchpadPlugin
 import LockScreenPlugin
+import MacSettingsPlugin
 import MicrophoneMutePlugin
 import MiddleClickPlugin
 import NightShiftPlugin
@@ -315,6 +316,7 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
         .init(pluginID: "launch-control", makeProvider: LaunchControlPluginFactory.makeProvider),
         .init(pluginID: "launchpad", makeProvider: LaunchpadPluginFactory.makeProvider),
         .init(pluginID: "lock-screen", makeProvider: LockScreenPluginFactory.makeProvider),
+        .init(pluginID: "mac-settings", makeProvider: MacSettingsPluginFactory.makeProvider),
         .init(pluginID: "microphone-mute", makeProvider: MicrophoneMutePluginFactory.makeProvider),
         .init(pluginID: "middle-click", makeProvider: MiddleClickPluginFactory.makeProvider),
         .init(pluginID: "night-shift", makeProvider: NightShiftPluginFactory.makeProvider),
