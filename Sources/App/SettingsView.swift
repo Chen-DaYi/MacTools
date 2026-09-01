@@ -38,6 +38,8 @@ private func settingsNavigationTitle(
         AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板")
     case .plugins(.marketplace):
         AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场")
+    case .marketplaceDetail:
+        AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场")
     case let .plugins(.configuration(pluginID)):
         configurationItems.first { $0.id == pluginID }?.title
             ?? AppL10n.settings("tab.plugins", defaultValue: "插件")
@@ -155,6 +157,9 @@ struct SettingsView: View {
         .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
             navigationCoordinator.reconcileCurrentDestinationAvailability()
         }
+        .onChange(of: pluginHost.pluginManagementItems) {
+            navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
         .blur(
             radius: navigationCoordinator.isUnifiedSearchPresented
                 && !accessibilityReduceTransparency
@@ -186,7 +191,7 @@ struct SettingsView: View {
 
     private var settingsSelection: Binding<SettingsNavigationDestination> {
         Binding {
-            navigationCoordinator.destination
+            navigationCoordinator.destination.sidebarDestination
         } set: { destination in
             navigationCoordinator.navigate(to: destination)
         }
@@ -2110,7 +2115,7 @@ private struct SettingsSidebar: View {
             switch $0 {
             case .general, .plugins(.automation), .about:
                 true
-            case .plugins:
+            case .plugins, .marketplaceDetail:
                 false
             }
         }
@@ -2226,6 +2231,8 @@ private struct SettingsSidebar: View {
                 .tag(destination)
                 .id(destination)
             }
+        case .marketplaceDetail:
+            EmptyView()
         }
     }
 
@@ -2598,6 +2605,12 @@ private struct SettingsDetailPane: View {
                 uninstallConfirmationSession: uninstallConfirmationSession,
                 showDashboard: showDashboard,
                 showFeaturePanel: showFeaturePanel
+            )
+        case let .marketplaceDetail(target):
+            MarketplacePluginDetailView(
+                pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
+                target: target
             )
         }
     }
